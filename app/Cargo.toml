@@ -1,0 +1,12 @@
+[package]
+name = "avelor"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+
+[dev-dependencies]
+pulldown-cmark = { workspace = true }
+
+[lints]
+workspace = true

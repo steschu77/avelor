@@ -1,0 +1,25 @@
+name: Reject merge commits
+description: Fails if a PR branch contains merge commits
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout PR head (not merge commit)
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: ${{ github.event.pull_request.head.sha }}
+            
+    - name: Check for merge commits
+      shell: bash
+      run: |
+        set -e
+
+        git fetch origin main
+
+        MERGES=$(git rev-list --merges origin/main..HEAD)
+        if [ -n "$MERGES" ]; then
+          echo "::error::Merge commits found in the branch:"
+          git show --oneline --no-patch $MERGES
+          exit 1
+        fi

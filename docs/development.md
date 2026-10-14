@@ -1,0 +1,33 @@
+# Avelor — Development and testing
+
+> How to check a change, measure the executable. The rules the code
+> follows are `architecture.md#principles` and `architecture.md#conventions`.
+
+## Checks <a id="checks"></a>
+
+- The docs (`app/tests/docs.rs`, `architecture.md`, Doc conventions): in
+  the docs, the README and the code's comments a reference
+  (`development.md#checks`) names an id at the end of a heading of its
+  doc; in a doc an id alone in backticks is a section of that doc, or else
+  an element of the page (an `id` in its HTML, an `.id` a module sets); a
+  file name in backticks (`.rs`, `.js`, `.css`, `.html`, with a `:line` or
+  not) is the end of a file's path in the repository, `src/` left out; a
+  link names a file there. An id is at most 16 characters, unique in its
+  doc and referred to; the docs are LF.
+- `cargo clippy --workspace`.
+
+## Measuring size <a id="measuring-size"></a>
+
+`target/release` holds the exe the user packs with UPX by hand, so it
+isn't rebuilt to measure. The `bloat` profile is the same code with a PDB:
+`CARGO_PROFILE_BLOAT_INHERITS=release CARGO_PROFILE_BLOAT_DEBUG=1
+CARGO_PROFILE_BLOAT_STRIP=none cargo build --profile bloat -p
+avelor`. On
+`target/bloat/avelor.pdb`, `llvm-pdbutil dump -symbols`
+(`S_GPROC32` records carry a code size), `-section-contribs`, `-modules`
+and `-publics` break it down, `llvm-size -A` gives the sections; a change
+is judged by diffing the per-function sizes of two PDBs.
+
+## Line endings
+
+Line endings are LF everywhere (`.gitattributes`).
