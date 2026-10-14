@@ -2,6 +2,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod config;
+mod shell;
 mod sys;
 
 use av_utils::error::Result;
@@ -24,5 +26,7 @@ pub fn main() {
 fn run() -> Result<()> {
     let paths = sys::paths()?;
     let _ = logger::init_logger(&paths.log_dir());
-    Ok(())
+    let config = config::load_config(&paths.config_dir())?;
+
+    sys::run(&paths, config)
 }

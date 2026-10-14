@@ -18,6 +18,12 @@ pub fn paths() -> Result<Paths> {
 
 impl Paths {
     // ------------------------------------------------------------------------
+    /// `%LOCALAPPDATA%\Avelor`: `config.yaml`.
+    pub fn config_dir(&self) -> PathBuf {
+        self.app_dir.clone()
+    }
+
+    // ------------------------------------------------------------------------
     /// `%LOCALAPPDATA%\Avelor\log`: one log file per run.
     pub fn log_dir(&self) -> PathBuf {
         self.app_dir.join("log")
