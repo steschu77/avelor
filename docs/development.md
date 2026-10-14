@@ -5,15 +5,16 @@
 
 ## Checks <a id="checks"></a>
 
+- `cargo test --workspace` runs the unit tests.
 - The docs (`app/tests/docs.rs`, `architecture.md`, Doc conventions): in
   the docs, the README and the code's comments a reference
   (`development.md#checks`) names an id at the end of a heading of its
   doc; in a doc an id alone in backticks is a section of that doc, or else
   an element of the page (an `id` in its HTML, an `.id` a module sets); a
   file name in backticks (`.rs`, `.js`, `.css`, `.html`, with a `:line` or
-  not) is the end of a file's path in the repository, `src/` left out; a
-  link names a file there. An id is at most 16 characters, unique in its
-  doc and referred to; the docs are LF.
+  not) is the end of a file's path in the repository, `src/` left out
+  (`av-utils/error.rs`); a link names a file there. An id is at most 16
+  characters, unique in its doc and referred to; the docs are LF.
 - `cargo clippy --workspace`.
 
 ## Measuring size <a id="measuring-size"></a>

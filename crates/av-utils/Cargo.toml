@@ -1,0 +1,10 @@
+[package]
+name = "av-utils"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+log = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true
