@@ -1,8 +1,8 @@
 # Avelor — Architecture
 
 > The entry point to the documentation: what the app is, the constraints
-> and principles it is built on, how host and crates are structured, build
-> and conventions — and the map of
+> and principles it is built on, how host and crates are structured, the
+> runtime, storage, build and conventions — and the map of
 > the other documents.
 
 ## What the app is
@@ -37,15 +37,16 @@ read by OCR.
 
 | Constraint | Consequence |
 |---|---|
-| Minimal dependencies | Only `serde`, `log` (+ `embed-resource`, `static_vcruntime` at build time) |
+| Windows and Linux desktop, Rust host | Win32 window and message loop (`windows` crate); GTK4 on Linux (`architecture.md#platforms`) |
+| Minimal dependencies | Only `serde`, `serde_yaml_ng`, `log`, `windows` (+ `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `glib`, `glib-unix` and `libc` instead of `windows` |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 
 ## Documents <a id="documents"></a>
 
 | Document | Covers |
 |---|---|
-| **`architecture.md`** | this file: what the app is, principles, structure, build, conventions |
-| `development.md` | checks, diagnosis, measuring size, line endings |
+| **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
+| `development.md` | checks, testing session end, diagnosis, measuring size, line endings |
 
 ## Doc conventions
 
@@ -73,6 +74,19 @@ The rules the code follows, and every change to it:
 6. **Pure core, thin shell.** Mapping and decision logic are pure functions
    with tests; I/O sits at the edges.
 
+## Runtime
+
+### Threads
+
+| Thread | Runs | Back to the UI thread via |
+|---|---|---|
+| UI thread | Win32 message loop (GTK's main loop on Linux) | — |
+
+### Closing
+
+Windows ending the session waits for nothing (principle 8); on Linux the
+session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
+
 ## Crates <a id="crates"></a>
 
 | Crate | Owns | Notes |
@@ -83,10 +97,14 @@ The rules the code follows, and every change to it:
 
 | Module | Responsibility |
 |---|---|
-| `main.rs` | logger, panic hook |
+| `main.rs` | logger, panic hook, the config (`load_config`) |
+| `shell.rs` | what the main window decides on every platform: its state (`architecture.md#platforms`) |
 | `sys/mod.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
-| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the log); message boxes |
+| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log); message boxes |
+| `sys/win32/mod.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end |
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
+| `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence |
+| `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>
 
@@ -94,16 +112,46 @@ The rules the code follows, and every change to it:
 
 | Area | Windows | Where | Linux |
 |---|---|---|---|
-| Folders | `%LOCALAPPDATA%\Avelor` (known folder): log | `sys/*/paths.rs` | `$XDG_STATE_HOME/avelor/log` |
+| Folders | `%LOCALAPPDATA%\Avelor` (known folder): config, log | `sys/*/paths.rs` | `$XDG_CONFIG_HOME/avelor` for the config; `$XDG_STATE_HOME/avelor/log` |
+| Window, main loop | Win32 window | `sys/*/window.rs` | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow` |
+| Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux/mod.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Dialogs and shell | `MessageBoxW` | `sys/*/dialogs.rs` | `gtk::AlertDialog` |
 
 **The platform layer.** `app/src/sys/` holds a module per platform;
 `sys/mod.rs` states the contract and re-exports one backend's items. It is
 the only `cfg(target_os)` in `app/src`:
 
-- `paths()`: the log folder.
+- `paths()`: the config and log folders.
+- `run(config)`: the window and the main loop; returns once the window is
+  gone.
 - `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
   is up, else stderr).
+
+**The shared shell.** `shell.rs` holds what the main window decides:
+
+- the window state.
+
+Each platform's window only turns its native events into calls on it,
+so the subtle part is written once:
+
+| Event | Windows | GTK4 |
+|---|---|---|
+| Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
+
+## Storage and configuration <a id="storage"></a>
+
+The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
+`config_dir`), on Linux in the XDG folders (`architecture.md#platforms`):
+
+- `config.yaml`: the window's size and maximized state;
+- the log files, one per run, in `…\Avelor\log`
+  (`development.md#diagnosis`).
+
+A broken `config.yaml` is set aside at start, without a question, as
+`config.yaml.broken`; an older one is kept, and the broken file is
+dropped. A key `config.yaml` doesn't know is kept as it is, so the
+settings of another version survive a save. Every overwriting write here
+is atomic.
 
 ## Build <a id="build"></a>
 
@@ -119,7 +167,7 @@ abort; how to measure the size: `development.md#measuring-size`.
 ## Conventions <a id="conventions"></a>
 
 - **Errors**: one `av_utils::Error` for every layer (`av-utils/error.rs`:
-  logging), extended when needed; a separate error type only for functions
+  logging, the operating system), extended when needed; a separate error type only for functions
   local to one module; expected outcomes are success variants, not errors;
   a failed write is `FileWrite { path, err }`.
 - **Reuse before writing**: `DateTime::from_system_time`. A new shared
@@ -132,3 +180,4 @@ abort; how to measure the size: `development.md#measuring-size`.
 | Part | Owns | Must not |
 |---|---|---|
 | av-utils | primitives with no domain (dates, atomic writes) | know about vaults, Google, LLMs; carry network types |
+| `app` shell | Win32, GTK | contain feature logic |

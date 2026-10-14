@@ -4,8 +4,12 @@ resolver = "3"
 
 [workspace.dependencies]
 glib = "0.22"
+glib-unix = "0.22"
 gtk = { package = "gtk4", version = "0.11" }
+libc = "0.2"
 log = "0.4"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_yaml_ng = "0.10.0"
 windows = "0.62"
 
 [workspace.lints.clippy]

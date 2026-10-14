@@ -32,6 +32,11 @@ pub enum Error {
     FromUtf16 {
         err: std::string::FromUtf16Error,
     },
+    Serde {
+        line: usize,
+        column: usize,
+        msg: String,
+    },
     Win32 {
         code: i32, // the Win32 error code
     },
@@ -55,6 +60,7 @@ impl Error {
             Error::FileIo { .. } => "file_io",
             Error::FromUtf8 { .. } => "from_utf8",
             Error::FromUtf16 { .. } => "from_utf16",
+            Error::Serde { .. } => "serde",
             Error::Win32 { .. } => "win32",
             Error::Gtk { .. } => "gtk",
         }
@@ -83,6 +89,18 @@ impl From<std::io::Error> for Error {
 impl From<std::string::FromUtf16Error> for Error {
     fn from(err: std::string::FromUtf16Error) -> Self {
         Error::FromUtf16 { err }
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl From<serde_yaml_ng::Error> for Error {
+    fn from(err: serde_yaml_ng::Error) -> Self {
+        let (line, column) = err.location().map_or((0, 0), |l| (l.line(), l.column()));
+        Error::Serde {
+            line,
+            column,
+            msg: err.to_string(),
+        }
     }
 }
 
