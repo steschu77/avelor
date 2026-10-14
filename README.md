@@ -43,6 +43,14 @@ Avelor builds on ideas found in several existing tools for managing personal inf
 cargo run
 ```
 
+On Linux the desktop shows the app and its icon once they are installed:
+
+```sh
+cargo install --path app
+cp -r app/res/icons ~/.local/share/
+install -Dm644 -t ~/.local/share/applications app/res/io.github.steschu77.Avelor.desktop
+```
+
 The checks every change passes:
 
 ```sh

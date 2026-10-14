@@ -1,0 +1,33 @@
+#define RT_MANIFEST 24
+
+1 RT_MANIFEST "res/avelor.exe.manifest"
+APP_ICON ICON "res/avelor.ico"
+
+// The version's numbers and text come from build.rs (version_macros).
+1 VERSIONINFO
+FILEVERSION VERSION_MAJOR,VERSION_MINOR,VERSION_PATCH,0
+PRODUCTVERSION VERSION_MAJOR,VERSION_MINOR,VERSION_PATCH,0
+FILEFLAGSMASK 0x3F
+FILEFLAGS 0x0
+// VOS_NT_WINDOWS32, VFT_APP
+FILEOS 0x40004
+FILETYPE 0x1
+FILESUBTYPE 0x0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "Avelor"
+            VALUE "FileVersion", VERSION_TEXT
+            VALUE "InternalName", "avelor"
+            VALUE "OriginalFilename", "avelor.exe"
+            VALUE "ProductName", "Avelor"
+            VALUE "ProductVersion", VERSION_TEXT
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
