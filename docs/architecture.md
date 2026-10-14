@@ -77,7 +77,7 @@ The rules the code follows, and every change to it:
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, logger | |
+| av-utils | shared `Error`, `DateTime`, logger, atomic writes (`fs`) | |
 
 ## Host modules
 
@@ -120,7 +120,8 @@ abort; how to measure the size: `development.md#measuring-size`.
 
 - **Errors**: one `av_utils::Error` for every layer (`av-utils/error.rs`:
   logging), extended when needed; a separate error type only for functions
-  local to one module; expected outcomes are success variants, not errors.
+  local to one module; expected outcomes are success variants, not errors;
+  a failed write is `FileWrite { path, err }`.
 - **Reuse before writing**: `DateTime::from_system_time`. A new shared
   helper replaces every existing copy of its pattern in the same change.
 - **Formatting**: Rust code is rustfmt-formatted; `cargo fmt --all` is
@@ -130,4 +131,4 @@ abort; how to measure the size: `development.md#measuring-size`.
 
 | Part | Owns | Must not |
 |---|---|---|
-| av-utils | primitives with no domain (dates) | know about vaults, Google, LLMs; carry network types |
+| av-utils | primitives with no domain (dates, atomic writes) | know about vaults, Google, LLMs; carry network types |
