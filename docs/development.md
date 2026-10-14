@@ -5,6 +5,7 @@
 
 ## Checks <a id="checks"></a>
 
+- `cargo test --workspace` runs the unit tests.
 - `cargo clippy --workspace`.
 
 ## Measuring size <a id="measuring-size"></a>

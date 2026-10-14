@@ -1,7 +1,8 @@
 # Avelor — Architecture
 
 > The entry point to the documentation: what the app is, the constraints
-> and principles it is built on, build and conventions — and the map of
+> and principles it is built on, how crates are structured, build and
+> conventions — and the map of
 > the other documents.
 
 ## What the app is
@@ -36,13 +37,14 @@ read by OCR.
 
 | Constraint | Consequence |
 |---|---|
+| Minimal dependencies | Only `serde`, `log` (+ `embed-resource`, `static_vcruntime` at build time) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 
 ## Documents <a id="documents"></a>
 
 | Document | Covers |
 |---|---|
-| **`architecture.md`** | this file: what the app is, principles, build, conventions |
+| **`architecture.md`** | this file: what the app is, principles, structure, build, conventions |
 | `development.md` | checks, measuring size, line endings |
 
 ## Doc conventions
@@ -58,14 +60,24 @@ read by OCR.
   word or two, at most 16 characters, unique within its file and never
   reused for another section, so a heading can be reworded without
   touching a reference. Headings carry no numbers.
-- **`file:line`**: host files are under `app/src/`.
+- **`file:line`**: host files are under `app/src/`, crate files under
+  `crates/<crate>/src/` (written `av-vault/vault.rs:201`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
 
 ## Principles <a id="principles"></a>
 
 The rules the code follows, and every change to it:
 
-1. **Keep the stack, add no dependency.** Rust, no async runtime.
+1. **Keep the stack, add no dependency.** Rust, hand-written utilities, no
+   async runtime.
+6. **Pure core, thin shell.** Mapping and decision logic are pure functions
+   with tests; I/O sits at the edges.
+
+## Crates <a id="crates"></a>
+
+| Crate | Owns | Notes |
+|---|---|---|
+| av-utils | shared `Error`, `DateTime`, logger | |
 
 ## Build <a id="build"></a>
 
@@ -74,10 +86,22 @@ Linux the desktop entry and the icon are files (`app/res`), installed as
 `README.md` says.
 
 The release profile is built for size: `opt-level = "z"`, LTO, one codegen
-unit, `strip`, `panic = "abort"` (`Cargo.toml`); how to measure the size:
-`development.md#measuring-size`.
+unit, `strip`, `panic = "abort"` (`Cargo.toml`); the panic hook
+`log_panics` (`logger.rs`) logs thread, message and location before the
+abort; how to measure the size: `development.md#measuring-size`.
 
 ## Conventions <a id="conventions"></a>
 
+- **Errors**: one `av_utils::Error` for every layer (`av-utils/error.rs`:
+  logging), extended when needed; a separate error type only for functions
+  local to one module; expected outcomes are success variants, not errors.
+- **Reuse before writing**: `DateTime::from_system_time`. A new shared
+  helper replaces every existing copy of its pattern in the same change.
 - **Formatting**: Rust code is rustfmt-formatted; `cargo fmt --all` is
   fine on any file at any time.
+
+## Ownership
+
+| Part | Owns | Must not |
+|---|---|---|
+| av-utils | primitives with no domain (dates) | know about vaults, Google, LLMs; carry network types |
