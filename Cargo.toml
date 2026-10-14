@@ -1,0 +1,15 @@
+[workspace]
+members = ["app"]
+resolver = "3"
+
+[workspace.lints.clippy]
+collapsible_if = "allow"
+collapsible_else_if = "allow"
+excessive_precision = "allow"
+
+[profile.release]
+opt-level = "z"           # Optimize for size instead of speed
+lto = true                # Enable Link Time Optimization
+codegen-units = 1         # Better optimization (slower compile)
+strip = true              # Strip symbols from binary
+panic = "abort"           # No unwinding: a panic ends the process
