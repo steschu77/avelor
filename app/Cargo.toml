@@ -5,5 +5,9 @@ edition = "2024"
 
 [dependencies]
 
+[build-dependencies]
+embed-resource = "3.0"
+static_vcruntime = "3.0"
+
 [lints]
 workspace = true

@@ -36,7 +36,7 @@ read by OCR.
 
 | Constraint | Consequence |
 |---|---|
-| Small executable | release profile for size (`architecture.md#build`), no async runtime; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
+| Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 
 ## Documents <a id="documents"></a>
 
@@ -68,6 +68,10 @@ The rules the code follows, and every change to it:
 1. **Keep the stack, add no dependency.** Rust, no async runtime.
 
 ## Build <a id="build"></a>
+
+`app/build.rs` embeds the manifest and icon, on Windows. On
+Linux the desktop entry and the icon are files (`app/res`), installed as
+`README.md` says.
 
 The release profile is built for size: `opt-level = "z"`, LTO, one codegen
 unit, `strip`, `panic = "abort"` (`Cargo.toml`); how to measure the size:

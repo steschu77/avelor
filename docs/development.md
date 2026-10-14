@@ -13,7 +13,7 @@
 isn't rebuilt to measure. The `bloat` profile is the same code with a PDB:
 `CARGO_PROFILE_BLOAT_INHERITS=release CARGO_PROFILE_BLOAT_DEBUG=1
 CARGO_PROFILE_BLOAT_STRIP=none cargo build --profile bloat -p
-avelor`. On
+avelor` (`build.rs` sees `PROFILE=release`). On
 `target/bloat/avelor.pdb`, `llvm-pdbutil dump -symbols`
 (`S_GPROC32` records carry a code size), `-section-contribs`, `-modules`
 and `-publics` break it down, `llvm-size -A` gives the sections; a change
