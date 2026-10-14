@@ -2,6 +2,8 @@
 //! translates errors within its context into meaningful messages in the user's
 //! language. Error text is only used for logging and API calls.
 
+use std::path::PathBuf;
+
 // ----------------------------------------------------------------------------
 #[derive(Debug)]
 pub enum Error {
@@ -9,6 +11,16 @@ pub enum Error {
     Logging,
     InvalidDate,
     InvalidTime,
+    InvalidPath {
+        path: PathBuf,
+    },
+    FileExists {
+        path: PathBuf,
+    },
+    FileWrite {
+        path: PathBuf,
+        err: std::io::Error,
+    },
 
     // Error forwards
     FileIo {
@@ -37,6 +49,9 @@ impl Error {
             Error::Logging => "logging",
             Error::InvalidDate => "invalid_date",
             Error::InvalidTime => "invalid_time",
+            Error::InvalidPath { .. } => "invalid_path",
+            Error::FileExists { .. } => "file_exists",
+            Error::FileWrite { .. } => "file_write",
             Error::FileIo { .. } => "file_io",
             Error::FromUtf8 { .. } => "from_utf8",
             Error::FromUtf16 { .. } => "from_utf16",
