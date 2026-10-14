@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 log = { workspace = true, features = ["std"] }
+serde = { workspace = true }
+serde_yaml_ng = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }

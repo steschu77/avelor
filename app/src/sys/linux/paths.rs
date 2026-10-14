@@ -17,6 +17,12 @@ pub fn paths() -> Result<Paths> {
 
 impl Paths {
     // ------------------------------------------------------------------------
+    /// `$XDG_CONFIG_HOME/avelor`: `config.yaml`.
+    pub fn config_dir(&self) -> PathBuf {
+        glib::user_config_dir().join(APP_DIR)
+    }
+
+    // ------------------------------------------------------------------------
     /// `$XDG_STATE_HOME/avelor/log`: one log file per run.
     pub fn log_dir(&self) -> PathBuf {
         glib::user_state_dir().join(APP_DIR).join("log")
