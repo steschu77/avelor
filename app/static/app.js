@@ -8,6 +8,7 @@
 
 import { rpcCall } from './core/rpc.js';
 import './ui/statusbar.js';
+import './features/close.js';
 import './features/layout.js';
 
 // The page listens.
