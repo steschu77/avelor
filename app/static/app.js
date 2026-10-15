@@ -7,9 +7,13 @@
 // declares names runs when another first imports it.
 
 import { rpcCall } from './core/rpc.js';
+import './model/events.js';
+import './ui/menu.js';
 import './ui/statusbar.js';
 import './features/close.js';
+import './features/jobs.js';
 import './features/layout.js';
+import './features/sidebar.js';
 
 // The page listens.
 rpcCall('ready');

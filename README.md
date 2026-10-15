@@ -26,6 +26,12 @@ It is a personal project, not a commercial product or a claim to have solved per
 - **Stay focused and lightweight.** The application avoids an npm or JavaScript bundler dependency and keeps its underlying documents accessible outside the application.
 - **AI-friendly by design.** Markdown and YAML are human-readable, structured, and compact. This makes it cheaper for AI features to understand your data, especially when running local models.
 
+## Features
+
+- **A vault of plain files.** Documents, notes, tasks, events, contacts, lists, and records are Markdown and YAML files in a folder you own.
+- **In your language.** English, German, and Spanish: the system's language or the one set in `config.yaml`. A new language is a catalog of texts, checked by a script.
+- **Light or dark, by mouse or keyboard.** Avelor follows the system's light or dark theme, on Windows its title bar too; every control is in the keyboard's reach, with a visible focus.
+
 ## How It Compares
 
 Avelor builds on ideas found in several existing tools for managing personal information. Applications such as [Obsidian](https://obsidian.md/) and [Joplin](https://joplinapp.org/) demonstrate the value of local, file-based notes; [Paperless-ngx](https://docs.paperless-ngx.com/), [Papra](https://papra.app/), and [Docspell](https://docspell.org/) focus on document archiving and retrieval; and [Nextcloud](https://nextcloud.com/) brings together services such as files, email, and calendars in a self-hosted environment.
@@ -48,6 +54,13 @@ sudo apt install libgtk-4-dev libwebkitgtk-6.0-dev
 
 ```sh
 cargo run
+```
+
+To open the sample vault in `data/forged` instead of the last one (edits
+change its files; `git restore data/forged` undoes them):
+
+```sh
+cargo run -- data/forged
 ```
 
 On Linux the desktop shows the app and its icon once they are installed:

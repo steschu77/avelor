@@ -10,6 +10,7 @@ use crate::app::Prefs;
 use crate::app::{App, Outbox, UiQueue, UiTask};
 use crate::close;
 use crate::config::{ConfigStore, WindowState};
+use crate::sys::Owner;
 use crate::sys::UiSignal;
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -38,6 +39,11 @@ pub struct Shell {
     /// A task waits in the queue because it found `App` taken; the
     /// task holding it wakes the queue when it returns.
     deferred: Cell<bool>,
+    /// The owner of the dialogs of `UiTask::Modal` tasks: the main window.
+    owner: OnceCell<Owner>,
+    /// The dialogs of `UiTask::Modal` tasks that are open; the window can't
+    /// be closed meanwhile.
+    modal: Cell<u32>,
 }
 
 impl Shell {
@@ -48,14 +54,17 @@ impl Shell {
             app: RefCell::new(None),
             ui: OnceCell::new(),
             deferred: Cell::new(false),
+            owner: OnceCell::new(),
+            modal: Cell::new(0),
         }
     }
 
     // ------------------------------------------------------------------------
     /// The web view is up: `App` starts with the config, posting to the
-    /// page through `outbox`, its queue woken by `signal`. Returns the page's
-    /// preferences, which the page is loaded with.
-    pub fn start(&self, signal: UiSignal, outbox: Outbox) -> Prefs {
+    /// page through `outbox`, its queue woken by `signal`, its dialogs owned
+    /// by `owner`. Returns the page's preferences, which the page is loaded
+    /// with.
+    pub fn start(&self, signal: UiSignal, owner: Owner, outbox: Outbox) -> Prefs {
         let Some(config) = self.config.take() else {
             return Prefs::new();
         };
@@ -66,6 +75,7 @@ impl Shell {
             *slot = Some(app);
         }
         let _ = self.ui.set(ui);
+        let _ = self.owner.set(owner);
         prefs
     }
 
@@ -98,19 +108,21 @@ impl Shell {
     }
 
     // ------------------------------------------------------------------------
-    /// Whether a handler is running further up the stack: a modal loop
-    /// inside it dispatched this message. The window's Close is refused
+    /// Whether a dialog or a handler is running further up the stack: a
+    /// modal loop dispatched this message. The window's Close is refused
     /// then.
     pub fn is_busy(&self) -> bool {
-        self.app.try_borrow_mut().is_err()
+        self.modal.get() > 0 || self.app.try_borrow_mut().is_err()
     }
 
     // ------------------------------------------------------------------------
     /// Run the tasks queued so far, one at a time and in order, each with
-    /// `App` taken while it runs. A task queued meanwhile waits for the
-    /// next wake (`UiSignal::wake`), so the main loop runs in between. If the
-    /// `App` is taken already, this call comes from a modal loop inside a
-    /// running task: the queue waits, and that task wakes it on return.
+    /// `App` taken while it runs. A task queued meanwhile (the next step of
+    /// a scan) waits for the next wake (`UiSignal::wake`), so the main loop runs
+    /// in between. A dialog (`UiTask::Modal`) runs without `App`, so what its
+    /// modal loop dispatches runs normally meanwhile. If the `App` is taken
+    /// already, this call comes from a modal loop inside a running task: the
+    /// queue waits, and that task wakes it on return.
     pub fn run_tasks(&self) {
         let Some(ui) = self.ui.get() else {
             return;
@@ -130,6 +142,21 @@ impl Shell {
                         task(app);
                     }
                     drop(slot);
+                }
+                UiTask::Modal(work) => {
+                    drop(slot);
+                    if let Some(owner) = self.owner.get() {
+                        self.modal.set(self.modal.get() + 1);
+                        let apply = work(owner);
+                        self.modal.set(self.modal.get() - 1);
+                        // Free again: whatever the dialog's loop ran has
+                        // returned.
+                        if let Ok(mut slot) = self.app.try_borrow_mut()
+                            && let Some(app) = slot.as_mut()
+                        {
+                            apply(app);
+                        }
+                    }
                 }
             }
             // `App` is free again: wake the queue for what waited.
@@ -171,7 +198,7 @@ mod tests {
 
         let shell = Shell::new(load_config(&dir).unwrap());
         assert_eq!(shell.window_state(), DEFAULT_STATE);
-        shell.start(UiSignal::none(), Box::new(|_| {}));
+        shell.start(UiSignal::none(), Owner::none(), Box::new(|_| {}));
         let state = WindowState {
             width: 900,
             height: 700,
