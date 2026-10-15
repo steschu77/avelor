@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
@@ -45,6 +46,12 @@ impl Harness {
     }
 
     // ------------------------------------------------------------------------
+    /// A vault's folder in the test's folder.
+    pub fn vault(&self) -> PathBuf {
+        self.dir.join("vault")
+    }
+
+    // ------------------------------------------------------------------------
     /// Send `text` from the page, run the queue, and return what the page
     /// got back.
     pub fn send(&mut self, text: &str) -> Vec<String> {
@@ -59,7 +66,23 @@ impl Harness {
         while let Some(task) = self.ui.pop() {
             match task {
                 UiTask::App(task) => task(&mut self.app),
+                UiTask::Modal(_) => panic!("a dialog in a test"),
             }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Run the queue until the vault scan has ended -- it reads on a worker
+    /// (`vault_scan`); at most 5 seconds.
+    pub fn wait_scanned(&mut self) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            self.run_queue();
+            if !self.app.scanning() {
+                return;
+            }
+            assert!(Instant::now() < deadline, "the vault scan didn't end");
+            std::thread::sleep(Duration::from_millis(1));
         }
     }
 

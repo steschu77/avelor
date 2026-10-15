@@ -5,6 +5,7 @@ import { createStore } from '../core/store.js';
 import { rpcCall } from '../core/rpc.js';
 
 export const store = createStore({
+  vault_name: '', // the open vault's folder name (the `vault` event)
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
   // level: 'error' }; always replaced
   notices: [],

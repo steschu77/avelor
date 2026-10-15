@@ -1,7 +1,8 @@
 # Avelor — Vault
 
-> The vault's file format: what an entity file holds, identity, roles,
-> types and sources.
+> The vault's file format and its life cycle: what an entity file holds,
+> identity, roles, types and sources; opening, switching and scanning a
+> vault.
 
 ## Principles <a id="principles"></a>
 
@@ -578,3 +579,45 @@ The forged vault (`data/forged`) shows the model in use:
 | `Projects/…489b.prj.md` | project | `project`, `created` | body = project description (The Money Pit, starred) |
 
 These are the ID card thread's entities; the whole vault has every type.
+
+## Flows <a id="flows"></a>
+
+| # | Flow | Trigger → page | Host → events | Result |
+|---|---|---|---|---|
+| A3 | Show in folder | vault menu → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
+
+## Opening and scanning <a id="opening"></a>
+
+```mermaid
+sequenceDiagram
+    participant P as page
+    participant S as App (UI thread)
+    participant W as worker (av-vault scan)
+    P->>S: ready
+    S->>W: run_scan(root)
+    W->>W: walk the tree
+    W->>S: [Start]
+    S-->>P: vault (scanning), job (running)
+    loop a batch: at most 100 files, or what 50 ms read
+        W->>W: read and parse the files
+        W->>S: [Entry, Failed, …]
+        S-->>P: entity, vault_error, job
+    end
+    W->>S: […, Done], then the end
+    S-->>P: vault (open), job (done)
+```
+
+The worker walks the vault and reads its files (`vault_scan.rs`,
+av-vault's `scan`), and sends what it read in batches through
+`run_with_progress`: the start alone, then a batch once it holds 100
+events or 50 ms have passed since the one before, the end with the last
+one. The UI thread puts each batch into the index and tells the page, so
+a file that is slow to read (a network share, an online-only file of a
+cloud folder) never blocks the window. The page gets one `entity` per
+file. When it ends, the log says how many files the
+scan read in how many milliseconds.
+
+A vault scan can't be stopped; a new one replaces it (a vault switch). A
+scan is named by an id: the one replaced is aborted, and the batches and
+the end it already queued are dropped. Until the scan ends (`App::scanning`), the index holds
+the files read so far.

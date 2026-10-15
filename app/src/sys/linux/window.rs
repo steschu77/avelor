@@ -93,13 +93,13 @@ pub fn create(
 
     // The window's Close asks the app first, which closes the window once
     // the page is ready (`UiSignal::close`); before the app is up there is no
-    // page to ask. Refused while a handler is still running: a nested loop
-    // dispatched it. GTK has no end of a resize drag: the size is saved when
+    // page to ask. Refused while a dialog or a handler is still running: a
+    // nested loop dispatched it. GTK has no end of a resize drag: the size is saved when
     // the window closes, a change of maximized when it happens.
     let closing = Rc::clone(shell);
     window.connect_close_request(move |window| {
         if closing.is_busy() {
-            log::info!("Close refused: a handler is still running");
+            log::info!("Close refused: a dialog or a handler is still running");
             return glib::Propagation::Stop;
         }
         if closing.on_close() {

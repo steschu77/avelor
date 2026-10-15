@@ -65,6 +65,7 @@ version = "0.1.0"
 dependencies = [
  "av-bundle",
  "av-utils",
+ "av-vault",
  "embed-resource",
  "glib",
  "glib-unix",

@@ -50,6 +50,13 @@ sudo apt install libgtk-4-dev libwebkitgtk-6.0-dev
 cargo run
 ```
 
+To open the sample vault in `data/forged` instead of the last one (edits
+change its files; `git restore data/forged` undoes them):
+
+```sh
+cargo run -- data/forged
+```
+
 On Linux the desktop shows the app and its icon once they are installed:
 
 ```sh

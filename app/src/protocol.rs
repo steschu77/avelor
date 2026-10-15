@@ -2,6 +2,7 @@
 //! `api.md#rules`): a JSON envelope per request, exactly
 //! one reply to each, events pushed.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::api;
@@ -29,11 +30,20 @@ struct Envelope {
 /// command's `args`. Decoded by hand (`decode`): serde's derive for an
 /// adjacently tagged enum grows by kilobytes per variant.
 enum Command {
-    // The page's preferences (`api`).
+    // The vault and the page's preferences (`api`).
     Ready,
+    SwitchVault(SwitchTo),
     SetPrefs(PagePrefs),
+    RevealVault,
     /// The page's answer to the event `close` (`close::close_ready`).
     CloseReady(close::Answer),
+}
+
+/// `{path?}`: no `path` shows the folder picker.
+#[derive(Deserialize)]
+struct SwitchTo {
+    #[serde(default)]
+    path: Option<PathBuf>,
 }
 
 /// `{prefs}`: the page's preferences, strings.
@@ -49,7 +59,9 @@ impl Command {
         use serde_json::from_value;
         Ok(match cmd {
             "ready" => Command::Ready,
+            "switch_vault" => Command::SwitchVault(from_value(args)?),
             "set_prefs" => Command::SetPrefs(from_value(args)?),
+            "reveal_vault" => Command::RevealVault,
             "close_ready" => Command::CloseReady(from_value(args)?),
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
@@ -78,7 +90,9 @@ pub fn on_message(app: &mut App, text: &str) {
 fn route(app: &mut App, req: Req, command: Command) {
     match command {
         Command::Ready => api::ready(app, req),
+        Command::SwitchVault(a) => api::switch_vault(app, req, a.path),
         Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
+        Command::RevealVault => api::reveal_vault(app, req),
         Command::CloseReady(a) => close::close_ready(app, req, a),
     }
 }

@@ -10,6 +10,7 @@ use crate::shell::{Shell, TITLE};
 use av_utils::error::Result;
 
 pub use dialogs::show_error;
+pub use dialogs::{Owner, open_path, pick_folder};
 pub use paths::Paths;
 pub use paths::paths;
 pub use webview::BRIDGE_JS;

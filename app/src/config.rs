@@ -21,6 +21,8 @@ fn is_false(value: &bool) -> bool {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub vault: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowState>,
     /// UI preferences, owned by the frontend; the host only stores and
     /// replays them.
@@ -47,6 +49,9 @@ pub struct ConfigStore {
     config: AppConfig,
     path: PathBuf,
     error: Option<Error>,
+    /// The vault the command line names: opened instead of the last
+    /// session's, and not remembered.
+    session_vault: Option<PathBuf>,
 }
 
 // ----------------------------------------------------------------------------
@@ -64,7 +69,32 @@ impl ConfigStore {
             config,
             path: path.to_path_buf(),
             error: None,
+            session_vault: None,
         })
+    }
+
+    // ------------------------------------------------------------------------
+    /// The vault to open: the command line's, else the last session's.
+    pub fn vault(&self) -> Option<&Path> {
+        self.session_vault
+            .as_deref()
+            .or(self.config.vault.as_deref())
+    }
+
+    // ------------------------------------------------------------------------
+    /// Open `root` in this session instead of the last session's vault,
+    /// without remembering it.
+    pub fn set_session_vault(&mut self, root: PathBuf) {
+        self.session_vault = Some(root);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Remember `root` as the vault to open at the next start, and write the
+    /// file.
+    pub fn set_vault(&mut self, root: PathBuf) -> Result<()> {
+        self.session_vault = None;
+        self.config.vault = Some(root);
+        self.save()
     }
 
     // ------------------------------------------------------------------------
@@ -123,6 +153,7 @@ pub fn load_config(dir: &Path) -> Result<ConfigStore> {
                 config: AppConfig::default(),
                 path,
                 error: Some(err),
+                session_vault: None,
             })
         }
         Err(err) => Err(err),
@@ -178,6 +209,21 @@ mod tests {
         assert!(config.error.is_none());
         assert!(config.window().is_none());
         assert!(config.prefs().is_empty());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_command_lines_vault_is_opened_not_remembered() {
+        let dir = temp_dir("session");
+        let mut config = load_config(&dir).unwrap();
+        config.set_vault(PathBuf::from("last")).unwrap();
+        config.set_session_vault(PathBuf::from("named"));
+        assert_eq!(config.vault(), Some(Path::new("named")));
+        let saved = load_config(&dir).unwrap();
+        assert_eq!(saved.vault(), Some(Path::new("last")));
+
+        config.set_vault(PathBuf::from("switched")).unwrap();
+        assert_eq!(config.vault(), Some(Path::new("switched")));
         fs::remove_dir_all(&dir).unwrap();
     }
 

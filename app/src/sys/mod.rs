@@ -7,6 +7,11 @@
 //!   window and run the main loop; returns once the window is gone.
 //! - `UiSignal` (`Send + Sync`): `wake()` has the UI thread run the app's
 //!   queue (`Shell::run_tasks`), from any thread; tests use `UiSignal::none()`.
+//! - `Owner`: the main window as the owner of a `UiTask::Modal`'s dialog;
+//!   tests use `Owner::none()`.
+//! - `pick_folder(owner: &Owner, title) -> Option<PathBuf>`: a folder the
+//!   user picks; `open_path(path) -> Result<()>`: a file or folder opened
+//!   in its default app. Both wait in the platform's modal loop.
 //! - `BRIDGE_JS`: the page's bridge to the host, `window.host.post(text)`
 //!   and `window.host.receive(text)` (`architecture.md#platforms`).
 //! - `show_error(title, text)`: a failure before or after the main window,
@@ -19,6 +24,8 @@ pub use win32::run;
 #[cfg(target_os = "windows")]
 pub use win32::{BRIDGE_JS, UiSignal};
 #[cfg(target_os = "windows")]
+pub use win32::{Owner, open_path, pick_folder};
+#[cfg(target_os = "windows")]
 pub use win32::{paths, show_error};
 
 #[cfg(target_os = "linux")]
@@ -27,6 +34,8 @@ mod linux;
 pub use linux::run;
 #[cfg(target_os = "linux")]
 pub use linux::{BRIDGE_JS, UiSignal};
+#[cfg(target_os = "linux")]
+pub use linux::{Owner, open_path, pick_folder};
 #[cfg(target_os = "linux")]
 pub use linux::{paths, show_error};
 
