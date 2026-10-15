@@ -1,5 +1,5 @@
 import { equal, posted, test } from './harness.js';
-import { rpcCall } from '../../static/core/rpc.js';
+import { rpcCall, rpcOn } from '../../static/core/rpc.js';
 
 const receive = message => globalThis.host.receive(JSON.stringify(message));
 
@@ -25,4 +25,14 @@ test('a call is settled once, and a reply to none is left out', async () => {
   receive({ re: id, ok: 2 });
   receive({ re: 4711, ok: 3 });
   equal(await reply, 1);
+});
+
+test('an event goes to its listeners in the order they came', () => {
+  const heard = [];
+  rpcOn('told', data => heard.push(['first', data]));
+  rpcOn('told', data => heard.push(['second', data]));
+  rpcOn('other', data => heard.push(['other', data]));
+  receive({ ev: 'told', data: 7 });
+  receive({ ev: 'unheard', data: 8 });
+  equal(heard, [['first', 7], ['second', 7]]);
 });

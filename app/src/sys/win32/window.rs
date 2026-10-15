@@ -13,10 +13,14 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC, ICoreWebView2Controller,
 };
 use windows::Win32::{
-    Foundation::*, Graphics::Gdi::*, System::LibraryLoader::GetModuleHandleW,
+    Foundation::*,
+    Graphics::Dwm::{DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute},
+    Graphics::Gdi::*,
+    System::LibraryLoader::GetModuleHandleW,
+    System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW},
     UI::WindowsAndMessaging::*,
 };
-use windows::core::{HSTRING, PCWSTR, w};
+use windows::core::{BOOL, HSTRING, PCWSTR, w};
 
 /// The app's queue has tasks to run (`UiSignal::wake`).
 const WM_TASK: u32 = WM_USER + 1;
@@ -138,6 +142,7 @@ impl WindowProc {
             .map_err(Error::from)?
         };
 
+        window.follow_theme();
         let show = if state.maximized {
             SW_SHOWMAXIMIZED
         } else {
@@ -179,6 +184,7 @@ impl WindowProc {
             let _ = controller.SetBounds(rect);
             let _ = controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
         }
+        webview::set_background(&controller, apps_dark());
         let signal = UiSignal::new(self.hwnd());
         let prefs = self.shell.start(signal, webview::outbox(webview.clone()));
         self.controller.replace(Some(controller));
@@ -189,6 +195,25 @@ impl WindowProc {
     /// A message arrived from the page's JS via `window.host.post`.
     pub fn on_web_message(&self, message: String) {
         self.shell.on_web_message(message);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The title bar and the web view's ground before the page paints in
+    /// Windows' theme for apps, as the page's colors are (`prefers-color-scheme`,
+    /// which WebView2 takes from the same setting).
+    fn follow_theme(&self) {
+        let dark = BOOL::from(apps_dark());
+        let _ = unsafe {
+            DwmSetWindowAttribute(
+                self.hwnd(),
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &dark as *const BOOL as *const core::ffi::c_void,
+                std::mem::size_of::<BOOL>() as u32,
+            )
+        };
+        if let Some(controller) = self.controller.borrow().as_ref() {
+            webview::set_background(controller, dark.as_bool());
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -242,6 +267,15 @@ impl WindowProc {
             WM_SETFOCUS => self.on_set_focus(),
             WM_EXITSIZEMOVE => self.on_exit_size_move(),
             WM_TASK => self.on_task(),
+            WM_SETTINGCHANGE => {
+                let area = PCWSTR(lparam.0 as *const u16);
+                if !area.is_null()
+                    && unsafe { area.to_string() }.is_ok_and(|a| a == "ImmersiveColorSet")
+                {
+                    self.follow_theme();
+                }
+                unsafe { DefWindowProcW(self.hwnd(), msg, wparam, lparam) }
+            }
             _ => unsafe { DefWindowProcW(self.hwnd(), msg, wparam, lparam) },
         }
     }
@@ -361,6 +395,26 @@ pub fn run_message_loop() {
             DispatchMessageW(&msg);
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+/// Windows' apps are dark (Settings, Personalization, Colors). Without the
+/// value, as before Windows 10, they are light.
+fn apps_dark() -> bool {
+    let mut light = 1u32;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    let read = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
+            w!("AppsUseLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some(&mut light as *mut u32 as *mut core::ffi::c_void),
+            Some(&mut size),
+        )
+    };
+    read.is_ok() && light == 0
 }
 
 // ----------------------------------------------------------------------------

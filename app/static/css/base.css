@@ -1,0 +1,54 @@
+/* Base: the box model, the page's ground and font, the global states
+   (.is-resizing) and controls. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  position: relative;
+  background: var(--c-paper);
+  color: var(--c-ink);
+  font: 400 var(--fs-ui)/1.4 var(--f-chrome);
+}
+
+/* while a grip is dragged (features/layout.js), widths follow the pointer
+   without easing */
+.is-resizing {
+  transition: none !important;
+}
+
+/* Less motion when the system asks for it: what slides or fades (the
+   panel, the status bar) changes at once, and the chat's caret doesn't
+   blink. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Controls take the text style of where they are; components set their own. */
+button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+/* The focus the keyboard moved: a ring inside the control, so a list's
+   edge doesn't cut it. A component with a focus of its own (.input's
+   border, an editor's caret) sets outline: none. */
+:focus-visible {
+  outline: 2px solid var(--c-accent-line);
+  outline-offset: -2px;
+}

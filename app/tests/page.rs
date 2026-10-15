@@ -7,7 +7,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 // The page's layers (build.rs), the tests above them.
-const LAYERS: &[&str] = &["static/core/", "tests/page/"];
+const LAYERS: &[&str] = &[
+    "static/core/",
+    "static/model/",
+    "static/ui/",
+    "static/features/",
+    "tests/page/",
+];
 
 // Ahead of UTC, behind it, and with its summer in December.
 const ZONES: [&str; 3] = ["Europe/Berlin", "America/Chicago", "Pacific/Auckland"];

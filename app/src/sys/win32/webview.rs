@@ -10,8 +10,9 @@ use crate::sys::win32::window::WindowProc;
 use webview2_com::{
     CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
     Microsoft::Web::WebView2::Win32::{
-        CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2, ICoreWebView2Controller,
-        ICoreWebView2Environment, ICoreWebView2Settings3,
+        COREWEBVIEW2_COLOR, CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2,
+        ICoreWebView2Controller, ICoreWebView2Controller2, ICoreWebView2Environment,
+        ICoreWebView2Settings3,
     },
 };
 use webview2_com::{WebMessageReceivedEventHandler, take_pwstr};
@@ -76,6 +77,26 @@ fn on_controller_created(hwnd: HWND, controller: ICoreWebView2Controller) -> Res
         prefs = window.on_controller(controller.clone(), &webview)
     });
     setup(hwnd, &webview, &prefs)
+}
+
+// ----------------------------------------------------------------------------
+/// What the web view shows before the page paints: the page's ground in
+/// the light or the `dark` theme (`--c-paper`, `css/tokens.css`), not white.
+pub fn set_background(controller: &ICoreWebView2Controller, dark: bool) {
+    let (r, g, b) = if dark {
+        (0x23, 0x21, 0x1e)
+    } else {
+        (0xf4, 0xf2, 0xee)
+    };
+    let color = COREWEBVIEW2_COLOR {
+        A: 255,
+        R: r,
+        G: g,
+        B: b,
+    };
+    if let Ok(controller) = controller.cast::<ICoreWebView2Controller2>() {
+        let _ = unsafe { controller.SetDefaultBackgroundColor(color) };
+    }
 }
 
 // ----------------------------------------------------------------------------
