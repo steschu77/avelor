@@ -12,8 +12,16 @@ export const store = createStore({
   // the page's preferences, strings by key: the host fills them into the
   // page (#prefs, page.rs); `savePrefs` changes them; always replaced
   prefs: JSON.parse($('prefs')?.textContent || '{}'),
+  // *_rev: bumped on every change on entities
+  entities_rev: 0,
   // the panel's width: 'closed', 'normal' or 'expanded' (full width)
   panel_size: 'normal',
+  // the Documents lens's order; `kind` is the last tiebreak, no column sorts by it
+  sort_state: [
+    { key: 'date', dir: 'desc' },
+    { key: 'title', dir: 'asc' },
+    { key: 'kind', dir: 'asc' },
+  ],
 });
 
 // ----------------------------------------------------------------------------

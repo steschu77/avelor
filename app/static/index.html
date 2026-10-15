@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/areas/shell.css">
   <link rel="stylesheet" href="css/areas/sidebar.css">
+  <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/panel.css">
 </head>
 
@@ -31,7 +32,18 @@
       </div>
     </aside>
 
-    <main class="main" id="main"></main>
+    <main class="main" id="main">
+      <!-- Documents (features/lenses/documents.js) -->
+      <div class="stack docs-lens" id="lens-documents">
+        <div class="table docs">
+          <div class="list-row table__head">
+            <button class="tool table__sort" data-sort="title"><span class="label">Name</span></button>
+            <button class="tool table__sort docs__head-date" data-sort="date"><span class="label">Date</span></button>
+          </div>
+          <div class="table__body" id="doc-rows"></div>
+        </div>
+      </div>
+    </main>
 
     <aside class="panel" id="panel">
       <div class="grip" id="panel-divider"></div>

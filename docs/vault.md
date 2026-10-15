@@ -621,3 +621,8 @@ A vault scan can't be stopped; a new one replaces it (a vault switch). A
 scan is named by an id: the one replaced is aborted, and the batches and
 the end it already queued are dropped. Until the scan ends (`App::scanning`), the index holds
 the files read so far.
+
+A scan starts only when a vault opens, so `vault` (scanning) starts the
+page's vault over (`forgetVault`, `model/events.js`). The page forgets:
+
+- the entities.

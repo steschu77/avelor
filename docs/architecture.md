@@ -71,7 +71,7 @@ read by OCR.
 - **`file:line`**: host files are under `app/src/`, page files under
   `app/static/`, crate files under `crates/<crate>/src/` (written
   `av-vault/vault.rs:201`).
-- **Flows** have ids by area (A vault): trigger
+- **Flows** have ids by area (A vault, F lenses): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
@@ -283,28 +283,35 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make); observable store (`setState`/`subscribe` with `Object.is`) |
+| `core/dom.js`, `core/store.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`); the date helpers (`parseDate`), every date format of the page |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
-| `model/state.js` | the store and its schema (the vault's state, `notices`, the preferences); `savePrefs`, `showError` |
-| `model/events.js` | the host's events into the model (`vault`) |
-| `ui/menu.js` | the popup menu (`showMenu`) with its Esc |
+| `model/state.js` | the store and its schema (the vault's state, the counters, `notices`, the preferences); `savePrefs`, `showError` |
+| `model/entities.js` | the Map `entities` |
+| `model/events.js` | the host's events into the model (`entity`, `vault`; `forgetVault`), the only writer of the Maps |
+| `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
+| `features/lenses/documents.js` | lenses |
 | `features/close.js` | closing the app: the `close` event answered `close_ready` |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/sidebar.js` | the vault panel: the vault menu |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the panel's close and expand buttons |
-| `app.js` | the entry: its imports run the modules that act when they load, in the order they act; `ready` |
+| `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
 | `icons/` | the icons, Fluent UI System Icons (MIT, `icons/LICENSE`), each a file as it comes, joined into the page's sprite by `build.rs` |
 
 ### Page state <a id="page-state"></a>
 
-The store (`model/state.js`) holds UI state and the notices.
+The store (`model/state.js`) holds UI state and the notices, plus revision counters
+(`entities_rev`). The domain data lives
+in Maps outside it (`entities`, in `model/entities.js`), changed in place. Only the host's
+events write them, in `model/events.js`, each followed by a counter's
+bump; a vault being opened clears them (`forgetVault`).
 
-The model calls no render. The renders subscribe to the store: the
-status bar to `notices`.
+The model calls no render. The renders subscribe to the store (`app.js`,
+the features): the lenses to the counters, the status bar to
+`notices`.
 
 A render never sends a change to the host.
 
@@ -419,4 +426,4 @@ abort. Where the bundle lands and how to measure the size:
 | av-utils | primitives with no domain (dates, ids, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | av-vault | the vault's schema, files, index | do network or UI; start threads (the app decides where scan work runs) |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
-| page | rendering, user input | resolve filenames, conflicts or structural rules |
+| page | rendering, user input, the page's copy of the data | resolve filenames, conflicts or structural rules |
