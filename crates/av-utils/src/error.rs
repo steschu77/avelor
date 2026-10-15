@@ -14,6 +14,9 @@ pub enum Error {
     BadRequest {
         msg: String,
     },
+    InvalidArgument {
+        arg: String,
+    },
     InvalidDate,
     InvalidTime,
     InvalidPath {
@@ -60,6 +63,7 @@ impl Error {
             Error::NotInitialized => "not_initialized",
             Error::Cancelled => "cancelled",
             Error::BadRequest { .. } => "bad_request",
+            Error::InvalidArgument { .. } => "invalid_argument",
             Error::InvalidDate => "invalid_date",
             Error::InvalidTime => "invalid_time",
             Error::InvalidPath { .. } => "invalid_path",

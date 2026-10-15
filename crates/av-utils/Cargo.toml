@@ -10,10 +10,11 @@ serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 glib = { workspace = true }
+libc = { workspace = true }
 
 [lints]
 workspace = true

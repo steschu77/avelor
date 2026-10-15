@@ -41,6 +41,7 @@ name = "av-utils"
 version = "0.1.0"
 dependencies = [
  "glib",
+ "libc",
  "log",
  "serde",
  "serde_json",
