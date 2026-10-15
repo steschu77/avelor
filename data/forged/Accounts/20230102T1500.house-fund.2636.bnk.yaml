@@ -1,0 +1,13 @@
+id: 018572ff-1d80-78ca-9bbc-6ffd7edc2636
+title: House fund
+date: 2023-01-02T15:00:00Z
+projects:
+- 01a0029c-68c0-79cd-804f-54d54c96489b
+created: {}
+bank-account:
+  type: savings
+  number: 0042-7318-5539
+  currency: USD
+  balance: 0.0
+  owner: Alexander and Maya Yahnek
+  institution: First Bank of Springfield

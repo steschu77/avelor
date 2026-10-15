@@ -1,0 +1,12 @@
+id: 019b8d2b-8c00-727b-a796-76832265bdf8
+title: Personal
+date: 2026-01-05T14:00:00Z
+remote:
+  account: 01a0c342-0940-7d5a-b215-6123a44c9144
+  remote:
+  - calendar-id: alex@example.com
+  - sync-token: CTxZTaq77cusbQIZVeoVjEI4prj9n3X5=
+  - time-min: 2025-08-10T05:00:00Z
+calendar:
+  color: '#3B82F6'
+  timeZone: America/Chicago

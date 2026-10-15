@@ -1,0 +1,39 @@
+id: 01a0fa4d-d540-722e-b251-9c3bc4a8182d
+title: Cover letter for Cogsworth
+date: 2026-10-02T01:50:00Z
+projects:
+- 01a0efd3-5680-7f23-a650-f11e31b93413
+linked-to: 01a0efdc-7e40-7087-b16f-7197eb7a2972
+ai: {}
+conversation:
+  messages:
+  - id: 01a0fa4d-d540-76d7-a2db-c15ca0947d46
+    date: 2026-10-02T01:50:00Z
+    content: Write a cover letter for the Restoration Mechanic job at Cogsworth.
+  - id: 01a0fa4d-ecb0-7dca-926e-60c41f9c725e
+    parent: 01a0fa4d-d540-76d7-a2db-c15ca0947d46
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-10-02T01:50:06Z
+    content: |-
+      Dear Hiring Manager,
+
+      As a passionate automotive professional with a proven track record of leveraging synergies in the automotive restoration space
+  - id: 01a0fa4e-4e58-70f8-8541-aeb1f53618fb
+    parent: 01a0fa4d-ecb0-7dca-926e-60c41f9c725e
+    date: 2026-10-02T01:50:31Z
+    content: Stop. The ad says don't say synergy. Write it like a mechanic talks.
+  - id: 01a0fa4e-69b0-7332-b7cc-9e67c42e4a1c
+    parent: 01a0fa4e-4e58-70f8-8541-aeb1f53618fb
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-10-02T01:50:38Z
+    content: |-
+      Dear Ms. Cogsworth,
+
+      I fix old cars, and I fix them right. I kept a '67 Fastback alive for eleven years with parts from four states and one very patient wife.
+
+      I'd like to do that for your customers.
+
+      Alexander Yahnek
+  active: 01a0fa4e-69b0-7332-b7cc-9e67c42e4a1c
