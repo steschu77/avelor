@@ -1,13 +1,14 @@
 # Avelor — User interface
 
-> The main window: its layout, the vault panel, the lenses, the status
-> bar, the jobs panel, page keys and the preferences.
+> The main window: its layout, the vault panel with its filters, the
+> lenses, the status bar, the jobs panel, page keys and the preferences.
 
 ## Layout
 
 Three panels:
 
-- the **vault panel** on the left; its lower area holds the jobs panel
+- the **vault panel** on the left, for filtering
+  (`ui.md#vault-panel`); its lower area holds the jobs panel
   (`ui.md#jobs-panel`);
 - the **main view** with the lenses (`ui.md#lenses`);
 - the **side panel** on the right.
@@ -16,15 +17,30 @@ Both side panels have grips to resize them; the widths are remembered
 across restarts (`ui.md#preferences`). Menus are popups (`showMenu`,
 `ui/menu.js`), which mark their anchor `aria-expanded`.
 
+## Vault panel <a id="vault-panel"></a>
+
+The vault panel defines the view on the vault: a project filters
+what the lens shows. Filtering is entirely on the page: all metadata
+arrives with the scan (`renderSidebar`, `features/sidebar.js`;
+`matchesFilter`, `model/entities.js`). The counts per project are derived on
+the page, once per frame.
+
+- **Projects**: "All Projects" clears the filter; "No project" shows the
+  entities in no project of the vault (`NO_PROJECT` as
+  `selected_project`); starred projects come first; archived projects are
+  folded under an "Archived" row at the end, still selectable
+  (`projectsInOrder`).
+
 ## Lenses <a id="lenses"></a>
 
 ### Documents <a id="documents"></a>
 
-`features/lenses/documents.js`: the entities as rows, in columns Name (the type
+`features/lenses/documents.js`: the entities in the
+vault panel's filter as rows, in columns Name (the type
 icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
 `sort_state`; `kind` is its last tiebreak, no column sorts by it).
 
-- **Keyed rows** (by entity) stay built, so a scan only adds rows.
+- **Keyed rows** (by entity) stay built while filtered out, so a scan only adds rows.
 
 ## Status bar <a id="status-bar"></a>
 
@@ -65,4 +81,5 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 |---|---|---|---|---|
 | A5 | Panel widths | drag a grip → `saveWidth` → `savePrefs` | `set_prefs {prefs}` → `config.yaml` `prefs` | the width comes back on the next start, inside the page (`#prefs`), without easing |
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
+| B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, counts re-render |
 | F1 | Sort in Documents | header click (`onSortClick`, `features/lenses/documents.js`) | — | multi-key sort in `sort_state` |

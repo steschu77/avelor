@@ -28,6 +28,21 @@
           <button type="button" class="tool" id="vault-menu-btn"><svg class="icon"><use href="#i-library" /></svg></button>
           <span id="vault-name"></span>
         </div>
+        <div class="sidebar__scroll">
+          <div class="nav-section label"><svg class="icon disclosure"><use href="#i-chevron-down" /></svg>Projects</div>
+          <a class="nav-item nav-item--compact" id="all-projects">
+            <svg class="icon nav-item__icon"><use href="#i-layer" /></svg>
+            All Projects
+            <span id="all-documents-count" class="meta nav-item__count"></span>
+          </a>
+          <a class="nav-item nav-item--compact" id="no-project" title="Documents without a project">
+            <svg class="icon nav-item__icon"><use href="#i-folder" /></svg>
+            <span class="nav-item__name">No project</span>
+            <span class="meta nav-item__count"></span>
+          </a>
+          <div id="projects"></div>
+        </div>
+
         <div class="jobs" id="jobs"></div>
       </div>
     </aside>

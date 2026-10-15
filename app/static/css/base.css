@@ -1,5 +1,5 @@
-/* Base: the box model, the page's ground and font, the global states
-   (.is-resizing) and controls. */
+/* Base: the box model, the page's ground and font, links, the global
+   states ([hidden], .is-resizing) and controls. */
 
 * {
   box-sizing: border-box;
@@ -17,6 +17,19 @@ body {
   background: var(--c-paper);
   color: var(--c-ink);
   font: 400 var(--fs-ui)/1.4 var(--f-chrome);
+}
+
+a {
+  color: var(--c-ink);
+}
+
+a:hover {
+  color: var(--c-ink-mute);
+}
+
+/* [hidden] always wins, whatever display a component's own rules set. */
+[hidden] {
+  display: none !important;
 }
 
 /* while a grip is dragged (features/layout.js), widths follow the pointer

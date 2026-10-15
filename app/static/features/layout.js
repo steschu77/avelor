@@ -1,7 +1,7 @@
 // The shell's layout (architecture.md#page): the grips that resize the
 // vault panel, the panel and its context column, with the widths kept in
 // the preferences; the panel's layout, which follows `panel_size`; the
-// panel's close and expand buttons.
+// sidebar's sections; the panel's close and expand buttons.
 
 import { $ } from '../core/dom.js';
 import { savePrefs, store } from '../model/state.js';
@@ -10,6 +10,7 @@ const root = document.documentElement;
 const shell = document.querySelector(".shell");
 const main = $("main");
 const panel = $("panel");
+const sidebar = $("sidebar");
 const sidebarDivider = $("sidebar-divider");
 const panelDivider = $("panel-divider");
 const contextDivider = $("context-divider");
@@ -149,6 +150,18 @@ document.addEventListener('mouseup', () => {
   main.classList.remove("is-resizing");
   document.body.style.cursor = "";
 });
+
+// collapsible sections: a label owns the siblings up to the next label
+for (const section of sidebar.querySelectorAll(".nav-section")) {
+  section.setAttribute("aria-expanded", "true");
+  section.addEventListener('click', () => {
+    const expanded = section.getAttribute("aria-expanded") !== "true";
+    section.setAttribute("aria-expanded", String(expanded));
+    for (let el = section.nextElementSibling; el && !el.classList.contains("nav-section"); el = el.nextElementSibling) {
+      el.hidden = !expanded;
+    }
+  });
+}
 
 btnClose.addEventListener('click', () => store.setState({ panel_size: "closed" }));
 

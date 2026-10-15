@@ -1,10 +1,12 @@
-// The Documents lens (ui.md#documents): the entities as rows. This file
-// owns the rows and the sort-state UI, model/entities.js the entities.
+// The Documents lens (ui.md#documents): the entities in the vault panel's
+// filter as rows. This file owns the rows and the sort-state UI,
+// model/entities.js the entities.
 
 import { $, accEl, oncePerFrame, placeChildren } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
 import { store } from '../../model/state.js';
 import { entities } from '../../model/entities.js';
+import { matchesFilter } from '../../model/entities.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 
 const lensEl = $('lens-documents');
@@ -39,8 +41,8 @@ function sortItems(items) {
 }
 
 // ----------------------------------------------------------------------------
-// The rows by entity id, kept across renders, so a scan only adds rows
-// instead of rebuilding the lens every frame.
+// The rows by entity id, kept across renders (also while filtered out), so
+// a scan only adds rows instead of rebuilding the lens every frame.
 const rows = new Map();
 const rowDocs = new WeakMap(); // a document's row -> the entity it was filled from
 
@@ -75,8 +77,13 @@ function docRow(doc) {
 }
 
 function renderDocuments() {
+  const state = store.getState();
+  const listed = [];
+  for (const doc of entities.values()) {
+    if (matchesFilter(doc, state)) listed.push(doc);
+  }
   pruneRows();
-  placeChildren(rowsEl, sortItems([...entities.values()]).map(docRow));
+  placeChildren(rowsEl, sortItems(listed).map(docRow));
 }
 
 // The lenses showing entities render at most once per frame. A scan sends

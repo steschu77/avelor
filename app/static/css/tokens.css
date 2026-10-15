@@ -1,5 +1,5 @@
-/* Tokens: the colors, fonts, sizes, insets, heights, shadows and layers
-   every other file uses (architecture.md#css). */
+/* Tokens: the colors, fonts, sizes, insets, heights, radii, shadows and
+   layers every other file uses (architecture.md#css). */
 
 :root {
   /* naming: c = color, f = font, fs = font size, lh = line height,
@@ -39,6 +39,7 @@
 
   --h-topbar: 36px;
   --h-row: 30px;
+  --h-nav-row: 28px;
   --h-control-sm: 22px;
   /* an icon (index.html's sprite, build.rs) */
   --h-icon: 16px;
@@ -55,6 +56,9 @@
   --w-panel: 400px;
   --w-expanded-context: 400px;
   --o-panel: 0px;
+
+  /* the only radius */
+  --r-pill: 99px;
 
   --z-panel: 2;
   /* above the panel */

@@ -625,4 +625,5 @@ the files read so far.
 A scan starts only when a vault opens, so `vault` (scanning) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 
-- the entities.
+- the entities and projects;
+- the filter.
