@@ -1,0 +1,51 @@
+id: 01a0ea92-6da0-7c10-ab60-e94a2d9ecb08
+title: Dom Castellano
+date: 2026-09-29T00:31:00Z
+projects:
+- 01a07403-c800-7adb-87da-574b8e98927f
+tags:
+- eleanor
+import:
+  origin: WhatsApp Chat with Dom Castellano.txt
+conversation:
+  messages:
+  - id: 01a0ea92-6da0-76a7-b937-a61e61753099
+    sender: Dom
+    date: 2026-09-29T00:31:00Z
+    content: Is this still available?
+  - id: 01a0ea93-5800-7e0f-8a79-fb7d708906f8
+    parent: 01a0ea92-6da0-76a7-b937-a61e61753099
+    sender: Alex
+    date: 2026-09-29T00:32:00Z
+    content: Yes. And no, I won't take $500.
+  - id: 01a0ea93-cd30-73a0-96c1-d62a5d0fe291
+    parent: 01a0ea93-5800-7e0f-8a79-fb7d708906f8
+    sender: Dom
+    date: 2026-09-29T00:32:30Z
+    content: Wasn't going to offer $500.
+  - id: 01a0ea94-4260-7eee-8e9e-1455dad916fb
+    parent: 01a0ea93-cd30-73a0-96c1-d62a5d0fe291
+    sender: Dom
+    date: 2026-09-29T00:33:00Z
+    content: Is she the real Eleanor?
+  - id: 01a0ea96-1720-702c-9fb1-8019ad097393
+    parent: 01a0ea94-4260-7eee-8e9e-1455dad916fb
+    sender: Alex
+    date: 2026-09-29T00:35:00Z
+    content: She's a Fastback with eleven years of love in her. Not a Shelby.
+  - id: 01a0ea97-0180-7174-b255-a3f03915e38c
+    parent: 01a0ea96-1720-702c-9fb1-8019ad097393
+    sender: Dom
+    date: 2026-09-29T00:36:00Z
+    content: Good. I don't want a movie car. I want a family car.
+  - id: 01a12768-76c0-7111-af51-98ec995d003a
+    parent: 01a0ea97-0180-7174-b255-a3f03915e38c
+    sender: Dom
+    date: 2026-10-10T20:02:00Z
+    content: Transfer is out.
+  - id: 01a12769-6120-7830-95e5-4f2dc2d347ae
+    parent: 01a12768-76c0-7111-af51-98ec995d003a
+    sender: Alex
+    date: 2026-10-10T20:03:00Z
+    content: Take care of her.
+  active: 01a12769-6120-7830-95e5-4f2dc2d347ae

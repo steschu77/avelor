@@ -126,6 +126,32 @@ impl Index {
             .filter(|e| e.doc.projects().iter().any(|p| p == project_id))
             .collect()
     }
+
+    // ------------------------------------------------------------------------
+    /// The members of `thread_id` -- entities whose `message.threads` lists
+    /// it -- in thread order: by `date`, ties broken by `id` (UUIDv7).
+    pub fn thread_members(&self, thread_id: &Id) -> Vec<&Entry> {
+        let mut members: Vec<&Entry> = self
+            .documents
+            .iter()
+            .filter(|e| {
+                e.doc
+                    .roles()
+                    .message
+                    .as_ref()
+                    .is_some_and(|m| m.threads.contains(thread_id))
+            })
+            .collect();
+        sort_by_date(&mut members);
+        members
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Sort `entries` by `date`, ties broken by `id` (UUIDv7, so creation
+/// order), the undated ones first: thread order.
+pub(crate) fn sort_by_date(entries: &mut [&Entry]) {
+    entries.sort_by_key(|e| (e.doc.date(), e.doc.id()));
 }
 
 // ----------------------------------------------------------------------------
