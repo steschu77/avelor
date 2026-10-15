@@ -74,7 +74,7 @@ events from Google Calendar, scanned pictures read by OCR.
 - **`file:line`**: host files are under `app/src/`, page files under
   `app/static/`, crate files under `crates/<crate>/src/` (written
   `av-vault/vault.rs:201`).
-- **Flows** have ids by area (A vault, F lenses): trigger
+- **Flows** have ids by area (A vault, B navigation, F lenses): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
@@ -294,31 +294,36 @@ nothing imports `app.js`.
 | `core/text.js` | the page's texts: `t`, a text of the run's catalog, `textOf`, one the host sent (`localization.md`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
-| `model/state.js` | the store and its schema (the vault's state, the counters, `notices`, the preferences); `savePrefs`, `showError` |
-| `model/entities.js` | the Map `entities` |
+| `model/state.js` | the store and its schema (the vault's state, the filters, the counters, `notices`, the preferences); `savePrefs`, `showError` |
+| `model/entities.js` | the Maps `entities`, `projects`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`) |
 | `model/events.js` | the host's events into the model (`entity`, `vault`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
 | `features/lenses/documents.js` | lenses |
 | `features/close.js` | closing the app: the `close` event answered `close_ready` |
 | `features/jobs.js` | job cards from the `job` event |
-| `features/sidebar.js` | the vault panel: the vault menu |
+| `features/sidebar.js` | the vault panel: projects, No project with their counts, the filter, the vault menu |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
-| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the panel's close and expand buttons |
+| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the sidebar's sections, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
 | `icons/` | the icons, Fluent UI System Icons (MIT, `icons/LICENSE`), each a file as it comes, joined into the page's sprite by `build.rs` |
 
+A page is drawn by what it must keep while it changes:
+
+- **Reconciled by key** (`placeChildren`): the lenses and the sidebar,
+  long lists whose rows keep their hover.
+
 ### Page state <a id="page-state"></a>
 
 The store (`model/state.js`) holds UI state and the notices, plus revision counters
-(`entities_rev`). The domain data lives
-in Maps outside it (`entities`, in `model/entities.js`), changed in place. Only the host's
+(`projects_rev`, `entities_rev`). The domain data lives
+in Maps outside it (`entities`, `projects`, in `model/entities.js`), changed in place. Only the host's
 events write them, in `model/events.js`, each followed by a counter's
 bump; a vault being opened clears them (`forgetVault`).
 
 The model calls no render. The renders subscribe to the store (`app.js`,
-the features): the lenses to the counters, the status bar to
+the features): the lenses and the sidebar to the counters, the status bar to
 `notices`.
 
 A render never sends a change to the host.
@@ -341,11 +346,11 @@ order into the page's one `<style>`. The order stands in one place, as
 
 | File | Holds |
 |---|---|
-| `css/tokens.css` | the colors, fonts, sizes, insets, heights, shadows and layers |
-| `css/base.css` | the box model, the page's ground, the global states (`.is-resizing`), controls |
-| `css/type.css` | the type roles (`meta`, …) and the utilities (`icon`, `push`) |
-| `css/components.css` | what several areas share: `tool`, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar, panel |
+| `css/tokens.css` | the colors, each light and dark, the fonts, sizes, insets, heights, radii, shadows and layers |
+| `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
+| `css/type.css` | the type roles (`label`, `meta`, `row-title`, …) and the utilities (`icon`, `push`, `stack`) |
+| `css/components.css` | what several areas share: `tool`, `menu`, `list-row`, `pane-head`, … |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel |
 
 Conventions the page keeps:
 
@@ -367,6 +372,26 @@ Conventions the page keeps:
   ring, a border) `--c-accent-line`, 3:1 on the grounds, and danger as
   text, an icon or a thin line `--c-danger-ink`, 4.5:1; the pale accent
   and danger stay for fills.
+- **Keyboard**: what is clicked is a `<button>`, or, when it holds
+  controls of its own (a row with its buttons), `pressable`
+  (`core/dom.js`): Tab reaches it, Enter or Space presses it. A control
+  shown on hover shows on its row's `:focus-within` too, never
+  `visibility: hidden` alone, which takes it out of the Tab order. The
+  focus shows as `base.css`'s ring; a rule that sets `outline: none`
+  shows it another way (an input's border). A row a render replaces
+  keeps its focus by a focus key (`keepingFocus`, a page's
+  `data-focus-key`).
+- **Names**: a control that shows a glyph (an x, a +, an arrow, a check
+  mark) or an icon alone is named by its tooltip's words: `titled` in a
+  script, `data-t-title` with `data-t-aria-label` in the markup, an icon
+  alone by its `data-t-title`. The areas are labelled landmarks, and a
+  new notice is read out (`ui.md#status-bar`). What slides or fades
+  stops when the system asks for less motion (`base.css`).
+- **The trade-off**: a control is made reachable, named and visible
+  where that is small (a button, an attribute, a rule, a token); where
+  more would add code or steps to the UI, it stays as it is and
+  `ui.md#keys-and-actions` says so. No conformance to a standard is
+  claimed.
 - **Specificity**: a block rule that sets the same property as a component
   overrides it, so a block class and a component are combined only when
   their properties don't overlap. A bare `.is-x` loses to any later block
