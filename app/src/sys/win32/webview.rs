@@ -7,12 +7,14 @@ use crate::app::Outbox;
 use crate::app::Prefs;
 use crate::page;
 use crate::sys::win32::window::WindowProc;
+use crate::texts;
 use webview2_com::{
-    CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
+    CoreWebView2EnvironmentOptions, CreateCoreWebView2ControllerCompletedHandler,
+    CreateCoreWebView2EnvironmentCompletedHandler,
     Microsoft::Web::WebView2::Win32::{
         COREWEBVIEW2_COLOR, CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2,
         ICoreWebView2Controller, ICoreWebView2Controller2, ICoreWebView2Environment,
-        ICoreWebView2Settings3,
+        ICoreWebView2EnvironmentOptions, ICoreWebView2Settings3,
     },
 };
 use webview2_com::{WebMessageReceivedEventHandler, take_pwstr};
@@ -44,11 +46,17 @@ pub fn init(hwnd: HWND, data_dir: &Path) -> Result<()> {
         },
     ));
 
+    // The run's language, for the date inputs, the spelling and the page's
+    // default locale.
+    let options = CoreWebView2EnvironmentOptions::default();
+    unsafe { options.set_language(texts::locale().tag.clone()) };
+    let options: ICoreWebView2EnvironmentOptions = options.into();
+
     unsafe {
         CreateCoreWebView2EnvironmentWithOptions(
             PCWSTR::null(),
             &HSTRING::from(data_dir),
-            None,
+            &options,
             &env_handler,
         )
     }

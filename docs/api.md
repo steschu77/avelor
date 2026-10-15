@@ -20,7 +20,8 @@ which answers through a `Req`. 2 commands, 1 event.
 ## Rules <a id="rules"></a>
 
 - **Exactly one reply per request**: `ok` with the command's value, or
-  `err` with a `code` and a `message`.
+  `err` with a `code` and a `text`, what the page shows
+  (`localization.md#host-texts`).
 - **Two-step decode** (envelope first, then the command), so a bad payload
   still has an `id` to answer: a request whose command or `args` don't
   decode is answered `bad_request`. A message that isn't JSON, or has no
@@ -74,4 +75,4 @@ What the host pushes; the page listens with `rpcOn`.
 
 | Event | Data | Pushed when |
 |---|---|---|
-| `notice` | `{ level: "error", message }` | `error`: the settings couldn't be saved where no command asked for it (the window's size), or `config.yaml` couldn't be read at start (on `ready`). A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |
+| `notice` | `{ level: "error", text }` | `error`: the settings couldn't be saved where no command asked for it (the window's size), or `config.yaml` couldn't be read at start (on `ready`). A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |

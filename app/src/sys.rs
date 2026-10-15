@@ -11,6 +11,8 @@
 //!   and `window.host.receive(text)` (`architecture.md#platforms`).
 //! - `show_error(title, text)`: a failure before or after the main window,
 //!   when there is no page.
+//! - `languages() -> Vec<String>`: the user's languages, the first first
+//!   (`texts::init`); the web view is given the run's (`texts::locale`).
 
 #[cfg(target_os = "windows")]
 mod win32;
@@ -19,7 +21,7 @@ pub use win32::run;
 #[cfg(target_os = "windows")]
 pub use win32::{BRIDGE_JS, UiSignal};
 #[cfg(target_os = "windows")]
-pub use win32::{paths, show_error};
+pub use win32::{languages, paths, show_error};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -28,7 +30,7 @@ pub use linux::run;
 #[cfg(target_os = "linux")]
 pub use linux::{BRIDGE_JS, UiSignal};
 #[cfg(target_os = "linux")]
-pub use linux::{paths, show_error};
+pub use linux::{languages, paths, show_error};
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 compile_error!("Windows and Linux only.");

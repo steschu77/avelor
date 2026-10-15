@@ -37,6 +37,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "av-texts"
+version = "0.1.0"
+dependencies = [
+ "oxc",
+ "serde_json",
+]
+
+[[package]]
 name = "av-utils"
 version = "0.1.0"
 dependencies = [
@@ -53,6 +61,7 @@ name = "avelor"
 version = "0.1.0"
 dependencies = [
  "av-bundle",
+ "av-texts",
  "av-utils",
  "embed-resource",
  "glib",
@@ -886,6 +895,7 @@ checksum = "a653a52b27d6bad0846e16d65aa1455419be260cfff170225adce49406be810f"
 dependencies = [
  "oxc_allocator",
  "oxc_ast",
+ "oxc_ast_visit",
  "oxc_codegen",
  "oxc_diagnostics",
  "oxc_mangler",

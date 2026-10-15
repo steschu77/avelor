@@ -11,6 +11,7 @@ use crate::app::Outbox;
 use crate::app::Prefs;
 use crate::page;
 use crate::shell::Shell;
+use crate::texts;
 
 // ----------------------------------------------------------------------------
 /// The page's bridge to the host (`architecture.md#platforms`): the script
@@ -23,6 +24,11 @@ pub const BRIDGE_JS: &str =
 /// The web view, its data in `data_dir` and its cache in `cache_dir`; what
 /// the page posts goes to `shell`.
 pub fn create(data_dir: &Path, cache_dir: &Path, shell: &Rc<Shell>) -> webkit6::WebView {
+    // The run's language, for the date inputs, the spelling and the page's
+    // default locale.
+    if let Some(context) = webkit6::WebContext::default() {
+        context.set_preferred_languages(&[texts::locale().tag.as_str()]);
+    }
     let session = webkit6::NetworkSession::new(data_dir.to_str(), cache_dir.to_str());
     let webview = webkit6::WebView::builder()
         .network_session(&session)

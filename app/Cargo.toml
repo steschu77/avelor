@@ -12,7 +12,7 @@ serde_yaml_ng = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 webview2-com = { workspace = true }
-windows = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_Registry", "Win32_System_Com", "Win32_UI_Shell", "Win32_System_LibraryLoader"] }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_Registry", "Win32_System_Com", "Win32_UI_Shell", "Win32_System_LibraryLoader", "Win32_Globalization"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 glib = { workspace = true, features = ["v2_72"] }
@@ -28,6 +28,7 @@ pulldown-cmark = { workspace = true }
 embed-resource = "3.0"
 oxc = { workspace = true, features = ["minifier", "codegen"] }
 av-bundle = { path = "../crates/av-bundle" }
+av-texts = { path = "../crates/av-texts" }
 static_vcruntime = "3.0"
 
 [lints]

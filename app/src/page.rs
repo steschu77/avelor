@@ -1,9 +1,11 @@
 //! The page the web view shows, the same on every platform: one
 //! self-contained HTML file, with the platform's bridge to the host and the
-//! page's preferences.
+//! page's preferences, and the
+//! texts in the run's language.
 
 use crate::app::Prefs;
 use crate::sys::BRIDGE_JS;
+use crate::texts;
 
 // ----------------------------------------------------------------------------
 /// The page's block for its bridge to the host (`index.html`), empty.
@@ -14,18 +16,33 @@ const BRIDGE_BLOCK: &str = r#"<script id="bridge"></script>"#;
 const PREFS_BLOCK: &str = r#"<script type="application/json" id="prefs">{}</script>"#;
 
 // ----------------------------------------------------------------------------
+/// The page's data block for its texts (`index.html`), empty.
+const TEXTS_BLOCK: &str = r#"<script type="application/json" id="texts">{}</script>"#;
+
+// ----------------------------------------------------------------------------
+/// The page's language as `index.html` has it.
+const LANGUAGE: &str = r#"<html lang="en">"#;
+
+// ----------------------------------------------------------------------------
 /// The page, `app/static/index.html` with its modules bundled in
 /// (`architecture.md#build`), the platform's bridge (`BRIDGE_JS`) in its
 /// bridge block, so the bridge is there before the modules run, and `prefs`
-/// in its preferences block. `<` is escaped: a value can't end the script
+/// in its preferences block, and the
+/// run's language (`texts::locale`) as its `lang` with its catalog in the
+/// texts block. `<` is escaped: a value can't end the script
 /// element.
 pub fn html(prefs: &Prefs) -> String {
     let html = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
     let bridge = format!(r#"<script id="bridge">{BRIDGE_JS}</script>"#);
     let json = serde_json::to_string(prefs).unwrap_or_else(|_| "{}".to_string());
     let block = PREFS_BLOCK.replace("{}", &json.replace('<', "\\u003c"));
-    html.replacen(BRIDGE_BLOCK, &bridge, 1)
+    let locale = texts::locale();
+    let language = format!(r#"<html lang="{}">"#, locale.tag);
+    let texts = TEXTS_BLOCK.replace("{}", &locale.catalog.json.replace('<', "\\u003c"));
+    html.replacen(LANGUAGE, &language, 1)
+        .replacen(BRIDGE_BLOCK, &bridge, 1)
         .replacen(PREFS_BLOCK, &block, 1)
+        .replacen(TEXTS_BLOCK, &texts, 1)
 }
 
 #[cfg(test)]
@@ -54,5 +71,15 @@ mod tests {
         assert!(!page.contains(PREFS_BLOCK));
         let block = r#"<script type="application/json" id="prefs">{"note":"\u003c/script>\u003cb>","panel_width":"500"}</script>"#;
         assert!(page.contains(block));
+    }
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_page_carries_its_texts_in_the_run_s_language() {
+        let page = html(&Prefs::new());
+        assert!(!page.contains(TEXTS_BLOCK));
+        assert!(page.contains(r#"<html lang="en">"#));
+        let start = r#"<script type="application/json" id="texts">{""#;
+        assert!(page.contains(start));
+        assert!(page.contains(r#""status.dismiss":"Dismiss""#));
     }
 }
