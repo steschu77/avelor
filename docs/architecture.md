@@ -8,7 +8,7 @@
 ## What the app is
 
 Avelor manages personal documents in a **vault**: a folder of plain
-markdown and YAML files that the user owns. It
+markdown and YAML files that the user owns (`vault.md#principles`). It
 holds:
 
 * chat messages, emails and letters,
@@ -41,6 +41,7 @@ read by OCR.
 | Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. UUIDv7, dates are hand-written |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
+| The vault is the source of truth | No database; the index is rebuilt by an indexing |
 | One coordinator | `App` alone posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
 
 ## Documents <a id="documents"></a>
@@ -50,6 +51,7 @@ read by OCR.
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
 | `saving.md` | closing |
+| `vault.md` | the file format: identity, roles, types, sources, metadata |
 | `api.md` | the protocol: transport, rules, the page's side, every command |
 | `ui.md` | the main window: layout, status bar, preferences |
 | `localization.md` | the app's texts: the catalogs, the page's and the host's, the run's language, the build's check, a new language |
@@ -71,7 +73,7 @@ read by OCR.
   (`development.md#checks`).
 - **`file:line`**: host files are under `app/src/`, page files under
   `app/static/`, crate files under `crates/<crate>/src/` (written
-  `av-utils/error.rs:20`).
+  `av-vault/vault.rs:201`).
 - **Flows** have ids by area (A vault): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
@@ -141,9 +143,28 @@ SIGTERM and SIGHUP end it the same way. Both are
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), atomic writes (`fs`) | |
+| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), text normalization, atomic writes (`fs`) | |
+| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index`, the indexing (`index_vault`, events applied by `Index::apply`) | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
+
+### av-vault's core
+
+- **One copy of the truth in `Document`**: the envelope holds the metadata,
+  read through accessors. `envelope` is an
+  `Option` — a markdown file without frontmatter stays without one — and
+  `Document` keeps its `id` beside it, since a file without `id` gets one
+  made up per indexing.
+
+  ```rust
+  pub struct Document {
+      id: Id,
+      envelope: Option<Envelope>,  // the only copy of the metadata
+      content: String,
+      format: FileFormat,
+      err: Result<()>,
+  }
+  ```
 
 ## Host modules
 
@@ -180,6 +201,7 @@ SIGTERM and SIGHUP end it the same way. Both are
 | Language | the display languages (`GetUserPreferredUILanguages`); WebView2's `Language` | `sys/*.rs` (`languages`), `sys/*/webview.rs` | the languages GLib reads from the environment (`language_names`); the web context's preferred languages |
 | Dialogs and shell | `MessageBoxW` | `sys/*/dialogs.rs` | `gtk::AlertDialog` |
 | Random | BCrypt | `av-utils/random.rs` | `getrandom` |
+| File permissions | `readonly()` | av-vault `vault.rs` | `readonly()` is true only when no one may write |
 | Icons and fonts | inline SVGs from Fluent UI System Icons (MIT), one sprite (`app/static/icons`, `build.rs`); Segoe UI | `css/tokens.css` (`--f-chrome`) | the same SVGs, since the Segoe font can't be shipped; `--f-chrome` already ends in `system-ui` |
 
 **The platform layer.** `app/src/sys/` holds a module per platform;
@@ -346,7 +368,7 @@ abort. Where the bundle lands and how to measure the size:
 - **Reuse before writing**: `Req::save_failed`,
   `Req::save_failed`,
   `av_utils::is_false`,
-  `DateTime::from_system_time`. A new shared
+  `DateTime::{from_system_time, plus_seconds}`. A new shared
   helper replaces every existing copy of its pattern in the same change.
 - **Formatting**: Rust code is rustfmt-formatted; `cargo fmt --all` is
   fine on any file at any time.
@@ -356,5 +378,6 @@ abort. Where the bundle lands and how to measure the size:
 | Part | Owns | Must not |
 |---|---|---|
 | av-utils | primitives with no domain (dates, ids, atomic writes) | know about vaults, Google, LLMs; carry network types |
+| av-vault | the vault's schema, files, index | do network or UI; start threads (the app decides where indexing runs) |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK; message decoding and replies | contain feature logic |
 | page | rendering, user input | resolve filenames, conflicts or structural rules |
