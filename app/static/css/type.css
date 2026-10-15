@@ -1,8 +1,22 @@
-/* Type roles: the text styles components and areas take (meta). */
+/* Type roles: the text styles components and areas take (meta), and the
+   utilities icon and push. */
 
 /* small print: counts, notes under values, dates in lists */
 .meta {
   font: 400 var(--fs-meta)/1.3 var(--f-chrome);
   color: var(--c-label);
   font-variant-numeric: tabular-nums;
+}
+
+/* an icon of the page's sprite (build.rs): its size, in the text's color */
+.icon {
+  flex: none;
+  width: var(--h-icon);
+  height: var(--h-icon);
+  fill: currentColor;
+}
+
+/* pushes itself, and what follows, to the end of a flex row */
+.push {
+  margin-left: auto;
 }

@@ -32,6 +32,8 @@
 
   --h-topbar: 36px;
   --h-control-sm: 22px;
+  /* an icon (index.html's sprite, build.rs) */
+  --h-icon: 16px;
 
   /* x inset of content panes: the right panel */
   --p-pane: 20px;
@@ -39,6 +41,7 @@
   --w-sidebar: 232px;
   --w-vault-list: 232px;
   --w-panel: 400px;
+  --w-expanded-context: 400px;
   --o-panel: 0px;
 
   --z-panel: 2;
