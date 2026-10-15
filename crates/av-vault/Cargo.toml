@@ -1,0 +1,13 @@
+[package]
+name = "av-vault"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = { workspace = true }
+av-utils = { path = "../av-utils" }
+serde = { workspace = true }
+serde_yaml_ng = { workspace = true }
+
+[lints]
+workspace = true

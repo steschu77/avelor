@@ -5,6 +5,7 @@ use std::fmt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::error::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 // ----------------------------------------------------------------------------
 const SECONDS_PER_DAY: u64 = 86_400;
@@ -317,6 +318,75 @@ impl DateTime {
     }
 
     // ------------------------------------------------------------------------
+    /// `YYYY-MM-DD`, or `YYYY-MM-DDTHH:MM:SS` with optional fractional
+    /// seconds (dropped) and a `Z` or `±hh:mm`/`±hhmm` offset (converted to UTC).
+    pub fn from_iso8601(s: &str) -> Result<Self> {
+        let s = s.as_bytes();
+
+        // The ASCII digits in `s[range]`; anything else (including bytes of
+        // a multi-byte character) is `err`.
+        fn digits<T: TryFrom<i32>>(s: &[u8], range: std::ops::Range<usize>) -> Option<T> {
+            s.get(range)
+                .filter(|p| p.iter().all(u8::is_ascii_digit))
+                .map(|p| p.iter().fold(0_i32, |a, b| a * 10 + i32::from(b - b'0')))
+                .and_then(|n| T::try_from(n).ok())
+        }
+
+        let (year, month, day) = (digits(s, 0..4), digits(s, 5..7), digits(s, 8..10));
+        let (Some(year), Some(month), Some(day)) = (year, month, day) else {
+            return Err(Error::InvalidDate);
+        };
+        let date = Date::from_ymd(year, month, day)?;
+
+        // Without a full HH:MM:SS the value is read as a plain date.
+        if s.len() < 19 {
+            return Ok(Self { date, time: None });
+        }
+        let (hour, minute, second) = (digits(s, 11..13), digits(s, 14..16), digits(s, 17..19));
+        let (Some(hour), Some(minute), Some(second)) = (hour, minute, second) else {
+            return Err(Error::InvalidTime);
+        };
+        let time = Some(Time::from_hms(hour, minute, second)?);
+        let local = Self { date, time };
+
+        // What follows the seconds: a fraction, then the offset from UTC.
+        let mut rest = &s[19..];
+        if let Some(fraction) = rest.strip_prefix(b".") {
+            let n = fraction.iter().take_while(|b| b.is_ascii_digit()).count();
+            rest = &fraction[n..];
+        }
+        let offset = match rest {
+            [sign @ (b'+' | b'-'), ..] => {
+                let hours: i64 = digits(rest, 1..3).ok_or(Error::InvalidTime)?;
+                let minutes_at = if rest.get(3) == Some(&b':') {
+                    4..6
+                } else {
+                    3..5
+                };
+                let minutes: i64 = digits(rest, minutes_at).ok_or(Error::InvalidTime)?;
+                let offset = hours * 3600 + minutes * 60;
+                if *sign == b'-' { -offset } else { offset }
+            }
+            _ => 0, // `Z`, or nothing
+        };
+        if offset == 0 {
+            return Ok(local);
+        }
+        Ok(Self::from_unix_millis((local.as_unix() - offset) * 1000))
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn as_iso8601(&self) -> String {
+        let (year, month, day) = self.date.to_ymd();
+        let month: i32 = month.into();
+        if let Some((hour, minute, second)) = self.time.map(|t| t.to_hms()) {
+            format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+        } else {
+            format!("{year:04}-{month:02}-{day:02}")
+        }
+    }
+
+    // ------------------------------------------------------------------------
     pub fn as_timestamp(&self) -> String {
         let (year, month, day) = self.date.to_ymd();
         let month: i32 = month.into();
@@ -325,6 +395,26 @@ impl DateTime {
         } else {
             format!("{year:04}{month:02}{day:02}")
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl<'a> Deserialize<'a> for DateTime {
+    fn deserialize<D: serde::Deserializer<'a>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        DateTime::from_iso8601(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl Serialize for DateTime {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.as_iso8601())
     }
 }
 
@@ -380,6 +470,31 @@ mod tests {
     fn unix_timestamps_round_trip() {
         let dt = DateTime::from_unix_millis(1_790_503_530_999);
         assert_eq!(dt.as_unix(), 1_790_503_530);
+    }
+
+    #[test]
+    fn from_iso8601_parses_and_never_panics() {
+        let dt = DateTime::from_iso8601("2026-09-27T10:05:30Z").unwrap();
+        assert_eq!(dt.as_iso8601(), "2026-09-27T10:05:30Z");
+        let d = DateTime::from_iso8601("2026-09-27").unwrap();
+        assert_eq!((d.as_iso8601(), d.time), ("2026-09-27".to_string(), None));
+
+        // Multi-byte characters where fixed byte offsets would split them.
+        for bad in ["202ä-01-01", "2026-0ä-01", "2026-01-01T1ä:00:00", "2026"] {
+            assert!(DateTime::from_iso8601(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn from_iso8601_converts_offsets_to_utc() {
+        let utc = |s: &str| DateTime::from_iso8601(s).unwrap().as_iso8601();
+        assert_eq!(utc("2026-09-24T12:10:00+02:00"), "2026-09-24T10:10:00Z");
+        assert_eq!(utc("2026-09-24T01:30:00+0200"), "2026-09-23T23:30:00Z");
+        assert_eq!(utc("2026-12-31T20:00:00-05:00"), "2027-01-01T01:00:00Z");
+        assert_eq!(utc("2026-09-24T10:10:00.123Z"), "2026-09-24T10:10:00Z");
+        assert_eq!(utc("2026-09-24T10:10:00.5+01:00"), "2026-09-24T09:10:00Z");
+        assert_eq!(utc("2026-09-24T10:10:00"), "2026-09-24T10:10:00Z");
+        assert!(DateTime::from_iso8601("2026-09-24T10:10:00+0ä:00").is_err());
     }
 
     #[test]

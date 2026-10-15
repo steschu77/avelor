@@ -50,6 +50,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "av-vault"
+version = "0.1.0"
+dependencies = [
+ "av-utils",
+ "log",
+ "serde",
+ "serde_yaml_ng",
+]
+
+[[package]]
 name = "avelor"
 version = "0.1.0"
 dependencies = [

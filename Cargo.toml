@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/av-utils", "crates/av-bundle", "app"]
+members = ["crates/av-utils", "crates/av-vault", "crates/av-bundle", "app"]
 resolver = "3"
 
 [workspace.dependencies]

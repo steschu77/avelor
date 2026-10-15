@@ -4,3 +4,4 @@ pub mod fs;
 pub mod id;
 pub mod logger;
 pub mod random;
+pub mod text;
