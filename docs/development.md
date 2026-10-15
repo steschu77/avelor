@@ -50,7 +50,7 @@ its import (`features/x.js uses el, which core/dom.js declares, without
 importing it`), a module in no layer, or one importing from a higher layer
 (`core/dom.js imports from ui/log.js, a higher layer (ui/)`). So does an
 export no module of the page imports (`core/x.js exports b, which no
-module imports`), and a non-ASCII character in any page source, a module or an HTML file
+module imports`), and a non-ASCII character in any page source, a module, a stylesheet or an HTML file
 (`line 273, column 53: '§' (U+00A7) isn't ASCII`), listed once per module
 that imports the file.
 

@@ -23,16 +23,22 @@
 
     <aside class="sidebar" id="sidebar">
       <div class="sidebar__list">
-        <div class="grip grip--end" id="sidebar-divider"></div>
+        <div class="grip grip--end" id="sidebar-divider" tabindex="0" role="separator" aria-orientation="vertical"></div>
       </div>
     </aside>
 
     <main class="main" id="main"></main>
 
     <aside class="panel" id="panel">
-      <div class="grip" id="panel-divider"></div>
-      <div class="panel__toolbar"></div>
+      <div class="grip" id="panel-divider" tabindex="0" role="separator" aria-orientation="vertical"></div>
+      <div class="toolbar panel__toolbar">
+        <button type="button" class="tool" id="doc-expand-btn"><svg class="icon"><use href="#i-panel-right-expand" /></svg></button>
+        <button type="button" class="tool push" id="doc-close-btn"><svg class="icon"><use href="#i-dismiss" /></svg></button>
+      </div>
       <div class="panel__body"></div>
+      <div class="panel__context">
+        <div class="grip" id="context-divider" tabindex="0" role="separator" aria-orientation="vertical"></div>
+      </div>
     </aside>
 
     <footer class="statusbar"></footer>

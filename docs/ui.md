@@ -26,11 +26,12 @@ of the others.
 
 The page keeps its preferences as one JSON object of strings
 (`savePrefs`, `model/state.js` → `set_prefs`): `sidebar_width`,
-`panel_width`. The host stores them as given
+`panel_width` and `context_width`. The host stores them as given
 (`config.yaml` `prefs`) and never reads them; it fills them into the page
 it loads on the next start, as JSON in
 `<script type="application/json" id="prefs">` (`page::html`), which
 becomes `prefs` in the store, so the layout is right from the first frame.
+The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 
 ## Flows
 
