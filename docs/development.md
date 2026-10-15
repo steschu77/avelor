@@ -16,6 +16,11 @@
   not) is the end of a file's path in the repository, `src/` left out
   (`av-utils/error.rs`); a link names a file there. An id is at most 16
   characters, unique in its doc and referred to; the docs are LF.
+- The page's modules (`app/tests/page.rs`): each test file of
+  `app/tests/page`, bundled with the modules it imports as the page is, is
+  run by node in three time zones. A test takes what a module exports; the
+  stand-in for the page is `app/tests/page/harness.js`. Without node the
+  tests are left out, but not in CI.
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
   tests.

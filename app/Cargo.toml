@@ -22,6 +22,7 @@ libc = { workspace = true }
 webkit6 = { workspace = true }
 
 [dev-dependencies]
+av-bundle = { path = "../crates/av-bundle" }
 pulldown-cmark = { workspace = true }
 
 [build-dependencies]
