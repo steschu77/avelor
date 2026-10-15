@@ -22,6 +22,10 @@ fn is_false(value: &bool) -> bool {
 pub struct AppConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowState>,
+    /// UI preferences, owned by the frontend; the host only stores and
+    /// replays them.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub prefs: BTreeMap<String, String>,
     /// The keys this version doesn't know, written back as they were read,
     /// so the settings of another version survive a save.
     #[serde(flatten)]
@@ -64,6 +68,18 @@ impl ConfigStore {
     // ------------------------------------------------------------------------
     pub fn window(&self) -> Option<WindowState> {
         self.config.window
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn prefs(&self) -> &BTreeMap<String, String> {
+        &self.config.prefs
+    }
+
+    // ------------------------------------------------------------------------
+    /// Store the page's preferences as given, and write the file.
+    pub fn set_prefs(&mut self, prefs: BTreeMap<String, String>) -> Result<()> {
+        self.config.prefs = prefs;
+        self.save()
     }
 
     // ------------------------------------------------------------------------
@@ -152,6 +168,7 @@ mod tests {
         let dir = temp_dir("missing");
         let config = load_config(&dir).unwrap();
         assert!(config.window().is_none());
+        assert!(config.prefs().is_empty());
         fs::remove_dir_all(&dir).unwrap();
     }
 

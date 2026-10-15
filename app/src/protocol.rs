@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use crate::api;
+use crate::app::Prefs;
 use crate::app::{App, UiQueue};
 use av_utils::error::Error;
 use serde::{Deserialize, Serialize};
@@ -27,15 +28,25 @@ struct Envelope {
 /// command's `args`. Decoded by hand (`decode`): serde's derive for an
 /// adjacently tagged enum grows by kilobytes per variant.
 enum Command {
+    // The page's preferences (`api`).
     Ready,
+    SetPrefs(PagePrefs),
+}
+
+/// `{prefs}`: the page's preferences, strings.
+#[derive(Deserialize)]
+struct PagePrefs {
+    prefs: Prefs,
 }
 
 impl Command {
     // ------------------------------------------------------------------------
     /// The command `cmd` with its `args`.
-    fn decode(cmd: &str, _args: Value) -> serde_json::Result<Self> {
+    fn decode(cmd: &str, args: Value) -> serde_json::Result<Self> {
+        use serde_json::from_value;
         Ok(match cmd {
             "ready" => Command::Ready,
+            "set_prefs" => Command::SetPrefs(from_value(args)?),
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
                 return Err(serde::de::Error::custom(unknown));
@@ -63,12 +74,13 @@ pub fn on_message(app: &mut App, text: &str) {
 fn route(app: &mut App, req: Req, command: Command) {
     match command {
         Command::Ready => api::ready(app, req),
+        Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
     }
 }
 
 // ----------------------------------------------------------------------------
-/// The answer to the page's request `id`, given exactly once: `ok` and
-/// `err` consume it. Dropped unanswered -- a branch that forgot it -- it
+/// The answer to the page's request `id`, given exactly once: `ok`, `err`
+/// and `fail` consume it. Dropped unanswered -- a branch that forgot it -- it
 /// answers `cancelled`, so every call on the page settles. It is `Send`: it
 /// holds the UI queue, never the web view, and its reply is posted on the
 /// UI thread.
@@ -102,6 +114,16 @@ impl Req {
     /// Answer with `error`: `{"re": id, "err": {"code", "message"}}`.
     pub fn err(mut self, error: Error) {
         let reply = error_reply(self.id, &error);
+        self.send(reply);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Answer with `error`, but with `message` to show instead of the
+    /// error's own text: the host words what went wrong, the page still
+    /// sees its code.
+    pub fn fail(mut self, error: Error, message: impl Into<String>) {
+        let err = json!({ "code": error.code(), "message": message.into() });
+        let reply = json!({ "re": self.id, "err": err });
         self.send(reply);
     }
 
@@ -144,7 +166,12 @@ mod tests {
     #[test]
     fn a_request_that_does_not_decode_is_answered_as_a_bad_request() {
         let mut h = Harness::new("bad-request");
-        let requests = [(2, r#"{"id": 2, "cmd": "no_such_command"}"#)];
+        let requests = [
+            (2, r#"{"id": 2, "cmd": "no_such_command"}"#),
+            (3, r#"{"id": 3, "cmd": "set_prefs", "args": {}}"#),
+            (4, r#"{"id": 4, "cmd": "set_prefs"}"#),
+            (5, r#"{"id": 5, "cmd": "set_prefs", "args": {"prefs": 5}}"#),
+        ];
         for (id, request) in requests {
             let replies = parse(&h.send(request));
             assert_eq!(replies.len(), 1, "{request}");

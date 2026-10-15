@@ -40,8 +40,8 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
         let webview = webview::create(&data_dir, &cache_dir, &shell);
         let window = window::create(app, &webview, &shell);
         end_session_on_request(app, &window, &shell);
-        shell.start(UiSignal::new(&shell, &window), webview::outbox(&webview));
-        webview::load(&webview);
+        let prefs = shell.start(UiSignal::new(&shell, &window), webview::outbox(&webview));
+        webview::load(&webview, &prefs);
     });
     // GTK isn't handed the command line: it has no options of its own.
     app.run_with_args::<&str>(&[]);

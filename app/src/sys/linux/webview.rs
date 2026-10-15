@@ -8,6 +8,7 @@ use gtk::gio;
 use webkit6::prelude::*;
 
 use crate::app::Outbox;
+use crate::app::Prefs;
 use crate::page;
 use crate::shell::Shell;
 
@@ -42,9 +43,9 @@ pub fn create(data_dir: &Path, cache_dir: &Path, shell: &Rc<Shell>) -> webkit6::
 }
 
 // ----------------------------------------------------------------------------
-/// Load the page into `webview`.
-pub fn load(webview: &webkit6::WebView) {
-    webview.load_html(&page::html(), None);
+/// Load the page into `webview`, with its preferences `prefs`.
+pub fn load(webview: &webkit6::WebView, prefs: &Prefs) {
+    webview.load_html(&page::html(prefs), None);
 }
 
 // ----------------------------------------------------------------------------

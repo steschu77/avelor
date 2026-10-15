@@ -50,6 +50,7 @@ read by OCR.
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
 | `api.md` | the protocol: transport, rules, the page's side, every command |
+| `ui.md` | the main window: preferences |
 
 ## Doc conventions
 
@@ -100,8 +101,8 @@ The rules the code follows, and every change to it:
 
 ### One way in <a id="one-way-in"></a>
 
-Every way into `App` — page messages — goes through the `UiQueue` queue,
-and `App` is taken only while a task runs:
+Every way into `App` — page messages, the window state — goes through the
+`UiQueue` queue, and `App` is taken only while a task runs:
 
 - `run` owns the `WindowProc` until the message loop has ended, and
   `GWLP_USERDATA` only points to it.
@@ -137,7 +138,7 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 |---|---|
 | `main.rs` | logger, panic hook, the config (`load_config`) |
 | `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net (`architecture.md#platforms`) |
-| `page.rs` | the page (`app/static/index.html`), the same on every platform, with the platform's `BRIDGE_JS` |
+| `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences and the platform's `BRIDGE_JS` |
 | `sys/mod.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
 | `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); message boxes |
 | `sys/win32/mod.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; `UiSignal` (`WM_TASK`) |
@@ -145,10 +146,10 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`) |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App`, `on_web_message` (every message to `protocol`), `post_text` through the outbox, `UiQueue` / `UiTask` |
+| `app.rs` | `App`, the config writes no request asked for (`save_window_state`), `on_web_message` (every message to `protocol`), `post_text` through the outbox, `UiQueue` / `UiTask` |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: `Harness::call` |
-| `api.rs` | `ready` |
+| `api.rs` | `ready`, `set_prefs` |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>
@@ -189,7 +190,8 @@ so the subtle part is written once:
 | Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
 
 **The page's bridge.** `page.rs` builds the page for both platforms:
-the bundle and the platform's `BRIDGE_JS` inlined before the bundle. The
+the bundle, the preferences block and the platform's `BRIDGE_JS` inlined
+before the bundle. The
 bridge defines `window.host.post(text)` and calls
 `window.host.receive(text)`, which `rpc.js` sets. On WebKitGTK the page
 posts to `webkit.messageHandlers.host`, and a reply is
@@ -221,7 +223,8 @@ The build checks it (`architecture.md#build`).
 The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
 `config_dir`), on Linux in the XDG folders (`architecture.md#platforms`):
 
-- `config.yaml`: the window's size and maximized state;
+- `config.yaml`: the window's size and maximized state, and the page's
+  preferences (`prefs`, `ui.md#preferences`);
 - the WebView2 profile in `…\Avelor\WebView2`;
 - the log files, one per run, in `…\Avelor\log`
   (`development.md#diagnosis`).
@@ -244,9 +247,9 @@ Linux the desktop entry and the icon are files (`app/res`), installed as
 `README.md` says. A page
 source with a non-ASCII character fails the build, named by its line and
 column. A new module
-is in the page once a module there imports it. The host loads
-the page (`page::html`) with `NavigateToString`, on Linux with
-`load_html`.
+is in the page once a module there imports it. The host fills the
+preferences into the page (`page::html`) and loads it with
+`NavigateToString`, on Linux with `load_html`.
 
 The release profile is built for size: `opt-level = "z"`, LTO, one codegen
 unit, `strip`, `panic = "abort"` (`Cargo.toml`); the panic hook
