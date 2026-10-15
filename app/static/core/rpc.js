@@ -1,8 +1,9 @@
 // The page's one door to the host (api.md#the-page-side):
-// `rpcCall` sends a command and returns a promise of its one reply.
+// `rpcCall` sends a command and returns a promise of its one reply;
+// `rpcOn` listens for the events the host pushes.
 
 // A failed call: `code` is the host's (`cancelled`, `bad_request`, ...).
-class RpcError extends Error {
+export class RpcError extends Error {
   constructor(cmd, code, message) {
     super(message || code);
     this.name = 'RpcError';
@@ -14,6 +15,7 @@ class RpcError extends Error {
 const rpcBridge = window.host;
 let rpcNextId = 1;
 const rpcPending = new Map(); // id -> { cmd, resolve, reject }
+const rpcListeners = new Map(); // event -> Set of listeners
 
 // Send `cmd` with `args`. The promise resolves with the reply's value and
 // rejects with an RpcError. Without a host (a test page) a call is
@@ -24,6 +26,13 @@ export function rpcCall(cmd, args = {}, { channel } = {}) {
   if (rpcBridge) rpcBridge.post(JSON.stringify({ id, cmd, args }));
   else rpcSettle(id, { err: { code: 'cancelled', message: 'There is no host.' } });
   return reply;
+}
+
+// Call `fn(data)` for every `event` the host pushes, after the listeners
+// that came before it.
+export function rpcOn(event, fn) {
+  if (!rpcListeners.has(event)) rpcListeners.set(event, new Set());
+  rpcListeners.get(event).add(fn);
 }
 
 // Settle the call `id` with `reply`: `{ ok }` or `{ err: { code, message } }`.
@@ -45,5 +54,6 @@ if (rpcBridge) {
       return;
     }
     if ('re' in msg) rpcSettle(msg.re, msg);
+    else if ('ev' in msg) rpcListeners.get(msg.ev)?.forEach(fn => fn(msg.data));
   };
 }

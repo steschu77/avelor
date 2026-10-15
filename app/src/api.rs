@@ -6,10 +6,19 @@ use crate::app::Prefs;
 use crate::protocol::Req;
 
 // ----------------------------------------------------------------------------
-/// `ready`: the page is loaded and listens. Answers `null`.
-pub fn ready(_app: &mut App, req: Req) {
+/// `ready`: the page is loaded and listens. A config that couldn't be read
+/// at start, and was set aside (`config::load_config`, which logs why), is
+/// told now, in the status bar. Answers `null`.
+pub fn ready(app: &mut App, req: Req) {
+    if app.config.take_error().is_some() {
+        app.notice(CONFIG_UNREAD);
+    }
     req.ok(());
 }
+
+/// The notice of a config that couldn't be read at start.
+const CONFIG_UNREAD: &str =
+    "config.yaml couldn't be read; the app started with the default settings.";
 
 // ----------------------------------------------------------------------------
 /// `set_prefs {prefs}`: store the page's preferences (strings) as given; the
@@ -28,6 +37,7 @@ pub fn set_prefs(app: &mut App, req: Req, prefs: Prefs) {
 // ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::config::load_config;
     use crate::testing::Harness;
     use serde_json::json;
@@ -38,6 +48,23 @@ mod tests {
         let mut h = Harness::new("ready");
         let sent = h.call("ready", json!({}));
         assert_eq!(sent, [json!({ "re": 1, "ok": null })]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_config_that_could_not_be_read_is_told_once_the_page_listens() {
+        let mut h = Harness::new("unread");
+        std::fs::write(h.dir().join("config.yaml"), "window: [unclosed\n").unwrap();
+        h.app.config = load_config(h.dir()).unwrap();
+
+        let sent = h.call("ready", json!({}));
+        let notice = json!({ "level": "error", "message": CONFIG_UNREAD });
+        let ready = json!({ "re": 1, "ok": null });
+        assert_eq!(
+            sent,
+            [json!({ "ev": "notice", "data": notice }), ready.clone()]
+        );
+        assert_eq!(h.call("ready", json!({})), [ready], "told once");
     }
 
     // ------------------------------------------------------------------------

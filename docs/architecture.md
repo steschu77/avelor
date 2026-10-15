@@ -40,7 +40,7 @@ read by OCR.
 | Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
 | Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com` |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
-| Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
+| Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 | One coordinator | `App` alone posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
 
 ## Documents <a id="documents"></a>
@@ -50,7 +50,7 @@ read by OCR.
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
 | `api.md` | the protocol: transport, rules, the page's side, every command |
-| `ui.md` | the main window: preferences |
+| `ui.md` | the main window: layout, status bar, preferences |
 
 ## Doc conventions
 
@@ -68,6 +68,9 @@ read by OCR.
 - **`file:line`**: host files are under `app/src/`, page files under
   `app/static/`, crate files under `crates/<crate>/src/` (written
   `av-vault/vault.rs:201`).
+- **Flows** have ids by area (A vault): trigger
+  on the page → page functions → command → what the host does and sends
+  back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
 
 ## Principles <a id="principles"></a>
@@ -78,7 +81,7 @@ The rules the code follows, and every change to it:
    Linux), hand-written utilities, no npm, no third-party bundler, no async
    runtime.
 2. **One way to do each thing.** One message format and one way to answer.
-4. **Every request gets exactly one answer.**
+4. **Every request gets exactly one answer; every failure is visible.**
 6. **Pure core, thin shell.** Mapping and decision logic are pure functions
    with tests; I/O sits at the edges.
 7. **One coordinator.** `App` (`app.rs`) is the only place that posts to
@@ -146,7 +149,7 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`) |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App`, the config writes no request asked for (`save_window_state`), `on_web_message` (every message to `protocol`), `post_text` through the outbox, `UiQueue` / `UiTask` |
+| `app.rs` | `App`, the config writes no request asked for (`save_window_state`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `UiQueue` / `UiTask` |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: `Harness::call` |
 | `api.rs` | `ready`, `set_prefs` |
@@ -204,19 +207,68 @@ ES modules
 make the page, each with its own scope: a file's dependencies are its
 `import` lines, and the order the modules run in follows from them
 (`development.md#the-bundled-page`). Every module but `app.js`, the entry,
-is in a layer folder (`core/`) and
+is in a layer folder (`core/`, `model/`, `ui/`, `features/`) and
 imports only from its own layer or a lower one, which the build checks;
 nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/rpc.js` | the protocol: `rpcCall`, `RpcError` (`api.md#the-page-side`) |
-| `app.js` | the entry: `ready` |
+| `core/dom.js`, `core/store.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make); observable store (`setState`/`subscribe` with `Object.is`) |
+| `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
+| `model/state.js` | the store and its schema (`notices`, the preferences); `savePrefs`, `showError` |
+| `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
+| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences |
+| `app.js` | the entry: its imports run the modules that act when they load, in the order they act; `ready` |
+| `css/` | the stylesheets in cascade order (`architecture.md#css`) |
+
+### Page state <a id="page-state"></a>
+
+The store (`model/state.js`) holds UI state and the notices.
+
+The model calls no render. The renders subscribe to the store: the
+status bar to `notices`.
+
+A render never sends a change to the host.
+
+### CSS <a id="css"></a>
+
+The stylesheets are split by cascade layer, not by feature: `index.html`
+links them in the order they cascade, and `build.rs` joins them in that
+order into the page's one `<style>`. The order stands in one place, as
+`app.js`'s imports order the modules.
+
+| File | Holds |
+|---|---|
+| `css/tokens.css` | the colors, fonts, sizes, insets, heights, shadows and layers |
+| `css/base.css` | the box model, the page's ground, the global states (`.is-resizing`), controls |
+| `css/type.css` | the type roles (`meta`, …) |
+| `css/components.css` | what several areas share: `tool`, … |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar, panel |
+
+Conventions the page keeps:
+
+- Tokens for sizes, insets and heights (`--fs-*`, `--p-*`, `--h-*`);
+  shared components (`tool`, …) and type roles (`meta`, …) come before the
+  areas' files, so a block
+  rule can override a component; values that must change together live in
+  one token or class; BEM without prefix; states as ARIA attributes where
+  one fits, `is-*` otherwise; every class used is defined and nothing
+  defined goes unused (`development.md#measuring-size`).
+- **Layers** (the Recede design): the chrome sits on `--c-shade`, lists on
+  `--c-paper`, the active content on `--c-card` with `--shadow-raise`. New
+  UI follows these layers.
+- **Specificity**: a block rule that sets the same property as a component
+  overrides it, so a block class and a component are combined only when
+  their properties don't overlap. A bare `.is-x` loses to any later block
+  rule of the same specificity: qualify it with its block, or, for a state
+  across blocks, use `!important` like `[hidden]` and `.is-resizing`.
+- A small visual change is fine when it simplifies the CSS, as long as it
+  is pointed out.
 
 ### ASCII-only sources
 
-No literal non-ASCII in `app/static`: `\u2026` in JS, `&#x2026;` in HTML.
-The build checks it (`architecture.md#build`).
+No literal non-ASCII in `app/static`: `\u2026` in JS, `&#x2026;` in HTML,
+`"\2026"` in CSS. The build checks it (`architecture.md#build`).
 
 ## Storage and configuration <a id="storage"></a>
 
@@ -240,11 +292,12 @@ is atomic.
 `app/build.rs` bundles the page's modules with `av-bundle`, from `app.js`
 through its imports, into one classic script (a syntax error, an import
 cycle, a missing import or a broken layer fails the build,
-`development.md#the-bundled-page`), parses it with oxc on every build,
-minifies JS (oxc, mangling) in release builds, inlines into `index.html` in
-`OUT_DIR`, and embeds the manifest and icon, on Windows. On
-Linux the desktop entry and the icon are files (`app/res`), installed as
-`README.md` says. A page
+`development.md#the-bundled-page`), parses it with oxc on every build, joins
+the CSS files `index.html` links in their order (`architecture.md#css`),
+minifies JS (oxc, mangling) and CSS (hand-written) in release builds,
+inlines both into `index.html` in `OUT_DIR`, and embeds the manifest and
+icon, on Windows. On Linux the desktop entry and the icon are files
+(`app/res`), installed as `README.md` says. A page
 source with a non-ASCII character fails the build, named by its line and
 column. A new module
 is in the page once a module there imports it. The host fills the
@@ -274,3 +327,4 @@ abort. Where the bundle lands and how to measure the size:
 |---|---|---|
 | av-utils | primitives with no domain (dates, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK; message decoding and replies | contain feature logic |
+| page | rendering, user input | resolve filenames, conflicts or structural rules |

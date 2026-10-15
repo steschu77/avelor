@@ -13,7 +13,7 @@ use std::{
 /// The page's layers, lowest first: a module in one of these folders imports
 /// only from its own layer or a lower one, and every module but an entry is
 /// in one (`av_bundle::bundle`, `architecture.md#page`).
-const LAYERS: &[&str] = &["core/"];
+const LAYERS: &[&str] = &["core/", "model/", "ui/", "features/"];
 
 // ----------------------------------------------------------------------------
 /// The page source `path` under `static_dir`. The sources are ASCII-only,
@@ -108,12 +108,117 @@ fn process_javascript(source: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
-/// The page, `index.html` with the bundle of `app.js` inlined, and what the
-/// bundle's modules import (`page-deps.txt`), written to `out_dir`.
+/// Minify `css` without changing what it means: comments are dropped,
+/// whitespace collapses to one space and goes where it can't matter -- after
+/// `{ } ; , > :` and before `{ } ; , >` -- and the `;` before a `}` goes.
+/// Before `:` it stays (`a :hover` is a descendant combinator), and so it
+/// does around `+ - *` (`calc(a + b)`). Strings and `\` escapes are copied
+/// as they are.
+fn minify_css(css: &str) -> String {
+    const NO_SPACE_AFTER: &str = "{};,>:";
+    const NO_SPACE_BEFORE: &str = "{};,>";
+
+    let mut out = String::with_capacity(css.len());
+    let mut chars = css.chars().peekable();
+    let mut space = false;
+
+    while let Some(c) = chars.next() {
+        if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            let mut prev = '\0';
+            for c in chars.by_ref() {
+                if prev == '*' && c == '/' {
+                    break;
+                }
+                prev = c;
+            }
+            continue;
+        }
+
+        if c.is_whitespace() {
+            space = true;
+            continue;
+        }
+
+        let tight = out
+            .chars()
+            .next_back()
+            .is_none_or(|prev| NO_SPACE_AFTER.contains(prev));
+        if space && !tight && !NO_SPACE_BEFORE.contains(c) {
+            out.push(' ');
+        }
+        space = false;
+
+        if c == '}' && out.ends_with(';') {
+            out.pop();
+        }
+        out.push(c);
+
+        match c {
+            '"' | '\'' => {
+                while let Some(s) = chars.next() {
+                    out.push(s);
+                    if s == '\\' {
+                        out.extend(chars.next());
+                    } else if s == c {
+                        break;
+                    }
+                }
+            }
+            '\\' => out.extend(chars.next()),
+            _ => {}
+        }
+    }
+
+    out
+}
+
+// ----------------------------------------------------------------------------
+fn process_css(source: &str) -> String {
+    if env::var("PROFILE").as_deref() == Ok("release") {
+        minify_css(source)
+    } else {
+        source.to_owned()
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// `html` with its stylesheet links replaced by one inlined `<style>` where
+/// the first one was, with the CSS of the linked files in the order they
+/// are linked: the cascade order (`architecture.md#css`).
+fn inline_styles(static_dir: &Path, html: &str) -> String {
+    let href_of = |line: &str| {
+        line.trim()
+            .strip_prefix("<link rel=\"stylesheet\" href=\"")?
+            .strip_suffix("\">")
+            .map(str::to_owned)
+    };
+    let mut css = String::new();
+    let mut page = String::new();
+    let mut style_at = None;
+    for line in html.split_inclusive('\n') {
+        match href_of(line) {
+            Some(href) => {
+                css.push_str(&source(static_dir, &href));
+                style_at.get_or_insert(page.len());
+            }
+            None => page.push_str(line),
+        }
+    }
+    let at = style_at.expect("index.html links no stylesheet");
+    page.insert_str(at, &format!("<style>\n{}\n</style>\n", process_css(&css)));
+    page
+}
+
+// ----------------------------------------------------------------------------
+/// The page, `index.html` with its CSS and the bundle of `app.js` inlined,
+/// and what the bundle's modules import (`page-deps.txt`), written to
+/// `out_dir`.
 fn build_pages(root: &Path, out_dir: &Path) {
     let static_dir = root.join("static");
 
     let html = source(&static_dir, "index.html");
+    let html = inline_styles(&static_dir, &html);
 
     let page = bundle(&static_dir, "app.js");
     fs::write(out_dir.join("page-deps.txt"), page.graph.to_string()).unwrap();

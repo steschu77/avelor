@@ -1,0 +1,89 @@
+/* The shell (index.html, features/layout.js): its grid, the top bar, the
+   main area and the status bar (ui/statusbar.js). */
+
+.shell {
+  display: grid;
+  grid-template-columns:
+    var(--w-sidebar) minmax(0, 1fr);
+
+  grid-template-rows:
+    var(--h-topbar) minmax(0, 1fr);
+
+  grid-template-areas:
+    "sidebar topbar"
+    "sidebar main";
+  height: 100vh;
+  transition: grid-template-columns 250ms ease;
+}
+
+/* Top bar: a shaded strip. */
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  background: var(--c-shade);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--c-line);
+  overflow: hidden;
+  padding: 0 var(--w-panel) 0 0;
+  transition: padding-right 250ms ease;
+}
+
+/* the status bar (ui/statusbar.js), a snackbar: it floats over the bottom of
+   the main area and slides in while it has a notice to show */
+.statusbar {
+  grid-area: main;
+  align-self: end;
+  justify-self: center;
+  z-index: var(--z-snackbar);
+  max-width: min(640px, calc(100% - 32px));
+  margin-bottom: 16px;
+  padding: 4px 6px 4px 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  box-shadow: var(--shadow-pop);
+  font: 400 var(--fs-ui)/1.4 var(--f-chrome);
+  color: var(--c-ink);
+  opacity: 0;
+  transform: translateY(12px);
+  visibility: hidden;
+  /* hidden once faded out, so it takes no clicks */
+  transition: opacity 200ms ease, transform 200ms ease, visibility 0s linear 200ms;
+}
+
+.statusbar.is-shown {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition: opacity 200ms ease, transform 200ms ease, visibility 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statusbar {
+    transition: none;
+  }
+}
+
+/* the newest notice (ui/statusbar.js): one line, its text cut to fit */
+.statusbar__notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-block: 2px;
+}
+
+.statusbar__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

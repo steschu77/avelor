@@ -1,6 +1,6 @@
 //! The protocol between host and page (`api.md#transport`,
 //! `api.md#rules`): a JSON envelope per request, exactly
-//! one reply to each.
+//! one reply to each, events pushed.
 
 use std::sync::Arc;
 
@@ -83,7 +83,7 @@ fn route(app: &mut App, req: Req, command: Command) {
 /// and `fail` consume it. Dropped unanswered -- a branch that forgot it -- it
 /// answers `cancelled`, so every call on the page settles. It is `Send`: it
 /// holds the UI queue, never the web view, and its reply is posted on the
-/// UI thread.
+/// UI thread, after the events its handler posted.
 pub struct Req {
     id: u64,
     ui: Arc<UiQueue>,
@@ -206,5 +206,18 @@ mod tests {
         assert_eq!(replies[1], json!({ "re": 2, "ok": null }));
         assert_eq!(error_code(&replies[2], 3), "cancelled");
         assert_eq!(replies.len(), 3);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_reply_follows_the_events_of_its_handler() {
+        let mut h = Harness::new("order");
+        let req = h.app.req(1);
+        req.ok("done");
+        h.app.post_event("entity", json!({ "id": "x" }));
+        h.run_queue();
+        let sent = parse(&h.take());
+        assert_eq!(sent[0], json!({ "ev": "entity", "data": { "id": "x" } }));
+        assert_eq!(sent[1], json!({ "re": 1, "ok": "done" }));
     }
 }
