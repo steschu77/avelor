@@ -4,6 +4,7 @@ pub mod fs;
 pub mod id;
 pub mod logger;
 pub mod random;
+pub mod text;
 
 // ----------------------------------------------------------------------------
 /// The serde skip of a flag written only when it is set
