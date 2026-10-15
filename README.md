@@ -39,6 +39,13 @@ Avelor builds on ideas found in several existing tools for managing personal inf
 
 ## Building
 
+On Linux GTK 4.10 or later with its development files (`libgtk-4-dev` on Ubuntu
+24.04 and later):
+
+```sh
+sudo apt install libgtk-4-dev
+```
+
 ```sh
 cargo run
 ```

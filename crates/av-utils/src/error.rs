@@ -11,7 +11,21 @@ pub enum Error {
     InvalidTime,
 
     // Error forwards
-    FileIo { err: std::io::Error },
+    FileIo {
+        err: std::io::Error,
+    },
+    FromUtf8 {
+        err: std::string::FromUtf8Error,
+    },
+    FromUtf16 {
+        err: std::string::FromUtf16Error,
+    },
+    Win32 {
+        code: i32, // the Win32 error code
+    },
+    Gtk {
+        msg: String,
+    },
 }
 
 // ----------------------------------------------------------------------------
@@ -24,6 +38,10 @@ impl Error {
             Error::InvalidDate => "invalid_date",
             Error::InvalidTime => "invalid_time",
             Error::FileIo { .. } => "file_io",
+            Error::FromUtf8 { .. } => "from_utf8",
+            Error::FromUtf16 { .. } => "from_utf16",
+            Error::Win32 { .. } => "win32",
+            Error::Gtk { .. } => "gtk",
         }
     }
 }
@@ -43,6 +61,31 @@ impl std::error::Error for Error {}
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Error::FileIo { err }
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl From<std::string::FromUtf16Error> for Error {
+    fn from(err: std::string::FromUtf16Error) -> Self {
+        Error::FromUtf16 { err }
+    }
+}
+
+// ----------------------------------------------------------------------------
+#[cfg(target_os = "windows")]
+impl From<windows::core::Error> for Error {
+    fn from(err: windows::core::Error) -> Self {
+        Error::Win32 { code: err.code().0 }
+    }
+}
+
+// ----------------------------------------------------------------------------
+#[cfg(target_os = "linux")]
+impl From<glib::error::BoolError> for Error {
+    fn from(err: glib::error::BoolError) -> Self {
+        Error::Gtk {
+            msg: err.to_string(),
+        }
     }
 }
 
