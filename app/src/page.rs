@@ -2,7 +2,8 @@
 //! self-contained HTML file.
 
 // ----------------------------------------------------------------------------
-/// The page, `app/static/index.html`.
+/// The page, `app/static/index.html` with its modules bundled in
+/// (`architecture.md#build`).
 pub fn html() -> &'static str {
-    include_str!("../static/index.html")
+    include_str!(concat!(env!("OUT_DIR"), "/index.html"))
 }
