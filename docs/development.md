@@ -1,12 +1,19 @@
 # Avelor — Development and testing
 
-> How to check a change, measure the executable. The rules the code
+> How to check a change, find a problem, measure the executable. The rules the code
 > follows are `architecture.md#principles` and `architecture.md#conventions`.
 
 ## Checks <a id="checks"></a>
 
 - `cargo test --workspace` runs the unit tests.
 - `cargo clippy --workspace`.
+
+## Diagnosis <a id="diagnosis"></a>
+
+Read the log first: `%LOCALAPPDATA%\Avelor\log` (on Linux
+`$XDG_STATE_HOME/avelor/log`), one file per run
+(`av-utils/logger.rs`), times in UTC; the panic hook logs a panic's
+thread, message and location before the abort.
 
 ## Measuring size <a id="measuring-size"></a>
 

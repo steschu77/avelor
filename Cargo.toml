@@ -3,7 +3,10 @@ members = ["crates/av-utils", "app"]
 resolver = "3"
 
 [workspace.dependencies]
+glib = "0.22"
+gtk = { package = "gtk4", version = "0.11" }
 log = "0.4"
+windows = "0.62"
 
 [workspace.lints.clippy]
 collapsible_if = "allow"

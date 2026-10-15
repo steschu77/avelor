@@ -4,6 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+log = { workspace = true }
+av-utils = { path = "../crates/av-utils" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_UI_Shell"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+glib = { workspace = true, features = ["v2_72"] }
+gtk = { workspace = true, features = ["v4_10"] }
 
 [build-dependencies]
 embed-resource = "3.0"

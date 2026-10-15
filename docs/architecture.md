@@ -1,8 +1,8 @@
 # Avelor — Architecture
 
 > The entry point to the documentation: what the app is, the constraints
-> and principles it is built on, how crates are structured, build and
-> conventions — and the map of
+> and principles it is built on, how host and crates are structured, build
+> and conventions — and the map of
 > the other documents.
 
 ## What the app is
@@ -45,7 +45,7 @@ read by OCR.
 | Document | Covers |
 |---|---|
 | **`architecture.md`** | this file: what the app is, principles, structure, build, conventions |
-| `development.md` | checks, measuring size, line endings |
+| `development.md` | checks, diagnosis, measuring size, line endings |
 
 ## Doc conventions
 
@@ -78,6 +78,32 @@ The rules the code follows, and every change to it:
 | Crate | Owns | Notes |
 |---|---|---|
 | av-utils | shared `Error`, `DateTime`, logger | |
+
+## Host modules
+
+| Module | Responsibility |
+|---|---|
+| `main.rs` | logger, panic hook |
+| `sys/mod.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
+| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the log); message boxes |
+| `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
+
+## Platforms <a id="platforms"></a>
+
+**Platform code, by area**
+
+| Area | Windows | Where | Linux |
+|---|---|---|---|
+| Folders | `%LOCALAPPDATA%\Avelor` (known folder): log | `sys/*/paths.rs` | `$XDG_STATE_HOME/avelor/log` |
+| Dialogs and shell | `MessageBoxW` | `sys/*/dialogs.rs` | `gtk::AlertDialog` |
+
+**The platform layer.** `app/src/sys/` holds a module per platform;
+`sys/mod.rs` states the contract and re-exports one backend's items. It is
+the only `cfg(target_os)` in `app/src`:
+
+- `paths()`: the log folder.
+- `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
+  is up, else stderr).
 
 ## Build <a id="build"></a>
 
