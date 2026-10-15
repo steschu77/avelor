@@ -18,6 +18,11 @@ const BROKEN_FILE: &str = "config.yaml.broken";
 pub struct AppConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowState>,
+    /// The language the user picked (`de`, `es-MX`), and how its texts
+    /// address the user (`de, informal`), else the system's
+    /// (`localization.md#language`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
     /// UI preferences, owned by the frontend; the host only stores and
     /// replays them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -66,6 +71,11 @@ impl ConfigStore {
     // ------------------------------------------------------------------------
     pub fn window(&self) -> Option<WindowState> {
         self.config.window
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn language(&self) -> Option<&str> {
+        self.config.language.as_deref()
     }
 
     // ------------------------------------------------------------------------

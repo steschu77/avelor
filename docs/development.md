@@ -19,11 +19,13 @@
 - The page's modules (`app/tests/page.rs`): each test file of
   `app/tests/page`, bundled with the modules it imports as the page is, is
   run by node in three time zones. A test takes what a module exports; the
-  stand-in for the page is `app/tests/page/harness.js`. Without node the
-  tests are left out, but not in CI.
+  stand-in for the page is `app/tests/page/harness.js`. A text is its key
+  there, so no wording breaks a test. Without node the tests are left out,
+  but not in CI.
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
-  tests.
+  tests. It checks the catalogs too (`localization.md#check`), with
+  `av-texts`' rules tested the same way.
 - `cargo clippy --workspace`.
 
 ## The bundled page <a id="the-bundled-page"></a>

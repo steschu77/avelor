@@ -4,6 +4,7 @@
 use crate::app::App;
 use crate::app::Prefs;
 use crate::protocol::Req;
+use crate::texts::Text;
 
 // ----------------------------------------------------------------------------
 /// `ready`: the page is loaded and listens. A config that couldn't be read
@@ -11,14 +12,10 @@ use crate::protocol::Req;
 /// told now, in the status bar. Answers `null`.
 pub fn ready(app: &mut App, req: Req) {
     if app.config.take_error().is_some() {
-        app.notice(CONFIG_UNREAD);
+        app.notice(Text::new("config.unread"));
     }
     req.ok(());
 }
-
-/// The notice of a config that couldn't be read at start.
-const CONFIG_UNREAD: &str =
-    "config.yaml couldn't be read; the app started with the default settings.";
 
 // ----------------------------------------------------------------------------
 /// `set_prefs {prefs}`: store the page's preferences (strings) as given; the
@@ -27,14 +24,13 @@ const CONFIG_UNREAD: &str =
 pub fn set_prefs(app: &mut App, req: Req, prefs: Prefs) {
     match app.config.set_prefs(prefs) {
         Ok(()) => req.ok(()),
-        Err(e) => req.save_failed(e, "the settings"),
+        Err(e) => req.save_failed(e, Text::new("save.settings")),
     }
 }
 
 // ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::config::load_config;
     use crate::testing::Harness;
     use serde_json::json;
@@ -55,7 +51,7 @@ mod tests {
         h.app.config = load_config(h.dir()).unwrap();
 
         let sent = h.call("ready", json!({}));
-        let notice = json!({ "level": "error", "message": CONFIG_UNREAD });
+        let notice = json!({ "level": "error", "text": { "key": "config.unread" } });
         let ready = json!({ "re": 1, "ok": null });
         assert_eq!(
             sent,

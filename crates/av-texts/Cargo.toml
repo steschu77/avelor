@@ -1,0 +1,11 @@
+[package]
+name = "av-texts"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+oxc = { workspace = true, features = ["ast_visit"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

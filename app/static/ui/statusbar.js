@@ -7,7 +7,9 @@
 // doesn't stack up.
 
 import { accEl } from '../core/dom.js';
+import { titled } from '../core/dom.js';
 import { RpcError, rpcOn } from '../core/rpc.js';
+import { t, textOf } from '../core/text.js';
 import { showError, store } from '../model/state.js';
 
 const statusbarEl = document.querySelector('footer.statusbar');
@@ -35,15 +37,15 @@ function renderStatusbar(notices) {
   text.title = notice.text;
   const dismiss = accEl('button', 'tool', '\u00d7');
   dismiss.type = 'button';
-  dismiss.title = 'Dismiss';
+  titled(dismiss, t('status.dismiss'));
   dismiss.addEventListener('click', () => clearNotice(notice.key));
   el.append(text, dismiss);
-  if (notices.length > 1) el.append(accEl('span', 'meta', `+${notices.length - 1} more`));
+  if (notices.length > 1) el.append(accEl('span', 'meta', t('status.more', { n: notices.length - 1 })));
   statusbarEl.append(el);
 }
 
 store.subscribe(state => state.notices, renderStatusbar);
-rpcOn('notice', ({ message }) => showError(message));
+rpcOn('notice', ({ text }) => showError(textOf(text)));
 
 // A failed call nobody handled is shown here too, so no failure is only a
 // console line. Cancelled calls are expected, and stay quiet.

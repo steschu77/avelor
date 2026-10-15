@@ -1,8 +1,16 @@
 // The page's tests (development.md#checks): what the page's modules need of
 // a page as they load, and `test` and `equal`. A test file imports it first;
-// app/tests/page.rs bundles the file and runs it in node.
+// app/tests/page.rs bundles the file and runs it in node. `t` gives a text's
+// key, as the catalog has only the tests' own texts, so a wording breaks no
+// test.
 
 const { deepStrictEqual } = require('node:assert');
+
+const TEXTS = {
+  'test.plain': 'plain',
+  'test.named': '{name} of {n}',
+  'test.count': { one: '{n} entry', other: '{n} entries' },
+};
 
 // What the page posted to the host, as objects, oldest first.
 export const posted = [];
@@ -11,7 +19,7 @@ globalThis.window = globalThis;
 globalThis.host = { post: text => posted.push(JSON.parse(text)) };
 globalThis.document = {
   documentElement: { lang: 'en' },
-  getElementById: () => null,
+  getElementById: id => (id === 'texts' ? { textContent: JSON.stringify(TEXTS) } : null),
   querySelector: () => null,
   querySelectorAll: () => [],
   addEventListener() {},

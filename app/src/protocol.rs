@@ -7,6 +7,7 @@ use std::sync::Arc;
 use crate::api;
 use crate::app::Prefs;
 use crate::app::{App, UiQueue};
+use crate::texts::Text;
 use av_utils::error::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -111,28 +112,28 @@ impl Req {
     }
 
     // ------------------------------------------------------------------------
-    /// Answer with `error`: `{"re": id, "err": {"code", "message"}}`.
+    /// Answer with `error`: `{"re": id, "err": {"code", "text"}}`, the text
+    /// naming the code; the error goes to the log.
     pub fn err(mut self, error: Error) {
         let reply = error_reply(self.id, &error);
         self.send(reply);
     }
 
     // ------------------------------------------------------------------------
-    /// Answer with `error`, but with `message` to show instead of the
-    /// error's own text: the host words what went wrong, the page still
-    /// sees its code.
-    pub fn fail(mut self, error: Error, message: impl Into<String>) {
-        let err = json!({ "code": error.code(), "message": message.into() });
+    /// Answer with `error`, but with `text` to show instead of the code's:
+    /// the host words what went wrong, the page still sees its code.
+    pub fn fail(mut self, error: Error, text: Text) {
+        let err = json!({ "code": error.code(), "text": text });
         let reply = json!({ "re": self.id, "err": err });
         self.send(reply);
     }
 
     // ------------------------------------------------------------------------
-    /// Answer a save of `what` ("the account") that failed, in a sentence
-    /// for the page; the error is logged.
-    pub fn save_failed(self, error: Error, what: &str) {
-        log::warn!("Could not save {what}: {error}");
-        self.fail(error, format!("Could not save {what}."));
+    /// Answer a save that failed with `text`, a sentence for the page
+    /// ("Could not save the account."); the error is logged.
+    pub fn save_failed(self, error: Error, text: Text) {
+        log::warn!("{}: {error}", text.key);
+        self.fail(error, text);
     }
 
     // ------------------------------------------------------------------------
@@ -154,7 +155,9 @@ impl Drop for Req {
 
 // ----------------------------------------------------------------------------
 fn error_reply(id: u64, error: &Error) -> Value {
-    let err = json!({ "code": error.code(), "message": error.to_string() });
+    log::info!("Request {id} failed: {error}");
+    let text = Text::new("error.code").arg("code", error.code());
+    let err = json!({ "code": error.code(), "text": text });
     json!({ "re": id, "err": err })
 }
 
