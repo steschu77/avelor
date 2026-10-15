@@ -20,6 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/linux-deps
+
       - name: Release Build
         run: cargo build --release
 
@@ -35,6 +39,10 @@ jobs:
       - name: Toolchain
         run: rustup update stable && rustup default stable && rustup component add rustfmt clippy
 
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/linux-deps
+        
       - name: Format
         run: cargo fmt --all --check
 
@@ -46,6 +54,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/linux-deps
 
       - name: Run tests
         run: cargo test --verbose
