@@ -54,7 +54,7 @@ module imports`), and a non-ASCII character in any page source, a module, a styl
 (`line 273, column 53: '§' (U+00A7) isn't ASCII`), listed once per module
 that imports the file.
 
-## Testing session end
+## Testing session end <a id="session-end"></a>
 
 Start the exe from Explorer, not with `cargo run`: under cargo the app sits
 in cargo's job object, which is killed together with cargo before Windows

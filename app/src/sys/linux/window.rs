@@ -11,11 +11,14 @@ use crate::shell::{Shell, TITLE};
 thread_local! {
     /// The shell whose queue `UiSignal::wake` runs, on the UI thread.
     static SHELL: RefCell<Weak<Shell>> = const { RefCell::new(Weak::new()) };
+    /// The window `UiSignal::close` closes.
+    static WINDOW: RefCell<glib::WeakRef<gtk::ApplicationWindow>> =
+        RefCell::new(glib::WeakRef::new());
 }
 
 // ----------------------------------------------------------------------------
 /// Wakes the app's queue from any thread: an idle callback of GTK's main
-/// loop runs it (`Shell::run_tasks`). Not `MainContext::invoke`, which on
+/// loop runs it (`Shell::run_tasks`); and closes the window for the app. Not `MainContext::invoke`, which on
 /// the UI thread calls at once, inside the task that woke the queue; the
 /// queue runs once the main loop gets to it, as on Windows
 /// (`architecture.md#one-way-in`).
@@ -25,9 +28,10 @@ pub struct UiSignal {
 
 impl UiSignal {
     // ------------------------------------------------------------------------
-    /// The signal of `shell`'s queue; on the UI thread.
-    pub fn new(shell: &Rc<Shell>, _window: &gtk::ApplicationWindow) -> Self {
+    /// The signal of `shell`'s queue and `window`; on the UI thread.
+    pub fn new(shell: &Rc<Shell>, window: &gtk::ApplicationWindow) -> Self {
         SHELL.with(|s| *s.borrow_mut() = Rc::downgrade(shell));
+        WINDOW.with(|w| w.borrow().set(Some(window)));
         Self { live: true }
     }
 
@@ -47,6 +51,23 @@ impl UiSignal {
         glib::idle_add_once(|| {
             if let Some(shell) = SHELL.with(|s| s.borrow().upgrade()) {
                 shell.run_tasks();
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    /// Have the main loop close the window, its state kept: the app's close,
+    /// once the page is ready. Closing the window ends the app.
+    pub fn close(&self) {
+        if !self.live {
+            return;
+        }
+        glib::idle_add_once(|| {
+            let shell = SHELL.with(|s| s.borrow().upgrade());
+            let window = WINDOW.with(|w| w.borrow().upgrade());
+            if let (Some(shell), Some(window)) = (shell, window) {
+                save_window_state(&window, &shell);
+                window.destroy();
             }
         });
     }
@@ -70,11 +91,21 @@ pub fn create(
         .child(webview)
         .build();
 
-    // GTK has no end of a resize drag: the size is saved when the window
-    // closes, a change of maximized when it happens.
-    let saving = Rc::clone(shell);
+    // The window's Close asks the app first, which closes the window once
+    // the page is ready (`UiSignal::close`); before the app is up there is no
+    // page to ask. Refused while a handler is still running: a nested loop
+    // dispatched it. GTK has no end of a resize drag: the size is saved when
+    // the window closes, a change of maximized when it happens.
+    let closing = Rc::clone(shell);
     window.connect_close_request(move |window| {
-        save_window_state(window, &saving);
+        if closing.is_busy() {
+            log::info!("Close refused: a handler is still running");
+            return glib::Propagation::Stop;
+        }
+        if closing.on_close() {
+            return glib::Propagation::Stop;
+        }
+        save_window_state(window, &closing);
         glib::Propagation::Proceed
     });
     let saving = Rc::clone(shell);
