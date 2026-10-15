@@ -17,7 +17,48 @@ use windows::Win32::{
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
+/// The app's queue has tasks to run (`UiSignal::wake`).
+const WM_TASK: u32 = WM_USER + 1;
 const WINDOW_CLASS: PCWSTR = w!("Avelor");
+
+// ----------------------------------------------------------------------------
+/// Wakes the app's queue from any thread: `WM_TASK`, posted to the main
+/// window, runs it (`Shell::run_tasks`).
+pub struct UiSignal {
+    hwnd: isize, // isize is Send+Sync, unlike HWND's raw pointer
+}
+
+impl UiSignal {
+    // ------------------------------------------------------------------------
+    fn new(hwnd: HWND) -> Self {
+        Self {
+            hwnd: hwnd.0 as isize,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// A signal without a window, for tests: they run the queue themselves.
+    #[cfg(test)]
+    pub fn none() -> Self {
+        Self { hwnd: 0 }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Have the window run the queue (`WM_TASK`).
+    pub fn wake(&self) {
+        if self.hwnd == 0 {
+            return;
+        }
+        unsafe {
+            let _ = PostMessageW(
+                Some(HWND(self.hwnd as *mut _)),
+                WM_TASK,
+                WPARAM(0),
+                LPARAM(0),
+            );
+        }
+    }
+}
 
 // ----------------------------------------------------------------------------
 /// The main window and the shell behind it.
@@ -124,14 +165,23 @@ impl WindowProc {
 
     // ------------------------------------------------------------------------
     /// The controller finished creating; store it and size it to the window.
-    pub fn on_controller(&self, controller: ICoreWebView2Controller, _webview: &ICoreWebView2) {
+    /// The app starts, posting to the page in `webview`.
+    pub fn on_controller(&self, controller: ICoreWebView2Controller, webview: &ICoreWebView2) {
         unsafe {
             let mut rect = RECT::default();
             let _ = GetClientRect(self.hwnd(), &mut rect);
             let _ = controller.SetBounds(rect);
             let _ = controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
         }
+        let signal = UiSignal::new(self.hwnd());
+        self.shell.start(signal, webview::outbox(webview.clone()));
         self.controller.replace(Some(controller));
+    }
+
+    // ------------------------------------------------------------------------
+    /// A message arrived from the page's JS via `window.host.post`.
+    pub fn on_web_message(&self, message: String) {
+        self.shell.on_web_message(message);
     }
 
     // ------------------------------------------------------------------------
@@ -184,6 +234,7 @@ impl WindowProc {
             }
             WM_SETFOCUS => self.on_set_focus(),
             WM_EXITSIZEMOVE => self.on_exit_size_move(),
+            WM_TASK => self.on_task(),
             _ => unsafe { DefWindowProcW(self.hwnd(), msg, wparam, lparam) },
         }
     }
@@ -265,6 +316,12 @@ impl WindowProc {
     /// every intermediate `WM_SIZE`.
     fn on_exit_size_move(&self) -> LRESULT {
         self.save_window_state();
+        LRESULT(0)
+    }
+
+    /// Run every queued task.
+    fn on_task(&self) -> LRESULT {
+        self.shell.run_tasks();
         LRESULT(0)
     }
 

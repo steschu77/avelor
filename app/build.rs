@@ -13,7 +13,7 @@ use std::{
 /// The page's layers, lowest first: a module in one of these folders imports
 /// only from its own layer or a lower one, and every module but an entry is
 /// in one (`av_bundle::bundle`, `architecture.md#page`).
-const LAYERS: &[&str] = &[];
+const LAYERS: &[&str] = &["core/"];
 
 // ----------------------------------------------------------------------------
 /// The page source `path` under `static_dir`. The sources are ASCII-only,

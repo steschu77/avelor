@@ -2,10 +2,15 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod api;
+mod app;
 mod config;
 mod page;
+mod protocol;
 mod shell;
 mod sys;
+#[cfg(test)]
+mod testing;
 
 use av_utils::error::Result;
 use av_utils::logger;

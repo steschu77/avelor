@@ -17,6 +17,8 @@ use av_utils::error::Result;
 pub use dialogs::show_error;
 pub use paths::Paths;
 pub use paths::paths;
+pub use webview::BRIDGE_JS;
+pub use window::UiSignal;
 
 // ----------------------------------------------------------------------------
 /// The app's id with the session manager and D-Bus.
@@ -38,6 +40,8 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
         let webview = webview::create(&data_dir, &cache_dir, &shell);
         let window = window::create(app, &webview, &shell);
         end_session_on_request(app, &window, &shell);
+        shell.start(UiSignal::new(&shell, &window), webview::outbox(&webview));
+        webview::load(&webview);
     });
     // GTK isn't handed the command line: it has no options of its own.
     app.run_with_args::<&str>(&[]);
