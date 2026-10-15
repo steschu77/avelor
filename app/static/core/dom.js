@@ -41,6 +41,25 @@ export function accEl(tag, className, text) {
   return el;
 }
 
+// An element clicked like a button that can't be one, since it holds
+// controls of its own (a row with its buttons): Tab reaches it, and Enter
+// or Space clicks it (below). In the markup: `tabindex="0" role="button"`.
+export function pressable(el) {
+  el.tabIndex = 0;
+  el.setAttribute('role', 'button');
+  return el;
+}
+
+// A key on a control inside a pressable element is the control's; Ctrl+Enter
+// is the action's (ui/page.js). An SVG has no `.click()`.
+document.addEventListener('keydown', e => {
+  if (e.defaultPrevented || (e.key !== 'Enter' && e.key !== ' ') || e.ctrlKey || e.altKey) return;
+  const el = e.target;
+  if (el.getAttribute?.('role') !== 'button' || el.localName === 'button') return;
+  e.preventDefault();
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+});
+
 // The tooltip `text` of a control that shows a glyph (an x, a +, an arrow,
 // a check mark) or an icon alone, and its name too: a screen reader reads
 // the words, not the glyph. Attributes, since an SVG has no `title`.
@@ -48,4 +67,10 @@ export function titled(el, text) {
   el.setAttribute('title', text);
   el.setAttribute('aria-label', text);
   return el;
+}
+
+// A boolean ARIA state: present as "true" when `on`, absent otherwise.
+export function setAria(el, name, on) {
+  if (on) el.setAttribute(name, 'true');
+  else el.removeAttribute(name);
 }

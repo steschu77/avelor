@@ -625,4 +625,5 @@ the files read so far.
 An indexing starts only when a vault opens, so `vault` (indexing) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 
-- the entities.
+- the entities and projects;
+- the filter.

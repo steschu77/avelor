@@ -29,6 +29,21 @@
           <button type="button" class="tool" id="vault-menu-btn" aria-haspopup="menu" data-t-title="shell.vault_menu"><svg class="icon"><use href="#i-library" /></svg></button>
           <span id="vault-name"></span>
         </div>
+        <div class="sidebar__scroll">
+          <div class="nav-section label" tabindex="0" role="button"><svg class="icon disclosure"><use href="#i-chevron-down" /></svg><span data-t="sidebar.projects"></span></div>
+          <a class="nav-item nav-item--compact" id="all-projects" tabindex="0" role="button">
+            <svg class="icon nav-item__icon"><use href="#i-layer" /></svg>
+            <span data-t="sidebar.all_projects"></span>
+            <span id="all-documents-count" class="meta nav-item__count"></span>
+          </a>
+          <a class="nav-item nav-item--compact" id="no-project" tabindex="0" role="button" data-t-title="sidebar.no_project_title">
+            <svg class="icon nav-item__icon"><use href="#i-folder" /></svg>
+            <span class="nav-item__name" data-t="sidebar.no_project"></span>
+            <span class="meta nav-item__count"></span>
+          </a>
+          <div id="projects"></div>
+        </div>
+
         <div class="jobs" id="jobs"></div>
       </div>
     </aside>
