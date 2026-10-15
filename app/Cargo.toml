@@ -22,6 +22,8 @@ webkit6 = { workspace = true }
 
 [build-dependencies]
 embed-resource = "3.0"
+oxc = { workspace = true, features = ["minifier", "codegen"] }
+av-bundle = { path = "../crates/av-bundle" }
 static_vcruntime = "3.0"
 
 [lints]

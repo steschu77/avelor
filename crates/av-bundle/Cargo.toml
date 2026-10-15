@@ -1,0 +1,10 @@
+[package]
+name = "av-bundle"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+oxc = { workspace = true, features = ["semantic"] }
+
+[lints]
+workspace = true

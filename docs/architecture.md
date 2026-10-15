@@ -1,9 +1,9 @@
 # Avelor — Architecture
 
 > The entry point to the documentation: what the app is, the constraints
-> and principles it is built on, how host and crates are structured, the
-> runtime, storage, build and conventions — and the map of
-> the other documents.
+> and principles it is built on, how host, page and crates are structured,
+> the runtime, storage, build and conventions — and the map of the other
+> documents.
 
 ## What the app is
 
@@ -38,7 +38,8 @@ read by OCR.
 | Constraint | Consequence |
 |---|---|
 | Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
-| Minimal dependencies | Only `serde`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com` |
+| Minimal dependencies | Only `serde`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com` |
+| No npm, no third-party bundler | 1 ES module, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 
 ## Documents <a id="documents"></a>
@@ -46,7 +47,7 @@ read by OCR.
 | Document | Covers |
 |---|---|
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
-| `development.md` | checks, testing session end, diagnosis, measuring size, line endings |
+| `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
 
 ## Doc conventions
 
@@ -71,7 +72,8 @@ read by OCR.
 The rules the code follows, and every change to it:
 
 1. **Keep the stack, add no dependency.** Rust + WebView2 (WebKitGTK on
-   Linux), hand-written utilities, no async runtime.
+   Linux), hand-written utilities, no npm, no third-party bundler, no async
+   runtime.
 6. **Pure core, thin shell.** Mapping and decision logic are pure functions
    with tests; I/O sits at the edges.
 
@@ -93,6 +95,7 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | Crate | Owns | Notes |
 |---|---|---|
 | av-utils | shared `Error`, `DateTime`, logger, atomic writes (`fs`) | |
+| av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 
 ## Host modules
 
@@ -143,6 +146,19 @@ so the subtle part is written once:
 |---|---|---|
 | Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
 
+## Page <a id="page"></a>
+
+`app/static`, 1 line of JS.
+
+| File | Role |
+|---|---|
+| `app.js` | the entry |
+
+### ASCII-only sources
+
+No literal non-ASCII in `app/static`: `\u2026` in JS, `&#x2026;` in HTML.
+The build checks it (`architecture.md#build`).
+
 ## Storage and configuration <a id="storage"></a>
 
 The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
@@ -161,16 +177,25 @@ is atomic.
 
 ## Build <a id="build"></a>
 
-`app/build.rs` embeds the manifest and icon, on Windows. On
+`app/build.rs` bundles the page's modules with `av-bundle`, from `app.js`
+through its imports, into one classic script (a syntax error, an import
+cycle, a missing import or a broken layer fails the build,
+`development.md#the-bundled-page`), parses it with oxc on every build,
+minifies JS (oxc, mangling) in release builds, inlines into `index.html` in
+`OUT_DIR`, and embeds the manifest and icon, on Windows. On
 Linux the desktop entry and the icon are files (`app/res`), installed as
-`README.md` says. The host loads
+`README.md` says. A page
+source with a non-ASCII character fails the build, named by its line and
+column. A new module
+is in the page once a module there imports it. The host loads
 the page (`page::html`) with `NavigateToString`, on Linux with
 `load_html`.
 
 The release profile is built for size: `opt-level = "z"`, LTO, one codegen
 unit, `strip`, `panic = "abort"` (`Cargo.toml`); the panic hook
 `log_panics` (`logger.rs`) logs thread, message and location before the
-abort; how to measure the size: `development.md#measuring-size`.
+abort. Where the bundle lands and how to measure the size:
+`development.md#the-bundled-page`, `development.md#measuring-size`.
 
 ## Conventions <a id="conventions"></a>
 

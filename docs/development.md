@@ -6,7 +6,35 @@
 ## Checks <a id="checks"></a>
 
 - `cargo test --workspace` runs the unit tests.
+- The build bundles the page's modules and checks them
+  (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
+  tests.
 - `cargo clippy --workspace`.
+
+## The bundled page <a id="the-bundled-page"></a>
+
+`build.rs` bundles the page into
+`target/debug/build/avelor/<hash>/out/index.html`. Several hash
+folders exist, so take the one newer than the edited file. While the app
+runs, `cargo build` compiles but can't replace the locked exe; `cargo test
+-p avelor --no-run` still runs `build.rs`, so the page is bundled
+and checked. The bundle holds the modules `app.js` imports, directly or
+not: a new module nothing imports is simply absent from the page, and one
+that registers or subscribes when it loads goes into `app.js`'s imports
+at the place it acts.
+
+`build.rs` also writes `page-deps.txt` there: a count, then each module in
+the order it runs, with the names it imports by the module they come
+from; a module imported for its side effects stands alone. What the
+bundle can't take fails the build, each problem naming its modules:
+an import cycle, a name imported that isn't
+exported, an exported `let`, a write to an import, a name used without
+its import (`features/x.js uses el, which core/dom.js declares, without
+importing it`), a module in no layer, or one importing from a higher layer
+(`core/dom.js imports from ui/log.js, a higher layer (ui/)`). So does a
+non-ASCII character in any page source, a module or an HTML file
+(`line 273, column 53: '§' (U+00A7) isn't ASCII`), listed once per module
+that imports the file.
 
 ## Testing session end <a id="session-end"></a>
 
