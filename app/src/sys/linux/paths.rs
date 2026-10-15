@@ -23,6 +23,18 @@ impl Paths {
     }
 
     // ------------------------------------------------------------------------
+    /// `$XDG_DATA_HOME/avelor/webkit`: the web view's data.
+    pub fn webview_dir(&self) -> PathBuf {
+        glib::user_data_dir().join(APP_DIR).join("webkit")
+    }
+
+    // ------------------------------------------------------------------------
+    /// `$XDG_CACHE_HOME/avelor/webkit`: the web view's cache.
+    pub fn webview_cache_dir(&self) -> PathBuf {
+        glib::user_cache_dir().join(APP_DIR).join("webkit")
+    }
+
+    // ------------------------------------------------------------------------
     /// `$XDG_STATE_HOME/avelor/log`: one log file per run.
     pub fn log_dir(&self) -> PathBuf {
         glib::user_state_dir().join(APP_DIR).join("log")
