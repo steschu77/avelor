@@ -8,6 +8,8 @@ mod window;
 use crate::config::ConfigStore;
 use crate::shell::{Shell, TITLE};
 use av_utils::error::Result;
+use windows::Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME};
+use windows::core::PWSTR;
 
 pub use dialogs::show_error;
 pub use paths::Paths;
@@ -25,4 +27,27 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
     window::run_message_loop();
     drop(window);
     Ok(())
+}
+
+// ----------------------------------------------------------------------------
+/// The user's preferred UI languages, the one Windows shows first
+/// (`de-DE`, `en-US`); none if Windows can't tell.
+pub fn languages() -> Vec<String> {
+    let (mut count, mut len) = (0u32, 0u32);
+    let mut buffer = Vec::new();
+    unsafe {
+        if GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, None, &mut len).is_err() {
+            return Vec::new();
+        }
+        buffer.resize(len as usize, 0u16);
+        let names = Some(PWSTR(buffer.as_mut_ptr()));
+        if GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, names, &mut len).is_err() {
+            return Vec::new();
+        }
+    }
+    buffer
+        .split(|&c| c == 0)
+        .filter(|name| !name.is_empty())
+        .map(String::from_utf16_lossy)
+        .collect()
 }

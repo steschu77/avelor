@@ -1,0 +1,8 @@
+{
+  "config.unread": "config.yaml couldn't be read; the app started with the default settings.",
+  "error.code": "Something went wrong ({code}).",
+  "save.settings": "Could not save the settings.",
+  "start.failed": "An error occurred.\n\nCheck the log file for more information.",
+  "status.dismiss": "Dismiss",
+  "status.more": "+{n} more"
+}

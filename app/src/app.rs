@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use crate::config::{ConfigStore, WindowState};
 use crate::protocol::{self, Req};
 use crate::sys::UiSignal;
+use crate::texts::Text;
 use serde::Serialize;
 
 // ----------------------------------------------------------------------------
@@ -62,11 +63,11 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// Show `message` in the page's status bar as an error (the event
-    /// `notice`, level error). `message` is the host's own words; the error
+    /// Show `text` in the page's status bar as an error (the event
+    /// `notice`, level error). `text` is the host's own words; the error
     /// behind it goes to the log.
-    pub fn notice(&self, message: &str) {
-        let notice = serde_json::json!({ "level": "error", "message": message });
+    pub fn notice(&self, text: Text) {
+        let notice = serde_json::json!({ "level": "error", "text": text });
         self.post_event("notice", notice);
     }
 
@@ -77,7 +78,7 @@ impl App {
     pub fn save_window_state(&mut self, state: WindowState) {
         if let Err(e) = self.config.set_window(state) {
             log::warn!("Could not save the window state: {e}");
-            self.notice("Could not save the settings.");
+            self.notice(Text::new("save.settings"));
         }
     }
 

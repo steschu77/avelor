@@ -49,6 +49,17 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
 }
 
 // ----------------------------------------------------------------------------
+/// The user's languages as GLib reads them from the environment
+/// (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`), the first first: `de_AT`,
+/// `de`; `C` last.
+pub fn languages() -> Vec<String> {
+    glib::language_names()
+        .into_iter()
+        .map(|name| name.to_string())
+        .collect()
+}
+
+// ----------------------------------------------------------------------------
 /// The session ends: the session manager's `query-end` (the app registers
 /// with it), or SIGTERM or SIGHUP. The window's state is kept, without
 /// asking anything (`architecture.md#principles`, principle 8); a signal

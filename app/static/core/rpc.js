@@ -2,10 +2,12 @@
 // `rpcCall` sends a command and returns a promise of its one reply;
 // `rpcOn` listens for the events the host pushes.
 
+import { textOf } from './text.js';
+
 // A failed call: `code` is the host's (`cancelled`, `bad_request`, ...).
 export class RpcError extends Error {
-  constructor(cmd, code, message) {
-    super(message || code);
+  constructor(cmd, code, text) {
+    super(textOf(text) || code);
     this.name = 'RpcError';
     this.cmd = cmd;
     this.code = code;
@@ -24,7 +26,7 @@ export function rpcCall(cmd, args = {}, { channel } = {}) {
   const id = rpcNextId++;
   const reply = new Promise((resolve, reject) => rpcPending.set(id, { cmd, resolve, reject }));
   if (rpcBridge) rpcBridge.post(JSON.stringify({ id, cmd, args }));
-  else rpcSettle(id, { err: { code: 'cancelled', message: 'There is no host.' } });
+  else rpcSettle(id, { err: { code: 'cancelled' } });
   return reply;
 }
 
@@ -35,12 +37,12 @@ export function rpcOn(event, fn) {
   rpcListeners.get(event).add(fn);
 }
 
-// Settle the call `id` with `reply`: `{ ok }` or `{ err: { code, message } }`.
+// Settle the call `id` with `reply`: `{ ok }` or `{ err: { code, text } }`.
 function rpcSettle(id, reply) {
   const call = rpcPending.get(id);
   if (!call) return;
   rpcPending.delete(id);
-  if (reply.err) call.reject(new RpcError(call.cmd, reply.err.code, reply.err.message));
+  if (reply.err) call.reject(new RpcError(call.cmd, reply.err.code, reply.err.text));
   else call.resolve(reply.ok);
 }
 

@@ -18,7 +18,8 @@
   characters, unique in its doc and referred to; the docs are LF.
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
-  tests.
+  tests. It checks the catalogs too (`localization.md#check`), with
+  `av-texts`' rules tested the same way.
 - `cargo clippy --workspace`.
 
 ## The bundled page <a id="the-bundled-page"></a>

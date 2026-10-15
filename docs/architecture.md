@@ -51,6 +51,7 @@ read by OCR.
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
 | `api.md` | the protocol: transport, rules, the page's side, every command |
 | `ui.md` | the main window: layout, status bar, preferences |
+| `localization.md` | the app's texts: the catalogs, the page's and the host's, the run's language, the build's check, a new language |
 
 ## Doc conventions
 
@@ -136,14 +137,16 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 |---|---|---|
 | av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, logger, atomic writes (`fs`) | |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
+| av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
 
 ## Host modules
 
 | Module | Responsibility |
 |---|---|
-| `main.rs` | logger, panic hook, the config (`load_config`) |
+| `main.rs` | logger, panic hook, the config (`load_config`), the run's language (`texts::init`) |
 | `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net (`architecture.md#platforms`) |
-| `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences and the platform's `BRIDGE_JS` |
+| `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences, the texts in the run's language, and the platform's `BRIDGE_JS` |
+| `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`), a text the page shows (`Text`: a key and its arguments); its tests |
 | `sys.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
 | `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); message boxes |
 | `sys/win32.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; `UiSignal` (`WM_TASK`) |
@@ -167,6 +170,7 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread) |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
+| Language | the display languages (`GetUserPreferredUILanguages`); WebView2's `Language` | `sys/*.rs` (`languages`), `sys/*/webview.rs` | the languages GLib reads from the environment (`language_names`); the web context's preferred languages |
 | Dialogs and shell | `MessageBoxW` | `sys/*/dialogs.rs` | `gtk::AlertDialog` |
 
 **The platform layer.** `app/src/sys/` holds a module per platform;
@@ -179,7 +183,7 @@ the only `cfg(target_os)` in `app/src`:
 - `UiSignal` (`Send + Sync`): `wake()`. `UiQueue` holds one instead of an
   `HWND`; tests use `UiSignal::none()`.
 - `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
-  is up, else stderr), and `BRIDGE_JS`.
+  is up, else stderr), the user's `languages`, and `BRIDGE_JS`.
 
 **The shared shell.** `shell.rs` holds what the main window decides:
 
@@ -195,8 +199,8 @@ so the subtle part is written once:
 | Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
 
 **The page's bridge.** `page.rs` builds the page for both platforms:
-the bundle, the preferences block and the platform's `BRIDGE_JS` inlined
-before the bundle. The
+the bundle, the preferences and texts blocks and the platform's
+`BRIDGE_JS` inlined before the bundle. The
 bridge defines `window.host.post(text)` and calls
 `window.host.receive(text)`, which `rpc.js` sets. On WebKitGTK the page
 posts to `webkit.messageHandlers.host`, and a reply is
@@ -216,6 +220,7 @@ nothing imports `app.js`.
 | File | Role |
 |---|---|
 | `core/dom.js`, `core/store.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make); observable store (`setState`/`subscribe` with `Object.is`) |
+| `core/text.js` | the page's texts: `t`, a text of the run's catalog, `textOf`, one the host sent (`localization.md`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `model/state.js` | the store and its schema (`notices`, the preferences); `savePrefs`, `showError` |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
@@ -270,7 +275,8 @@ Conventions the page keeps:
 ### ASCII-only sources
 
 No literal non-ASCII in `app/static`: `\u2026` in JS, `&#x2026;` in HTML,
-`"\2026"` in CSS. The build checks it (`architecture.md#build`).
+`"\2026"` in CSS. The build checks it (`architecture.md#build`). The
+catalogs are UTF-8, outside it (`localization.md#catalogs`).
 
 ## Storage and configuration
 

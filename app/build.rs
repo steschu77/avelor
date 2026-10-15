@@ -1,3 +1,4 @@
+use av_texts::{Catalog, Used};
 use oxc::{
     allocator::Allocator,
     codegen::{Codegen, CodegenOptions, CommentOptions},
@@ -6,6 +7,7 @@ use oxc::{
     span::SourceType,
 };
 use std::{
+    collections::BTreeSet,
     env, fs,
     path::{Path, PathBuf},
 };
@@ -14,6 +16,11 @@ use std::{
 /// only from its own layer or a lower one, and every module but an entry is
 /// in one (`av_bundle::bundle`, `architecture.md#page`).
 const LAYERS: &[&str] = &["core/", "model/", "ui/", "features/"];
+
+// ----------------------------------------------------------------------------
+/// The app's own catalogs, each with every key English has
+/// (`localization.md#catalogs`); a language from outside may lack some.
+const OWN_LANGUAGES: &[&str] = &["en", "de", "es"];
 
 // ----------------------------------------------------------------------------
 /// The page source `path` under `static_dir`. The sources are ASCII-only,
@@ -212,7 +219,8 @@ fn inline_styles(static_dir: &Path, html: &str) -> String {
 
 // ----------------------------------------------------------------------------
 /// The page, `index.html` with its CSS and the bundle of `app.js` inlined,
-/// and what the bundle's modules import (`page-deps.txt`), written to
+/// and what the bundle's modules import (`page-deps.txt`); the catalogs the bundle's
+/// texts come from (`build_texts`), written to
 /// `out_dir`.
 fn build_pages(root: &Path, out_dir: &Path) {
     let static_dir = root.join("static");
@@ -222,6 +230,7 @@ fn build_pages(root: &Path, out_dir: &Path) {
 
     let page = bundle(&static_dir, "app.js");
     fs::write(out_dir.join("page-deps.txt"), page.graph.to_string()).unwrap();
+    build_texts(root, out_dir, &page.js);
     let html = inline_script(
         &html,
         "<script type=\"module\" src=\"./app.js\"></script>",
@@ -230,6 +239,87 @@ fn build_pages(root: &Path, out_dir: &Path) {
     fs::write(out_dir.join("index.html"), html).unwrap();
 
     println!("cargo:rerun-if-changed=static");
+}
+
+// ----------------------------------------------------------------------------
+/// The catalogs (`app/texts/*.json`, `localization.md`), checked against
+/// the keys the page's script `js` and the host's
+/// sources use; a problem fails the build, each one
+/// listed. Written to `out_dir` as `texts.rs`,
+/// which `texts.rs` includes: each language's texts over English's, as the
+/// JSON both the page and the host read.
+fn build_texts(root: &Path, out_dir: &Path, js: &str) {
+    let mut catalogs = Vec::new();
+    for entry in fs::read_dir(root.join("texts")).expect("app has no texts folder") {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|ext| ext == "json") {
+            let language = path.file_stem().unwrap().to_string_lossy().into_owned();
+            let json = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
+            let catalog = Catalog::parse(&language, &json)
+                .unwrap_or_else(|e| panic!("app/texts/{language}.json: {e}"));
+            catalogs.push(catalog);
+        }
+    }
+    catalogs.sort_by(|a, b| a.language.cmp(&b.language));
+    for own in OWN_LANGUAGES {
+        assert!(
+            catalogs.iter().any(|catalog| catalog.language == *own),
+            "app/texts has no {own}.json (localization.md#catalogs)"
+        );
+    }
+    let at = catalogs.iter().position(|c| c.language == "en").unwrap();
+    let english = catalogs.remove(at);
+
+    let page = av_texts::page_keys(js).unwrap_or_else(|problems| failed(&problems));
+    let mut used = Used {
+        page,
+        host: BTreeSet::new(),
+    };
+    for path in rust_files(&root.join("src")) {
+        let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
+        let host = av_texts::host_keys(&text);
+        used.page.extend(host.page);
+        used.host.extend(host.host);
+    }
+    let problems = av_texts::check(&english, &catalogs, OWN_LANGUAGES, &used);
+    if !problems.is_empty() {
+        failed(&problems);
+    }
+
+    let mut rows = String::new();
+    for catalog in std::iter::once(&english).chain(&catalogs) {
+        rows.push_str(&format!(
+            "    Catalog {{ language: {:?}, json: {:?} }},\n",
+            catalog.language,
+            catalog.over(&english).to_json(),
+        ));
+    }
+    let out = format!("pub static CATALOGS: &[Catalog] = &[\n{rows}];\n");
+    fs::write(out_dir.join("texts.rs"), out).unwrap();
+    println!("cargo:rerun-if-changed=texts");
+    println!("cargo:rerun-if-changed=src");
+}
+
+/// The catalogs' `problems`, listed; the build fails.
+fn failed(problems: &[String]) -> ! {
+    for problem in problems {
+        eprintln!("{problem}");
+    }
+    panic!("the app's texts fail their check (localization.md#check)");
+}
+
+/// The `.rs` files under `dir`, its folders' too.
+fn rust_files(dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir).unwrap_or_else(|e| panic!("{dir:?}: {e}")) {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            files.extend(rust_files(&path));
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            files.push(path);
+        }
+    }
+    files
 }
 
 // ----------------------------------------------------------------------------

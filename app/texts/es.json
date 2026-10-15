@@ -1,0 +1,8 @@
+{
+  "config.unread": "No se pudo leer config.yaml; la aplicación se inició con la configuración predeterminada.",
+  "error.code": "Algo ha fallado ({code}).",
+  "save.settings": "No se pudo guardar la configuración.",
+  "start.failed": "Se ha producido un error.\n\nEl archivo de registro tiene más información.",
+  "status.dismiss": "Descartar",
+  "status.more": "+{n} más"
+}

@@ -36,6 +36,11 @@ jobs:
       - name: Check merge commits
         uses: ./.github/actions/reject-merge-commits
 
+      # A catalog from outside, as its pull request brings it
+      # (docs/localization.md).
+      - name: Catalogs
+        run: python3 tools/check_catalog.py app/texts/*.json
+
       - name: Toolchain
         run: rustup update stable && rustup default stable && rustup component add rustfmt clippy
 
