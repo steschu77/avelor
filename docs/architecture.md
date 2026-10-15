@@ -38,7 +38,7 @@ events from Google Calendar, scanned pictures read by OCR.
 | Constraint | Consequence |
 |---|---|
 | Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
-| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com` |
+| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. UUIDv7, dates are hand-written |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 | One coordinator | `App` alone posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
@@ -135,7 +135,7 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, logger, atomic writes (`fs`) | |
+| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), atomic writes (`fs`) | |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
 
@@ -173,6 +173,7 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | Theme | Windows' theme for apps (`AppsUseLightTheme`): the title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the web view's ground before the page paints (`SetDefaultBackgroundColor`), again on `WM_SETTINGCHANGE`; WebView2's `prefers-color-scheme` follows the same setting | `sys/win32/window.rs`, `sys/win32/webview.rs` | GTK's theme: the window's, and through it WebKitGTK's color scheme |
 | Language | the display languages (`GetUserPreferredUILanguages`); WebView2's `Language` | `sys/*.rs` (`languages`), `sys/*/webview.rs` | the languages GLib reads from the environment (`language_names`); the web context's preferred languages |
 | Dialogs and shell | `MessageBoxW` | `sys/*/dialogs.rs` | `gtk::AlertDialog` |
+| Random | BCrypt | `av-utils/random.rs` | `getrandom` |
 | Icons and fonts | inline SVGs from Fluent UI System Icons (MIT), one sprite (`app/static/icons`, `build.rs`); Segoe UI | `css/tokens.css` (`--f-chrome`) | the same SVGs, since the Segoe font can't be shipped; `--f-chrome` already ends in `system-ui` |
 
 **The platform layer.** `app/src/sys/` holds a module per platform;
@@ -354,6 +355,6 @@ abort. Where the bundle lands and how to measure the size:
 
 | Part | Owns | Must not |
 |---|---|---|
-| av-utils | primitives with no domain (dates, atomic writes) | know about vaults, Google, LLMs; carry network types |
+| av-utils | primitives with no domain (dates, ids, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK; message decoding and replies | contain feature logic |
 | page | rendering, user input | resolve filenames, conflicts or structural rules |

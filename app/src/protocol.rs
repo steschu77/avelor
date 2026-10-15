@@ -156,7 +156,11 @@ impl Drop for Req {
 // ----------------------------------------------------------------------------
 fn error_reply(id: u64, error: &Error) -> Value {
     log::info!("Request {id} failed: {error}");
-    let text = Text::new("error.code").arg("code", error.code());
+    let mut text = Text::new("error.code").arg("code", error.code());
+    // The argument named, for the page that sent it (not shown).
+    if let Error::InvalidArgument { arg } = error {
+        text = text.arg("arg", arg.as_str());
+    }
     let err = json!({ "code": error.code(), "text": text });
     json!({ "re": id, "err": err })
 }
