@@ -1,0 +1,35 @@
+.panel {
+  position: absolute;
+  top: 0;
+  right: calc(-1 * var(--o-panel));
+  width: var(--w-panel);
+  height: 100%;
+  z-index: var(--z-panel);
+
+  display: grid;
+  grid-template-rows: var(--h-topbar) 1fr;
+  grid-template-areas:
+    "header"
+    "body";
+
+  transition:
+    right 250ms ease,
+    width 250ms ease;
+  box-shadow: var(--shadow-raise);
+}
+
+.panel__toolbar {
+  grid-area: header;
+  padding: 0 var(--p-pane);
+  background: var(--c-card);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.panel__body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--c-card);
+  overflow: hidden;
+}

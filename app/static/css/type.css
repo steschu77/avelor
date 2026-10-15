@@ -1,0 +1,8 @@
+/* Type roles: the text styles components and areas take (meta). */
+
+/* small print: counts, notes under values, dates in lists */
+.meta {
+  font: 400 var(--fs-meta)/1.3 var(--f-chrome);
+  color: var(--c-label);
+  font-variant-numeric: tabular-nums;
+}

@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use crate::config::{ConfigStore, WindowState};
 use crate::protocol::{self, Req};
 use crate::sys::UiSignal;
+use serde::Serialize;
 
 // ----------------------------------------------------------------------------
 pub type Prefs = BTreeMap<String, String>;
@@ -40,18 +41,43 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// Send `text` to the page as it is: a reply.
+    /// Send `text` to the page as it is: a reply or an event.
     pub fn post_text(&self, text: &str) {
         (self.outbox)(text);
     }
 
     // ------------------------------------------------------------------------
+    /// Push the event `ev` with `data` to the page: `{"ev": ev, "data": data}`
+    /// (`api.md#events`).
+    pub fn post_event(&self, ev: &str, data: impl Serialize) {
+        #[derive(Serialize)]
+        struct Event<'a, T> {
+            ev: &'a str,
+            data: T,
+        }
+        match serde_json::to_string(&Event { ev, data }) {
+            Ok(text) => self.post_text(&text),
+            Err(e) => log::warn!("Could not send the event {ev}: {e}"),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Show `message` in the page's status bar as an error (the event
+    /// `notice`, level error). `message` is the host's own words; the error
+    /// behind it goes to the log.
+    pub fn notice(&self, message: &str) {
+        let notice = serde_json::json!({ "level": "error", "message": message });
+        self.post_event("notice", notice);
+    }
+
+    // ------------------------------------------------------------------------
     /// Remember the main window's state in the app config, writing it only
-    /// if it changed (a plain move ends a drag too). A failure is only
-    /// logged, the window works on.
+    /// if it changed (a plain move ends a drag too). A failure is shown in
+    /// the status bar (`notice`); the window works on.
     pub fn save_window_state(&mut self, state: WindowState) {
         if let Err(e) = self.config.set_window(state) {
             log::warn!("Could not save the window state: {e}");
+            self.notice("Could not save the settings.");
         }
     }
 

@@ -5,11 +5,36 @@
   <meta charset="utf-8">
   <!-- the page's preferences, filled in by the host (page.rs) -->
   <script type="application/json" id="prefs">{}</script>
+  <!-- the CSS in cascade order (architecture.md#css); build.rs inlines it -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/type.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/areas/shell.css">
+  <link rel="stylesheet" href="css/areas/sidebar.css">
+  <link rel="stylesheet" href="css/areas/panel.css">
 </head>
 
 <body>
-  <div style="text-align: center; margin-top: 50px;">
-    <h1>Avelor</h1>
+
+  <div class="shell">
+    <header class="topbar"></header>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__list">
+        <div class="grip grip--end" id="sidebar-divider"></div>
+      </div>
+    </aside>
+
+    <main class="main" id="main"></main>
+
+    <aside class="panel" id="panel">
+      <div class="grip" id="panel-divider"></div>
+      <div class="panel__toolbar"></div>
+      <div class="panel__body"></div>
+    </aside>
+
+    <footer class="statusbar" role="status"></footer>
   </div>
 
   <!-- the bridge to the host, filled in by the host (page.rs) -->

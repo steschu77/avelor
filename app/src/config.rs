@@ -42,6 +42,7 @@ pub struct WindowState {
 pub struct ConfigStore {
     config: AppConfig,
     path: PathBuf,
+    error: Option<Error>,
 }
 
 // ----------------------------------------------------------------------------
@@ -58,6 +59,7 @@ impl ConfigStore {
         Ok(Self {
             config,
             path: path.to_path_buf(),
+            error: None,
         })
     }
 
@@ -88,6 +90,11 @@ impl ConfigStore {
     }
 
     // ------------------------------------------------------------------------
+    pub fn take_error(&mut self) -> Option<Error> {
+        self.error.take()
+    }
+
+    // ------------------------------------------------------------------------
     fn save(&self) -> Result<()> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
@@ -111,6 +118,7 @@ pub fn load_config(dir: &Path) -> Result<ConfigStore> {
             Ok(ConfigStore {
                 config: AppConfig::default(),
                 path,
+                error: Some(err),
             })
         }
         Err(err) => Err(err),
@@ -163,6 +171,7 @@ mod tests {
     fn a_missing_config_loads_as_the_defaults() {
         let dir = temp_dir("missing");
         let config = load_config(&dir).unwrap();
+        assert!(config.error.is_none());
         assert!(config.window().is_none());
         assert!(config.prefs().is_empty());
         fs::remove_dir_all(&dir).unwrap();
@@ -193,6 +202,7 @@ mod tests {
 
         fs::write(&config_file, broken_unopened).unwrap();
         let config = load_config(&dir).unwrap();
+        assert!(matches!(config.error, Some(Error::Serde { .. })));
         assert!(config.window().is_none());
 
         assert!(broken_file.exists());
@@ -201,6 +211,7 @@ mod tests {
         assert!(!config_file.exists());
         fs::write(&config_file, broken_unclosed).unwrap();
         let config = load_config(&dir).unwrap();
+        assert!(matches!(config.error, Some(Error::Serde { .. })));
         assert!(config.window().is_none());
 
         // still the initial broken file

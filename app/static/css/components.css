@@ -1,0 +1,58 @@
+/* Components: the parts several areas share (tools, grips, ...). They
+   come before the areas, so an area's rule can override them. */
+
+/* Tool buttons (toolbars, pane heads): no chrome until hovered or pressed. */
+.tool {
+  min-width: var(--h-control-sm);
+  height: var(--h-control-sm);
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: none;
+  cursor: default;
+}
+
+.tool:hover {
+  background: var(--c-hover);
+}
+
+/* Resize grip on a pane's left edge; --end puts it on the right edge. */
+.grip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 2;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grip--end {
+  left: auto;
+  right: 0;
+}
+
+.grip::before {
+  content: "";
+  width: 2px;
+  height: 28px;
+  border-left: 1px solid var(--c-ink-mute);
+  border-right: 1px solid var(--c-ink-mute);
+}
+
+.grip:hover::before {
+  border-color: var(--c-ink);
+}
+
+/* A failure, marked by a bar on the left. */
+.error-note {
+  padding: 6px 10px;
+  border-left: 2px solid var(--c-danger);
+  font: 400 var(--fs-small)/1.4 var(--f-chrome);
+  color: var(--c-ink);
+}
