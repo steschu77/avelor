@@ -1,0 +1,42 @@
+id: 01a0a30a-f740-78ab-84bf-52b8a4121402
+title: Gus Pappas
+date: 2026-09-15T03:10:00Z
+import:
+  origin: Signal/gus-pappas.txt
+conversation:
+  messages:
+  - id: 01a0a30a-f740-7af3-bc0f-599750c5c5f0
+    sender: Gus
+    date: 2026-09-15T03:10:00Z
+    content: heard you're selling Eleanor
+  - id: 01a0a30b-e1a0-7047-8e9a-8523afc5d0e4
+    parent: 01a0a30a-f740-7af3-bc0f-599750c5c5f0
+    sender: Alex
+    date: 2026-09-15T03:11:00Z
+    content: Gotta. The house.
+  - id: 01a0a30c-08b0-7a51-8fcc-7005ae7df739
+    parent: 01a0a30b-e1a0-7047-8e9a-8523afc5d0e4
+    sender: Gus
+    date: 2026-09-15T03:11:10Z
+    content: F
+  - id: 01a1d85a-ed00-7ade-a7fe-2d9b4568e3c4
+    parent: 01a0a30c-08b0-7a51-8fcc-7005ae7df739
+    sender: Gus
+    date: 2026-11-14T04:40:00Z
+    content: when's the next project
+  - id: 01a1d85b-d760-71e6-88c7-3a5b76da2861
+    parent: 01a1d85a-ed00-7ade-a7fe-2d9b4568e3c4
+    sender: Alex
+    date: 2026-11-14T04:41:00Z
+    content: Maya says after Christmas
+  - id: 01a1d85c-2580-7754-be10-d54be3680f1a
+    parent: 01a1d85b-d760-71e6-88c7-3a5b76da2861
+    sender: Gus
+    date: 2026-11-14T04:41:20Z
+    content: so january 2nd
+  - id: 01a1d85c-c1c0-755e-bb96-44a307c4a18c
+    parent: 01a1d85c-2580-7754-be10-d54be3680f1a
+    sender: Alex
+    date: 2026-11-14T04:42:00Z
+    content: The auction's on the 16th. I'm not an animal.
+  active: 01a1d85c-c1c0-755e-bb96-44a307c4a18c

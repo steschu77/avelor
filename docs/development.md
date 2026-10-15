@@ -7,6 +7,8 @@
 
 - `cargo test --workspace` runs the unit tests and every feature module's
   dispatch tests (`testing.rs`: `Harness`, `call`).
+  av-vault's `forged_vault_loads_with_multi_roles` indexes `data/forged`, so
+  every file there must load.
 - The docs (`app/tests/docs.rs`, `architecture.md`, Doc conventions): in
   the docs, the README and the code's comments a reference
   (`development.md#checks`) names an id at the end of a heading of its
@@ -21,6 +23,7 @@
   tests. It checks the catalogs too (`localization.md#check`), with
   `av-texts`' rules tested the same way.
 - `cargo clippy --workspace`.
+- The user tests new flows by hand against `data/forged`.
 
 ## The bundled page <a id="the-bundled-page"></a>
 

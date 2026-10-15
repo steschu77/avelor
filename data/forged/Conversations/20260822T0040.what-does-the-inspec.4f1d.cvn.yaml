@@ -1,0 +1,59 @@
+id: 01a026e9-0300-7fe9-8a55-626a04ae4f1d
+title: What does the inspection say?
+date: 2026-08-22T00:40:00Z
+projects:
+- 01a0029c-68c0-79cd-804f-54d54c96489b
+linked-to: 01a02114-b3c0-7330-8bba-ac26fdbd3ccd
+ai: {}
+conversation:
+  messages:
+  - id: 01a026e9-0300-7b04-b8c7-43b30468c393
+    date: 2026-08-22T00:40:00Z
+    content: What does the inspection say? Anything scary?
+  - id: 01a026e9-31e0-794a-b028-0cbd81aeadeb
+    parent: 01a026e9-0300-7b04-b8c7-43b30468c393
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-08-22T00:40:12Z
+    content: |-
+      Nothing structural. 47 findings, 3 major:
+
+      - **Water heater** (finding 4): from 1998, replace within a year.
+      - **Stair railing** (finding 12): loose, fix before you move in.
+      - **Kitchen supply line** (finding 19): corroded, have a plumber look at it.
+
+      The rest are notes, like a sticky front door and a creaking third stair.
+  - id: 01a026eb-4cf0-7fb1-aabb-469096ab689d
+    parent: 01a026e9-31e0-794a-b028-0cbd81aeadeb
+    date: 2026-08-22T00:42:30Z
+    content: Can we live with that?
+  - id: 01a026eb-7018-786b-b047-aa916f0377c9
+    parent: 01a026eb-4cf0-7fb1-aabb-469096ab689d
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-08-22T00:42:39Z
+    content: 'Yes, if you budget for the water heater (about $1,500) and fix the railing before Lisa slides down it. I would get the kitchen line checked before closing: a corroded line tends to fail at the worst moment.'
+  - id: 01a1a187-e440-7ccd-b6f7-fa548f0a0e59
+    parent: 01a026eb-7018-786b-b047-aa916f0377c9
+    date: 2026-11-03T13:10:00Z
+    content: Is the house haunted?
+  - id: 01a1a188-0380-7211-a0e0-08671662768e
+    parent: 01a1a187-e440-7ccd-b6f7-fa548f0a0e59
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-11-03T13:10:08Z
+    content: |-
+      None of your documents mention a haunting. Finding 31 of the inspection reports "unexplained noises in the attic at night" and recommends a wildlife specialist.
+
+      Most likely raccoons.
+  - id: 01a1a18d-1460-78de-a862-7f2f369fdfe7
+    parent: 01a1a188-0380-7211-a0e0-08671662768e
+    date: 2026-11-03T13:15:40Z
+    content: Make that a task.
+  - id: 01a1a18d-2400-7b14-ac65-91e6f9b4c966
+    parent: 01a1a18d-1460-78de-a862-7f2f369fdfe7
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-11-03T13:15:44Z
+    content: 'Done: "Call pest control about the attic (raccoons, NOT ghosts)", linked to the inspection report.'
+  active: 01a1a18d-2400-7b14-ac65-91e6f9b4c966

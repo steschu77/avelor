@@ -153,3 +153,61 @@ fn indexing_ends_where_it_is_told_to_stop() {
 
     fs::remove_dir_all(&root).ok();
 }
+
+/// The sample vault under `data/forged` follows vault.md; every
+/// file must load cleanly and derive its intended type.
+#[test]
+fn forged_vault_loads_with_multi_roles() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/forged");
+    let index = Index::build(&root);
+
+    assert!(index.failed.is_empty(), "failed: {:?}", index.failed);
+    let broken: Vec<_> = index.broken().iter().map(|e| &e.path).collect();
+    assert!(broken.is_empty(), "broken: {broken:?}");
+
+    for entry in index.all() {
+        let name = entry.path.file_name().unwrap().to_string_lossy();
+        let type_id = name.rsplit('.').nth(1).unwrap();
+        assert_eq!(entry.doc.kind().type_id(), type_id, "{name}");
+        assert!(entry.doc.source().is_some(), "{name} has no source");
+    }
+
+    let thread = index
+        .all()
+        .iter()
+        .find(|e| e.doc.kind() == DocumentType::Thread && e.doc.title() == "ID Card Renewal")
+        .expect("forged thread");
+    let members = index.thread_members(&thread.doc.id());
+    assert_eq!(members.len(), 7);
+    assert!(
+        members
+            .windows(2)
+            .all(|w| w[0].doc.date() <= w[1].doc.date())
+    );
+    let kinds: Vec<_> = members.iter().map(|e| e.doc.kind().type_id()).collect();
+    assert_eq!(kinds, ["msg", "tsk", "eml", "eml", "eml", "evt", "msg"]);
+
+    let conversation = index
+        .all()
+        .iter()
+        .filter(|e| e.doc.title() == "Preparing the ID card appointment")
+        .find_map(|e| e.doc.roles().conversation.as_ref())
+        .expect("forged conversation");
+    let active = conversation.active.expect("active leaf");
+    assert!(conversation.messages.iter().any(|m| m.id == Some(active)));
+    let roots = conversation
+        .messages
+        .iter()
+        .filter(|m| m.parent.is_none())
+        .count();
+    assert_eq!(roots, 1);
+
+    // Links are top-level, and point into the vault.
+    let links: Vec<_> = index
+        .all()
+        .iter()
+        .filter_map(|e| e.doc.linked_to())
+        .collect();
+    assert!(links.len() >= 20, "{} links", links.len());
+    assert!(links.iter().all(|to| index.get(to).is_some()));
+}

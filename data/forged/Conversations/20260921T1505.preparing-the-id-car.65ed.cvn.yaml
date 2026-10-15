@@ -1,0 +1,63 @@
+id: 01a0c36d-10e0-7fa8-bbcb-e140e48265ed
+title: Preparing the ID card appointment
+date: 2026-09-21T15:05:10Z
+projects:
+- 01a0448a-27e0-7df0-8df9-c5bc0740088c
+tags:
+- authority
+linked-to: 01a0c34c-1b60-7b34-b197-750699eb1136
+ai: {}
+conversation:
+  messages:
+  - id: 01a0c36d-37f0-7254-8ff5-db84b32e57d8
+    date: 2026-09-21T15:05:10Z
+    content: What do I need to bring to my ID card appointment on Thursday?
+  - id: 01a0c36d-5730-70b5-8f32-ec65cc4c3bb0
+    parent: 01a0c36d-37f0-7254-8ff5-db84b32e57d8
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-21T15:05:18Z
+    content: |-
+      According to the renewal letter from the Registration Office, you need:
+
+      - your current ID card,
+      - a recent passport-sized photograph.
+
+      Your appointment is on Thursday, Sep 24, at 10:10, at Main Street 123. The confirmation asks you to arrive a few minutes early.
+  - id: 01a0c36e-0310-7378-9d96-040166efe58a
+    parent: 01a0c36d-5730-70b5-8f32-ec65cc4c3bb0
+    date: 2026-09-21T15:06:02Z
+    content: Can I pay by card there?
+  - id: 01a0c36e-1e68-773a-9434-07da79b765c9
+    parent: 01a0c36e-0310-7378-9d96-040166efe58a
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-21T15:06:09Z
+    content: I don't know that. None of the letters mention payment.
+  - id: 01a0c36e-9780-77ed-ba12-1ec15d3f7166
+    parent: 01a0c36e-0310-7378-9d96-040166efe58a
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-21T15:06:40Z
+    content: None of your documents from the Registration Office mention payment methods or the fee. To be safe, bring some cash as well, or call the office at (123) 456-7890 before Thursday to ask.
+  - id: 01a0c36f-2038-765e-92ff-aa4aab53501d
+    parent: 01a0c36d-5730-70b5-8f32-ec65cc4c3bb0
+    date: 2026-09-21T15:07:15Z
+    content: How long will the appointment take?
+  - id: 01a0c36f-37a8-7cea-9b5d-c68e0f7853c8
+    parent: 01a0c36f-2038-765e-92ff-aa4aab53501d
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-21T15:07:21Z
+    content: The confirmation doesn't say how long it takes. Renewal appointments usually take 10 to 20 minutes, so plan for about half an hour including the wait.
+  - id: 01a0c370-4530-7209-a8b6-fe7d1c3817d8
+    parent: 01a0c36e-9780-77ed-ba12-1ec15d3f7166
+    date: 2026-09-21T15:08:30Z
+    content: Thanks! Do I need another appointment to pick up the new card?
+  - id: 01a0c370-6088-7453-a7c4-c89fd056a74d
+    parent: 01a0c370-4530-7209-a8b6-fe7d1c3817d8
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-21T15:08:37Z
+    content: That isn't in your documents yet. The office will usually send a letter once the card is ready, and it should say whether pickup needs an appointment.
+  active: 01a0c370-6088-7453-a7c4-c89fd056a74d
