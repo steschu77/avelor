@@ -12,6 +12,8 @@ use av_utils::error::Result;
 pub use dialogs::show_error;
 pub use paths::Paths;
 pub use paths::paths;
+pub use webview::BRIDGE_JS;
+pub use window::UiSignal;
 
 // ----------------------------------------------------------------------------
 /// Show the main window in the state `config` saved, with the page in its

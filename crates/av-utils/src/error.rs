@@ -9,6 +9,11 @@ use std::path::PathBuf;
 pub enum Error {
     // Generic errors
     Logging,
+    NotInitialized,
+    Cancelled,
+    BadRequest {
+        msg: String,
+    },
     InvalidDate,
     InvalidTime,
     InvalidPath {
@@ -48,10 +53,13 @@ pub enum Error {
 // ----------------------------------------------------------------------------
 impl Error {
     // ------------------------------------------------------------------------
-    /// The error's code.
+    /// The error's code (`api.md#rules`).
     pub fn code(&self) -> &'static str {
         match self {
             Error::Logging => "logging",
+            Error::NotInitialized => "not_initialized",
+            Error::Cancelled => "cancelled",
+            Error::BadRequest { .. } => "bad_request",
             Error::InvalidDate => "invalid_date",
             Error::InvalidTime => "invalid_time",
             Error::InvalidPath { .. } => "invalid_path",
@@ -89,6 +97,17 @@ impl From<std::io::Error> for Error {
 impl From<std::string::FromUtf16Error> for Error {
     fn from(err: std::string::FromUtf16Error) -> Self {
         Error::FromUtf16 { err }
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Error::Serde {
+            line: err.line(),
+            column: err.column(),
+            msg: err.to_string(),
+        }
     }
 }
 

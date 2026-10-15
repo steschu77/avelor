@@ -38,9 +38,10 @@ read by OCR.
 | Constraint | Consequence |
 |---|---|
 | Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
-| Minimal dependencies | Only `serde`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com` |
-| No npm, no third-party bundler | 1 ES module, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
+| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com` |
+| No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
+| One coordinator | `App` alone posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
 
 ## Documents <a id="documents"></a>
 
@@ -48,6 +49,7 @@ read by OCR.
 |---|---|
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
+| `api.md` | the protocol: transport, rules, the page's side, every command |
 
 ## Doc conventions
 
@@ -74,8 +76,18 @@ The rules the code follows, and every change to it:
 1. **Keep the stack, add no dependency.** Rust + WebView2 (WebKitGTK on
    Linux), hand-written utilities, no npm, no third-party bundler, no async
    runtime.
+2. **One way to do each thing.** One message format and one way to answer.
+4. **Every request gets exactly one answer.**
 6. **Pure core, thin shell.** Mapping and decision logic are pure functions
    with tests; I/O sits at the edges.
+7. **One coordinator.** `App` (`app.rs`) is the only place that posts to
+   the page; no worker gets a path of its own to the webview. Each new
+   coordination primitive (`Req`, the re-entrancy net) is designed with
+   the user before it is built.
+8. **The UI thread never waits for the page.** The page is reached only
+   through the UI thread's message queue, so a wait for it there needs a
+   nested message loop. A Win32 message that needs an answer at once
+   (`WM_QUERYENDSESSION`) gets it from what the host already knows.
 
 ## Runtime
 
@@ -83,7 +95,29 @@ The rules the code follows, and every change to it:
 
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
-| UI thread | Win32 message loop (GTK's main loop on Linux) | — |
+| UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler | — |
+| WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
+
+### One way in <a id="one-way-in"></a>
+
+Every way into `App` — page messages — goes through the `UiQueue` queue,
+and `App` is taken only while a task runs:
+
+- `run` owns the `WindowProc` until the message loop has ended, and
+  `GWLP_USERDATA` only points to it.
+- The wndproc and `with_window` hand out `&WindowProc`; its own fields are
+  `Cell`s and `RefCell`s, and no COM call runs while a borrow is held.
+- `run_tasks` runs the tasks queued so far, one at a time, each with
+  `RefCell<Option<App>>` taken by `try_borrow_mut`. A task queued
+  meanwhile waits for its own `WM_TASK` (on Linux an idle callback), so
+  the message loop runs in between. Nothing else takes `App`, and nothing
+  calls `borrow_mut()` on it: with `panic = "abort"` a second borrow ends
+  the app.
+- A message that finds `App` taken leaves its task in the queue. The task
+  holding it re-posts `WM_TASK` (on Linux an idle callback) once it
+  returns.
+- Because every page message goes through the queue, a later one can't
+  run before a deferred one.
 
 ### Closing
 
@@ -102,15 +136,19 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | Module | Responsibility |
 |---|---|
 | `main.rs` | logger, panic hook, the config (`load_config`) |
-| `shell.rs` | what the main window decides on every platform: its state (`architecture.md#platforms`) |
-| `page.rs` | the page (`app/static/index.html`), the same on every platform |
+| `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net (`architecture.md#platforms`) |
+| `page.rs` | the page (`app/static/index.html`), the same on every platform, with the platform's `BRIDGE_JS` |
 | `sys/mod.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
 | `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); message boxes |
-| `sys/win32/mod.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end |
-| `sys/win32/webview.rs` | WebView2 environment/controller, `NavigateToString` |
+| `sys/win32/mod.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; `UiSignal` (`WM_TASK`) |
+| `sys/win32/webview.rs` | WebView2 environment/controller, message handler, `NavigateToString`; App's outbox (`PostWebMessageAsString`) |
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
-| `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence |
-| `sys/linux/webview.rs` | the WebKitGTK web view with its network session, `load_html` |
+| `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`) |
+| `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
+| `app.rs` | `App`, `on_web_message` (every message to `protocol`), `post_text` through the outbox, `UiQueue` / `UiTask` |
+| `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
+| `testing.rs` | the test harness: `Harness::call` |
+| `api.rs` | `ready` |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>
@@ -120,9 +158,9 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | Area | Windows | Where | Linux |
 |---|---|---|---|
 | Folders | `%LOCALAPPDATA%\Avelor` (known folder): config, log, WebView2 profile | `sys/*/paths.rs` | `$XDG_CONFIG_HOME/avelor` for the config; `$XDG_STATE_HOME/avelor/log`; `$XDG_DATA_HOME/avelor/webkit` and the cache folder for the web view |
-| Window, main loop | Win32 window | `sys/*/window.rs` | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow` |
+| Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread) |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux/mod.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
-| Web view | WebView2: `NavigateToString` | `sys/*/webview.rs` | WebKitGTK 6.0: `load_html` |
+| Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
 | Dialogs and shell | `MessageBoxW` | `sys/*/dialogs.rs` | `gtk::AlertDialog` |
 
 **The platform layer.** `app/src/sys/` holds a module per platform;
@@ -132,11 +170,15 @@ the only `cfg(target_os)` in `app/src`:
 - `paths()`: the config, log and web view folders.
 - `run(paths, config)`: the window, the web view and the main loop;
   returns once the window is gone.
+- `UiSignal` (`Send + Sync`): `wake()`. `UiQueue` holds one instead of an
+  `HWND`; tests use `UiSignal::none()`.
 - `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
-  is up, else stderr).
+  is up, else stderr), and `BRIDGE_JS`.
 
 **The shared shell.** `shell.rs` holds what the main window decides:
 
+- the queue runner and the re-entrancy net (`App` in a
+  `RefCell<Option<_>>`, the deferred flag; `architecture.md#one-way-in`);
 - the window state.
 
 Each platform's window only turns its native events into calls on it,
@@ -146,13 +188,28 @@ so the subtle part is written once:
 |---|---|---|
 | Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
 
+**The page's bridge.** `page.rs` builds the page for both platforms:
+the bundle and the platform's `BRIDGE_JS` inlined before the bundle. The
+bridge defines `window.host.post(text)` and calls
+`window.host.receive(text)`, which `rpc.js` sets. On WebKitGTK the page
+posts to `webkit.messageHandlers.host`, and a reply is
+`evaluate_javascript` of `host.receive(…)` with the text as a JSON string
+literal.
+
 ## Page <a id="page"></a>
 
-`app/static`, 1 line of JS.
+ES modules
+make the page, each with its own scope: a file's dependencies are its
+`import` lines, and the order the modules run in follows from them
+(`development.md#the-bundled-page`). Every module but `app.js`, the entry,
+is in a layer folder (`core/`) and
+imports only from its own layer or a lower one, which the build checks;
+nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `app.js` | the entry |
+| `core/rpc.js` | the protocol: `rpcCall`, `RpcError` (`api.md#the-page-side`) |
+| `app.js` | the entry: `ready` |
 
 ### ASCII-only sources
 
@@ -213,4 +270,4 @@ abort. Where the bundle lands and how to measure the size:
 | Part | Owns | Must not |
 |---|---|---|
 | av-utils | primitives with no domain (dates, atomic writes) | know about vaults, Google, LLMs; carry network types |
-| `app` shell | Win32, WebView2, GTK, WebKitGTK | contain feature logic |
+| `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK; message decoding and replies | contain feature logic |

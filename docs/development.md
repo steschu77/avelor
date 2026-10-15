@@ -5,7 +5,8 @@
 
 ## Checks <a id="checks"></a>
 
-- `cargo test --workspace` runs the unit tests.
+- `cargo test --workspace` runs the unit tests and every feature module's
+  dispatch tests (`testing.rs`: `Harness`, `call`).
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
   tests.

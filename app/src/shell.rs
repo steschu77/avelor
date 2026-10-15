@@ -3,8 +3,14 @@
 //! native events into calls on it.
 
 use std::cell::RefCell;
+use std::cell::{Cell, OnceCell};
+use std::sync::Arc;
 
+use crate::app::{App, Outbox, UiQueue, UiTask};
 use crate::config::{ConfigStore, WindowState};
+use crate::sys::UiSignal;
+use av_utils::error::Error;
+use av_utils::error::Result;
 
 // ----------------------------------------------------------------------------
 /// The main window's title.
@@ -20,6 +26,15 @@ const DEFAULT_STATE: WindowState = WindowState {
 // ----------------------------------------------------------------------------
 pub struct Shell {
     config: RefCell<ConfigStore>,
+    /// Taken only by `run_tasks`, for one task at a time. A message that
+    /// finds it taken came from a modal loop inside that task, and its work
+    /// waits in the queue until the task returns.
+    app: RefCell<Option<App>>,
+    /// The app's task queue.
+    ui: OnceCell<Arc<UiQueue>>,
+    /// A task waits in the queue because it found `App` taken; the
+    /// task holding it wakes the queue when it returns.
+    deferred: Cell<bool>,
 }
 
 impl Shell {
@@ -27,6 +42,75 @@ impl Shell {
     pub fn new(config: ConfigStore) -> Self {
         Self {
             config: RefCell::new(config),
+            app: RefCell::new(None),
+            ui: OnceCell::new(),
+            deferred: Cell::new(false),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The web view is up: `App` starts, posting to the page through
+    /// `outbox`, its queue woken by `signal`.
+    pub fn start(&self, signal: UiSignal, outbox: Outbox) {
+        let ui = Arc::new(UiQueue::new(signal));
+        let app = App::new(Arc::clone(&ui), outbox);
+        if let Ok(mut slot) = self.app.try_borrow_mut() {
+            *slot = Some(app);
+        }
+        let _ = self.ui.set(ui);
+    }
+
+    // ------------------------------------------------------------------------
+    /// A message arrived from the page's JS via `window.host.post`.
+    pub fn on_web_message(&self, message: String) {
+        let _ = self.queue(move |app| app.on_web_message(message));
+    }
+
+    // ------------------------------------------------------------------------
+    /// Run `f` with `App` after everything queued before it: right
+    /// away, or -- if a handler further up the stack holds it, and
+    /// this message came from a modal loop inside it -- once that handler
+    /// has returned.
+    fn queue(&self, f: impl FnOnce(&mut App) + Send + 'static) -> Result<()> {
+        let Some(ui) = self.ui.get() else {
+            return Err(Error::NotInitialized);
+        };
+        ui.push(UiTask::App(Box::new(f)));
+        self.run_tasks();
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------------
+    /// Run the tasks queued so far, one at a time and in order, each with
+    /// `App` taken while it runs. A task queued meanwhile waits for the
+    /// next wake (`UiSignal::wake`), so the main loop runs in between. If the
+    /// `App` is taken already, this call comes from a modal loop inside a
+    /// running task: the queue waits, and that task wakes it on return.
+    pub fn run_tasks(&self) {
+        let Some(ui) = self.ui.get() else {
+            return;
+        };
+        for _ in 0..ui.queued() {
+            let Ok(mut slot) = self.app.try_borrow_mut() else {
+                log::debug!("UI tasks wait for a handler in a modal loop");
+                self.deferred.set(true);
+                return;
+            };
+            let Some(task) = ui.pop() else {
+                return;
+            };
+            match task {
+                UiTask::App(task) => {
+                    if let Some(app) = slot.as_mut() {
+                        task(app);
+                    }
+                    drop(slot);
+                }
+            }
+            // `App` is free again: wake the queue for what waited.
+            if self.deferred.take() {
+                ui.wake();
+            }
         }
     }
 
