@@ -1,5 +1,5 @@
-/* The sidebar (features/sidebar.js): the vault panel, and the jobs panel
-   (features/jobs.js). */
+/* The sidebar (features/sidebar.js): the vault panel's sections and items,
+   and the jobs panel (features/jobs.js). */
 
 .sidebar {
   grid-area: sidebar;
@@ -20,9 +20,110 @@
   overflow: hidden;
 }
 
+/* nav items keep their spacing and scroll instead of being squeezed */
+.sidebar__scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  /* rtl puts the scrollbar on the left, away from the grip; children restore ltr */
+  direction: rtl;
+}
+
+.sidebar__scroll>* {
+  flex-shrink: 0;
+  direction: ltr;
+}
+
 /* the sidebar's pane heads line up with the topbar's bottom border */
 .sidebar .pane-head {
   border-bottom: 1px solid var(--c-line);
+}
+
+.nav-section {
+  padding: 14px var(--p-gutter) 4px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* collapse arrow: chevron down when expanded, right when collapsed; also
+   the icon of the sidebar's Archived row, which carries aria-expanded
+   itself */
+.disclosure {
+  width: 12px;
+  height: 12px;
+  transition: transform 150ms ease;
+}
+
+.nav-section>.disclosure {
+  margin-right: 6px;
+}
+
+[aria-expanded="false"]>.disclosure {
+  transform: rotate(-90deg);
+}
+
+.nav-item {
+  margin: 0 var(--p-gutter);
+  height: var(--h-nav-row);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font: 400 var(--fs-small)/1 var(--f-chrome);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  cursor: default;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-item:hover {
+  background: var(--c-card);
+}
+
+.nav-item[aria-current="true"] {
+  background: var(--c-card);
+  border-color: var(--c-line);
+}
+
+.nav-item--compact {
+  font-size: var(--fs-ui);
+}
+
+/* an archived project's pill, under the Archived row */
+.nav-item--archived {
+  color: var(--c-label);
+}
+
+.nav-item__icon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+/* a project's star: the glyph follows the row's aria-selected (starred) */
+.nav-item__icon--star {
+  color: transparent;
+}
+
+.nav-item[aria-selected="true"] .nav-item__icon--star {
+  color: var(--c-ink);
+}
+
+/* long names end in an ellipsis rather than pushing the count out */
+.nav-item__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-item__count {
+  margin-left: auto;
 }
 
 /* job progress (features/jobs.js) */

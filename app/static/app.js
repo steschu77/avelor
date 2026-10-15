@@ -14,14 +14,28 @@ import './ui/statusbar.js';
 import './features/close.js';
 import './features/jobs.js';
 import './features/layout.js';
-import './features/sidebar.js';
+import { scheduleRenderSidebar } from './features/sidebar.js';
 import { initDocumentsLens, scheduleRenderDocuments } from './features/lenses/documents.js';
 
 initDocumentsLens();
 
-// The lenses follow the model (model/events.js): the entities as they are
-// now.
-store.subscribe(state => state.entities_rev, () => scheduleRenderDocuments());
+// The lenses and the sidebar follow the model (model/events.js): the
+// entities as they are now, the projects the sidebar lists.
+store.subscribe(state => state.entities_rev, () => {
+  scheduleRenderDocuments();
+  scheduleRenderSidebar();
+});
+store.subscribe(state => state.projects_rev, () => {
+  scheduleRenderDocuments();
+  scheduleRenderSidebar();
+});
+
+// The filter changed: re-render the filtered lenses and the sidebar's
+// highlights.
+store.subscribe(state => state.selected_project, () => {
+  scheduleRenderDocuments();
+  scheduleRenderSidebar();
+});
 
 // The page listens.
 rpcCall('ready');

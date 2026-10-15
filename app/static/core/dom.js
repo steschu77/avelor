@@ -40,3 +40,9 @@ export function accEl(tag, className, text) {
   if (text !== undefined) el.textContent = text;
   return el;
 }
+
+// A boolean ARIA state: present as "true" when `on`, absent otherwise.
+export function setAria(el, name, on) {
+  if (on) el.setAttribute(name, 'true');
+  else el.removeAttribute(name);
+}
