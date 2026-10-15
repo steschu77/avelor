@@ -1,12 +1,16 @@
 //! `App`, the host's one coordinator (`architecture.md#principles`,
 //! principle 7).
+use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use crate::config::{ConfigStore, WindowState};
 use crate::protocol::{self, Req};
 use crate::sys::UiSignal;
 
 // ----------------------------------------------------------------------------
+pub type Prefs = BTreeMap<String, String>;
+
 /// Where messages to the page go: the web view in the app, a list in
 /// tests.
 pub type Outbox = Box<dyn Fn(&str)>;
@@ -16,6 +20,7 @@ pub type Outbox = Box<dyn Fn(&str)>;
 /// back to the page, and the host-side app state it drives.
 pub struct App {
     outbox: Outbox,
+    pub config: ConfigStore,
     ui: Arc<UiQueue>,
 }
 
@@ -23,8 +28,8 @@ impl App {
     // ------------------------------------------------------------------------
     /// `ui` is the window's task queue: the shell runs what is queued on it
     /// (`Shell::run_tasks`). Every message to the page goes to `outbox`.
-    pub fn new(ui: Arc<UiQueue>, outbox: Outbox) -> Self {
-        Self { outbox, ui }
+    pub fn new(ui: Arc<UiQueue>, outbox: Outbox, config: ConfigStore) -> Self {
+        Self { outbox, config, ui }
     }
 
     // ------------------------------------------------------------------------
@@ -38,6 +43,16 @@ impl App {
     /// Send `text` to the page as it is: a reply.
     pub fn post_text(&self, text: &str) {
         (self.outbox)(text);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Remember the main window's state in the app config, writing it only
+    /// if it changed (a plain move ends a drag too). A failure is only
+    /// logged, the window works on.
+    pub fn save_window_state(&mut self, state: WindowState) {
+        if let Err(e) = self.config.set_window(state) {
+            log::warn!("Could not save the window state: {e}");
+        }
     }
 
     // ------------------------------------------------------------------------

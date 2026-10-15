@@ -4,6 +4,7 @@
 use std::path::Path;
 
 use crate::app::Outbox;
+use crate::app::Prefs;
 use crate::page;
 use crate::sys::win32::window::WindowProc;
 use webview2_com::{
@@ -70,16 +71,17 @@ fn on_environment_created(hwnd: HWND, environment: ICoreWebView2Environment) -> 
 // ----------------------------------------------------------------------------
 fn on_controller_created(hwnd: HWND, controller: ICoreWebView2Controller) -> Result<()> {
     let webview = unsafe { controller.CoreWebView2()? };
+    let mut prefs = Prefs::new();
     WindowProc::with_window(hwnd, |window| {
-        window.on_controller(controller.clone(), &webview)
+        prefs = window.on_controller(controller.clone(), &webview)
     });
-    setup(hwnd, &webview)
+    setup(hwnd, &webview, &prefs)
 }
 
 // ----------------------------------------------------------------------------
 /// One-time webview configuration: settings, the message-received handler,
-/// and the initial navigation, to the page.
-fn setup(hwnd: HWND, webview: &ICoreWebView2) -> Result<()> {
+/// and the initial navigation, to the page with its preferences `prefs`.
+fn setup(hwnd: HWND, webview: &ICoreWebView2, prefs: &Prefs) -> Result<()> {
     unsafe {
         if let Ok(settings) = webview.Settings() {
             let _ = settings.SetIsStatusBarEnabled(false);
@@ -104,7 +106,7 @@ fn setup(hwnd: HWND, webview: &ICoreWebView2) -> Result<()> {
         }));
         webview.add_WebMessageReceived(&handler, &mut token)?;
 
-        webview.NavigateToString(&HSTRING::from(page::html()))?;
+        webview.NavigateToString(&HSTRING::from(page::html(prefs)))?;
     }
     Ok(())
 }
