@@ -1,0 +1,167 @@
+id: 01a072c5-2d80-7a74-8ef6-81086e3607e6
+title: Yahnek HQ 🏠
+date: 2026-09-05T18:12:00Z
+import:
+  origin: WhatsApp Chat with Yahnek HQ 🏠.txt
+conversation:
+  messages:
+  - id: 01a072c5-2d80-7d51-88d5-37f556923871
+    sender: Alex
+    date: 2026-09-05T18:12:00Z
+    content: FOUND THE TITLE
+  - id: 01a072c5-a2b0-74c3-9a35-8dcfa0405628
+    parent: 01a072c5-2d80-7d51-88d5-37f556923871
+    sender: Alex
+    date: 2026-09-05T18:12:30Z
+    content: it was stuck to a pizza coupon from 2009
+  - id: 01a072c6-17e0-7be5-8c70-80c4f4dde19f
+    parent: 01a072c5-a2b0-74c3-9a35-8dcfa0405628
+    sender: Maya
+    date: 2026-09-05T18:13:00Z
+    content: Of course it was.
+  - id: 01a072c7-0240-70d8-8ab7-c4ff6eaeb581
+    parent: 01a072c6-17e0-7be5-8c70-80c4f4dde19f
+    sender: Lisa
+    date: 2026-09-05T18:14:00Z
+    content: can we get pizza with the coupon
+  - id: 01a072c7-5060-72f1-bd4d-12da64dcef4c
+    parent: 01a072c7-0240-70d8-8ab7-c4ff6eaeb581
+    sender: Alex
+    date: 2026-09-05T18:14:20Z
+    content: It expired in 2010.
+  - id: 01a072c7-9e80-74f4-b3eb-4e860580a3d5
+    parent: 01a072c7-5060-72f1-bd4d-12da64dcef4c
+    sender: Lisa
+    date: 2026-09-05T18:14:40Z
+    content: so no
+  - id: 01a1276f-c9c0-70ec-9ef6-69db3d13cdea
+    parent: 01a072c7-9e80-74f4-b3eb-4e860580a3d5
+    sender: Alex
+    date: 2026-10-10T20:10:00Z
+    content: She's sold.
+  - id: 01a12770-b420-7db1-af1f-ec4e114f36c5
+    parent: 01a1276f-c9c0-70ec-9ef6-69db3d13cdea
+    sender: Maya
+    date: 2026-10-10T20:11:00Z
+    content: ❤️ I know. I saw the transfer. Perfect timing.
+  - id: 01a12771-9e80-7569-85c2-1569e903e523
+    parent: 01a12770-b420-7db1-af1f-ec4e114f36c5
+    sender: Oma
+    date: 2026-10-10T20:12:00Z
+    content: Hoffentlich an keinen Spinner!!
+  - id: 01a15e8a-3bc0-7d94-98e9-cfc31494292e
+    parent: 01a12771-9e80-7569-85c2-1569e903e523
+    sender: Lisa
+    date: 2026-10-21T12:58:00Z
+    content: DAD.
+  - id: 01a15e8a-62d0-7e2f-b9b0-3d1e9947abb4
+    parent: 01a15e8a-3bc0-7d94-98e9-cfc31494292e
+    sender: Lisa
+    date: 2026-10-21T12:58:10Z
+    content: THE SLIP WAS DUE YESTERDAY
+  - id: 01a15e8e-cfa0-7b39-914b-99be256c6c50
+    parent: 01a15e8a-62d0-7e2f-b9b0-3d1e9947abb4
+    sender: Alex
+    date: 2026-10-21T13:03:00Z
+    content: Signed. Photographed. In the vault.
+  - id: 01a15e8f-44d0-7af7-bde8-b6403c264cc6
+    parent: 01a15e8e-cfa0-7b39-914b-99be256c6c50
+    sender: Lisa
+    date: 2026-10-21T13:03:30Z
+    content: the vault is not the school
+  - id: 01a191d6-8ec0-7d6a-ae94-60ac12b9c14b
+    parent: 01a15e8f-44d0-7af7-bde8-b6403c264cc6
+    sender: Maya
+    date: 2026-10-31T12:02:00Z
+    content: Movers are here. Where are the donuts?
+  - id: 01a191d7-7920-7c78-bc14-837dfe7371bb
+    parent: 01a191d6-8ec0-7d6a-ae94-60ac12b9c14b
+    sender: Alex
+    date: 2026-10-31T12:03:00Z
+    content: The donuts are at 8. It's in the calendar.
+  - id: 01a191d7-c740-79b3-a1d8-4f178abac7ac
+    parent: 01a191d7-7920-7c78-bc14-837dfe7371bb
+    sender: Maya
+    date: 2026-10-31T12:03:20Z
+    content: The movers are at 7. It's in the calendar.
+  - id: 01a191d8-6380-7cf7-af0c-7ccfcaf6f371
+    parent: 01a191d7-c740-79b3-a1d8-4f178abac7ac
+    sender: Alex
+    date: 2026-10-31T12:04:00Z
+    content: Which calendar
+  - id: 01a19268-2060-7c46-bfd8-248679a484e8
+    parent: 01a191d8-6380-7cf7-af0c-7ccfcaf6f371
+    sender: Lisa
+    date: 2026-10-31T14:41:00Z
+    content: the couch is stuck on the stairs
+  - id: 01a19268-4770-7f5a-9e3c-c205299fe4f0
+    parent: 01a19268-2060-7c46-bfd8-248679a484e8
+    sender: Lisa
+    date: 2026-10-31T14:41:10Z
+    content: they keep yelling PIVOT
+  - id: 01a19269-0ac0-7d21-b5e3-1a843a416378
+    parent: 01a19268-4770-7f5a-9e3c-c205299fe4f0
+    sender: Alex
+    date: 2026-10-31T14:42:00Z
+    content: This is fine 🔥
+  - id: 01a19287-4120-7344-8ce5-ea604c0450bc
+    parent: 01a19269-0ac0-7d21-b5e3-1a843a416378
+    sender: Oma
+    date: 2026-10-31T15:15:00Z
+    content: <Media omitted>
+  - id: 01a19287-6830-78d5-b73d-d10978174a57
+    parent: 01a19287-4120-7344-8ce5-ea604c0450bc
+    sender: Oma
+    date: 2026-10-31T15:15:10Z
+    content: Guten Morgen!!! Happy Moving 🎃🏠
+  - id: 01a19288-2b80-729c-abb9-a24537a6a5c9
+    parent: 01a19287-6830-78d5-b73d-d10978174a57
+    sender: Lisa
+    date: 2026-10-31T15:16:00Z
+    content: oma it's 4pm where you are
+  - id: 01a19288-a0b0-7b45-b400-39ada628e396
+    parent: 01a19288-2b80-729c-abb9-a24537a6a5c9
+    sender: Oma
+    date: 2026-10-31T15:16:30Z
+    content: Guten Abend!!!
+  - id: 01a19ffc-6240-70ed-8fa6-4390a53f0dec
+    parent: 01a19288-a0b0-7b45-b400-39ada628e396
+    sender: Lisa
+    date: 2026-11-03T05:58:00Z
+    content: the house is haunted
+  - id: 01a19ffc-b060-79f2-a6eb-73ea2733626d
+    parent: 01a19ffc-6240-70ed-8fa6-4390a53f0dec
+    sender: Lisa
+    date: 2026-11-03T05:58:20Z
+    content: something is walking in the attic
+  - id: 01a19ffd-4ca0-7e6a-a58a-264b93028b33
+    parent: 01a19ffc-b060-79f2-a6eb-73ea2733626d
+    sender: Alex
+    date: 2026-11-03T05:59:00Z
+    content: Who you gonna call?
+  - id: 01a19ffd-c1d0-77e4-bcc7-e9494cf3b9c3
+    parent: 01a19ffd-4ca0-7e6a-a58a-264b93028b33
+    sender: Maya
+    date: 2026-11-03T05:59:30Z
+    content: Go to sleep. Both of you.
+  - id: 01a1b72b-bf60-709d-a1fe-875b9bdc3d21
+    parent: 01a19ffd-c1d0-77e4-bcc7-e9494cf3b9c3
+    sender: Oma
+    date: 2026-11-07T18:01:00Z
+    content: Alles Liebe zum Geburtstag, mein Schatz!!! 🎂🎂🎂
+  - id: 01a1b72c-3490-70aa-9cda-63a43c8811a3
+    parent: 01a1b72b-bf60-709d-a1fe-875b9bdc3d21
+    sender: Lisa
+    date: 2026-11-07T18:01:30Z
+    content: danke oma ❤️
+  - id: 01a1d058-2500-715c-b2c2-44570724dc19
+    parent: 01a1b72c-3490-70aa-9cda-63a43c8811a3
+    sender: Alex
+    date: 2026-11-12T15:20:00Z
+    content: 'Critter Busters: 2 raccoons. 0 ghosts.'
+  - id: 01a1d058-c140-79f1-9963-331a449f990d
+    parent: 01a1d058-2500-715c-b2c2-44570724dc19
+    sender: Lisa
+    date: 2026-11-12T15:20:40Z
+    content: that is exactly what a ghost would want you to think
+  active: 01a1d058-c140-79f1-9963-331a449f990d

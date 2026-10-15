@@ -1,0 +1,8 @@
+id: 01a1a464-5040-738a-b1fb-65efe0f2da25
+title: Bin Day
+date: 2026-11-04T02:30:00Z
+import:
+  origin: bins_2026-2027.ics
+calendar:
+  color: '#6B7280'
+  timeZone: America/Chicago

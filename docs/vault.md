@@ -559,3 +559,22 @@ Block: `import:`
 The entity was imported from an external file.
 
 * `origin`: string, filename of the imported file (csv, txt, json, ics, vcf)
+
+## The forged vault
+
+The forged vault (`data/forged`) shows the model in use:
+
+| File | Type | Roles + source | Shows |
+|---|---|---|---|
+| `Threads/…0bc1.thd.yaml` | thread | `thread`, `created` | a thread has no member list and no projects |
+| `Scans/…c1cf.msg.md`, `…ccdd.msg.md` | message | `message`, `scan` | scanned letters as thread members |
+| `Mail/…f379.eml.md`, `…a44c.eml.md`, `…1136.eml.md` | email | `email` + `message`, `remote` | mails in the same thread |
+| `Tasks/…3871.tsk.md` | task | `task` + `message`, `created` | a task in a thread, `linked-to` the letter |
+| `Calendar/Personal/…7a3d.evt.md` | event | `event` + `message`, `created` | an event in a thread, `linked-to` the booking mail |
+| `Calendar/…bdf8.cal.yaml` | calendar | `calendar`, `created` | events live in a folder named after it |
+| `Conversations/…65ed.cvn.yaml` | conversation | `conversation`, `ai` | branched message tree, `active` leaf, `linked-to` a mail |
+| `Accounts/…d9a1.bnk.yaml` | bank account | `bank-account`, `created` | |
+| `Accounts/…675b.txs.yaml` | transactions | `transactions`, `import` | bookings `linked-to` the task they paid for |
+| `Projects/…489b.prj.md` | project | `project`, `created` | body = project description (The Money Pit, starred) |
+
+These are the ID card thread's entities; the whole vault has every type.

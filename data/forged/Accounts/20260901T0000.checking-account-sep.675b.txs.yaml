@@ -1,0 +1,60 @@
+id: 01a0f61a-16a0-7a60-a0cd-3c68045b675b
+title: Checking account, September 2026
+date: 2026-09-01T00:00:00Z
+import:
+  origin: statement_2026-09.csv
+transactions:
+  account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
+  amount: 1824.55
+  transactions:
+  - id: 01a05b8d-9300-7ac7-a8cc-ad4534c97b58
+    title: Salary September
+    date: 2026-09-01T11:00:00Z
+    status: booked
+    amount: 3120.0
+    sender: Springfield Power Station
+    receiver: Alexander Yahnek
+  - id: 01a05bdf-f8c0-72e2-9833-76b178de839f
+    title: Rent September
+    date: 2026-09-01T12:30:00Z
+    status: booked
+    amount: -1150.0
+    sender: Alexander Yahnek
+    receiver: Shady Pines Properties
+  - id: 01a072a9-b640-7110-9d7a-5bcc198eb23d
+    title: Speedy Mart
+    date: 2026-09-05T22:42:00Z
+    status: booked
+    amount: -23.85
+    sender: Alexander Yahnek
+    receiver: Speedy Mart
+  - id: 01a0a414-7800-7be3-a746-f61921449d53
+    title: Springfield Power & Light
+    date: 2026-09-15T13:00:00Z
+    status: booked
+    amount: -64.2
+    sender: Alexander Yahnek
+    receiver: Springfield Power & Light
+  - id: 01a0c9dd-03e0-720d-b003-d648f0ef5a3d
+    title: Photo booth, passport photos
+    date: 2026-09-22T21:05:00Z
+    status: booked
+    amount: -12.0
+    sender: Alexander Yahnek
+    receiver: Springfield Photo Express
+    linked-to: 01a04372-eb80-782e-8563-b0e46f733871
+  - id: 01a0d2f1-8a00-7a90-b9e4-03f81ee5e338
+    title: ID card fee
+    date: 2026-09-24T15:24:00Z
+    status: booked
+    amount: -37.0
+    sender: Alexander Yahnek
+    receiver: City of Springfield, Registration Office
+    linked-to: 01a04372-eb80-782e-8563-b0e46f733871
+  - id: 01a0d314-5440-7f08-9d18-a0c75bd9e696
+    title: Big Dough Donuts
+    date: 2026-09-24T16:02:00Z
+    status: booked
+    amount: -8.4
+    sender: Alexander Yahnek
+    receiver: Big Dough Donuts

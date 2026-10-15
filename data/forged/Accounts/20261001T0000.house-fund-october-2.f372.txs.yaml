@@ -1,0 +1,24 @@
+id: 01a0f4c2-c400-7e22-b6a2-e8c1c412f372
+title: House fund, October 2026
+date: 2026-10-01T00:00:00Z
+import:
+  origin: housefund_2026-10.csv
+transactions:
+  account: 018572ff-1d80-78ca-9bbc-6ffd7edc2636
+  amount: -19700.0
+  transactions:
+  - id: 01a130d7-a000-7e1e-8a27-8e195caa6f64
+    title: Transfer from checking
+    date: 2026-10-12T16:00:00Z
+    status: booked
+    amount: 25300.0
+    sender: Checking 0042-7318-5520
+    receiver: Alexander Yahnek
+  - id: 01a14038-6480-7c00-ab7d-3ce47b15d077
+    title: Down payment, 1313 Mockingbird Lane
+    date: 2026-10-15T15:40:00Z
+    status: booked
+    amount: -45000.0
+    sender: Alexander Yahnek
+    receiver: Springfield Title & Escrow
+    linked-to: 01a14066-2b40-75a3-9141-a831abc53eee

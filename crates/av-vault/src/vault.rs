@@ -201,6 +201,32 @@ impl Index {
             .filter(|e| e.doc.projects().iter().any(|p| p == project_id))
             .collect()
     }
+
+    // ------------------------------------------------------------------------
+    /// The members of `thread_id` -- entities whose `message.threads` lists
+    /// it -- in thread order: by `date`, ties broken by `id` (UUIDv7).
+    pub fn thread_members(&self, thread_id: &Id) -> Vec<&Entry> {
+        let mut members: Vec<&Entry> = self
+            .documents
+            .iter()
+            .filter(|e| {
+                e.doc
+                    .roles()
+                    .message
+                    .as_ref()
+                    .is_some_and(|m| m.threads.contains(thread_id))
+            })
+            .collect();
+        sort_by_date(&mut members);
+        members
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Sort `entries` by `date`, ties broken by `id` (UUIDv7, so creation
+/// order), the undated ones first: thread order.
+pub(crate) fn sort_by_date(entries: &mut [&Entry]) {
+    entries.sort_by_key(|e| (e.doc.date(), e.doc.id()));
 }
 
 // ----------------------------------------------------------------------------
@@ -489,5 +515,63 @@ mod tests {
         assert_eq!(events, 2, "the start and the first file");
 
         fs::remove_dir_all(&root).ok();
+    }
+
+    /// The sample vault under `data/forged` follows vault.md; every
+    /// file must load cleanly and derive its intended type.
+    #[test]
+    fn forged_vault_loads_with_multi_roles() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/forged");
+        let index = Index::scan(&root);
+
+        assert!(index.failed.is_empty(), "failed: {:?}", index.failed);
+        let broken: Vec<_> = index.broken().iter().map(|e| &e.path).collect();
+        assert!(broken.is_empty(), "broken: {broken:?}");
+
+        for entry in index.all() {
+            let name = entry.path.file_name().unwrap().to_string_lossy();
+            let type_id = name.rsplit('.').nth(1).unwrap();
+            assert_eq!(entry.doc.kind().type_id(), type_id, "{name}");
+            assert!(entry.doc.source().is_some(), "{name} has no source");
+        }
+
+        let thread = index
+            .all()
+            .iter()
+            .find(|e| e.doc.kind() == DocumentType::Thread && e.doc.title() == "ID Card Renewal")
+            .expect("forged thread");
+        let members = index.thread_members(&thread.doc.id());
+        assert_eq!(members.len(), 7);
+        assert!(
+            members
+                .windows(2)
+                .all(|w| w[0].doc.date() <= w[1].doc.date())
+        );
+        let kinds: Vec<_> = members.iter().map(|e| e.doc.kind().type_id()).collect();
+        assert_eq!(kinds, ["msg", "tsk", "eml", "eml", "eml", "evt", "msg"]);
+
+        let conversation = index
+            .all()
+            .iter()
+            .filter(|e| e.doc.title() == "Preparing the ID card appointment")
+            .find_map(|e| e.doc.roles().conversation.as_ref())
+            .expect("forged conversation");
+        let active = conversation.active.expect("active leaf");
+        assert!(conversation.messages.iter().any(|m| m.id == Some(active)));
+        let roots = conversation
+            .messages
+            .iter()
+            .filter(|m| m.parent.is_none())
+            .count();
+        assert_eq!(roots, 1);
+
+        // Links are top-level, and point into the vault.
+        let links: Vec<_> = index
+            .all()
+            .iter()
+            .filter_map(|e| e.doc.linked_to())
+            .collect();
+        assert!(links.len() >= 20, "{} links", links.len());
+        assert!(links.iter().all(|to| index.get(to).is_some()));
     }
 }

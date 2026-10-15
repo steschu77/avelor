@@ -1,0 +1,44 @@
+id: 01a1c767-5380-758c-8034-ae6626b9521b
+title: Reply to Shady Pines
+date: 2026-11-10T21:40:00Z
+projects:
+- 01a0029c-68c0-79cd-804f-54d54c96489b
+linked-to: 01a1c2c1-2400-7a65-8a63-343e1ae1c15e
+ai: {}
+conversation:
+  messages:
+  - id: 01a1c767-5380-7680-b550-cfb71ecee9e4
+    date: 2026-11-10T21:40:00Z
+    content: Write a scathing letter to Shady Pines.
+  - id: 01a1c767-7e78-71e7-860a-64535fae244b
+    parent: 01a1c767-5380-7680-b550-cfb71ecee9e4
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-11-10T21:40:11Z
+    content: |-
+      Dear Mrs. Petrillo,
+
+      I have read your deposit statement with all the attention it deserves, which is very little. Fifty dollars per nail hole is not a deduction, it is a business model.
+  - id: 01a1c778-1c60-73dc-98d6-7206772039af
+    date: 2026-11-10T21:58:20Z
+    content: Write a polite but firm letter to Shady Pines. Nail holes are normal wear and tear.
+  - id: 01a1c778-4f28-7bf7-80ce-a282804d9367
+    parent: 01a1c778-1c60-73dc-98d6-7206772039af
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-11-10T21:58:33Z
+    content: |-
+      Dear Mrs. Petrillo,
+
+      Thank you for your security deposit statement of November 9 for Unit 4B.
+
+      I dispute two of the deductions:
+
+      - $300 for six nail holes. Small nail holes from hanging pictures are normal wear and tear, which a landlord can't deduct.
+      - $75 for one light bulb "including labor". The bulb costs $3.
+
+      Please refund the remaining $375 within 14 days.
+
+      Kind regards,
+      Alexander Yahnek
+  active: 01a1c778-4f28-7bf7-80ce-a282804d9367

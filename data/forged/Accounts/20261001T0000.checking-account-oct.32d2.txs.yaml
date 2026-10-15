@@ -1,0 +1,129 @@
+id: 01a0f4c2-c400-722f-86af-41e1c45532d2
+title: Checking account, October 2026
+date: 2026-10-01T00:00:00Z
+import:
+  origin: statement_2026-10.csv
+transactions:
+  account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
+  amount: 23031.98
+  transactions:
+  - id: 01a0f71f-0380-76cc-b258-cc605728a18e
+    title: Salary October
+    date: 2026-10-01T11:00:00Z
+    status: booked
+    amount: 3120.0
+    sender: Springfield Power Station
+    receiver: Alexander Yahnek
+  - id: 01a0f771-6940-7915-a7e5-b5a5108542b2
+    title: Rent October (the last one)
+    date: 2026-10-01T12:30:00Z
+    status: booked
+    amount: -1150.0
+    sender: Alexander Yahnek
+    receiver: Shady Pines Properties
+  - id: 01a10259-c500-7e4e-bfcf-20717cb4327c
+    title: Speedy Mart
+    date: 2026-10-03T15:20:00Z
+    status: booked
+    amount: -14.5
+    sender: Alexander Yahnek
+    receiver: Speedy Mart
+  - id: 01a12762-0e20-762e-ab79-8cad493b4862
+    title: 'Bill of sale: 1967 Ford Mustang Fastback'
+    date: 2026-10-10T19:55:00Z
+    status: booked
+    amount: 48500.0
+    sender: Dom Castellano
+    receiver: Alexander Yahnek
+    linked-to: 01a1274b-2ac0-7d08-8215-6b7d8091dd69
+  - id: 01a130d7-a000-7afd-8227-81cbcd16c31d
+    title: Transfer to House fund
+    date: 2026-10-12T16:00:00Z
+    status: booked
+    amount: -25300.0
+    sender: Alexander Yahnek
+    receiver: House fund 0042-7318-5539
+  - id: 01a1308e-6200-7eb7-8cc6-a4ee49f6c515
+    title: Title transfer fee
+    date: 2026-10-12T14:40:00Z
+    status: booked
+    amount: -28.0
+    sender: Alexander Yahnek
+    receiver: Springfield Motor Vehicle Office
+  - id: 01a13ab6-7b00-7249-871a-e9853e7b31ae
+    title: Insurance refund, Mustang
+    date: 2026-10-14T14:00:00Z
+    status: booked
+    amount: 212.4
+    sender: Steady Hands Insurance
+    receiver: Alexander Yahnek
+    linked-to: 01a1279d-9080-77bd-b20c-41b5291ad1e4
+  - id: 01a13fa5-e880-7daa-a96f-801e441fa235
+    title: Springfield Power & Light
+    date: 2026-10-15T13:00:00Z
+    status: booked
+    amount: -58.4
+    sender: Alexander Yahnek
+    receiver: Springfield Power & Light
+  - id: 01a14515-8280-7669-8f8d-fdca4632cb29
+    title: Brothers Plumbing
+    date: 2026-10-16T14:20:00Z
+    status: booked
+    amount: -380.0
+    sender: Alexander Yahnek
+    receiver: Brothers Plumbing
+    linked-to: 01a14507-c6e0-70e8-b112-ac55730f6eee
+  - id: 01a155a4-66c0-70d7-a86e-6677906a1d12
+    title: Pivot! Movers, deposit
+    date: 2026-10-19T19:30:00Z
+    status: booked
+    amount: -250.0
+    sender: Alexander Yahnek
+    receiver: Pivot! Movers
+    linked-to: 01a11c07-4180-76df-a0d8-d3b61c076efb
+  - id: 01a16ecd-22e0-7c93-8501-edbac5dd89a9
+    title: Springfield Animal Shelter
+    date: 2026-10-24T16:45:00Z
+    status: booked
+    amount: -150.0
+    sender: Alexander Yahnek
+    receiver: Springfield Animal Shelter
+    linked-to: 01a16ec8-8f00-76c2-bfb2-743d1817d422
+  - id: 01a16f1a-f4c0-70c4-9dfb-12c0eba5e5bf
+    title: PetPal Supplies
+    date: 2026-10-24T18:10:00Z
+    status: booked
+    amount: -186.73
+    sender: Alexander Yahnek
+    receiver: PetPal Supplies
+  - id: 01a184c7-0d40-7562-8f5d-24d9e980c1db
+    title: Springfield Vet Clinic
+    date: 2026-10-28T23:10:00Z
+    status: booked
+    amount: -95.0
+    sender: Alexander Yahnek
+    receiver: Springfield Vet Clinic
+    linked-to: 01a184c2-7960-73d3-8fb1-14a528f7841b
+  - id: 01a18185-ec00-79fd-ac1d-7513b0b32106
+    title: StreamFlix
+    date: 2026-10-28T08:00:00Z
+    status: booked
+    amount: -15.99
+    sender: Alexander Yahnek
+    receiver: StreamFlix
+  - id: 01a193ac-3920-78b1-9a6b-e5dae6dd63bc
+    title: Pivot! Movers, final invoice
+    date: 2026-10-31T20:35:00Z
+    status: booked
+    amount: -1140.0
+    sender: Alexander Yahnek
+    receiver: Pivot! Movers
+    linked-to: 01a193a7-a540-7e86-9c68-3c80ab0a15ae
+  - id: 01a19204-5580-7378-9739-4d41313c3c33
+    title: Big Dough Donuts
+    date: 2026-10-31T12:52:00Z
+    status: booked
+    amount: -31.8
+    sender: Alexander Yahnek
+    receiver: Big Dough Donuts
+    linked-to: 01a1920b-a880-7313-9da1-fd570a3b7d0f

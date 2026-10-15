@@ -1,0 +1,32 @@
+id: 01a1cd0f-b0c0-7c01-9a1a-f9d8be5be644
+title: Do I need the extended warranty?
+date: 2026-11-12T00:02:00Z
+tags:
+- sus
+linked-to: 01a1cb56-6800-7f3f-9381-69a718fc7dd1
+ai: {}
+conversation:
+  messages:
+  - id: 01a1cd0f-b0c0-72ec-8b4e-e9f28ef5a8d7
+    date: 2026-11-12T00:02:00Z
+    content: Do I need the extended warranty for Eleanor?
+  - id: 01a1cd0f-c830-7d00-94cf-df395181e83a
+    parent: 01a1cd0f-b0c0-72ec-8b4e-e9f28ef5a8d7
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-11-12T00:02:06Z
+    content: |-
+      Eleanor was built in 1967, and you sold her on October 10. Her factory warranty ended around 1969.
+
+      No.
+  - id: 01a1cd10-4d00-7a80-8d98-085f3e13ddef
+    parent: 01a1cd0f-c830-7d00-94cf-df395181e83a
+    date: 2026-11-12T00:02:40Z
+    content: They said it's the final notice.
+  - id: 01a1cd10-5ca0-79bc-9a48-1c89c21db8fc
+    parent: 01a1cd10-4d00-7a80-8d98-085f3e13ddef
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-11-12T00:02:44Z
+    content: It was also the final notice on September 18 and October 9.
+  active: 01a1cd10-5ca0-79bc-9a48-1c89c21db8fc

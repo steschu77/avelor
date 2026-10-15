@@ -7,10 +7,13 @@
 
 - `cargo test --workspace` runs the unit tests and every feature module's
   dispatch tests (`testing.rs`: `Harness`, `call`).
+  av-vault's `forged_vault_loads_with_multi_roles` scans `data/forged`, so
+  every file there must load.
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
   tests.
 - `cargo clippy --workspace`.
+- The user tests new flows by hand against `data/forged`.
 
 ## The bundled page <a id="the-bundled-page"></a>
 

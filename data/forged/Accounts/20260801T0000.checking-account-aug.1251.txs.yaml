@@ -1,0 +1,52 @@
+id: 019fba9e-d800-719a-bf83-ce5a72721251
+title: Checking account, August 2026
+date: 2026-08-01T00:00:00Z
+import:
+  origin: statement_2026-08.csv
+transactions:
+  account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
+  amount: 1424.76
+  transactions:
+  - id: 019fbcfb-1780-7805-afe3-2ffe08e87a73
+    title: Salary August
+    date: 2026-08-01T11:00:00Z
+    status: booked
+    amount: 3120.0
+    sender: Springfield Power Station
+    receiver: Alexander Yahnek
+  - id: 019fbd4d-7d40-7961-856a-4d2e9d399f0c
+    title: Rent August
+    date: 2026-08-01T12:30:00Z
+    status: booked
+    amount: -1150.0
+    sender: Alexander Yahnek
+    receiver: Shady Pines Properties
+  - id: 01a00581-fc80-71ab-bbab-f260ba280a75
+    title: Springfield Power & Light
+    date: 2026-08-15T13:00:00Z
+    status: booked
+    amount: -61.9
+    sender: Alexander Yahnek
+    receiver: Springfield Power & Light
+  - id: 01a02139-52c0-7bf7-a2ae-8c9e79d0f3bb
+    title: Home inspection, 1313 Mockingbird Lane
+    date: 2026-08-20T22:10:00Z
+    status: booked
+    amount: -450.0
+    sender: Alexander Yahnek
+    receiver: Plain Truth Home Inspections
+    linked-to: 01a02114-b3c0-7330-8bba-ac26fdbd3ccd
+  - id: 01a02bd0-3320-7899-96aa-b1df6648749d
+    title: Speedy Mart
+    date: 2026-08-22T23:31:00Z
+    status: booked
+    amount: -17.35
+    sender: Alexander Yahnek
+    receiver: Speedy Mart
+  - id: 01a04762-0000-7cda-b4fa-2ed0ab338e94
+    title: StreamFlix
+    date: 2026-08-28T08:00:00Z
+    status: booked
+    amount: -15.99
+    sender: Alexander Yahnek
+    receiver: StreamFlix

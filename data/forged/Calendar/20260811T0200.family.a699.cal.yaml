@@ -1,0 +1,11 @@
+id: 019fee8c-4d00-7ec3-a4ff-4c12d814a699
+title: Family
+date: 2026-08-11T02:00:00Z
+remote:
+  account: 01a0c342-0940-7d5a-b215-6123a44c9144
+  remote:
+  - calendar-id: c_9f2e4b7a1d3c5e8f0a6b2d4c@group.calendar.google.com
+  - sync-token: CcfrVIGH1H79S9ShfLKxJsCPx5AHcPyW=
+  - time-min: 2025-08-10T05:00:00Z
+calendar:
+  color: '#10B981'

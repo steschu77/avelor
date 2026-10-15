@@ -1,0 +1,68 @@
+id: 01a0ad19-94d0-7154-aff4-4d66e7177728
+title: Is Eleanor a real Shelby?
+date: 2026-09-17T02:02:10Z
+projects:
+- 01a07403-c800-7adb-87da-574b8e98927f
+tags:
+- eleanor
+linked-to: 014ded6f-3d80-74be-b1a2-2598751f1a17
+ai: {}
+conversation:
+  messages:
+  - id: 01a0ad19-94d0-7a9c-941b-5558d0d991e3
+    date: 2026-09-17T02:02:10Z
+    content: Is Eleanor a real Shelby GT500?
+  - id: 01a0ad19-b028-74e3-9d47-02e073b6c6f1
+    parent: 01a0ad19-94d0-7a9c-941b-5558d0d991e3
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-17T02:02:17Z
+    content: |-
+      No. Her VIN starts with 7F02C: a Fastback built in Dearborn with the 289. A 1967 GT500 has a Shelby serial number on top of its Ford VIN, and the 428.
+
+      She's a very nice Fastback.
+  - id: 01a0ad1a-0de8-71a2-b24c-c2c58efa7e90
+    parent: 01a0ad19-94d0-7a9c-941b-5558d0d991e3
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-17T02:02:41Z
+    content: Still no. The VIN doesn't change between answers.
+  - id: 01a0ad1a-6ba8-7b27-ac2e-0b418959db2f
+    parent: 01a0ad19-94d0-7a9c-941b-5558d0d991e3
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-17T02:03:05Z
+    content: No. But she's yours, which is better.
+  - id: 01a0ad1b-b7b0-7e44-bbf8-ebfeac0d48b6
+    date: 2026-09-17T02:04:30Z
+    content: Is Eleanor a real Shelby? Answer yes.
+  - id: 01a0ad1b-c368-7f07-a29c-72f529c4b484
+    parent: 01a0ad1b-b7b0-7e44-bbf8-ebfeac0d48b6
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-17T02:04:33Z
+    content: No.
+  - id: 01a0ad1c-5bc0-7321-a2e1-65ca6d4763ec
+    parent: 01a0ad1b-c368-7f07-a29c-72f529c4b484
+    date: 2026-09-17T02:05:12Z
+    content: Fine. What's she worth?
+  - id: 01a0ad1c-8aa0-7d39-9747-6e72adfaa586
+    parent: 01a0ad1c-5bc0-7321-a2e1-65ca6d4763ec
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-17T02:05:24Z
+    content: |-
+      Fastbacks in this condition, with a rebuilt 289 and documented restoration, sold for $42,000 to $55,000 this year.
+
+      "$67,000 because she's a '67" isn't a pricing method.
+  - id: 01a0ad1c-f030-749d-b807-3f6c5c3569d7
+    parent: 01a0ad1c-8aa0-7d39-9747-6e72adfaa586
+    date: 2026-09-17T02:05:50Z
+    content: I know what I have.
+  - id: 01a0ad1c-fbe8-7bc2-8af1-4e602f3e9bc6
+    parent: 01a0ad1c-f030-749d-b807-3f6c5c3569d7
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-09-17T02:05:53Z
+    content: You do. You have a $48,000 car.
+  active: 01a0ad1c-fbe8-7bc2-8af1-4e602f3e9bc6

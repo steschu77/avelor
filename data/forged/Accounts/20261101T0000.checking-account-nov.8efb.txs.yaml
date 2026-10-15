@@ -1,0 +1,67 @@
+id: 01a19467-e800-78d8-aabc-0ef81abf8efb
+title: Checking account, November 2026
+date: 2026-11-01T00:00:00Z
+import:
+  origin: statement_2026-11.csv
+transactions:
+  account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
+  amount: 3679.27
+  transactions:
+  - id: 01a19c21-7200-712c-a348-ef95216cc40c
+    title: Salary November
+    date: 2026-11-02T12:00:00Z
+    status: booked
+    amount: 3120.0
+    sender: Springfield Power Station
+    receiver: Alexander Yahnek
+  - id: 01a19ceb-c6e0-74e7-8639-7cbfc851921b
+    title: Speedy Mart
+    date: 2026-11-02T15:41:00Z
+    status: booked
+    amount: -9.99
+    sender: Alexander Yahnek
+    receiver: Speedy Mart
+  - id: 01a1b04d-0500-7fb1-a0f0-c00d67e958b8
+    title: Für Lisa 🎂
+    date: 2026-11-06T10:00:00Z
+    status: booked
+    amount: 100.0
+    sender: Ingrid Brenner
+    receiver: Alexander Yahnek
+  - id: 01a1b899-0b00-7f2f-a63b-e6926de91b4d
+    title: Slice of Heaven Pizza
+    date: 2026-11-08T00:40:00Z
+    status: booked
+    amount: -48.6
+    sender: Alexander Yahnek
+    receiver: Slice of Heaven Pizza
+  - id: 01a1c5c2-2f00-7a9b-b158-01c97db3b513
+    title: Springfield Power & Light
+    date: 2026-11-10T14:00:00Z
+    status: booked
+    amount: -72.15
+    sender: Alexander Yahnek
+    receiver: Springfield Power & Light
+  - id: 01a1d053-9120-70ed-8f06-0a6cf5a1acaa
+    title: Critter Busters
+    date: 2026-11-12T15:15:00Z
+    status: booked
+    amount: -165.0
+    sender: Alexander Yahnek
+    receiver: Critter Busters
+    linked-to: 01a1d04e-fd40-7ce0-8bc0-13bd052e3b7e
+  - id: 01a1d80a-5c00-7e4e-9c17-c0ae60cff77a
+    title: GameVault, in-game currency
+    date: 2026-11-14T03:12:00Z
+    status: booked
+    amount: -19.99
+    sender: Alexander Yahnek
+    receiver: GameVault
+  - id: 01a1d5a3-2000-7d35-81a4-6e101d4e755f
+    title: Security deposit refund (partial)
+    date: 2026-11-13T16:00:00Z
+    status: pending
+    amount: 775.0
+    sender: Shady Pines Properties
+    receiver: Alexander Yahnek
+    linked-to: 01a1c140-9e80-76bf-9bd7-fce93dafe486

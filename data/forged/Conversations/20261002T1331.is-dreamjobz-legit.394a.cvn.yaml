@@ -1,0 +1,39 @@
+id: 01a0fccf-9e20-73e8-b8ce-70484b5a394a
+title: Is DreamJobz legit?
+date: 2026-10-02T13:31:00Z
+projects:
+- 01a0efd3-5680-7f23-a650-f11e31b93413
+tags:
+- sus
+linked-to: 01a0fcbf-2360-7d74-ae62-3249b5b670d6
+ai: {}
+conversation:
+  messages:
+  - id: 01a0fccf-9e20-7a3a-9bf8-5f043f1ed827
+    date: 2026-10-02T13:31:00Z
+    content: Is this job offer legit?
+  - id: 01a0fccf-c148-77fc-8bd3-a6f4e6835368
+    parent: 01a0fccf-9e20-7a3a-9bf8-5f043f1ed827
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-10-02T13:31:09Z
+    content: |-
+      I'd say no. The mail has four red flags:
+
+      1. It asks for your bank login and password. No employer needs those for payroll.
+      2. "Senior Automotive Rockstar" is not a job title.
+      3. It names no company address, no salary, and no job.
+      4. Seven exclamation marks and a rocket.
+
+      Don't reply, and don't click anything.
+  - id: 01a0fcd0-c318-72ca-9b6f-647f174d972b
+    parent: 01a0fccf-c148-77fc-8bd3-a6f4e6835368
+    date: 2026-10-02T13:32:15Z
+    content: They said we're like a family here.
+  - id: 01a0fcd0-d2b8-78dd-b2f3-6c95fe92f669
+    parent: 01a0fcd0-c318-72ca-9b6f-647f174d972b
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-10-02T13:32:19Z
+    content: Families don't ask for your bank login.
+  active: 01a0fcd0-d2b8-78dd-b2f3-6c95fe92f669
