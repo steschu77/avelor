@@ -38,9 +38,12 @@
   --track-label: 0.13em;
 
   --h-topbar: 36px;
+  --h-row: 30px;
   --h-control-sm: 22px;
   /* an icon (index.html's sprite, build.rs) */
   --h-icon: 16px;
+  /* the Documents lens: its sticky head */
+  --h-table-head: 28px;
 
   /* sidebar inset */
   --p-gutter: 12px;

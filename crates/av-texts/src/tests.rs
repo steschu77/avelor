@@ -183,3 +183,17 @@ fn the_host_uses_the_keys_it_looks_up_and_those_it_gives_the_page() {
     );
     assert_eq!(used.page.into_iter().collect::<Vec<_>>(), ["e.f"]);
 }
+
+// ----------------------------------------------------------------------------
+#[test]
+fn the_page_s_markup_names_its_texts_by_key() {
+    let html = r#"<button data-table-only data-t-title="editor.table" data-t="editor.table_label"></button>
+<input data-t-placeholder="words.placeholder">"#;
+    let keys = html_keys(html).unwrap();
+    assert_eq!(
+        keys.into_iter().collect::<Vec<_>>(),
+        ["editor.table", "editor.table_label", "words.placeholder"]
+    );
+    let problems = html_keys(r#"<span data-t="lens.bank">Bank</span>"#).unwrap_err();
+    assert!(problems[0].contains("lens.bank"), "{problems:?}");
+}

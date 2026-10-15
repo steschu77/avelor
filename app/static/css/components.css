@@ -94,6 +94,15 @@
   border-color: var(--c-ink);
 }
 
+/* A row of a list with columns; --cols is its grid template. */
+.list-row {
+  display: grid;
+  grid-template-columns: var(--cols);
+  gap: 0 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--c-line);
+}
+
 /* A failure, marked by a bar on the left. */
 .error-note {
   padding: 6px 10px;

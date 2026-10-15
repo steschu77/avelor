@@ -314,7 +314,7 @@ fn build_pages(root: &Path, out_dir: &Path) {
 
     let page = bundle(&static_dir, "app.js");
     fs::write(out_dir.join("page-deps.txt"), page.graph.to_string()).unwrap();
-    build_texts(root, out_dir, &page.js);
+    build_texts(root, out_dir, &index, &page.js);
     let sprite = icon_sprite(&static_dir, &[&index, &page.js]);
     assert!(html.contains("<body>\n"), "index.html has no <body>");
     let html = html.replacen("<body>\n", &format!("<body>\n{sprite}"), 1);
@@ -330,12 +330,12 @@ fn build_pages(root: &Path, out_dir: &Path) {
 
 // ----------------------------------------------------------------------------
 /// The catalogs (`app/texts/*.json`, `localization.md`), checked against
-/// the keys the page's script `js` and the host's
+/// the keys the page's markup `html` and script `js` and the host's
 /// sources use; a problem fails the build, each one
 /// listed. Written to `out_dir` as `texts.rs`,
 /// which `texts.rs` includes: each language's texts over English's, as the
 /// JSON both the page and the host read.
-fn build_texts(root: &Path, out_dir: &Path, js: &str) {
+fn build_texts(root: &Path, out_dir: &Path, html: &str, js: &str) {
     let mut catalogs = Vec::new();
     for entry in fs::read_dir(root.join("texts")).expect("app has no texts folder") {
         let path = entry.unwrap().path();
@@ -357,7 +357,14 @@ fn build_texts(root: &Path, out_dir: &Path, js: &str) {
     let at = catalogs.iter().position(|c| c.language == "en").unwrap();
     let english = catalogs.remove(at);
 
-    let page = av_texts::page_keys(js).unwrap_or_else(|problems| failed(&problems));
+    // The host fills the markup's marks in the whole page, the bundle in it
+    // too (`page::html`).
+    assert!(
+        !js.contains(" data-t=") && !js.contains(" data-t-"),
+        "the page's script has a data-t mark, which the host would fill in (localization.md#page)"
+    );
+    let mut page = av_texts::page_keys(js).unwrap_or_else(|problems| failed(&problems));
+    page.extend(av_texts::html_keys(html).unwrap_or_else(|problems| failed(&problems)));
     let mut used = Used {
         page,
         host: BTreeSet::new(),

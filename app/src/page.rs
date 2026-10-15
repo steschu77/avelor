@@ -32,7 +32,7 @@ const LANGUAGE: &str = r#"<html lang="en">"#;
 /// texts block. `<` is escaped: a value can't end the script
 /// element.
 pub fn html(prefs: &Prefs) -> String {
-    let html = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
+    let html = worded(include_str!(concat!(env!("OUT_DIR"), "/index.html")));
     let bridge = format!(r#"<script id="bridge">{BRIDGE_JS}</script>"#);
     let json = serde_json::to_string(prefs).unwrap_or_else(|_| "{}".to_string());
     let block = PREFS_BLOCK.replace("{}", &json.replace('<', "\\u003c"));
@@ -43,6 +43,54 @@ pub fn html(prefs: &Prefs) -> String {
         .replacen(BRIDGE_BLOCK, &bridge, 1)
         .replacen(PREFS_BLOCK, &block, 1)
         .replacen(TEXTS_BLOCK, &texts, 1)
+}
+
+// ----------------------------------------------------------------------------
+/// `html` with the texts its elements name in the run's language
+/// (`localization.md#page`): `data-t="key"` the element's text,
+/// `data-t-<attribute>="key"` that attribute's (`title`, `placeholder`).
+/// The build checked the keys, that such an element is empty and that no
+/// script has such a mark.
+fn worded(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(at) = rest.find(" data-t") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + " data-t".len()..];
+        let (attribute, after) = if let Some(after) = after.strip_prefix("=\"") {
+            (None, after)
+        } else if let Some((attribute, after)) = after
+            .strip_prefix('-')
+            .and_then(|after| after.split_once("=\""))
+        {
+            (Some(attribute), after)
+        } else {
+            out.push_str(" data-t");
+            rest = after;
+            continue;
+        };
+        let Some((key, after)) = after.split_once('"') else {
+            break;
+        };
+        let text = texts::of(key)
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;");
+        match attribute {
+            Some(attribute) => {
+                out.push_str(&format!(" {attribute}=\"{text}\""));
+                rest = after;
+            }
+            None => {
+                out.push('>');
+                out.push_str(&text);
+                rest = after.strip_prefix('>').unwrap_or(after);
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 #[cfg(test)]
@@ -81,5 +129,15 @@ mod tests {
         let start = r#"<script type="application/json" id="texts">{""#;
         assert!(page.contains(start));
         assert!(page.contains(r#""status.dismiss":"Dismiss""#));
+    }
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_page_s_own_texts_are_filled_in() {
+        let html =
+            r#"<b data-table-only data-t-title="status.dismiss" data-t="status.dismiss"></b>"#;
+        assert_eq!(
+            worded(html),
+            r#"<b data-table-only title="Dismiss">Dismiss</b>"#
+        );
     }
 }
