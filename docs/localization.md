@@ -33,7 +33,7 @@ A catalog is one JSON object of texts by key:
 The catalogs are UTF-8, outside `app/static` and its ASCII rule
 (`architecture.md`, ASCII-only sources).
 
-## The page
+## The page <a id="page"></a>
 
 The page shows `t(key, args)` (`core/text.js`): the text of `key` in the
 run's language with `args` filled in. The host puts the language's
@@ -41,6 +41,13 @@ catalog into the page (the `texts` block, `page.rs`), the language's
 texts over English's, and the language as the page's `lang`. A key is
 written out where `t` is called (`t('status.dismiss')`), never built, so
 the build can check it.
+
+The page's own markup (`index.html`) names its texts by key too, and the
+host fills them in as it serves the page: `data-t="lens.bank"` is the
+element's text, which it has none of in the markup, and
+`data-t-title="editor.bold"` is its `title` (and so for any attribute).
+A date, a count and a relative day follow the locale through `Intl`
+(`core/format.js`).
 
 ## The host's texts <a id="host-texts"></a>
 
@@ -82,6 +89,8 @@ catalog, on:
 - a key a catalog has that English lacks, or a placeholder that English's
   text doesn't have;
 - a key English has that German or Spanish lacks;
+- an element of `index.html` with a key and a text of its own, and the
+  page's script with a `data-t` mark, which the host would fill in;
 - a count's forms for a text the host shows itself;
 - a `t` whose key isn't written out.
 

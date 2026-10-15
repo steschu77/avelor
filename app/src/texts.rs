@@ -68,6 +68,17 @@ fn texts() -> &'static Map<String, Value> {
 }
 
 // ----------------------------------------------------------------------------
+/// The text of `key` as a data file of the app names it (a blueprint's
+/// words, `blueprints.rs`), whose keys the build reads from the file.
+pub fn of(key: &str) -> String {
+    texts()
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or(key)
+        .to_string()
+}
+
+// ----------------------------------------------------------------------------
 /// A text the page shows in its language (`localization.md#host-texts`):
 /// a key of the catalogs and what its placeholders are given, each a
 /// string, a number or a text itself. The page gets `{key, args}`.

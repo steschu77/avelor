@@ -239,6 +239,47 @@ fn keys_after<'a>(code: &'a str, call: &'a str) -> impl Iterator<Item = String> 
 }
 
 // ----------------------------------------------------------------------------
+/// The keys the page's own markup (`index.html`) names: `data-t="key"`, its
+/// element's text, which the element doesn't have in the markup, and
+/// `data-t-<attribute>="key"`, that attribute's. An element with a text
+/// in the markup besides its key is an error.
+pub fn html_keys(html: &str) -> Result<BTreeSet<String>, Vec<String>> {
+    let mut keys = BTreeSet::new();
+    let mut problems = Vec::new();
+    let mut rest = html;
+    while let Some(at) = rest.find(" data-t") {
+        let after = &rest[at + " data-t".len()..];
+        let (text, after) = if let Some(after) = after.strip_prefix("=\"") {
+            (true, after)
+        } else if let Some(after) = after.strip_prefix('-') {
+            match after.split_once("=\"") {
+                Some((_, after)) => (false, after),
+                None => (false, after),
+            }
+        } else {
+            rest = after;
+            continue;
+        };
+        let Some((key, after)) = after.split_once('"') else {
+            problems.push("index.html: a data-t without its key's end".to_string());
+            break;
+        };
+        if text && !after.starts_with("></") {
+            problems.push(format!(
+                "index.html: the element of \"{key}\" has more than its text"
+            ));
+        }
+        keys.insert(key.to_string());
+        rest = after;
+    }
+    if problems.is_empty() {
+        Ok(keys)
+    } else {
+        Err(problems)
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// The catalogs' problems, each naming the catalog's file and the key:
 /// English against what `used` names (a key used that it lacks, one used
 /// nowhere, a count's forms where the host needs a plain text); each of

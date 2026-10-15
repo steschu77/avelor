@@ -92,7 +92,7 @@ What the host pushes; the page listens with `rpcOn`.
 
 | Event | Data | Pushed when |
 |---|---|---|
-| `vault` | `{ state, name, path, total }` | An indexing started, `state` `indexing` (on `ready`, after `switch_vault`), or read every file, `state` `open`: the vault's folder name and path, and the number of files found. Every entity comes in between as an `entity` event, with the indexing's `job` events. |
+| `vault` | `{ state, name, path, total }` | An indexing started, `state` `indexing` (on `ready`, after `switch_vault`), or read every file, `state` `open`: the vault's folder name and path, and the number of files found. Every entity comes in between as an `entity` event, with the indexing's `job` events. A new indexing starts the page's vault over. |
 | `vault_error` | `{ path, error }` | A file of the indexing couldn't be read; it stays out of the index. The indexing's job ends with the count as its summary. |
 | `close` | `{ id }` | The window's Close (`saving.md#closing-the-app`). |
 | `job` | `{ id, label, state: "running"\|"done", done, total, summary, stoppable }`, `label` a text and `summary` a list of them (`localization.md#host-texts`) | A job started, made progress, or ended: an indexing. `summary` is an ended job's summary (what it did, what failed, or why it failed); a job that ended did all its steps (`done` = `total`). |

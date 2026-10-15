@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/areas/shell.css">
   <link rel="stylesheet" href="css/areas/sidebar.css">
+  <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/panel.css">
 </head>
 
@@ -21,28 +22,39 @@
   <div class="shell">
     <header class="topbar"></header>
 
-    <aside class="sidebar" id="sidebar">
+    <aside class="sidebar" id="sidebar" data-t-aria-label="shell.vault_panel">
       <div class="sidebar__list">
-        <div class="grip grip--end" id="sidebar-divider" tabindex="0" role="separator" aria-orientation="vertical"></div>
+        <div class="grip grip--end" id="sidebar-divider" data-t-aria-label="layout.resize_sidebar" tabindex="0" role="separator" aria-orientation="vertical"></div>
         <div class="pane-head">
-          <button type="button" class="tool" id="vault-menu-btn"><svg class="icon"><use href="#i-library" /></svg></button>
+          <button type="button" class="tool" id="vault-menu-btn" aria-haspopup="menu" data-t-title="shell.vault_menu"><svg class="icon"><use href="#i-library" /></svg></button>
           <span id="vault-name"></span>
         </div>
         <div class="jobs" id="jobs"></div>
       </div>
     </aside>
 
-    <main class="main" id="main"></main>
+    <main class="main" id="main">
+      <!-- Documents (features/lenses/documents.js) -->
+      <div class="stack docs-lens" id="lens-documents">
+        <div class="table docs">
+          <div class="list-row table__head">
+            <button class="tool table__sort" data-sort="title"><span class="label" data-t="docs.name"></span></button>
+            <button class="tool table__sort docs__head-date" data-sort="date"><span class="label" data-t="docs.date"></span></button>
+          </div>
+          <div class="table__body" id="doc-rows"></div>
+        </div>
+      </div>
+    </main>
 
-    <aside class="panel" id="panel">
-      <div class="grip" id="panel-divider" tabindex="0" role="separator" aria-orientation="vertical"></div>
+    <aside class="panel" id="panel" data-t-aria-label="shell.panel">
+      <div class="grip" id="panel-divider" data-t-aria-label="layout.resize_panel" tabindex="0" role="separator" aria-orientation="vertical"></div>
       <div class="toolbar panel__toolbar">
-        <button type="button" class="tool" id="doc-expand-btn"><svg class="icon"><use href="#i-panel-right-expand" /></svg></button>
-        <button type="button" class="tool push" id="doc-close-btn"><svg class="icon"><use href="#i-dismiss" /></svg></button>
+        <button type="button" class="tool" id="doc-expand-btn" data-t-title="panel.expand"><svg class="icon"><use href="#i-panel-right-expand" /></svg></button>
+        <button type="button" class="tool push" id="doc-close-btn" data-t-title="panel.close"><svg class="icon"><use href="#i-dismiss" /></svg></button>
       </div>
       <div class="panel__body"></div>
       <div class="panel__context">
-        <div class="grip" id="context-divider" tabindex="0" role="separator" aria-orientation="vertical"></div>
+        <div class="grip" id="context-divider" data-t-aria-label="layout.resize_context" tabindex="0" role="separator" aria-orientation="vertical"></div>
       </div>
     </aside>
 
