@@ -10,6 +10,8 @@ libc = "0.2"
 log = "0.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_yaml_ng = "0.10.0"
+webkit6 = "0.6"
+webview2-com = "0.39.1"
 windows = "0.62"
 
 [workspace.lints.clippy]

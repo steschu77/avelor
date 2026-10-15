@@ -2,6 +2,7 @@
 
 mod dialogs;
 mod paths;
+mod webview;
 mod window;
 
 use std::rc::Rc;
@@ -22,10 +23,11 @@ pub use paths::paths;
 const APP_ID: &str = "io.github.steschu77.Avelor";
 
 // ----------------------------------------------------------------------------
-/// Show the main window in the state `config` saved, and run the main loop
-/// until the window is gone. Each start is a process of its own
-/// (`NON_UNIQUE`), as on Windows.
-pub fn run(_paths: &Paths, config: ConfigStore) -> Result<()> {
+/// Show the main window in the state `config` saved, with the page in its
+/// web view, and run the main loop until the window is gone. Each start is
+/// a process of its own (`NON_UNIQUE`), as on Windows.
+pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
+    let (data_dir, cache_dir) = (paths.webview_dir(), paths.webview_cache_dir());
     let app = gtk::Application::builder()
         .application_id(APP_ID)
         .flags(gio::ApplicationFlags::NON_UNIQUE)
@@ -33,7 +35,8 @@ pub fn run(_paths: &Paths, config: ConfigStore) -> Result<()> {
         .build();
     let shell = Rc::new(Shell::new(config));
     app.connect_activate(move |app| {
-        let window = window::create(app, &shell);
+        let webview = webview::create(&data_dir, &cache_dir, &shell);
+        let window = window::create(app, &webview, &shell);
         end_session_on_request(app, &window, &shell);
     });
     // GTK isn't handed the command line: it has no options of its own.

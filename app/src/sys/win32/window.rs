@@ -1,9 +1,16 @@
 use std::cell::Cell;
+use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::config::WindowState;
 use crate::shell::Shell;
+use crate::sys::win32::webview;
 use av_utils::error::{Error, Result};
+use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
+use webview2_com::Microsoft::Web::WebView2::Win32::{
+    COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC, ICoreWebView2Controller,
+};
 use windows::Win32::{
     Foundation::*, Graphics::Gdi::*, System::LibraryLoader::GetModuleHandleW,
     UI::WindowsAndMessaging::*,
@@ -22,6 +29,9 @@ const WINDOW_CLASS: PCWSTR = w!("Avelor");
 /// under a running handler.
 pub struct WindowProc {
     hwnd: Cell<HWND>,
+    controller: RefCell<Option<ICoreWebView2Controller>>,
+    /// Where the web view keeps its profile.
+    webview_dir: PathBuf,
     shell: Shell,
     maximized: Cell<bool>,
 }
@@ -29,9 +39,15 @@ pub struct WindowProc {
 impl WindowProc {
     // ------------------------------------------------------------------------
     /// Create the main window in the state the shell saved, or at the
-    /// default size if there is none. The caller keeps the returned object
-    /// until the message loop has ended.
-    pub fn create(title: &str, icon: Option<&str>, shell: Shell) -> Result<Rc<Self>> {
+    /// default size if there is none, with a web view whose profile is in
+    /// `webview_dir`. The caller keeps the returned object until the message
+    /// loop has ended.
+    pub fn create(
+        title: &str,
+        icon: Option<&str>,
+        webview_dir: PathBuf,
+        shell: Shell,
+    ) -> Result<Rc<Self>> {
         let title = HSTRING::from(title);
         let icon = icon.map(HSTRING::from);
 
@@ -56,6 +72,8 @@ impl WindowProc {
 
         let window = Rc::new(WindowProc {
             hwnd: Cell::new(HWND::default()),
+            controller: RefCell::new(None),
+            webview_dir,
             shell,
             maximized: Cell::new(state.maximized),
         });
@@ -89,8 +107,31 @@ impl WindowProc {
     }
 
     // ------------------------------------------------------------------------
+    /// Run `f` with the window object of `hwnd`, unless the window is gone.
+    pub fn with_window(hwnd: HWND, f: impl FnOnce(&WindowProc)) {
+        // Set from `WM_NCCREATE` to `WM_NCDESTROY`, while the object is
+        // alive: its owner keeps it until the message loop has ended.
+        let ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *const WindowProc;
+        if let Some(window) = unsafe { ptr.as_ref() } {
+            f(window);
+        }
+    }
+
+    // ------------------------------------------------------------------------
     fn hwnd(&self) -> HWND {
         self.hwnd.get()
+    }
+
+    // ------------------------------------------------------------------------
+    /// The controller finished creating; store it and size it to the window.
+    pub fn on_controller(&self, controller: ICoreWebView2Controller, _webview: &ICoreWebView2) {
+        unsafe {
+            let mut rect = RECT::default();
+            let _ = GetClientRect(self.hwnd(), &mut rect);
+            let _ = controller.SetBounds(rect);
+            let _ = controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+        }
+        self.controller.replace(Some(controller));
     }
 
     // ------------------------------------------------------------------------
@@ -127,24 +168,40 @@ impl WindowProc {
     // ------------------------------------------------------------------------
     fn handle_msg(&self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         match msg {
+            WM_CREATE => self.on_create(),
             WM_DESTROY => self.on_destroy(),
             WM_QUERYENDSESSION => self.on_query_end_session(lparam),
             WM_ENDSESSION => self.on_end_session(wparam.0 != 0),
             WM_SIZE => {
                 let kind = wparam.0 as u32;
                 if kind != SIZE_MINIMIZED {
-                    self.on_size(kind == SIZE_MAXIMIZED)
+                    let cx = loword(lparam.0 as u32);
+                    let cy = hiword(lparam.0 as u32);
+                    self.on_size(kind == SIZE_MAXIMIZED, cx, cy)
                 } else {
                     LRESULT(0)
                 }
             }
+            WM_SETFOCUS => self.on_set_focus(),
             WM_EXITSIZEMOVE => self.on_exit_size_move(),
             _ => unsafe { DefWindowProcW(self.hwnd(), msg, wparam, lparam) },
         }
     }
 
     // ------------------------------------------------------------------------
+    fn on_create(&self) -> LRESULT {
+        if let Err(e) = webview::init(self.hwnd(), &self.webview_dir) {
+            log::error!("WebView2 init failed: {e}");
+            return LRESULT(-1);
+        }
+        LRESULT(0)
+    }
+
+    // ------------------------------------------------------------------------
     fn on_destroy(&self) -> LRESULT {
+        if let Some(controller) = self.controller.take() {
+            let _ = unsafe { controller.Close() };
+        }
         unsafe { PostQuitMessage(0) };
         LRESULT(0)
     }
@@ -172,17 +229,34 @@ impl WindowProc {
         LRESULT(0)
     }
 
-    fn on_size(&self, maximized: bool) -> LRESULT {
-        // Creating the window sizes it as restored before it is shown
-        // maximized: not a change to save.
-        if !unsafe { IsWindowVisible(self.hwnd()) }.as_bool() {
-            return LRESULT(0);
-        }
+    fn on_size(&self, maximized: bool, cx: i32, cy: i32) -> LRESULT {
         // Maximize and restore don't end a size/move drag, so
         // `WM_EXITSIZEMOVE` never sees them; save on the change itself.
-        if maximized != self.maximized.get() {
+        // Creating the window sizes it as restored before it is shown
+        // maximized: not a change to save.
+        let shown = unsafe { IsWindowVisible(self.hwnd()) }.as_bool();
+        if shown && maximized != self.maximized.get() {
             self.maximized.set(maximized);
             self.save_window_state();
+        }
+
+        let controller = self.controller.borrow().clone();
+        if let Some(controller) = controller {
+            let rect = RECT {
+                left: 0,
+                top: 0,
+                right: cx,
+                bottom: cy,
+            };
+            let _ = unsafe { controller.SetBounds(rect) };
+        }
+        LRESULT(0)
+    }
+
+    fn on_set_focus(&self) -> LRESULT {
+        let controller = self.controller.borrow().clone();
+        if let Some(controller) = controller {
+            let _ = unsafe { controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC) };
         }
         LRESULT(0)
     }
@@ -223,4 +297,14 @@ pub fn run_message_loop() {
             DispatchMessageW(&msg);
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+fn loword(dword: u32) -> i32 {
+    (dword & 0xffff) as i16 as i32
+}
+
+// ----------------------------------------------------------------------------
+fn hiword(dword: u32) -> i32 {
+    ((dword >> 16) & 0xffff) as i16 as i32
 }

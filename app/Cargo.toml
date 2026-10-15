@@ -10,6 +10,7 @@ serde = { workspace = true }
 serde_yaml_ng = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = { workspace = true }
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_UI_Shell", "Win32_System_LibraryLoader"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -17,6 +18,7 @@ glib = { workspace = true, features = ["v2_72"] }
 glib-unix = { workspace = true }
 gtk = { workspace = true, features = ["v4_10"] }
 libc = { workspace = true }
+webkit6 = { workspace = true }
 
 [build-dependencies]
 embed-resource = "3.0"

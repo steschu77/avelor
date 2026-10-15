@@ -24,6 +24,12 @@ impl Paths {
     }
 
     // ------------------------------------------------------------------------
+    /// `%LOCALAPPDATA%\Avelor\WebView2`: the web view's profile.
+    pub fn webview_dir(&self) -> PathBuf {
+        self.app_dir.join("WebView2")
+    }
+
+    // ------------------------------------------------------------------------
     /// `%LOCALAPPDATA%\Avelor\log`: one log file per run.
     pub fn log_dir(&self) -> PathBuf {
         self.app_dir.join("log")
