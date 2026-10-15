@@ -14,7 +14,7 @@
   an element of the page (an `id` in its HTML, an `.id` a module sets); a
   file name in backticks (`.rs`, `.js`, `.css`, `.html`, with a `:line` or
   not) is the end of a file's path in the repository, `src/` left out
-  (`av-utils/error.rs`); a link names a file there. An id is at most 16
+  (`av-vault/envelope.rs`); a link names a file there. An id is at most 16
   characters, unique in its doc and referred to; the docs are LF.
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
