@@ -1,0 +1,20 @@
+/* The sidebar: the vault panel. */
+
+.sidebar {
+  grid-area: sidebar;
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  background: var(--c-shade);
+}
+
+/* the vault list keeps its width */
+.sidebar__list {
+  position: relative;
+  flex: none;
+  width: var(--w-vault-list);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--c-line);
+  overflow: hidden;
+}
