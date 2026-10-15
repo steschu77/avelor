@@ -211,17 +211,104 @@ fn inline_styles(static_dir: &Path, html: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
-/// The page, `index.html` with its CSS and the bundle of `app.js` inlined,
-/// and what the bundle's modules import (`page-deps.txt`), written to
-/// `out_dir`.
+/// The icons, `icons/*.svg` under `static_dir` (Fluent UI System Icons), as
+/// one hidden SVG of symbols, each `#i-<file name>`: the file's `viewBox`
+/// and shapes, their `fill` left to the page's CSS (`.icon`). An icon that
+/// none of `sources` refers to, or a reference to an icon that isn't
+/// there, fails the build.
+fn icon_sprite(static_dir: &Path, sources: &[&str]) -> String {
+    let mut files: Vec<PathBuf> = fs::read_dir(static_dir.join("icons"))
+        .expect("app/static has no icons folder")
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "svg"))
+        .collect();
+    files.sort();
+
+    let mut names = Vec::new();
+    let mut symbols = String::new();
+    for path in files {
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        let file = format!("icons/{name}.svg");
+        let svg = source(static_dir, &file);
+        let start = svg
+            .find("<svg")
+            .unwrap_or_else(|| panic!("{file}: no <svg>"));
+        let (tag, rest) = svg[start..]
+            .split_once('>')
+            .unwrap_or_else(|| panic!("{file}: no end of <svg>"));
+        let view_box = tag
+            .split_once("viewBox=\"")
+            .and_then(|(_, after)| after.split_once('"'))
+            .map(|(view_box, _)| view_box)
+            .unwrap_or_else(|| panic!("{file}: no viewBox"));
+        let (shapes, _) = rest
+            .rsplit_once("</svg>")
+            .unwrap_or_else(|| panic!("{file}: no </svg>"));
+        let shapes = without_fill(shapes.trim());
+        symbols.push_str(&format!(
+            "<symbol id=\"i-{name}\" viewBox=\"{view_box}\">{shapes}</symbol>\n"
+        ));
+        names.push(name);
+    }
+
+    let used: Vec<String> = sources.iter().flat_map(|text| icon_refs(text)).collect();
+    for name in &names {
+        assert!(
+            used.contains(name),
+            "icons/{name}.svg: no page source refers to #i-{name}"
+        );
+    }
+    for name in &used {
+        assert!(
+            names.contains(name),
+            "#i-{name}: there is no icons/{name}.svg"
+        );
+    }
+    format!("<svg style=\"display: none\" aria-hidden=\"true\">\n{symbols}</svg>\n")
+}
+
+// ----------------------------------------------------------------------------
+/// `svg` without its `fill` attributes.
+fn without_fill(svg: &str) -> String {
+    let mut out = String::new();
+    let mut rest = svg;
+    while let Some(at) = rest.find(" fill=\"") {
+        out.push_str(&rest[..at]);
+        let value = &rest[at + " fill=\"".len()..];
+        rest = value.split_once('"').map_or("", |(_, after)| after);
+    }
+    out.push_str(rest);
+    out
+}
+
+// ----------------------------------------------------------------------------
+/// The icons `text` refers to: the names after `#i-`.
+fn icon_refs(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.match_indices("#i-")
+        .map(|(at, _)| {
+            text[at + "#i-".len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                .collect::<String>()
+        })
+        .filter(|name| !name.is_empty())
+}
+
+// ----------------------------------------------------------------------------
+/// The page, `index.html` with its CSS, its icons and the bundle of `app.js`
+/// inlined, and what the bundle's modules import (`page-deps.txt`), written
+/// to `out_dir`.
 fn build_pages(root: &Path, out_dir: &Path) {
     let static_dir = root.join("static");
 
-    let html = source(&static_dir, "index.html");
-    let html = inline_styles(&static_dir, &html);
+    let index = source(&static_dir, "index.html");
+    let html = inline_styles(&static_dir, &index);
 
     let page = bundle(&static_dir, "app.js");
     fs::write(out_dir.join("page-deps.txt"), page.graph.to_string()).unwrap();
+    let sprite = icon_sprite(&static_dir, &[&index, &page.js]);
+    assert!(html.contains("<body>\n"), "index.html has no <body>");
+    let html = html.replacen("<body>\n", &format!("<body>\n{sprite}"), 1);
     let html = inline_script(
         &html,
         "<script type=\"module\" src=\"./app.js\"></script>",

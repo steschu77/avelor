@@ -162,10 +162,11 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | Area | Windows | Where | Linux |
 |---|---|---|---|
 | Folders | `%LOCALAPPDATA%\Avelor` (known folder): config, log, WebView2 profile | `sys/*/paths.rs` | `$XDG_CONFIG_HOME/avelor` for the config; `$XDG_STATE_HOME/avelor/log`; `$XDG_DATA_HOME/avelor/webkit` and the cache folder for the web view |
-| Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread) |
+| Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread, inside the task that woke it) |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux/mod.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
 | Dialogs and shell | `MessageBoxW` | `sys/*/dialogs.rs` | `gtk::AlertDialog` |
+| Icons and fonts | inline SVGs from Fluent UI System Icons (MIT), one sprite (`app/static/icons`, `build.rs`); Segoe UI | `css/tokens.css` (`--f-chrome`) | the same SVGs, since the Segoe font can't be shipped; `--f-chrome` already ends in `system-ui` |
 
 **The platform layer.** `app/src/sys/` holds a module per platform;
 `sys/mod.rs` states the contract and re-exports one backend's items. It is
@@ -217,9 +218,10 @@ nothing imports `app.js`.
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `model/state.js` | the store and its schema (`notices`, the preferences); `savePrefs`, `showError` |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
-| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences |
+| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
+| `icons/` | the icons, Fluent UI System Icons (MIT, `icons/LICENSE`), each a file as it comes, joined into the page's sprite by `build.rs` |
 
 ### Page state <a id="page-state"></a>
 
@@ -241,7 +243,7 @@ order into the page's one `<style>`. The order stands in one place, as
 |---|---|
 | `css/tokens.css` | the colors, fonts, sizes, insets, heights, shadows and layers |
 | `css/base.css` | the box model, the page's ground, the global states (`.is-resizing`), controls |
-| `css/type.css` | the type roles (`meta`, …) |
+| `css/type.css` | the type roles (`meta`, …) and the utilities (`icon`, `push`) |
 | `css/components.css` | what several areas share: `tool`, … |
 | `css/areas/*.css` | one file per area, in this order: shell, sidebar, panel |
 
@@ -260,7 +262,8 @@ Conventions the page keeps:
 - **Specificity**: a block rule that sets the same property as a component
   overrides it, so a block class and a component are combined only when
   their properties don't overlap. A bare `.is-x` loses to any later block
-  rule of the same specificity: qualify it with its block, or, for a state
+  rule of the same specificity: qualify it with its block
+  (`.panel.is-expanded`), or, for a state
   across blocks, use `!important` like `[hidden]` and `.is-resizing`.
 - A small visual change is fine when it simplifies the CSS, as long as it
   is pointed out.
@@ -295,9 +298,11 @@ cycle, a missing import or a broken layer fails the build,
 `development.md#the-bundled-page`), parses it with oxc on every build, joins
 the CSS files `index.html` links in their order (`architecture.md#css`),
 minifies JS (oxc, mangling) and CSS (hand-written) in release builds,
-inlines both into `index.html` in `OUT_DIR`, and embeds the manifest and
-icon, on Windows. On Linux the desktop entry and the icon are files
-(`app/res`), installed as `README.md` says. A page
+inlines both into `index.html` in `OUT_DIR`, with the icons of
+`app/static/icons` as one hidden SVG of symbols (an icon nothing refers to,
+or a reference to one that isn't there, fails the build), and embeds the
+manifest and icon, on Windows. On Linux the desktop entry and the icon are
+files (`app/res`), installed as `README.md` says. A page
 source with a non-ASCII character fails the build, named by its line and
 column. A new module
 is in the page once a module there imports it. The host fills the

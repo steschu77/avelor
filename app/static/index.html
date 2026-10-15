@@ -30,8 +30,14 @@
 
     <aside class="panel" id="panel">
       <div class="grip" id="panel-divider"></div>
-      <div class="panel__toolbar"></div>
+      <div class="toolbar panel__toolbar">
+        <button type="button" class="tool" id="doc-expand-btn"><svg class="icon"><use href="#i-panel-right-expand" /></svg></button>
+        <button type="button" class="tool push" id="doc-close-btn"><svg class="icon"><use href="#i-dismiss" /></svg></button>
+      </div>
       <div class="panel__body"></div>
+      <div class="panel__context">
+        <div class="grip" id="context-divider"></div>
+      </div>
     </aside>
 
     <footer class="statusbar" role="status"></footer>

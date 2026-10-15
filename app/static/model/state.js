@@ -11,6 +11,8 @@ export const store = createStore({
   // the page's preferences, strings by key: the host fills them into the
   // page (#prefs, page.rs); `savePrefs` changes them; always replaced
   prefs: JSON.parse($('prefs')?.textContent || '{}'),
+  // the panel's width: 'closed', 'normal' or 'expanded' (full width)
+  panel_size: 'normal',
 });
 
 // ----------------------------------------------------------------------------

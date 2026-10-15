@@ -7,15 +7,22 @@
   z-index: var(--z-panel);
 
   display: grid;
+  grid-template-columns: 1fr 0px;
   grid-template-rows: var(--h-topbar) 1fr;
   grid-template-areas:
-    "header"
-    "body";
+    "header header"
+    "body   context";
 
   transition:
     right 250ms ease,
-    width 250ms ease;
+    width 250ms ease,
+    grid-template-columns 250ms ease;
   box-shadow: var(--shadow-raise);
+}
+
+/* expanded, the panel has its context column */
+.panel.is-expanded {
+  grid-template-columns: 1fr var(--w-expanded-context);
 }
 
 .panel__toolbar {
@@ -32,4 +39,29 @@
   min-width: 0;
   background: var(--c-card);
   overflow: hidden;
+}
+
+.panel__context {
+  grid-area: context;
+  /* anchors its .grip to the context's left edge */
+  position: relative;
+  /* the column is 0px wide until the panel is expanded */
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  opacity: 0;
+  pointer-events: none;
+
+  transition: opacity 250ms ease;
+}
+
+/* open, the context column's shadow falls onto the panel's body */
+.panel.is-expanded .panel__context {
+  opacity: 1;
+  pointer-events: auto;
+  overflow: visible;
+  z-index: 1;
 }

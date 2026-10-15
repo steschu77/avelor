@@ -79,3 +79,8 @@ AI assistance is a tool in the development process, not a substitute for code ow
 ## License
 
 This project is licensed under the [MIT license](LICENSE).
+
+The icons in `app/static/icons` are from
+[Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons)
+by Microsoft, under the MIT license
+([`app/static/icons/LICENSE`](app/static/icons/LICENSE)).

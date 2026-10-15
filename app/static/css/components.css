@@ -18,6 +18,13 @@
   background: var(--c-hover);
 }
 
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Resize grip on a pane's left edge; --end puts it on the right edge. */
 .grip {
   position: absolute;
