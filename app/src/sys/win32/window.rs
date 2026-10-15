@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::app::Prefs;
 use crate::config::WindowState;
 use crate::shell::Shell;
 use crate::sys::win32::webview;
@@ -165,8 +166,13 @@ impl WindowProc {
 
     // ------------------------------------------------------------------------
     /// The controller finished creating; store it and size it to the window.
-    /// The app starts, posting to the page in `webview`.
-    pub fn on_controller(&self, controller: ICoreWebView2Controller, webview: &ICoreWebView2) {
+    /// The app starts, posting to the page in `webview`. Returns the page's
+    /// preferences, which the page is loaded with.
+    pub fn on_controller(
+        &self,
+        controller: ICoreWebView2Controller,
+        webview: &ICoreWebView2,
+    ) -> Prefs {
         unsafe {
             let mut rect = RECT::default();
             let _ = GetClientRect(self.hwnd(), &mut rect);
@@ -174,8 +180,9 @@ impl WindowProc {
             let _ = controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
         }
         let signal = UiSignal::new(self.hwnd());
-        self.shell.start(signal, webview::outbox(webview.clone()));
+        let prefs = self.shell.start(signal, webview::outbox(webview.clone()));
         self.controller.replace(Some(controller));
+        prefs
     }
 
     // ------------------------------------------------------------------------

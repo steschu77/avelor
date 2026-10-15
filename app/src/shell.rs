@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::cell::{Cell, OnceCell};
 use std::sync::Arc;
 
+use crate::app::Prefs;
 use crate::app::{App, Outbox, UiQueue, UiTask};
 use crate::config::{ConfigStore, WindowState};
 use crate::sys::UiSignal;
@@ -25,7 +26,8 @@ const DEFAULT_STATE: WindowState = WindowState {
 
 // ----------------------------------------------------------------------------
 pub struct Shell {
-    config: RefCell<ConfigStore>,
+    /// The app config, held until `App` exists and takes it over.
+    config: RefCell<Option<ConfigStore>>,
     /// Taken only by `run_tasks`, for one task at a time. A message that
     /// finds it taken came from a modal loop inside that task, and its work
     /// waits in the queue until the task returns.
@@ -41,7 +43,7 @@ impl Shell {
     // ------------------------------------------------------------------------
     pub fn new(config: ConfigStore) -> Self {
         Self {
-            config: RefCell::new(config),
+            config: RefCell::new(Some(config)),
             app: RefCell::new(None),
             ui: OnceCell::new(),
             deferred: Cell::new(false),
@@ -49,15 +51,21 @@ impl Shell {
     }
 
     // ------------------------------------------------------------------------
-    /// The web view is up: `App` starts, posting to the page through
-    /// `outbox`, its queue woken by `signal`.
-    pub fn start(&self, signal: UiSignal, outbox: Outbox) {
+    /// The web view is up: `App` starts with the config, posting to the
+    /// page through `outbox`, its queue woken by `signal`. Returns the page's
+    /// preferences, which the page is loaded with.
+    pub fn start(&self, signal: UiSignal, outbox: Outbox) -> Prefs {
+        let Some(config) = self.config.take() else {
+            return Prefs::new();
+        };
+        let prefs = config.prefs().clone();
         let ui = Arc::new(UiQueue::new(signal));
-        let app = App::new(Arc::clone(&ui), outbox);
+        let app = App::new(Arc::clone(&ui), outbox, config);
         if let Ok(mut slot) = self.app.try_borrow_mut() {
             *slot = Some(app);
         }
         let _ = self.ui.set(ui);
+        prefs
     }
 
     // ------------------------------------------------------------------------
@@ -118,17 +126,18 @@ impl Shell {
     /// The state the main window opens in: as it was last saved, or the
     /// default size.
     pub fn window_state(&self) -> WindowState {
-        self.config.borrow().window().unwrap_or(DEFAULT_STATE)
+        let config = self.config.borrow();
+        config
+            .as_ref()
+            .and_then(ConfigStore::window)
+            .unwrap_or(DEFAULT_STATE)
     }
 
     // ------------------------------------------------------------------------
     /// The window's state changed: a drag ended, it was maximized or
-    /// restored, or it closes. Persisted; a failure is only logged, the
-    /// window works on.
+    /// restored, or it closes. `App` persists it (`App::save_window_state`).
     pub fn on_window_state(&self, state: WindowState) {
-        if let Err(e) = self.config.borrow_mut().set_window(state) {
-            log::warn!("Could not save the window state: {e}");
-        }
+        let _ = self.queue(move |app| app.save_window_state(state));
     }
 }
 
@@ -145,6 +154,7 @@ mod tests {
 
         let shell = Shell::new(load_config(&dir).unwrap());
         assert_eq!(shell.window_state(), DEFAULT_STATE);
+        shell.start(UiSignal::none(), Box::new(|_| {}));
         let state = WindowState {
             width: 900,
             height: 700,

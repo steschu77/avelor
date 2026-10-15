@@ -1,13 +1,15 @@
-//! For tests: an `App` without a window. What it sends to the page is
-//! collected, and the test runs its UI queue.
+//! For tests: an `App` without a window, on a temporary config folder.
+//! What it sends to the page is collected, and the test runs its UI queue.
 
 use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
 
 use crate::app::{App, UiQueue, UiTask};
+use crate::config::load_config;
 use crate::sys::UiSignal;
 
 // ----------------------------------------------------------------------------
@@ -15,20 +17,31 @@ pub struct Harness {
     pub app: App,
     pub ui: Arc<UiQueue>,
     sent: Rc<RefCell<Vec<String>>>,
+    dir: PathBuf,
 }
 
 impl Harness {
     // ------------------------------------------------------------------------
-    /// An `App` whose queue nothing wakes: the test runs it.
-    pub fn new(_name: &str) -> Self {
+    /// An `App` on an empty config folder, named after the test, whose
+    /// queue nothing wakes: the test runs it.
+    pub fn new(name: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("avelor-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = load_config(&dir).unwrap();
         let ui = Arc::new(UiQueue::new(UiSignal::none()));
         let sent = Rc::new(RefCell::new(Vec::new()));
         let outbox = {
             let sent = Rc::clone(&sent);
             Box::new(move |text: &str| sent.borrow_mut().push(text.to_string()))
         };
-        let app = App::new(Arc::clone(&ui), outbox);
-        Self { app, ui, sent }
+        let app = App::new(Arc::clone(&ui), outbox, config);
+        Self { app, ui, sent, dir }
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn dir(&self) -> &Path {
+        &self.dir
     }
 
     // ------------------------------------------------------------------------
@@ -62,6 +75,12 @@ impl Harness {
     /// What the page got since the last call.
     pub fn take(&self) -> Vec<String> {
         std::mem::take(&mut *self.sent.borrow_mut())
+    }
+}
+
+impl Drop for Harness {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
