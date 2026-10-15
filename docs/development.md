@@ -5,7 +5,8 @@
 
 ## Checks <a id="checks"></a>
 
-- `cargo test --workspace` runs the unit tests.
+- `cargo test --workspace` runs the unit tests and every feature module's
+  dispatch tests (`testing.rs`: `Harness`, `call`).
 - The docs (`app/tests/docs.rs`, `architecture.md`, Doc conventions): in
   the docs, the README and the code's comments a reference
   (`development.md#checks`) names an id at the end of a heading of its

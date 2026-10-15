@@ -43,6 +43,7 @@ dependencies = [
  "glib",
  "log",
  "serde",
+ "serde_json",
  "serde_yaml_ng",
  "windows",
 ]
@@ -62,6 +63,7 @@ dependencies = [
  "oxc",
  "pulldown-cmark",
  "serde",
+ "serde_json",
  "serde_yaml_ng",
  "static_vcruntime",
  "webkit6",
