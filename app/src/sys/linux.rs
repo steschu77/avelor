@@ -15,6 +15,7 @@ use crate::shell::Shell;
 use av_utils::error::Result;
 
 pub use dialogs::show_error;
+pub use dialogs::{Owner, open_path, pick_folder};
 pub use paths::Paths;
 pub use paths::paths;
 pub use webview::BRIDGE_JS;
@@ -41,7 +42,8 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
         let window = window::create(app, &webview, &shell);
         end_session_on_request(app, &window, &shell);
         let signal = UiSignal::new(&shell, &window);
-        let prefs = shell.start(signal, webview::outbox(&webview));
+        let owner = Owner::new(window.clone());
+        let prefs = shell.start(signal, owner, webview::outbox(&webview));
         webview::load(&webview, &prefs);
     });
     // GTK isn't handed the command line: it has no options of its own.

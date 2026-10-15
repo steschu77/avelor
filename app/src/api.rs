@@ -1,20 +1,94 @@
-//! The app's own commands (`api.md#the-page-side`): `ready` and the page's
-//! preferences.
+//! The app's own commands (`api.md#the-page-side`): `ready`, switching and
+//! revealing the vault, and the page's preferences; and opening a vault
+//! (`open_vault`).
+
+use std::path::{Path, PathBuf};
 
 use crate::app::App;
 use crate::app::Prefs;
 use crate::protocol::Req;
-use crate::texts::Text;
+use crate::sys;
+use crate::texts::{self, Text};
+use av_utils::error::Error;
+use serde_json::json;
 
 // ----------------------------------------------------------------------------
 /// `ready`: the page is loaded and listens. A config that couldn't be read
 /// at start, and was set aside (`config::load_config`, which logs why), is
-/// told now, in the status bar. Answers `null`.
+/// told now, in the status bar. Opens the vault of the last session (or the
+/// command line's, `ConfigStore::vault`); answers `null`.
 pub fn ready(app: &mut App, req: Req) {
     if app.config.take_error().is_some() {
         app.notice(Text::new("config.unread"));
     }
+    if let Some(root) = app.config.vault().map(Path::to_path_buf) {
+        open_vault(app, &root);
+    }
     req.ok(());
+}
+
+// ----------------------------------------------------------------------------
+/// `switch_vault {path?}`: open the vault at `path`, or the folder the user
+/// picks, and remember it for the next start. Answers `ok {path}`, the vault
+/// being opened, once the switch is under way; `path` is null when the
+/// picker was cancelled, which keeps the vault that is open.
+pub fn switch_vault(app: &mut App, req: Req, path: Option<PathBuf>) {
+    match path {
+        Some(path) => {
+            switch_to(app, path.clone());
+            req.ok(json!({ "path": path }));
+        }
+        None => app.on_ui(
+            |owner| sys::pick_folder(owner, texts::text("vault.pick")),
+            |app, picked| {
+                if let Some(path) = &picked {
+                    switch_to(app, path.clone());
+                }
+                req.ok(json!({ "path": picked }));
+            },
+        ),
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Remember `root` as the vault, then open it.
+pub(crate) fn switch_to(app: &mut App, root: PathBuf) {
+    app.remember_vault(root.clone());
+    open_vault(app, &root);
+}
+
+// ----------------------------------------------------------------------------
+/// Make `root` the open vault, then kick off an indexing that streams progress
+/// and results back via `on_index_event`.
+pub(crate) fn open_vault(app: &mut App, root: &Path) {
+    app.vault.begin_open(root);
+    app.run_indexing(root.to_path_buf());
+}
+
+// ----------------------------------------------------------------------------
+/// `reveal_vault`: show the open vault's folder in the file manager once the
+/// handler has returned. Answers `null`; `invalid_path` if no vault is
+/// open.
+pub fn reveal_vault(app: &mut App, req: Req) {
+    let Some(root) = app.vault.root().map(Path::to_path_buf) else {
+        let error = Error::InvalidPath {
+            path: PathBuf::new(),
+        };
+        return req.fail(error, Text::new("vault.none_open"));
+    };
+    app.on_ui(
+        {
+            let root = root.clone();
+            move |_| sys::open_path(&root)
+        },
+        move |_, opened| match opened {
+            Ok(()) => req.ok(()),
+            Err(e) => {
+                log::warn!("Could not show {} in its folder: {e}", root.display());
+                req.fail(e, Text::new("vault.show_failed"));
+            }
+        },
+    );
 }
 
 // ----------------------------------------------------------------------------
@@ -31,9 +105,19 @@ pub fn set_prefs(app: &mut App, req: Req, prefs: Prefs) {
 // ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::config::load_config;
     use crate::testing::Harness;
-    use serde_json::json;
+    use crate::testing::parse;
+    use av_utils::id::Id;
+    use serde_json::Value;
+    use std::fs;
+
+    // ------------------------------------------------------------------------
+    /// The events `ev` among what the page got.
+    fn events<'a>(sent: &'a [Value], ev: &str) -> Vec<&'a Value> {
+        sent.iter().filter(|m| m["ev"] == ev).collect()
+    }
 
     // ------------------------------------------------------------------------
     #[test]
@@ -58,6 +142,51 @@ mod tests {
             [json!({ "ev": "notice", "data": notice }), ready.clone()]
         );
         assert_eq!(h.call("ready", json!({})), [ready], "told once");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_switch_opens_the_vault_and_tells_how_its_scan_went() {
+        let mut h = Harness::new("switch");
+        let root = h.vault();
+        let note = format!(
+            "---\nid: {}\ntitle: A\ndocument: {{}}\n---\nA\n",
+            Id::generate()
+        );
+        fs::create_dir_all(root.join("Notes")).unwrap();
+        fs::write(root.join("Notes/a.md"), note).unwrap();
+        fs::write(root.join("Notes/b.md"), b"---\ntitle: \xff\n---\n").unwrap();
+
+        let mut sent = h.call("switch_vault", json!({ "path": root }));
+        h.wait_indexed();
+        sent.extend(parse(&h.take()));
+        let path = root.to_str().unwrap();
+        let reply = sent.iter().find(|m| m["re"] == 1).unwrap();
+        assert_eq!(reply["ok"], json!({ "path": path }));
+        assert_eq!(h.app.config.vault(), Some(&*root));
+
+        let vault = events(&sent, "vault");
+        let opened = |state| json!({ "state": state, "name": "vault", "path": path, "total": 2 });
+        assert_eq!(vault.len(), 2, "{sent:?}");
+        assert_eq!(vault[0]["data"], opened("indexing"));
+        assert_eq!(vault[1]["data"], opened("open"));
+        let [failed] = &events(&sent, "vault_error")[..] else {
+            panic!("one file couldn't be read: {sent:?}");
+        };
+        assert!(failed["data"]["path"].as_str().unwrap().ends_with("b.md"));
+        assert!(!failed["data"]["error"].as_str().unwrap().is_empty());
+        let at = |m: &Value| sent.iter().position(|s| s == m).unwrap();
+        assert!(at(vault[0]) < at(failed) && at(failed) < at(vault[1]));
+        assert_eq!(events(&sent, "entity").len(), 1);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn revealing_the_vault_needs_one() {
+        let mut h = Harness::new("reveal");
+        let sent = h.call("reveal_vault", json!({}));
+        let err = json!({ "code": "invalid_path", "text": { "key": "vault.none_open" } });
+        assert_eq!(sent, [json!({ "re": 1, "err": err })]);
     }
 
     // ------------------------------------------------------------------------

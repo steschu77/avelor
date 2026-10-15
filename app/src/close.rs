@@ -47,7 +47,7 @@ pub fn on_close(app: &mut App) {
     app.close.asked = Some(id);
     app.post_event("close", json!({ "id": id }));
     app.run(
-        || std::thread::sleep(CLOSE_WAIT),
+        |_| std::thread::sleep(CLOSE_WAIT),
         move |app, ()| waited(app, id),
     );
 }
