@@ -6,6 +6,7 @@ use std::rc::Rc;
 use crate::app::Prefs;
 use crate::config::WindowState;
 use crate::shell::Shell;
+use crate::sys::win32::dialogs::Owner;
 use crate::sys::win32::webview;
 use av_utils::error::{Error, Result};
 use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
@@ -189,7 +190,10 @@ impl WindowProc {
             let _ = controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
         }
         let signal = UiSignal::new(self.hwnd());
-        let prefs = self.shell.start(signal, webview::outbox(webview.clone()));
+        let owner = Owner::new(self.hwnd());
+        let prefs = self
+            .shell
+            .start(signal, owner, webview::outbox(webview.clone()));
         self.controller.replace(Some(controller));
         prefs
     }
@@ -278,11 +282,12 @@ impl WindowProc {
     // ------------------------------------------------------------------------
     /// The window's Close: the app asks the page first, and closes the
     /// window once it is ready (`close`); before the WebView is up there is
-    /// no page to ask. Refused while a handler is still running: a modal
-    /// loop dispatched this message.
+    /// no page to ask. Refused while a dialog or a handler is still
+    /// running: a modal loop dispatched this message (the taskbar's Close
+    /// while a picker is open).
     fn on_close(&self) -> LRESULT {
         if self.shell.is_busy() {
-            log::info!("Close refused: a handler is still running");
+            log::info!("Close refused: a dialog or a handler is still running");
             return LRESULT(0);
         }
         if !self.shell.on_close() {
@@ -291,11 +296,12 @@ impl WindowProc {
         LRESULT(0)
     }
 
-    /// The app closes the window (`UiQueue::close_window`). Refused like
-    /// `WM_CLOSE` while a handler runs; closing again asks again.
+    /// The app closes the window (`UiQueue::close_window`). Refused
+    /// like `WM_CLOSE` while a dialog or a handler runs; closing again asks
+    /// again.
     fn on_close_now(&self) -> LRESULT {
         if self.shell.is_busy() {
-            log::info!("Close refused: a handler is still running");
+            log::info!("Close refused: a dialog or a handler is still running");
             return LRESULT(0);
         }
         let _ = unsafe { DestroyWindow(self.hwnd()) };

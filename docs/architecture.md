@@ -42,7 +42,7 @@ read by OCR.
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 | The vault is the source of truth | No database; the index is rebuilt by an indexing |
-| One coordinator | `App` alone posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
+| One coordinator | `App` alone runs background work (`run*`, `UiQueue`) and posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
 
 ## Documents <a id="documents"></a>
 
@@ -87,11 +87,15 @@ The rules the code follows, and every change to it:
    Linux), hand-written utilities, no npm, no third-party bundler, no async
    runtime.
 2. **One way to do each thing.** One message format and one way to answer.
+3. **Boundaries by types and rules, not by layers of folders.** The host
+   doesn't need `services/` and
+   `repositories/`; it needs state that can only be changed through its own
+   methods, and modules that don't reach into each other.
 4. **Every request gets exactly one answer; every failure is visible.**
 6. **Pure core, thin shell.** Mapping and decision logic are pure functions
    with tests; I/O sits at the edges.
-7. **One coordinator.** `App` (`app.rs`) is the only place that posts to
-   the page; no worker gets a path of its own to the webview. Each new
+7. **One coordinator.** `App` (`app.rs`) is the only place that runs
+   background work and posts to the page; no worker gets a path of its own to the webview. Each new
    coordination primitive (`Req`, the re-entrancy net) is designed with
    the user before it is built.
 8. **The UI thread never waits for the page.** The page is reached only
@@ -107,14 +111,24 @@ The rules the code follows, and every change to it:
 
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
-| UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler | — |
-| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
+| UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the indexing's batches into the index | — |
+| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the indexing's walk and reads (`indexing.rs`); the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
 | WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
+
+### The run family
+
+Two variants: plain (`run`), with ordered progress callbacks
+(`run_with_progress`); continuations are `FnOnce(&mut
+App, T)`. `Task(Cancel)` aborts (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
+dropping a `Task` leaves its work running. Continuations re-check identity themselves
+(batch ids), because an already queued `apply`
+still runs, and so does progress queued before the abort.
 
 ### One way in <a id="one-way-in"></a>
 
-Every way into `App` — page messages, the window state — goes through the
-`UiQueue` queue, and `App` is taken only while a task runs:
+Every way into `App` — page messages, worker results, the window
+state — goes through the `UiQueue` queue, and `App` is taken only
+while a task runs:
 
 - `run` owns the `WindowProc` until the message loop has ended, and
   `GWLP_USERDATA` only points to it.
@@ -122,7 +136,7 @@ Every way into `App` — page messages, the window state — goes through the
   `Cell`s and `RefCell`s, and no COM call runs while a borrow is held.
 - `run_tasks` runs the tasks queued so far, one at a time, each with
   `RefCell<Option<App>>` taken by `try_borrow_mut`. A task queued
-  meanwhile waits for its own `WM_TASK` (on Linux an idle callback), so
+  meanwhile (a batch of the indexing) waits for its own `WM_TASK` (on Linux an idle callback), so
   the message loop runs in between. Nothing else takes `App`, and nothing
   calls `borrow_mut()` on it: with `panic = "abort"` a second borrow ends
   the app.
@@ -131,6 +145,22 @@ Every way into `App` — page messages, the window state — goes through the
   returns.
 - Because every page message goes through the queue, a later one can't
   run before a deferred one.
+
+### Dialogs
+
+`App::on_ui(work: FnOnce(&Owner) -> T, apply: FnOnce(&mut App, T))`
+queues a `UiTask::Modal`, whose `work` runs on the UI thread *after* the
+current handler has released `App`. The main window is the dialog's
+owner, and `apply` then runs with `App`. While the dialog is open,
+other messages run normally, and a close is refused. On Linux the dialog
+waits in a nested `glib::MainLoop` (`sys/linux/dialogs.rs`), as a Win32
+dialog waits in its modal loop.
+
+### Jobs <a id="jobs"></a>
+
+`App::start_job` / `update_job` / `end_job` (`jobs.rs`): a
+card per job in the jobs panel (the `job` event, `ui.md#jobs-panel`). A new long operation becomes a job through
+this helper, not a slot with callbacks of its own.
 
 ### Closing
 
@@ -143,7 +173,7 @@ SIGTERM and SIGHUP end it the same way. Both are
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), text normalization, atomic writes (`fs`) | |
+| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), text normalization, atomic writes (`fs`), cross-thread `Cancel` | |
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index`, the indexing (`index_vault`, events applied by `Index::apply`) | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
@@ -175,17 +205,19 @@ SIGTERM and SIGHUP end it the same way. Both are
 | `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences, the texts in the run's language, and the platform's `BRIDGE_JS` |
 | `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`), a text the page shows (`Text`: a key and its arguments); its tests |
 | `sys.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
-| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); message boxes |
+| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); folder picker, message boxes, ShellExecute |
 | `sys/win32.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
 | `sys/win32/webview.rs` | WebView2 environment/controller, message handler, `NavigateToString`; App's outbox (`PostWebMessageAsString`) |
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App`, the config writes no request asked for (`save_window_state`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `run`, `UiQueue` / `UiTask` (`close_window`) |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `run*`, `on_ui`, `Progress` (`send`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
+| `indexing.rs` | the indexing (`vault.md#opening`): `run_indexing` with av-vault's `index_vault` on a worker, its batches into the index (`Vault::apply_indexed`) and to the page (`vault`, `entity`, `vault_error`, the indexing's `job`), a replaced scan's batches dropped, `indexing`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
-| `testing.rs` | the test harness: `Harness::call`, the collected events |
+| `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; its dispatch tests |
-| `api.rs` | `ready`, `set_prefs` |
+| `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
+| `api.rs` | `ready`, vault open, switch and reveal, `set_prefs` |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>
@@ -199,7 +231,7 @@ SIGTERM and SIGHUP end it the same way. Both are
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
 | Language | the display languages (`GetUserPreferredUILanguages`); WebView2's `Language` | `sys/*.rs` (`languages`), `sys/*/webview.rs` | the languages GLib reads from the environment (`language_names`); the web context's preferred languages |
-| Dialogs and shell | `MessageBoxW` | `sys/*/dialogs.rs` | `gtk::AlertDialog` |
+| Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `FileLauncher` (they use the XDG desktop portal where there is one) |
 | Random | BCrypt | `av-utils/random.rs` | `getrandom` |
 | File permissions | `readonly()` | av-vault `vault.rs` | `readonly()` is true only when no one may write |
 | Icons and fonts | inline SVGs from Fluent UI System Icons (MIT), one sprite (`app/static/icons`, `build.rs`); Segoe UI | `css/tokens.css` (`--f-chrome`) | the same SVGs, since the Segoe font can't be shipped; `--f-chrome` already ends in `system-ui` |
@@ -213,13 +245,18 @@ the only `cfg(target_os)` in `app/src`:
   returns once the window is gone.
 - `UiSignal` (`Send + Sync`): `wake()` and `close()`. `UiQueue` holds one instead of an
   `HWND`; tests use `UiSignal::none()`.
-- `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
+- `Owner`: what a `UiTask::Modal` gets instead of an `HWND`.
+  `pick_folder(&Owner, title)` waits in the platform's modal loop
+  (`IFileOpenDialog`; `gtk::FileDialog` in a nested `glib::MainLoop`), so
+  `App::on_ui` keeps its meaning.
+- `open_path`, `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
   is up, else stderr), the user's `languages`, and `BRIDGE_JS`.
 
 **The shared shell.** `shell.rs` holds what the main window decides:
 
 - the queue runner and the re-entrancy net (`App` in a
-  `RefCell<Option<_>>`, the deferred flag; `architecture.md#one-way-in`);
+  `RefCell<Option<_>>`, the deferred flag, the modal count;
+  `architecture.md#one-way-in`);
 - close, the app's own close;
 - the window state.
 
@@ -255,9 +292,15 @@ nothing imports `app.js`.
 | `core/dom.js`, `core/store.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make); observable store (`setState`/`subscribe` with `Object.is`) |
 | `core/text.js` | the page's texts: `t`, a text of the run's catalog, `textOf`, one the host sent (`localization.md`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
-| `model/state.js` | the store and its schema (`notices`, the preferences); `savePrefs`, `showError` |
+| `core/actions.js` | the action registry and the one global key handler |
+| `model/state.js` | the store and its schema (the vault's state, `notices`, the preferences); `savePrefs`, `showError` |
+| `model/events.js` | the host's events into the model (`vault`) |
+| `ui/menu.js` | the popup menu (`showMenu`) with its Esc |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
 | `features/close.js` | closing the app: the `close` event answered `close_ready` |
+| `features/jobs.js` | job cards from the `job` event |
+| `features/sidebar.js` | the vault panel: the vault menu |
+| `features/workspace/vault.js` | `switchVault`, `revealVault` |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
@@ -271,6 +314,15 @@ The model calls no render. The renders subscribe to the store: the
 status bar to `notices`.
 
 A render never sends a change to the host.
+
+### Actions <a id="actions"></a>
+
+What a key, a menu or a button starts is registered once
+(`registerAction({id, title, shortcut, when, run})`, `core/actions.js`). One `keydown` handler runs the first action
+with the key's shortcut whose `when` holds; a key something else already
+handled (`defaultPrevented`, Ctrl+I as italic in an editor) is left
+alone. The keys
+in use: `ui.md#keys-and-actions`.
 
 ### CSS <a id="css"></a>
 
@@ -319,8 +371,10 @@ catalogs are UTF-8, outside it (`localization.md#catalogs`).
 The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
 `config_dir`), on Linux in the XDG folders (`architecture.md#platforms`):
 
-- `config.yaml`: the window's size and maximized state, and the page's
-  preferences (`prefs`, `ui.md#preferences`);
+- `config.yaml`: the vault of the last session (`vault`), the window's
+  size and maximized state, the language the user picked (`language`,
+  `localization.md#language`), and the page's preferences (`prefs`,
+  `ui.md#preferences`);
 - the WebView2 profile in `…\Avelor\WebView2`;
 - the log files, one per run, in `…\Avelor\log`
   (`development.md#diagnosis`).
@@ -379,5 +433,5 @@ abort. Where the bundle lands and how to measure the size:
 |---|---|---|
 | av-utils | primitives with no domain (dates, ids, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | av-vault | the vault's schema, files, index | do network or UI; start threads (the app decides where indexing runs) |
-| `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK; message decoding and replies | contain feature logic |
+| `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
 | page | rendering, user input | resolve filenames, conflicts or structural rules |

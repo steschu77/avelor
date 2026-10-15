@@ -1,8 +1,21 @@
 {
   "config.unread": "config.yaml konnte nicht gelesen werden; die App ist mit den Standardeinstellungen gestartet.",
   "error.code": "Etwas ist schiefgegangen ({code}).",
+  "indexing.label": "Indizierung von {path}",
+  "indexing.replaced": "durch eine andere Indizierung ersetzt",
+  "indexing.unread": {
+    "one": "{n} Datei konnte nicht gelesen werden",
+    "other": "{n} Dateien konnten nicht gelesen werden"
+  },
+  "menu.close": "Menü schließen",
   "save.settings": "Die Einstellungen konnten nicht gespeichert werden.",
+  "sidebar.no_vault": "Kein Tresor",
+  "sidebar.show_in_folder": "Im Ordner zeigen",
+  "sidebar.switch_vault": "Tresor wechseln …",
   "start.failed": "Ein Fehler ist aufgetreten.\n\nNäheres steht in der Protokolldatei.",
   "status.dismiss": "Ausblenden",
-  "status.more": "+{n} weitere"
+  "status.more": "+{n} weitere",
+  "vault.none_open": "Es ist kein Tresor geöffnet.",
+  "vault.pick": "Tresor auswählen",
+  "vault.show_failed": "Der Ordner des Tresors konnte nicht angezeigt werden."
 }

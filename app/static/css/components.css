@@ -1,5 +1,6 @@
-/* Components: the parts several areas share (tools, grips, ...). They
-   come before the areas, so an area's rule can override them. */
+/* Components: the parts several areas share (tools, menus, grips, pane
+   heads, ...). They come before the areas, so an area's rule can override
+   them. */
 
 /* Tool buttons (toolbars, pane heads): no chrome until hovered or pressed. */
 .tool {
@@ -23,6 +24,43 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
+}
+
+/* Popup menu (showMenu, ui/menu.js): the vault menu */
+.menu {
+  position: fixed;
+  display: block;
+  min-width: 190px;
+  padding: 4px 0;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  box-shadow: var(--shadow-pop);
+  z-index: 50;
+  overflow: auto;
+  max-height: 100%;
+}
+
+.menu__item {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-top: 1px solid transparent;
+  font: 400 var(--fs-body)/1 var(--f-chrome);
+  color: var(--c-ink);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu__item:hover {
+  background: var(--c-card);
+}
+
+.menu__label {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Resize grip on a pane's left edge; --end puts it on the right edge. */
@@ -62,4 +100,16 @@
   border-left: 2px solid var(--c-danger);
   font: 400 var(--fs-small)/1.4 var(--f-chrome);
   color: var(--c-ink);
+}
+
+/* The strip atop a pane: the vault header. */
+.pane-head {
+  width: 100%;
+  height: var(--h-topbar);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--p-gutter);
+  font: 500 var(--fs-sub)/1 var(--f-serif);
 }

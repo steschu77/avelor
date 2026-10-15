@@ -6,6 +6,8 @@ mod api;
 mod app;
 mod close;
 mod config;
+mod indexing;
+mod jobs;
 mod page;
 mod protocol;
 mod shell;
@@ -31,8 +33,12 @@ pub fn main() {
 fn run() -> Result<()> {
     let paths = sys::paths()?;
     let _ = logger::init_logger(&paths.log_dir());
-    let config = config::load_config(&paths.config_dir())?;
+    let mut config = config::load_config(&paths.config_dir())?;
     texts::init(config.language());
+    // `avelor <folder>` opens that vault for this session.
+    if let Some(vault) = std::env::args_os().nth(1) {
+        config.set_session_vault(std::path::absolute(vault)?);
+    }
 
     sys::run(&paths, config)
 }

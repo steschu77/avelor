@@ -45,13 +45,15 @@ the build can check it.
 ## The host's texts <a id="host-texts"></a>
 
 The host gives the page a text as its key and what its placeholders are
-given, `{key, args}` (`texts::Text`): a notice and an error's reply (the
-host's words, or the code's own text). An argument is a string, a number
-or a text itself, which the page writes as its locale does (`textOf`); a
-count's form follows the language's rules, a contributed language's too.
+given, `{key, args}` (`texts::Text`): a notice, an error's reply (the
+host's words, or the code's own text), and a job's label and its summary
+(a list of parts). An argument is a string, a number or a text itself,
+which the page writes as its locale does (`textOf`); a count's form
+follows the language's rules, a contributed language's too.
 
 What the host shows or writes itself it takes from the same catalogs,
-plain texts only: the failed start's box (`texts::text`).
+plain texts only: the failed start's box and the folder picker's title
+(`texts::text`).
 
 ## The language <a id="language"></a>
 

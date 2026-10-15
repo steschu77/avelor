@@ -13,6 +13,8 @@
   --c-card: #ffffff;
   /* primary text */
   --c-ink: #16161a;
+  /* body copy */
+  --c-ink-soft: #232329;
   /* icons */
   --c-ink-mute: #565660;
   --c-label: rgba(22, 22, 26, 0.55);
@@ -24,17 +26,24 @@
   /* a pane lifted above the one to its left: the panel */
   --shadow-raise: -12px 0 24px -14px rgba(22, 22, 26, 0.28);
 
+  --f-serif: Georgia, serif;
   --f-chrome: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
 
+  --fs-label: 9px;
   --fs-meta: 10px;
   --fs-ui: 11px;
   --fs-small: 12px;
+  --fs-body: 13px;
+  --fs-sub: 15px;
+  --track-label: 0.13em;
 
   --h-topbar: 36px;
   --h-control-sm: 22px;
   /* an icon (index.html's sprite, build.rs) */
   --h-icon: 16px;
 
+  /* sidebar inset */
+  --p-gutter: 12px;
   /* x inset of content panes: the right panel */
   --p-pane: 20px;
 

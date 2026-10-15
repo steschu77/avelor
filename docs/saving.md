@@ -15,7 +15,7 @@ the status bar).
 The window's Close doesn't destroy the window at once: the host asks
 the page first (`close::on_close`; `close.rs`, `features/close.js`).
 
-- **Refused** while a handler runs.
+- **Refused** while a dialog or a handler runs.
 - **The request.** The host sends the event `close {id}` on every Close.
   A second Close while it is asked asks nothing more.
 - **What the page does.** The page answers `close_ready {id, ready}`.

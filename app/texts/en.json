@@ -1,8 +1,21 @@
 {
   "config.unread": "config.yaml couldn't be read; the app started with the default settings.",
   "error.code": "Something went wrong ({code}).",
+  "indexing.label": "Indexing {path}",
+  "indexing.replaced": "replaced by another indexing",
+  "indexing.unread": {
+    "one": "{n} file couldn't be read",
+    "other": "{n} files couldn't be read"
+  },
+  "menu.close": "Close the menu",
   "save.settings": "Could not save the settings.",
+  "sidebar.no_vault": "No vault",
+  "sidebar.show_in_folder": "Show in folder",
+  "sidebar.switch_vault": "Switch vault…",
   "start.failed": "An error occurred.\n\nCheck the log file for more information.",
   "status.dismiss": "Dismiss",
-  "status.more": "+{n} more"
+  "status.more": "+{n} more",
+  "vault.none_open": "No vault is open.",
+  "vault.pick": "Select Vault",
+  "vault.show_failed": "Could not show the vault's folder."
 }
