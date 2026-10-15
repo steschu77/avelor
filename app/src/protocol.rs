@@ -7,6 +7,7 @@ use std::sync::Arc;
 use crate::api;
 use crate::app::Prefs;
 use crate::app::{App, UiQueue};
+use crate::close;
 use av_utils::error::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -31,6 +32,8 @@ enum Command {
     // The page's preferences (`api`).
     Ready,
     SetPrefs(PagePrefs),
+    /// The page's answer to the event `close` (`close::close_ready`).
+    CloseReady(close::Answer),
 }
 
 /// `{prefs}`: the page's preferences, strings.
@@ -47,6 +50,7 @@ impl Command {
         Ok(match cmd {
             "ready" => Command::Ready,
             "set_prefs" => Command::SetPrefs(from_value(args)?),
+            "close_ready" => Command::CloseReady(from_value(args)?),
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
                 return Err(serde::de::Error::custom(unknown));
@@ -75,6 +79,7 @@ fn route(app: &mut App, req: Req, command: Command) {
     match command {
         Command::Ready => api::ready(app, req),
         Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
+        Command::CloseReady(a) => close::close_ready(app, req, a),
     }
 }
 

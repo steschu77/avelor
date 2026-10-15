@@ -49,6 +49,7 @@ read by OCR.
 |---|---|
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
+| `saving.md` | closing |
 | `api.md` | the protocol: transport, rules, the page's side, every command |
 | `ui.md` | the main window: layout, status bar, preferences |
 
@@ -91,7 +92,9 @@ The rules the code follows, and every change to it:
 8. **The UI thread never waits for the page.** The page is reached only
    through the UI thread's message queue, so a wait for it there needs a
    nested message loop. A Win32 message that needs an answer at once
-   (`WM_QUERYENDSESSION`) gets it from what the host already knows.
+   (`WM_QUERYENDSESSION`) gets it from what the host already knows. A
+   request the page can answer later (`WM_CLOSE`) is asked, with a
+   timeout.
 
 ## Runtime
 
@@ -100,6 +103,7 @@ The rules the code follows, and every change to it:
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
 | UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler | — |
+| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
 | WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
 
 ### One way in <a id="one-way-in"></a>
@@ -125,8 +129,10 @@ Every way into `App` — page messages, the window state — goes through the
 
 ### Closing
 
-Windows ending the session waits for nothing (principle 8); on Linux the
-session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
+The window's Close asks the page first; Windows ending the session waits
+for nothing (principle 8); on Linux the session manager's `query-end`,
+SIGTERM and SIGHUP end it the same way. Both are
+`saving.md#closing-the-app`.
 
 ## Crates <a id="crates"></a>
 
@@ -140,18 +146,19 @@ session manager's `query-end`, SIGTERM and SIGHUP end it the same way.
 | Module | Responsibility |
 |---|---|
 | `main.rs` | logger, panic hook, the config (`load_config`) |
-| `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net (`architecture.md#platforms`) |
+| `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net, Close to `App` (`architecture.md#platforms`) |
 | `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences and the platform's `BRIDGE_JS` |
 | `sys/mod.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
 | `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); message boxes |
-| `sys/win32/mod.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; `UiSignal` (`WM_TASK`) |
+| `sys/win32/mod.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
 | `sys/win32/webview.rs` | WebView2 environment/controller, message handler, `NavigateToString`; App's outbox (`PostWebMessageAsString`) |
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
-| `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`) |
+| `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App`, the config writes no request asked for (`save_window_state`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `UiQueue` / `UiTask` |
+| `app.rs` | `App`, the config writes no request asked for (`save_window_state`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `run`, `UiQueue` / `UiTask` (`close_window`) |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
-| `testing.rs` | the test harness: `Harness::call` |
+| `testing.rs` | the test harness: `Harness::call`, the collected events |
+| `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; its dispatch tests |
 | `api.rs` | `ready`, `set_prefs` |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
@@ -176,7 +183,7 @@ the only `cfg(target_os)` in `app/src`:
 - `paths()`: the config, log and web view folders.
 - `run(paths, config)`: the window, the web view and the main loop;
   returns once the window is gone.
-- `UiSignal` (`Send + Sync`): `wake()`. `UiQueue` holds one instead of an
+- `UiSignal` (`Send + Sync`): `wake()` and `close()`. `UiQueue` holds one instead of an
   `HWND`; tests use `UiSignal::none()`.
 - `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
   is up, else stderr), and `BRIDGE_JS`.
@@ -185,6 +192,7 @@ the only `cfg(target_os)` in `app/src`:
 
 - the queue runner and the re-entrancy net (`App` in a
   `RefCell<Option<_>>`, the deferred flag; `architecture.md#one-way-in`);
+- close, the app's own close;
 - the window state.
 
 Each platform's window only turns its native events into calls on it,
@@ -192,6 +200,7 @@ so the subtle part is written once:
 
 | Event | Windows | GTK4 |
 |---|---|---|
+| Close | `WM_CLOSE` | `close-request` |
 | Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
 
 **The page's bridge.** `page.rs` builds the page for both platforms:
@@ -219,6 +228,7 @@ nothing imports `app.js`.
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `model/state.js` | the store and its schema (`notices`, the preferences); `savePrefs`, `showError` |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
+| `features/close.js` | closing the app: the `close` event answered `close_ready` |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
@@ -289,7 +299,7 @@ A broken `config.yaml` is set aside at start, without a question, as
 `config.yaml.broken`; an older one is kept, and the broken file is
 dropped. A key `config.yaml` doesn't know is kept as it is, so the
 settings of another version survive a save. Every overwriting write here
-is atomic.
+is atomic (`saving.md#atomic-writes`).
 
 ## Build <a id="build"></a>
 

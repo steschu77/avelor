@@ -4,6 +4,7 @@
 
 mod api;
 mod app;
+mod close;
 mod config;
 mod page;
 mod protocol;

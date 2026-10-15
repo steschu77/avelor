@@ -2,8 +2,10 @@
 //! principle 7).
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
 use crate::protocol::{self, Req};
 use crate::sys::UiSignal;
@@ -23,6 +25,9 @@ pub struct App {
     outbox: Outbox,
     pub config: ConfigStore,
     ui: Arc<UiQueue>,
+
+    /// The close asked of the page (`close`).
+    pub close: CloseState,
 }
 
 impl App {
@@ -30,7 +35,12 @@ impl App {
     /// `ui` is the window's task queue: the shell runs what is queued on it
     /// (`Shell::run_tasks`). Every message to the page goes to `outbox`.
     pub fn new(ui: Arc<UiQueue>, outbox: Outbox, config: ConfigStore) -> Self {
-        Self { outbox, config, ui }
+        Self {
+            outbox,
+            config,
+            ui,
+            close: CloseState::default(),
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -71,6 +81,32 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
+    /// Run blocking `work` on a worker thread, then apply its output on the
+    /// UI thread.
+    pub fn run<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+        apply: impl FnOnce(&mut App, T) + Send + 'static,
+    ) {
+        let ui = Arc::clone(&self.ui);
+        let spawned = std::thread::Builder::new()
+            .name("avelor-worker".to_string())
+            .spawn(move || {
+                let out = work();
+                ui.send_to_ui(move |app| apply(app, out));
+            });
+        if let Err(e) = spawned {
+            log::error!("Could not start a worker thread: {e}");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The UI queue, for what must run after the current task.
+    pub(crate) fn ui(&self) -> &UiQueue {
+        &self.ui
+    }
+
+    // ------------------------------------------------------------------------
     /// Remember the main window's state in the app config, writing it only
     /// if it changed (a plain move ends a drag too). A failure is shown in
     /// the status bar (`notice`); the window works on.
@@ -101,6 +137,8 @@ pub enum UiTask {
 pub struct UiQueue {
     signal: UiSignal,
     tasks: Mutex<VecDeque<UiTask>>,
+    /// Whether `close_window` was called; what a test can look at.
+    closed: AtomicBool,
 }
 
 // ----------------------------------------------------------------------------
@@ -110,7 +148,24 @@ impl UiQueue {
         Self {
             signal,
             tasks: Mutex::new(VecDeque::new()),
+            closed: AtomicBool::new(false),
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Have the window close (`UiSignal::close`): how `App` ends the program
+    /// once the page is ready (`close`). A queue without a window (in
+    /// tests) only remembers it.
+    pub fn close_window(&self) {
+        self.closed.store(true, Ordering::Relaxed);
+        self.signal.close();
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether the window was asked to close (`close_window`).
+    #[cfg(test)]
+    pub fn window_closed(&self) -> bool {
+        self.closed.load(Ordering::Relaxed)
     }
 
     // ------------------------------------------------------------------------

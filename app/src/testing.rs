@@ -91,3 +91,11 @@ pub fn parse(sent: &[String]) -> Vec<Value> {
         .map(|text| serde_json::from_str(text).unwrap())
         .collect()
 }
+
+// ----------------------------------------------------------------------------
+/// Each message as its event's name, `reply` for an answer.
+pub fn shape(sent: &[Value]) -> Vec<&str> {
+    sent.iter()
+        .map(|m| m["ev"].as_str().unwrap_or("reply"))
+        .collect()
+}

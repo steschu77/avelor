@@ -15,7 +15,7 @@ a reply or an event from the host (`app/src/protocol.rs`,
 
 The host decodes a message in `protocol::on_message` into a `Command` (one
 enum variant per command) and routes it to its feature module's function,
-which answers through a `Req`. 2 commands, 1 event.
+which answers through a `Req`.
 
 ## Rules <a id="rules"></a>
 
@@ -68,6 +68,14 @@ Host modules: `api.rs`.
 | `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). `null`. |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
 
+### Jobs and closing
+
+Host module: `close.rs`.
+
+| Command | Args | Reply and pushes |
+|---|---|---|
+| `close_ready` | `{ id, ready }` | The page's answer to the `close` event `id` (`saving.md#closing-the-app`): `ready` closes the window; not ready keeps it. An answer to an earlier close changes nothing. `null`. |
+
 ## Events <a id="events"></a>
 
 What the host pushes; the page listens with `rpcOn`.
@@ -75,3 +83,4 @@ What the host pushes; the page listens with `rpcOn`.
 | Event | Data | Pushed when |
 |---|---|---|
 | `notice` | `{ level: "error", message }` | `error`: the settings couldn't be saved where no command asked for it (the window's size), or `config.yaml` couldn't be read at start (on `ready`). A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |
+| `close` | `{ id }` | The window's Close (`saving.md#closing-the-app`). |

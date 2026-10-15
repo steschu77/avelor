@@ -20,11 +20,14 @@ use windows::core::{HSTRING, PCWSTR, w};
 
 /// The app's queue has tasks to run (`UiSignal::wake`).
 const WM_TASK: u32 = WM_USER + 1;
+/// The app's close, once the page is ready (`UiSignal::close`).
+const WM_CLOSE_NOW: u32 = WM_USER + 2;
 const WINDOW_CLASS: PCWSTR = w!("Avelor");
 
 // ----------------------------------------------------------------------------
 /// Wakes the app's queue from any thread: `WM_TASK`, posted to the main
-/// window, runs it (`Shell::run_tasks`).
+/// window, runs it (`Shell::run_tasks`); and closes the window for the
+/// app (`WM_CLOSE_NOW`).
 pub struct UiSignal {
     hwnd: isize, // isize is Send+Sync, unlike HWND's raw pointer
 }
@@ -47,16 +50,22 @@ impl UiSignal {
     // ------------------------------------------------------------------------
     /// Have the window run the queue (`WM_TASK`).
     pub fn wake(&self) {
+        self.post(WM_TASK);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Have the window close (`WM_CLOSE_NOW`).
+    pub fn close(&self) {
+        self.post(WM_CLOSE_NOW);
+    }
+
+    // ------------------------------------------------------------------------
+    fn post(&self, msg: u32) {
         if self.hwnd == 0 {
             return;
         }
         unsafe {
-            let _ = PostMessageW(
-                Some(HWND(self.hwnd as *mut _)),
-                WM_TASK,
-                WPARAM(0),
-                LPARAM(0),
-            );
+            let _ = PostMessageW(Some(HWND(self.hwnd as *mut _)), msg, WPARAM(0), LPARAM(0));
         }
     }
 }
@@ -227,6 +236,8 @@ impl WindowProc {
         match msg {
             WM_CREATE => self.on_create(),
             WM_DESTROY => self.on_destroy(),
+            WM_CLOSE => self.on_close(),
+            WM_CLOSE_NOW => self.on_close_now(),
             WM_QUERYENDSESSION => self.on_query_end_session(lparam),
             WM_ENDSESSION => self.on_end_session(wparam.0 != 0),
             WM_SIZE => {
@@ -261,6 +272,33 @@ impl WindowProc {
             let _ = unsafe { controller.Close() };
         }
         unsafe { PostQuitMessage(0) };
+        LRESULT(0)
+    }
+
+    // ------------------------------------------------------------------------
+    /// The window's Close: the app asks the page first, and closes the
+    /// window once it is ready (`close`); before the WebView is up there is
+    /// no page to ask. Refused while a handler is still running: a modal
+    /// loop dispatched this message.
+    fn on_close(&self) -> LRESULT {
+        if self.shell.is_busy() {
+            log::info!("Close refused: a handler is still running");
+            return LRESULT(0);
+        }
+        if !self.shell.on_close() {
+            return self.on_close_now();
+        }
+        LRESULT(0)
+    }
+
+    /// The app closes the window (`UiQueue::close_window`). Refused like
+    /// `WM_CLOSE` while a handler runs; closing again asks again.
+    fn on_close_now(&self) -> LRESULT {
+        if self.shell.is_busy() {
+            log::info!("Close refused: a handler is still running");
+            return LRESULT(0);
+        }
+        let _ = unsafe { DestroyWindow(self.hwnd()) };
         LRESULT(0)
     }
 

@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::app::Prefs;
 use crate::app::{App, Outbox, UiQueue, UiTask};
+use crate::close;
 use crate::config::{ConfigStore, WindowState};
 use crate::sys::UiSignal;
 use av_utils::error::Error;
@@ -86,6 +87,22 @@ impl Shell {
         ui.push(UiTask::App(Box::new(f)));
         self.run_tasks();
         Ok(())
+    }
+
+    // ------------------------------------------------------------------------
+    /// The window's Close: `App` asks the page first (`close::on_close`) and
+    /// closes the window once it is ready. False before `App` is up: there
+    /// is no page to ask, and the window closes at once.
+    pub fn on_close(&self) -> bool {
+        self.queue(close::on_close).is_ok()
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether a handler is running further up the stack: a modal loop
+    /// inside it dispatched this message. The window's Close is refused
+    /// then.
+    pub fn is_busy(&self) -> bool {
+        self.app.try_borrow_mut().is_err()
     }
 
     // ------------------------------------------------------------------------
