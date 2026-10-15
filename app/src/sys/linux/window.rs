@@ -8,8 +8,12 @@ use crate::shell::{Shell, TITLE};
 
 // ----------------------------------------------------------------------------
 /// Create the main window of `app` in the state the shell saved, or at the
-/// default size if there is none, and show it.
-pub fn create(app: &gtk::Application, shell: &Rc<Shell>) -> gtk::ApplicationWindow {
+/// default size if there is none, with `webview` filling it, and show it.
+pub fn create(
+    app: &gtk::Application,
+    webview: &webkit6::WebView,
+    shell: &Rc<Shell>,
+) -> gtk::ApplicationWindow {
     let state = shell.window_state();
     let window = gtk::ApplicationWindow::builder()
         .application(app)
@@ -17,6 +21,7 @@ pub fn create(app: &gtk::Application, shell: &Rc<Shell>) -> gtk::ApplicationWind
         .default_width(state.width)
         .default_height(state.height)
         .maximized(state.maximized)
+        .child(webview)
         .build();
 
     // GTK has no end of a resize drag: the size is saved when the window
