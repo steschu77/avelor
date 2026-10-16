@@ -1,5 +1,6 @@
 {
   "card.edit": "Dokument bearbeiten",
+  "card.leave_thread": "Aus dem Verlauf entfernen",
   "config.unread": "config.yaml konnte nicht gelesen werden; die App ist mit den Standardeinstellungen gestartet.",
   "conflict.changed_editing": "Die Datei auf der Festplatte hat sich {when} geändert, während du sie hier bearbeitet hast. Wähle, welche Fassung bleiben soll.",
   "conflict.changed_unsaved": "Die Datei auf der Festplatte hat sich {when} geändert, daher wurde deine Änderung nicht gespeichert. Lade die Fassung von der Festplatte und nimm die Änderung erneut vor.",

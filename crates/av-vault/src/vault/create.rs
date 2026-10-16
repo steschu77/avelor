@@ -5,8 +5,9 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use super::{Changes, Entry, Index};
+use super::{Changes, Entry, Index, SaveOutcome};
 use crate::document::{Document, FileFormat};
+use crate::envelope::Thread;
 use crate::envelope::{Empty, Project, Roles, Source};
 use crate::filename;
 use crate::schema::layout;
@@ -23,6 +24,54 @@ impl Index {
     // conflict writes nothing -- then changes and saves entity by entity,
     // recording each file it wrote in `changes`. A failed save restores that
     // entity's in-memory state, so the index always matches the disk.
+
+    /// Create a new thread titled `title` with `members` as its members;
+    /// its id is `changes.created`. It has no projects of its own: its
+    /// projects are its members' (vault.md#thread). The thread's file gets
+    /// its generated name (`filename::generated_name`) in the first
+    /// member's folder, and is never written over an existing file.
+    pub fn create_thread(
+        &mut self,
+        title: String,
+        members: &[Id],
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        let Some(first) = members.first() else {
+            return Err(Error::InvalidArgument {
+                arg: "members".into(),
+            });
+        };
+        for id in members {
+            self.check_writable(id)?;
+        }
+        if let Some(changed) = self.first_changed(members)? {
+            return Ok(SaveOutcome::Conflict(changed));
+        }
+        let folder = self.entry(first).and_then(|e| e.local.parent());
+        let folder = folder.map(Path::to_path_buf).unwrap_or_default();
+
+        let roles = Roles {
+            thread: Some(Thread {}),
+            ..Default::default()
+        };
+        let doc = Document::create(
+            roles,
+            Source::Created(Empty {}),
+            title,
+            Vec::new(),
+            FileFormat::YAML,
+        );
+        let id = self.create(doc, &folder, changes)?;
+
+        for member in members {
+            if let conflict @ SaveOutcome::Conflict(_) =
+                self.update(member, changes, |doc| doc.join_thread(id))?
+            {
+                return Ok(conflict);
+            }
+        }
+        Ok(SaveOutcome::Saved)
+    }
 
     /// Create a new project titled `title`. Its file gets its generated
     /// name (`filename::generated_name`) in `Projects/`, the conventional

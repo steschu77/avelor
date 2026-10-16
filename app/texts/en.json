@@ -1,5 +1,6 @@
 {
   "card.edit": "Edit document",
+  "card.leave_thread": "Remove from thread",
   "config.unread": "config.yaml couldn't be read; the app started with the default settings.",
   "conflict.changed_editing": "The file on disk changed {when} while you were editing it here. Choose which version to keep.",
   "conflict.changed_unsaved": "The file on disk changed {when}, so your change wasn't saved. Load the version on disk, then make the change again.",
