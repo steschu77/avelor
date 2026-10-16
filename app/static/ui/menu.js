@@ -1,6 +1,7 @@
 // The popup menu every menu of the page uses (ui.md): `showMenu` opens one
 // at its anchor, `closeMenu` closes it, and so do a click outside it and
-// Esc (the `menu.close` action).
+// Esc (the `menu.close` action, which runs before the vault pages' Esc,
+// ui/page.js, as app.js imports this file first).
 
 import { accEl } from '../core/dom.js';
 import { iconEl } from './icons.js';

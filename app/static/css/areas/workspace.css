@@ -1,5 +1,136 @@
-/* The pages of the expanded vault area: the Workspace pages
-   (features/workspace/: trash). The page itself is a component. */
+/* The pages of the expanded vault area: New (features/new.js) and the
+   Workspace pages (features/workspace/: trash). The page itself is a
+   component. */
+
+/* New (features/new.js): the sheet of the entity being
+   made, raised on the card layer */
+.new__sheet {
+  /* the form's inset, which its foot's rule spans (the Task tab's is the
+     pane's) */
+  --p-new-x: var(--p-sheet-x);
+  max-width: var(--w-new-sheet);
+  display: flex;
+  flex-direction: column;
+  padding: var(--p-sheet-y) var(--p-sheet-x) 0;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  box-shadow: var(--shadow-card);
+}
+
+.new__kind {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.new__kind>.icon {
+  font-size: var(--fs-sub);
+  color: var(--c-ink-mute);
+}
+
+.new__title-label {
+  margin-top: 18px;
+}
+
+.new__title {
+  margin-top: 6px;
+  width: 100%;
+  height: var(--h-new-title);
+  padding: 0 10px;
+  font: 500 var(--fs-doc-title)/1.2 var(--f-serif);
+}
+
+/* the folder the file goes to */
+.new__path {
+  margin-top: 8px;
+  color: var(--c-ink-mute);
+}
+
+.new__rows {
+  margin-top: 16px;
+}
+
+.new__rows .form-field>.seg {
+  margin-left: 0;
+}
+
+.new__date {
+  flex: none;
+  width: var(--w-new-date);
+}
+
+.new__time {
+  flex: none;
+  width: var(--w-new-time);
+}
+
+.new__body-head {
+  margin-top: 22px;
+}
+
+.new__body {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 132px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  resize: vertical;
+  font: 400 var(--fs-body)/var(--lh-body) var(--f-serif);
+  color: var(--c-ink-soft);
+}
+
+/* a list's items, one input each */
+.new__items {
+  display: flex;
+  flex-direction: column;
+}
+
+.new__item {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--c-line);
+  font: 400 var(--fs-body)/1 var(--f-serif);
+}
+
+.new__item-remove {
+  opacity: 0;
+}
+
+.new__item:hover .new__item-remove,
+.new__item:focus-within .new__item-remove {
+  opacity: 1;
+}
+
+.new__add-item {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.new__error {
+  margin-top: 16px;
+}
+
+/* the task the Task tab made before, with a button that shows it */
+.new__created {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Create (and Cancel), on a rule across the form */
+.new__foot {
+  margin: 24px calc(-1 * var(--p-new-x)) 0;
+  padding: 12px var(--p-new-x);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--c-line);
+}
 
 /* Trash (Workspace -> Trash, features/workspace/trash.js): the files in the vault's trash,
    each with Restore and Delete; Empty trash in the head */

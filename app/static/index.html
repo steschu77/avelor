@@ -60,6 +60,7 @@
     <div class="pane-section pane-section--ruled toolbar">
       <button type="button" class="tool" data-cmd="edit" title="Edit document"><svg class="icon"><use href="#i-edit" /></svg></button>
       <button type="button" class="tool" data-cmd="link" title="Link to another entity"><svg class="icon"><use href="#i-link" /></svg></button>
+      <button type="button" class="tool" data-cmd="task" title="New task for this"><svg class="icon"><use href="#i-clipboard-task" /></svg></button>
       <button type="button" class="tool tool--danger push" data-cmd="thread"
         title="Remove from thread"><svg class="icon"><use href="#i-arrow-step-in-left" /></svg></button>
       <button type="button" class="tool tool--danger" data-cmd="delete" title="Delete document"><svg class="icon"><use href="#i-delete" /></svg></button>
@@ -77,6 +78,12 @@
           <span id="vault-name"></span>
         </div>
         <div class="sidebar__scroll">
+          <a class="nav-item nav-item--compact" id="new-item" data-vault-op="new" data-action="new"
+            aria-haspopup="menu">
+            <svg class="icon"><use href="#i-add" /></svg>
+            New<kbd>CTRL+N</kbd>
+          </a>
+
           <div class="nav-section label"><svg class="icon disclosure"><use href="#i-chevron-down" /></svg>Projects
             <button type="button" id="add-project-btn" class="nav-section__add"
               title="Add project"><svg class="icon"><use href="#i-add" /></svg></button>
@@ -181,6 +188,8 @@
         <!-- Tabs about what the panel shows (context.js) -->
         <div class="context">
           <nav class="tabs context__tabs" id="context-tabs" role="tablist"></nav>
+          <!-- A new task for what is shown (features/new.js) -->
+          <div id="context-task" class="context__pane" hidden></div>
           <!-- The links of what is shown (features/linked.js) -->
           <div id="context-linked" class="context__pane" hidden></div>
         </div>

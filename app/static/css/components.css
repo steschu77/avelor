@@ -1,9 +1,10 @@
-/* Components: the parts several areas share (buttons, tools, chips,
-   inputs, menus, grips, list rows, section heads, pane heads, dialogs,
-   the vault area's page, ...). They come before the areas, so an area's rule can override
-   them. */
+/* Components: the parts several areas share (buttons, tools, the
+   segmented control, chips, inputs, menus, grips, list rows, section
+   heads, forms, pane heads, dialogs, the vault area's page, ...). They come
+   before the areas, so an area's rule can override them. */
 
-/* Buttons: bordered and set like a label. */
+/* Buttons: bordered and set like a label; --primary fills with the accent,
+   --ghost drops the border. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -17,6 +18,21 @@
 
 .btn:hover {
   background: var(--c-hover);
+}
+
+.btn--primary,
+.btn--primary:hover {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
+.btn--primary:hover {
+  filter: brightness(1.04);
+}
+
+.btn--ghost {
+  border-color: transparent;
+  color: var(--c-label);
 }
 
 /* Tool buttons (toolbars, pane heads): no chrome until hovered or pressed. */
@@ -87,6 +103,30 @@
 .icon-btn--quiet:hover {
   border-color: var(--c-line);
   color: var(--c-ink);
+}
+
+/* Segmented control: one pressed segment. */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--c-line);
+  color: var(--c-label);
+}
+
+.seg>* {
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.seg>*:hover {
+  background: var(--c-hover);
+}
+
+.seg>[aria-pressed="true"] {
+  background: var(--c-card);
+  color: var(--c-ink);
+  box-shadow: inset 0 0 0 1px var(--c-line);
 }
 
 /* Pills: --tag fills with the accent, --action can be clicked. */
@@ -308,6 +348,11 @@
   color: var(--c-ink);
 }
 
+/* a segmented control sits on the rule */
+.section-head>.seg {
+  margin: 0 0 -7px auto;
+}
+
 .section-head__note {
   margin-left: auto;
   color: var(--c-label);
@@ -344,6 +389,44 @@
 .empty__title {
   color: var(--c-ink-mute);
   font-size: var(--fs-body);
+}
+
+/* Form rows: a grid of labels and fields, each field on a rule. */
+.form-grid {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 0 16px;
+  align-items: center;
+}
+
+.form-field {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--c-line);
+  font: 400 var(--fs-body)/1 var(--f-serif);
+}
+
+.form-field>.seg {
+  margin-left: auto;
+}
+
+/* a text input in a field, without a box of its own; it fills the rest of
+   the line, or starts the next one when less than its basis is left */
+.form-input {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--c-ink);
+}
+
+.form-input::placeholder {
+  color: var(--c-label);
 }
 
 /* The strip atop a pane: the vault header, the vault area's title, the
@@ -418,7 +501,8 @@
   box-shadow: inset 0 0 0 2px var(--c-accent);
 }
 
-/* A page of the expanded vault area (ui/page.js): the Workspace pages. */
+/* A page of the expanded vault area (ui/page.js): the Workspace pages
+   and New. */
 .page {
   padding: var(--p-page-y) var(--p-page-x);
   display: flex;

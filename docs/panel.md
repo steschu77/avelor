@@ -83,8 +83,8 @@ template itself:
   editing toolbar, passed to `createEditor()`'s `toolbar` option.
 - **`#preview-toolbar-template`** — the action row:
   `data-cmd="edit"` (edit mode, if the entity is `editable`; one card in
-  edit mode at a time), `data-cmd="link"` (the context column's Linked
-  tab), `data-cmd="thread"`
+  edit mode at a time), `data-cmd="link"` and `data-cmd="task"` (the
+  context column's Linked and Task tabs), `data-cmd="thread"`
   (remove from thread) and `data-cmd="delete"`. The template's elements
   carry no ids, since it is cloned for every card.
 
@@ -218,6 +218,13 @@ the panel shows (`features/context.js`: `registerContextTab`,
 `selectContextTab`).
 A tab picked by its button focuses its first field.
 
+- **Task** — the New form for a task `linked-to` the selected card, else
+  the shown thread (`features/new.js`); a draft per card. The card's Task button
+  (`openTaskTab`) selects the card, expands the panel and opens the tab.
+  The projects are
+  the card's, else the sidebar's (`projectsFor`). Create or Ctrl+Enter
+  (focus in the tab) creates the task; the card stays shown, and the form
+  clears and notes the new task, with Open (`createdNote`).
 - **Linked** — `panel.md#links`.
 
 ## Links <a id="links"></a>
@@ -259,7 +266,9 @@ entity (`renderCardChips`, `features/panel/panel.js`).
   down move the highlight, Enter or a click picks, Esc closes.
 - A project picked joins it (`joinProjectLocal` → `join_project`), a label
   is added (`setTagsLocal` → `set_tags`); a label chip's × removes it.
-- The filter is `showMenu`'s (`ui/menu.js`), its `filter` option.
+- The filter is `showMenu`'s (`ui/menu.js`), its `filter` option. The
+  New page and the Task tab have the same row and "+" (`renderNewChips`,
+  `features/new.js`), which fill the draft.
 
 ## Titles <a id="titles"></a>
 
@@ -459,6 +468,7 @@ and save their bodies at once.
 | D3 | Edit | card Edit (if `editable`) → `setMessageEditMode` | — | one card in edit mode at a time; Esc leaves |
 | D5 | Delete | card delete, two clicks within 3 s → save first → `deleteEntityLocal` | `delete_entity` → `Index::delete` (dissolve threads, move to `.trash/`) → `entity_deleted`, changed members as `entity`, the answer | neighbour selected (`selectionWithout`) |
 | D6 | Labels | card "+" → `addChip`'s menu: a label in use or "New label", Enter or a click; a chip's × → `setTagsLocal` | `set_tags` → `entity` | the card's chips follow |
+| D8 | Task for a card | the card's Task button → `openTaskTab`; Create or Ctrl+Enter → `createNew` | `create_entity`, a task `linked-to` the card → `entity`, `ok {id}` | the card stays shown; the form clears and notes the new task |
 | D9 | Link | the card's Link button → `openLinkedTab`; a result's click or Enter → `setLinkLocal` | `set_link {id, to}` → `Index::set_link` → `entity` | the card's chips and the tab follow; an older link is replaced |
 | D10 | Unlink | × on a link chip or a Linked tab row → `setLinkLocal(id, null)` on the entity holding the link | `set_link {id, to: null}` → `entity` | the key removed |
 | D11 | Follow a link | a link chip, a Linked tab row, or an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |

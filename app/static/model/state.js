@@ -25,7 +25,7 @@ export const store = createStore({
   threads_rev: 0,
   entities_rev: 0,
   selected_project: null, // project filter: one, NO_PROJECT (in none) or null (all), see matchesFilter
-  vault_op: null, // the Workspace op shown in the expanded vault area ("trash")
+  vault_op: null, // the Workspace op shown in the expanded vault area ("new", "trash")
   vault_expanded: false, // the vault area is open
   // the panel's width: 'closed', 'normal' or 'expanded' (full width)
   panel_size: 'normal',

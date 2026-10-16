@@ -28,8 +28,10 @@
   box-shadow: 0 1px 0 var(--c-card);
 }
 
-/* a tab of the column: Linked (features/linked.js) */
+/* a tab of the column: Task, the New form (features/new.js) for a task
+   about what is shown, with its inset; Linked (features/linked.js) */
 .context__pane {
+  --p-new-x: var(--p-pane);
   flex: 1;
   min-height: 0;
   overflow: auto;

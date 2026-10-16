@@ -1,18 +1,23 @@
-// The page's entry (architecture.md#page): it tells the host the page
+// The page's entry (architecture.md#page): it starts the lenses, wires the
+// renders to the model (the lenses, the sidebar, the dirty dots), closes a
+// page about the old vault when another opens, and tells the host the page
 // listens (`ready`). Nothing imports it.
 //
 // Its imports run the page's modules (development.md#the-bundled-page): each
-// module that acts when it loads -- registers an action or a tab, subscribes to
-// the store, listens to the host or the DOM -- is imported here, in the
-// order it acts: the context tabs as the strip shows them
+// module that acts when it loads -- registers an action, a page or a tab,
+// subscribes to the store, listens to the host or the DOM -- is imported
+// here, in the order it acts: the menu's Esc before the vault pages'
+// (core/actions.js), the context tabs as the strip shows them
 // (features/context.js). A module that only declares names runs when
 // another first imports it.
 
 import { rpcCall } from './core/rpc.js';
+import { rpcOn } from './core/rpc.js';
 import { store } from './model/state.js';
 import { isDirty } from './model/documents.js';
 import './model/events.js';
 import './ui/menu.js';
+import { shownVaultPage } from './ui/page.js';
 import './ui/statusbar.js';
 import { msgControllers } from './features/panel/panel.js';
 import './features/close.js';
@@ -20,6 +25,7 @@ import './features/jobs.js';
 import './features/header.js';
 import './features/conflict.js';
 import './features/workspace/trash.js';
+import './features/new.js';
 import './features/linked.js';
 import './features/layout.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
@@ -70,5 +76,11 @@ store.subscribe(
 // the lens again.
 store.subscribe(({ prefs }) => prefs.doc_types, scheduleRenderDocuments);
 
-// The page listens.
+// Another vault opens (`forgetVault`, model/events.js): a page about the
+// old one (New) closes.
+rpcOn('vault', ({ state }) => {
+  if (state === 'scanning') shownVaultPage()?.close();
+});
+
+// The page listens: the host opens the vault of the last session.
 rpcCall('ready');

@@ -661,9 +661,22 @@ not by location:
 ```
 Vault/
   Projects/            # *.md / *.yaml project descriptors
+  Documents/           # *.md notes made with New
+  Contacts/            # *.md per contact
+  Records/             # *.yaml (IDs, passports, …)
+  Tasks/               # *.md per task
+  Lists/               # *.yaml
+  Calendar/
+    Created Here/      # *.md events made with New, in no calendar
   .trash/              # deleted entities, at their vault-relative path (§ Trash)
   …any user folders for notes, letters, tasks…
 ```
+
+New in the app (`create_entity`, `Index::create_new`) writes a document into
+`Documents/`, a task into `Tasks/`, an event into `Calendar/Created Here/`,
+a contact into `Contacts/`, a list into `Lists/` and a record into
+`Records/`, each with its generated name (`vault.md#filenames`). A new
+thread goes beside its first member.
 
 ## The forged vault
 
@@ -725,7 +738,7 @@ scan read in how many milliseconds.
 A vault scan can't be stopped; a new one replaces it (a vault switch). A
 scan is named by an id: the one replaced is aborted, and the batches and
 the end it already queued are dropped. While the worker walks, the app
-may write a file the walk then finds too (a restore): `Index::apply`
+may write a file the walk then finds too (New, a restore): `Index::apply`
 skips an entry whose id the index already has, since the app's own entry
 is the newer one. Until the scan ends (`App::scanning`), the index holds
 the files read so far: a command for an entity not read yet answers
@@ -739,4 +752,6 @@ page's vault over (`forgetVault`, `model/events.js`). The page forgets:
   were sent before the switch, when every editor left edit mode
   (`switchVault`).
 - the conflicts;
-- the selection and the filter.
+- the selection and the filter;
+- a page about the old vault: New and the Task tab's drafts
+  (`features/new.js`).

@@ -6,6 +6,7 @@
 .label,
 .tabs,
 .btn,
+.seg,
 .section-head,
 .menu__hint,
 .type-toggle {
@@ -57,12 +58,20 @@
   font: 500 var(--fs-doc-title)/1.25 var(--f-serif);
 }
 
+.pane-title {
+  font: 500 var(--fs-pane-title)/1.2 var(--f-serif);
+}
+
 .page-title {
   font: 500 var(--fs-page-title)/1.15 var(--f-serif);
 }
 
 .mono {
   font: 400 var(--fs-small)/1.45 var(--f-mono);
+}
+
+.mono--small {
+  font-size: var(--fs-ui);
 }
 
 /* an icon of the page's sprite (build.rs): its size, in the text's color */

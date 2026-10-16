@@ -1,5 +1,5 @@
-//! The structural commands (`panel.md#saving-structure`): threads,
-//! projects, titles, stars, archiving, labels, links, deletes -- and
+//! The structural commands (`panel.md#saving-structure`): new entities,
+//! threads, projects, titles, stars, archiving, labels, links, deletes -- and
 //! `reload_entity`, the conflict dialog's Use theirs, which ends like
 //! them. Typed commands (`api.md#structure`): each edit goes through
 //! `App::edit`, which pushes every entity it wrote (`entity`,
@@ -8,6 +8,7 @@
 
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
+use av_vault::vault::NewEntity;
 use av_vault::vault::SaveOutcome;
 use av_vault::vault::{Changes, Index};
 use serde::Serialize;
@@ -94,6 +95,16 @@ pub fn create_thread(app: &mut App, req: Req, title: String, members: Vec<Id>) {
         outcome
     });
     answer(app, req, result, created);
+}
+
+// ----------------------------------------------------------------------------
+/// `create_entity`: the entity `new`, made with New -- a document, task,
+/// event, contact, list or record (`Index::create_new`), in its type's
+/// folder.
+pub fn create_entity(app: &mut App, req: Req, new: NewEntity) {
+    let created = app.edit(|index, changes| index.create_new(new, changes));
+    let id = created.as_ref().ok().copied();
+    answer(app, req, created.map(|_| SaveOutcome::Saved), id);
 }
 
 // ----------------------------------------------------------------------------
@@ -285,6 +296,42 @@ mod tests {
             sent[0]["err"]["message"],
             "Could not save the change: it is no longer in the vault."
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_new_task_is_pushed_before_the_answer() {
+        let (mut h, ids) = notes("create-entity", 1);
+        let sent = h.call(
+            "create_entity",
+            json!({
+                "roles": { "task": { "status": "todo", "due": "2026-10-09" } },
+                "title": "Call the landlord",
+                "tags": ["home"],
+                "linked_to": ids[0],
+            }),
+        );
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        let entity = &sent[0]["data"];
+        assert_eq!(entity["kind"], "task");
+        assert_eq!(entity["source"], json!({ "created": {} }));
+        assert_eq!(entity["linked_to"], ids[0].to_string());
+        assert_eq!(entity["task"]["status"], "todo");
+        assert!(
+            entity["path"].as_str().unwrap().starts_with("Tasks"),
+            "{entity}"
+        );
+        assert_eq!(sent[1]["ok"]["id"], entity["id"]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_new_entity_of_another_type_is_refused() {
+        let (mut h, _) = notes("create-refused", 1);
+        let args = json!({ "roles": { "project": {} }, "title": "Move" });
+        let sent = h.call("create_entity", args);
+        assert_eq!(shape(&sent), ["reply"]);
+        assert_eq!(sent[0]["err"]["code"], "invalid_argument");
     }
 
     // ------------------------------------------------------------------------

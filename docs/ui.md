@@ -1,7 +1,8 @@
 # Avelor — User interface
 
 > The main window: its layout, the vault panel with its filters, the
-> lenses, the status bar, the jobs panel, page keys and the preferences.
+> lenses, the status bar, the jobs panel, page keys, New and the
+> preferences.
 
 ## Layout
 
@@ -19,9 +20,10 @@ Both side panels can be extended to full width for focused work and have
 grips to resize them; the widths are remembered across restarts
 (`ui.md#preferences`). Opening a panel never moves the main view's
 layout. The expanded vault area hosts the
-pages of the vault panel: the Workspace pages (Trash). It is expanded only
-while one of them is shown: a page opens it (`openVaultOp`, `ui/page.js`);
-its × or a click on a filter closes it (`closeVaultArea`). Menus are popups
+pages of the vault panel: the Workspace pages (Trash) and New. It is
+expanded only while one of them is shown: a page opens it (`openVaultOp`,
+`ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
+or a click on a filter closes it (`closeVaultArea`). Menus are popups
 (`showMenu`, `ui/menu.js`), which mark their anchor `aria-expanded`.
 
 ## Vault panel <a id="vault-panel"></a>
@@ -125,7 +127,27 @@ when it has a note. How jobs run on the host: `architecture.md#jobs`.
 What a key, a menu or a button starts is a registered action
 (`architecture.md#actions`). The page keys:
 
-- **Esc** closes an open menu.
+- **Esc** closes an open menu, else the page in the expanded vault area
+  (New); in an editor it leaves edit mode.
+- **Ctrl+Enter** runs the open page's main action (Create).
+- **Ctrl+N** opens New.
+- A key the editor already handled (Ctrl+I as italic) is left alone.
+
+The host switches off the browser's accelerator keys so they reach the page
+(`sys/win32/webview.rs`).
+
+## New
+
+The New item and Ctrl+N open a menu of types
+(`showNewMenu`, `features/new.js`): a document, task, event, contact, list or
+record. The choice opens the New page in the expanded vault area
+(`openNew`, op `new`); its projects start with the selected one, and its
+projects and labels share one row with a card's "+" menu
+(`panel.md#labels`). Create or
+Ctrl+Enter (`createNew`) sends `create_entity`, which writes the entity
+into its type's folder (`vault.md#vault-layout`); the area closes and
+the new entity is selected. A failure stays on the page; Esc cancels. The
+Task tab of the context column uses the same form (`panel.md#context-column`).
 
 ## Preferences <a id="preferences"></a>
 
@@ -155,6 +177,7 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
+| D7 | New | New item or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
 | F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selectFilter`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |

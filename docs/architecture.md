@@ -259,7 +259,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
-| `structure.rs` | the structural commands: threads, projects, titles, stars, archiving, labels, links, deletes, `reload_entity`; their answers; their dispatch tests |
+| `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>
@@ -333,17 +333,18 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`), every date format of the page, and counts with their noun (`plural`) |
+| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `localDay`, `relativeDay`), every date format of the page, and counts with their noun (`plural`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`; `serializeMarkdown` |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`, `threadMembers`, `threadProjects`); the selection published minus what is gone (`commitExistingSelection`) |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts (`editorRoots`) |
 | `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinProjectLocal`, …, `setLinkLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc; the two-click confirm (`armedButton`: one armed button page-wide); the editors' toolbars |
 | `ui/field.js` | editing in place (`editTextInPlace`) |
-| `ui/page.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages (`replaceVaultPage`) |
+| `ui/page.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages: their Esc and Ctrl+Enter (`registerVaultPage`), `replaceVaultPage`, which keeps the focus |
+| `ui/segmented.js` | the segmented control (`accSeg`) |
 | `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
 | `features/selection.js`, `features/context.js` | the selection (`selectDocument`, `selectById`, the filter, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`); the context column's tabs and the card's buttons that open them |
 | `features/panel/panel.js` | the side panel renderer (thread, standalone card), its chips, the structural edits it starts, its subscriptions |
@@ -353,10 +354,10 @@ nothing imports `app.js`.
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
-| `features/linked.js` | the Linked tab: links to, linked from, a search to link to |
+| `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the vault area's and the panel's layout, the page items, the sidebar's sections, the panel's close and expand buttons |
-| `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, `ready` |
+| `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, the dirty dots, `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
 | `icons/` | the icons, Fluent UI System Icons (MIT, `icons/LICENSE`), each a file as it comes, joined into the page's sprite by `build.rs` |
 
@@ -389,10 +390,12 @@ A render never sends a change to the host.
 ### Actions <a id="actions"></a>
 
 What a key, a menu or a button starts is registered once
-(`registerAction({id, title, shortcut, when, run})`, `core/actions.js`). One `keydown` handler runs the first action
+(`registerAction({id, title, shortcut, when, run})`, `runAction(id,
+…args)`, `core/actions.js`). One `keydown` handler runs the first action
 with the key's shortcut whose `when` holds; a key something else already
 handled (`defaultPrevented`, Ctrl+I as italic in an editor) is left
-alone. The keys
+alone. The pages of the expanded vault area register what Esc and
+Ctrl+Enter do on them (`registerVaultPage`, `ui/page.js`). The keys
 in use: `ui.md#keys-and-actions`.
 
 ### CSS <a id="css"></a>
@@ -407,8 +410,8 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/tokens.css` | the colors, fonts, sizes, insets, heights, radii, shadows and layers |
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
-| `css/components.css` | what several areas share: `btn`, `tool`, `chip`, `input`, `menu`, `list-row`, `pane-head`, the dialogs, the vault area's `page`, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, editor, assistant (with the context column), workspace (the vault area's pages), header (the lens header, the titles edited in place) |
+| `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `input`, `menu`, `list-row`, `section-head`, the forms, `pane-head`, the dialogs, the vault area's `page`, … |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 

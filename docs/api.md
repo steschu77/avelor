@@ -108,6 +108,7 @@ has no file, is read-only or has broken frontmatter, `not_found`,
 
 | Command | Args | Does | Answer `id` |
 |---|---|---|---|
+| `create_entity` | `{ roles, title, date?, projects?, tags?, linked_to?, content? }` | Make an entity: `roles` are its frontmatter blocks, e.g. `{"task": {"status": "todo", "due": "2026-10-09"}}`, and decide its type — a document, task, event, contact, list or record; anything else is `invalid_argument`, as are an empty title, an event without `start`, a non-project in `projects` and a `linked_to` that isn't in the vault. Written with `created: {}` into its type's folder (`vault.md#vault-layout`), a list or record as YAML without `content`; `date` is an event's start, else the one given, else now. | the new entity |
 | `create_thread` | `{ title, members }` | A thread with these members, without projects of its own (`vault.md#thread`); its file goes beside its first member. | the new thread |
 | `join_thread` | `{ id, thread }` | Make `id` a member of `thread`. | the thread |
 | `leave_thread` | `{ id, thread }` | Remove `id` from `thread`; a thread left with fewer than two members dissolves: the other member leaves too, and the thread's file goes to `.trash`. | the thread |

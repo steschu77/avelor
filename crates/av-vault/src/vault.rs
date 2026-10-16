@@ -30,6 +30,7 @@ use av_utils::fs::write_atomic;
 use av_utils::id::Id;
 use av_utils::text::renormalize;
 use av_utils::text::{LineEnding, normalize};
+use serde::Deserialize;
 
 // ----------------------------------------------------------------------------
 /// What a file looked like when the app last read or wrote it. A file whose
@@ -184,6 +185,24 @@ pub struct Changes {
     pub saved: Vec<Id>,
     /// Entities whose file was moved to `.trash` and which left the index.
     pub trashed: Vec<Id>,
+}
+
+// ----------------------------------------------------------------------------
+/// An entity to make in the app (New, [`Index::create_new`]): its role
+/// blocks, which decide its type, and the well-known fields it starts with.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct NewEntity {
+    pub roles: Roles,
+    pub title: String,
+    /// Not given: now; an event's is its `start`.
+    pub date: Option<DateTime>,
+    pub projects: Vec<Id>,
+    pub tags: Vec<String>,
+    /// The entity it is linked to (`linked-to`).
+    pub linked_to: Option<Id>,
+    /// The markdown body; a list or a record has none.
+    pub content: String,
 }
 
 // ----------------------------------------------------------------------------
@@ -486,6 +505,64 @@ impl Index {
             FileFormat::Markdown,
         );
         self.create(doc, Path::new(layout::PROJECTS), changes)
+    }
+
+    /// Make the entity `new` (New in the app): a document, task, event,
+    /// contact, list or record, as its roles derive -- the other types have
+    /// flows of their own, and are refused. It is created here (`created:
+    /// {}`), a list or record as YAML without a body, the others as
+    /// markdown, in the conventional folder of its type
+    /// ([`layout`]). Its `date` is an event's start, else the one given,
+    /// else now. Nothing is written if the title is empty, an event has no
+    /// start, one of `projects` isn't a project, or `linked_to` isn't in the
+    /// vault.
+    pub fn create_new(&mut self, new: NewEntity, changes: &mut Changes) -> Result<Id> {
+        let invalid = |arg: &str| Error::InvalidArgument { arg: arg.into() };
+        let (format, folder) = match new.roles.derived_type() {
+            Some(DocumentType::Document) => (FileFormat::Markdown, layout::DOCUMENTS),
+            Some(DocumentType::Task) => (FileFormat::Markdown, layout::TASKS),
+            Some(DocumentType::Event) => (FileFormat::Markdown, layout::CREATED_EVENTS),
+            Some(DocumentType::Contact) => (FileFormat::Markdown, layout::CONTACTS),
+            Some(DocumentType::List) => (FileFormat::YAML, layout::LISTS),
+            Some(DocumentType::Record) => (FileFormat::YAML, layout::RECORDS),
+            _ => return Err(invalid("roles")),
+        };
+        let title = new.title.trim().to_string();
+        if title.is_empty() {
+            return Err(invalid("title"));
+        }
+        let date = match &new.roles.event {
+            Some(event) => Some(event.start.ok_or_else(|| invalid("event.start"))?),
+            None => new.date,
+        };
+        let is_project = |id: &Id| {
+            self.get(id)
+                .is_some_and(|d| d.kind() == DocumentType::Project)
+        };
+        if !new.projects.iter().all(is_project) {
+            return Err(invalid("projects"));
+        }
+        if new.linked_to.is_some_and(|to| self.get(&to).is_none()) {
+            return Err(invalid("linked_to"));
+        }
+
+        let mut doc = Document::create(
+            new.roles,
+            Source::Created(Empty {}),
+            title,
+            new.projects,
+            format,
+        );
+        if let Some(date) = date {
+            doc.set_date(date);
+        }
+        doc.set_tags(clean_labels(new.tags));
+        doc.set_link(new.linked_to);
+        let body = new.content.trim_end();
+        if format == FileFormat::Markdown && !body.is_empty() {
+            doc.set_content(format!("{body}\n"));
+        }
+        self.create(doc, Path::new(folder), changes)
     }
 
     /// Write the new entity `doc` to a file with its generated name in
@@ -917,8 +994,8 @@ impl Index {
         Ok((path, format))
     }
 
-    /// Apply `change` to `id`'s document and save it, recording a write in
-    /// `changes`.
+    /// Apply `change` to `id`'s document and save it if that changed
+    /// anything ([`Index::write_change`]), recording a write in `changes`.
     fn update(
         &mut self,
         id: &Id,
@@ -1591,6 +1668,149 @@ mod tests {
         let doc = rescanned.get(&project).unwrap();
         assert_eq!(doc.kind(), DocumentType::Project);
         assert_eq!(doc.title(), "New project");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// The new entity `new`, which must be created; its id and its file's
+    /// vault-relative path and text.
+    fn create_new(index: &mut Index, new: NewEntity) -> (Id, PathBuf, String) {
+        let mut changes = Changes::default();
+        let id = index.create_new(new, &mut changes).unwrap();
+        assert_eq!(changes.created, Some(id));
+        let entry = index.entry(&id).unwrap();
+        let text = fs::read_to_string(&entry.path).unwrap();
+        (id, entry.local.clone(), text)
+    }
+
+    /// The roles of `yaml`, a frontmatter fragment.
+    fn roles(yaml: &str) -> Roles {
+        serde_yaml_ng::from_str(yaml).unwrap()
+    }
+
+    #[test]
+    fn a_new_task_lands_in_tasks_and_survives_a_rescan() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let new = NewEntity {
+            roles: roles("task: {status: todo, due: 2026-10-09}"),
+            title: " Call the landlord ".into(),
+            tags: vec![" home ".into(), "home".into(), "".into()],
+            linked_to: Some(ids[0]),
+            content: "Ask about the heating.".into(),
+            ..Default::default()
+        };
+        let (id, local, text) = create_new(&mut index, new);
+
+        assert!(local.starts_with(layout::TASKS), "{}", local.display());
+        let name = local.file_name().unwrap().to_string_lossy().to_string();
+        assert!(
+            name.contains(".call-the-landlord.") && name.ends_with(".tsk.md"),
+            "{name}"
+        );
+        assert!(text.contains("created: {}"), "{text}");
+        assert!(text.ends_with("---\nAsk about the heating.\n"), "{text}");
+
+        let rescanned = Index::scan(&root);
+        let doc = rescanned.get(&id).unwrap();
+        assert_eq!(doc.kind(), DocumentType::Task);
+        assert_eq!(doc.title(), "Call the landlord");
+        assert_eq!(doc.tags(), ["home"]);
+        assert_eq!(doc.linked_to(), Some(ids[0]));
+        let task = doc.roles().task.clone().unwrap();
+        assert_eq!(task.status.as_deref(), Some("todo"));
+        assert_eq!(
+            task.due,
+            Some(DateTime::from_iso8601("2026-10-09").unwrap())
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_new_list_is_yaml_with_its_items_and_no_body() {
+        let (root, _) = thread_vault();
+        let mut index = Index::scan(&root);
+        let new = NewEntity {
+            roles: roles("list: {items: [Bank, Insurance]}"),
+            title: "Change of address".into(),
+            content: "ignored".into(),
+            ..Default::default()
+        };
+        let (_, local, text) = create_new(&mut index, new);
+        assert!(local.starts_with(layout::LISTS), "{}", local.display());
+        assert!(local.to_string_lossy().ends_with(".lst.yaml"));
+        assert!(text.contains("items:\n  - Bank\n  - Insurance\n"), "{text}");
+        assert!(!text.contains("ignored") && !text.contains("---"), "{text}");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_new_event_is_dated_by_its_start() {
+        let (root, _) = thread_vault();
+        let mut index = Index::scan(&root);
+        let new = NewEntity {
+            roles: roles("event: {start: 2026-10-07T07:30:00Z, end: 2026-10-07T08:30:00Z}"),
+            title: "Dentist".into(),
+            date: Some(DateTime::from_iso8601("2020-01-01").unwrap()),
+            ..Default::default()
+        };
+        let (id, local, _) = create_new(&mut index, new);
+        assert!(
+            local.starts_with(layout::CREATED_EVENTS),
+            "{}",
+            local.display()
+        );
+        let name = local.file_name().unwrap().to_string_lossy().to_string();
+        assert!(name.starts_with("20261007T0730.dentist."), "{name}");
+        let date = index.get(&id).unwrap().date();
+        assert_eq!(
+            date,
+            Some(DateTime::from_iso8601("2026-10-07T07:30:00Z").unwrap())
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn new_refuses_other_types_empty_titles_and_unknown_references() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let refused = [
+            (roles("project: {}"), "Move", vec![], "roles"),
+            (roles("thread: {}"), "Trip", vec![], "roles"),
+            (Roles::default(), "Nothing", vec![], "roles"),
+            (roles("task: {}"), "  ", vec![], "title"),
+            (roles("event: {}"), "No start", vec![], "event.start"),
+            (roles("task: {}"), "Not a project", vec![ids[0]], "projects"),
+        ];
+        for (roles, title, projects, arg) in refused {
+            let new = NewEntity {
+                roles,
+                title: title.into(),
+                projects,
+                ..Default::default()
+            };
+            let mut changes = Changes::default();
+            match index.create_new(new, &mut changes) {
+                Err(Error::InvalidArgument { arg: got }) => assert_eq!(got, arg, "{title}"),
+                other => panic!("{title}: {other:?}"),
+            }
+            assert_eq!(changes.created, None, "{title}");
+        }
+        let unknown = NewEntity {
+            roles: roles("task: {}"),
+            title: "Linked to nothing".into(),
+            linked_to: Some(Id::generate()),
+            ..Default::default()
+        };
+        let refused = index.create_new(unknown, &mut Changes::default());
+        assert!(matches!(refused, Err(Error::InvalidArgument { ref arg }) if arg == "linked_to"));
+        assert_eq!(index.all().len(), 3, "nothing written");
+        for folder in [layout::TASKS, layout::PROJECTS, layout::CREATED_EVENTS] {
+            assert!(!root.join(folder).exists(), "{folder}");
+        }
 
         fs::remove_dir_all(&root).ok();
     }

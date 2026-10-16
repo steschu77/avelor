@@ -11,6 +11,34 @@ export function parseDate(text) {
 }
 
 // ----------------------------------------------------------------------------
+// The start of `d`'s local day.
+export const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+// ----------------------------------------------------------------------------
+// `date`'s local day as `YYYY-MM-DD`, the value of an <input type="date">.
+export function localDay(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// `date` as the host writes an instant: UTC in ISO 8601, to the second.
+export function isoInstant(date) {
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+// ----------------------------------------------------------------------------
+// `date`'s day as seen from today: "today", "tomorrow", "in 3 days",
+// "yesterday", "3 days ago"; empty without a date.
+export function relativeDay(date) {
+  if (!date || isNaN(date)) return '';
+  const n = Math.round((dayStart(date) - dayStart(new Date())) / 864e5);
+  if (n === 0) return 'today';
+  if (n === 1) return 'tomorrow';
+  if (n === -1) return 'yesterday';
+  return n > 0 ? `in ${n} days` : `${-n} days ago`;
+}
+
+// ----------------------------------------------------------------------------
 // Every date format of the page, here and through shared instances
 // (`toLocale*String` builds a formatter per call); named by what they show,
 // the examples in US English.

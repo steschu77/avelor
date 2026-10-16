@@ -1,8 +1,9 @@
 // The panel's context column, expanded (index.html, .panel__context,
-// `panel_size`): tabs about what the panel shows -- Linked
-// (features/linked.js). One tab shows at a time, the one picked last while the
-// app runs. A tab registers itself, in the order the strip shows them, which
-// is the order app.js imports their files in; a card's buttons open them.
+// `panel_size`): tabs about what the panel shows -- Task (features/new.js) and
+// Linked (features/linked.js). One tab shows at a time, the one picked last
+// while the app runs. A tab registers itself, in the order the strip shows
+// them, which is the order app.js imports their files in; a card's buttons
+// open them.
 
 import { $, accEl } from '../core/dom.js';
 import { expandPanel, panelMode, selectDocument } from './selection.js';
@@ -32,8 +33,8 @@ export function registerContextTab(tab) {
   selectContextTab(contextTab ?? tab.id);
 }
 
-// What the Linked tab is about: the selected card (a thread's focused one,
-// the document shown), else the thread shown; '' for nothing.
+// What the Task and Linked tabs are about: the selected card (a thread's
+// focused one, the document shown), else the thread shown; '' for nothing.
 export function contextTarget(state) {
   const mode = panelMode(state);
   if (mode !== 'document' && mode !== 'thread') return '';
@@ -52,10 +53,30 @@ export function selectContextTab(id, focus = false) {
 }
 
 // ----------------------------------------------------------------------------
+// A card's Task button: the Task tab for the card, in the expanded panel.
+export function openTaskTab(doc_id) {
+  selectDocument(doc_id);
+  expandPanel();
+  selectContextTab('task', true);
+}
+
 // A card's Link button: the Linked tab for the card, in the expanded panel,
 // with the search focused.
 export function openLinkedTab(doc_id) {
   selectDocument(doc_id);
   expandPanel();
   selectContextTab('linked', true);
+}
+
+// ----------------------------------------------------------------------------
+// The note that `id` was made -- `text`, and Open, which shows it (`hint`
+// its tooltip): the Task tab's.
+export function createdNote(text, id, hint) {
+  const note = accEl('div', 'note new__created', text);
+  const open = accEl('button', 'tool', 'Open');
+  open.type = 'button';
+  open.title = hint;
+  open.addEventListener('click', () => selectDocument(id));
+  note.append(open);
+  return note;
 }
