@@ -1,8 +1,9 @@
 /* Type roles: the text styles components and areas take (label, meta,
-   row-title), and the utilities icon, push and stack. */
+   row-title, ...), and the utilities icon, truncate-start, push and stack. */
 
 /* Uppercase labels, and every control set like one. */
 .label,
+.btn,
 .menu__hint,
 .type-toggle {
   font: 400 var(--fs-label)/1 var(--f-chrome);
@@ -28,6 +29,12 @@
   color: var(--c-label);
 }
 
+/* document text */
+.prose {
+  font: 400 var(--fs-body)/var(--lh-body) var(--f-serif);
+  color: var(--c-ink-soft);
+}
+
 /* one line of a list: table titles */
 .row-title {
   font: 400 var(--fs-body)/1.3 var(--f-serif);
@@ -36,12 +43,25 @@
   text-overflow: ellipsis;
 }
 
+.doc-title {
+  font: 500 var(--fs-doc-title)/1.25 var(--f-serif);
+}
+
 /* an icon of the page's sprite (build.rs): its size, in the text's color */
 .icon {
   flex: none;
   width: var(--h-icon);
   height: var(--h-icon);
   fill: currentColor;
+}
+
+/* ellipsis at the start: the end of a path stays visible */
+.truncate-start {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
 }
 
 /* pushes itself, and what follows, to the end of a flex row */

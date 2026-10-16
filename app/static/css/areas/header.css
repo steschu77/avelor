@@ -1,4 +1,10 @@
-/* The lens header (features/header.js): the active labels. */
+/* The lens header (features/header.js): the project's tools and the
+   active labels; and the titles edited in place (the project's name). */
+
+.project-tools {
+  flex: none;
+  padding: 0 var(--p-gutter) 6px;
+}
 
 /* the active labels after the project's name in the lens header, on one
    line: what doesn't fit is cut off at the right */
@@ -11,4 +17,13 @@
 
 .label-filter .chip {
   flex: none;
+}
+
+/* the project's name while edited in place */
+.project-name[contenteditable] {
+  background: var(--c-card);
+}
+
+.project-name:focus {
+  outline: none;
 }

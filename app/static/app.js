@@ -14,6 +14,7 @@ import './ui/statusbar.js';
 import './features/close.js';
 import './features/jobs.js';
 import './features/header.js';
+import './features/conflict.js';
 import './features/layout.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
 import { initDocumentsLens, scheduleRenderDocuments } from './features/lenses/documents.js';
