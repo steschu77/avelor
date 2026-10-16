@@ -1,14 +1,50 @@
 # Avelor — Saving and closing
 
-> How the app closes without losing edits.
+> How a file changed outside the app is handled, how a write is undone,
+> and how the app closes without losing edits.
+
+## Conflicts <a id="conflicts"></a>
+
+Another program may change a vault file while the app has it open. The app
+never writes over such a change.
+
+### The stamp <a id="the-stamp"></a>
+
+Every document keeps the `FileStamp` (modified time, size) of the file as
+it last read or wrote it, with what the file held then (`Document`'s
+`OnDisk`) — taken before reading, so a change during the read shows up as
+a conflict, never as a missed one. Before a write, the host compares it
+with the file; a mismatch, or a missing file, is `SaveOutcome::Conflict`,
+and nothing is written. A conflict is an expected outcome, not an error:
+saves return `SaveOutcome::{Saved, Unchanged, Conflict}`.
 
 ### Atomic writes <a id="atomic-writes"></a>
 
-Every overwriting write — the config folder — goes through
+Every overwriting write — vault files and the config folder — goes through
 `av_utils::fs::write_atomic`: a temporary `.{name}.tmp` beside the file,
-flushed, then renamed over it. A file another program holds open without
+flushed, then renamed over it; on Linux it takes the mode of the file it
+replaces. A file another program holds open without
 delete sharing can't be replaced; that save fails visibly (its error in
 the status bar).
+
+### Limits
+
+- A change that keeps both the size and the modified time (FAT's 2-second
+  resolution, tools that restore the time) isn't found.
+
+## Undo <a id="undo"></a>
+
+Every write keeps its step: `Changes`, the record of an operation, holds
+each file it wrote with what the file held before and after
+(`FileStep`): its frontmatter, and its body only where the operation
+changed it, so undoing a title keeps the text written since.
+`Index::replay` takes a step back (`Op::Undo`), its files as they were
+before, the last written first: what they held, the frontmatter's keys
+in the app's order, as any write puts them; or forth again
+(`Op::Redo`), as the step left them. Neither writes anything unless every
+file still holds what it held at that point, in memory and on disk
+(`#the-stamp`): a file written since, by the app or another program, is
+the conflict.
 
 ## Closing the app <a id="closing-the-app"></a>
 
