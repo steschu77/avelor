@@ -283,15 +283,16 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`); the date helpers (`parseDate`), every date format of the page, and counts with their noun (`plural`) |
+| `core/dom.js`, `core/store.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); the date helpers (`parseDate`), every date format of the page, and counts with their noun (`plural`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
-| `model/state.js` | the store and its schema (the vault's state, the filters, the counters, `notices`, the preferences); `savePrefs`, `showError` |
+| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `notices`, the preferences); `savePrefs`, `showError` |
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`) |
 | `model/events.js` | the host's events into the model (`entity`, `vault`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
-| `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread |
+| `features/selection.js` | the selection (`selectDocument`, `selectById`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
+| `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, and shows an entity on request (`revealInDocuments`) |
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/close.js` | closing the app: the `close` event answered `close_ready` |
 | `features/jobs.js` | job cards from the `job` event |
@@ -309,7 +310,7 @@ A page is drawn by what it must keep while it changes:
 
 ### Page state <a id="page-state"></a>
 
-The store (`model/state.js`) holds UI state and the notices, plus revision counters
+The store (`model/state.js`) holds selection and UI state and the notices, plus revision counters
 (`projects_rev`, `entities_rev`). The domain data lives
 in Maps outside it (`entities`, `projects`, `threads`, in `model/entities.js`), changed in place. Only the host's
 events write them, in `model/events.js`, each followed by a counter's
@@ -317,7 +318,9 @@ bump; a vault being opened clears them (`forgetVault`).
 
 The model calls no render. The renders subscribe to the store (`app.js`,
 the features): the lenses and the sidebar to the counters, the status bar to
-`notices`.
+`notices`. A render that follows several values subscribes with an array
+of selectors (`store.subscribe([s => s.selected_project, s =>
+s.projects_rev], …)`), called when any of them changed.
 
 A render never sends a change to the host.
 

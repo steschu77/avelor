@@ -55,9 +55,14 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   under each. Unfolded, the members sort like the rows.
 - **Folds**: a project's group folded or open is kept across restarts in
   the preferences (`doc_folded`), not in the vault (`vault.md#principles`);
-  before the first fold, the archived projects are folded. Threads fold while
+  before the first fold, the archived projects are folded. A reveal
+  (below) opens a folded group for the session only. Threads fold while
   the app runs: folded at first, a thread unfolded shows unfolded in every
   group.
+- **Selecting**: a row is selected by a click, an entity's in the thread
+  it shows under (`selectDocument(id, thread)`), a thread's row selects
+  the thread (`selectById`). The selected entity's rows are marked
+  (`markSelection`), and the rows of the thread the panel shows.
 - **Types**: the bar under the lens head (`#doc-types`; `typeBar`,
   `features/lenses/types.js`), the lens's own filter — the vault panel's
   counts don't follow it: Documents (a `document` but a note, a `message`),
@@ -71,6 +76,9 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   preferences.
 - **Keyed rows** (by group, thread and entity) stay built while filtered
   out or folded, so a scan only adds rows.
+- **Shown on request** (the selection restored on start,
+  `revealInDocuments`): the group and thread holding the entity's first
+  row unfold and it is scrolled to.
 
 ## Status bar <a id="status-bar"></a>
 
@@ -102,7 +110,11 @@ The page keeps its preferences as one JSON object of strings
 (`doc_types`, type ids joined by commas; an id the page doesn't know is
 dropped), its bar (`doc_types_bar`: `open` or `closed`) and its folded
 projects (`doc_folded`, project ids joined by commas; project ids are
-unique across vaults, so one list serves every vault). The host stores them as given
+unique across vaults, so one list serves every vault); the selection
+(`entity`, `thread`: ids, empty for none), saved once the vault's scan
+has ended and selected again after the next one (`restoreSelection`,
+`features/selection.js`), if it is still in the vault and nothing else
+was selected meanwhile; a vault switch clears it. The host stores them as given
 (`config.yaml` `prefs`) and never reads them; it fills them into the page
 it loads on the next start, as JSON in
 `<script type="application/json" id="prefs">` (`page::html`), which
@@ -116,5 +128,6 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | A5 | Panel widths | drag a grip → `saveWidth` → `savePrefs` | `set_prefs {prefs}` → `config.yaml` `prefs` | the width comes back on the next start, inside the page (`#prefs`), without easing |
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, counts re-render |
+| B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | F1 | Sort in Documents | header click (`onSortClick`, `features/lenses/documents.js`) | — | multi-key sort in `sort_state` |
-| F6 | Fold, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selected_project`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the projects' folds and the types kept across restarts |
+| F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selected_project`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |

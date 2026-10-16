@@ -54,15 +54,16 @@ function forgetVault() {
 
   const { projects_rev, entities_rev } = store.getState();
   store.setState({
+    selected_entity: null, selected_thread: null,
     selected_project: null,
     projects_rev: projects_rev + 1, entities_rev: entities_rev + 1,
   });
 }
 
 // The vault being opened: its scan starts (the vault's name and file
-// count).
+// count) and ends.
 rpcOn('vault', ({ state, name, total }) => {
-  if (state !== 'scanning') return;
+  if (state !== 'scanning') return store.setState({ vault_state: state });
   forgetVault();
-  store.setState({ vault_name: name, files_total: total });
+  store.setState({ vault_name: name, files_total: total, vault_state: 'scanning' });
 });

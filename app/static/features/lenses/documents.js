@@ -3,10 +3,13 @@
 // in no project; a thread's members under the thread's row -- each group
 // and thread folding (the projects folded kept in the `doc_folded`
 // preference); its own type selection (features/lenses/types.js; the
-// `doc_types` and `doc_types_bar` preferences). This file owns the rows,
-// the folds and the sort-state UI, model/entities.js the entities.
+// `doc_types` and `doc_types_bar` preferences); and one entity shown on
+// request (`revealInDocuments`, the selection restored on start). This
+// file owns the rows, the folds and the sort-state UI, model/entities.js
+// the entities and features/selection.js the selection.
 
 import { $, accEl, oncePerFrame, placeChildren } from '../../core/dom.js';
+import { setAria } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
 import { shortDate } from '../../core/format.js';
 import { plural } from '../../core/format.js';
@@ -18,6 +21,7 @@ import { projects, projectsInOrder, projectsOf } from '../../model/entities.js';
 import { knownThreads, threads } from '../../model/entities.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
+import { markSelection, selectById, selectDocument } from '../selection.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
 
 const lensEl = $('lens-documents');
@@ -113,9 +117,11 @@ function itemsOf(docs) {
 // The folds. A project's group is folded while its id is in the
 // `doc_folded` preference (the ids joined by commas; before the first
 // fold, the archived projects' are), so the folds outlast a restart
-// without changing the vault (vault.md#principles). The threads unfolded,
-// by id -- one unfolded shows in every group -- are kept while the app
-// runs.
+// without changing the vault (vault.md#principles); a group a reveal
+// opened stays open for the session, the preference unchanged. The
+// threads unfolded, by id -- one unfolded shows in every group -- are kept
+// while the app runs.
+const revealedGroups = new Set(); // project ids
 const unfoldedThreads = new Set();
 
 function foldedProjects() {
@@ -125,14 +131,18 @@ function foldedProjects() {
 }
 
 function groupFolded(key) {
-  return foldedProjects().has(key);
+  return !revealedGroups.has(key) && foldedProjects().has(key);
 }
 
+// A group a reveal opened is folded again with its id already in the
+// preference: then nothing is saved.
 function toggleGroup(key) {
   const folded = foldedProjects();
   if (groupFolded(key)) folded.delete(key);
   else folded.add(key);
-  savePrefs({ doc_folded: [...folded].join(',') });
+  revealedGroups.delete(key);
+  const doc_folded = [...folded].join(',');
+  if (doc_folded !== store.getState().prefs.doc_folded) savePrefs({ doc_folded });
   scheduleRenderDocuments();
 }
 
@@ -220,7 +230,7 @@ const projectsEl = accEl('div', 'docs__projects');
 
 // A thread's row: its fold, icon, title, "5 of 6, 14/08 - 23/09" (its
 // members shown here of all of them, and their days) and its newest
-// member's date.
+// member's date. A click shows the thread in the panel.
 function threadRow(group, item, depth, total) {
   const key = threadKey(group, item.thread_id);
   const el = cachedRow(key, { group, thread_id: item.thread_id }, () => {
@@ -262,6 +272,7 @@ function docRow(group, thread_id, doc, depth) {
   const el = cachedRow(docKey(group, thread_id, doc.doc_id), { group, thread_id, doc_id: doc.doc_id }, () => {
     const row = accEl('div', 'list-row table__row');
     row.dataset.id = doc.doc_id;
+    if (thread_id) row.dataset.thread = thread_id;
     const cell = nameCell(depth);
     const gap = accEl('span', 'docs__gap');
     cell.append(gap, iconEl('', 'table__icon'), accEl('span', 'row-title'));
@@ -278,6 +289,42 @@ function docRow(group, thread_id, doc, depth) {
   }
   return el;
 }
+
+// ----------------------------------------------------------------------------
+// An entity or thread whose row the next render unfolds and scrolls to.
+let revealId = null;
+
+export function revealInDocuments(id) {
+  revealId = id;
+  scheduleRenderDocuments();
+}
+
+// Unfold the first group holding `id` (an entity, or a thread one of whose
+// members it holds; for the session) and, for an entity in a thread, its
+// first thread: the key of the row to scroll to.
+function unfoldFor(groups, id) {
+  for (const group of groups) {
+    const doc = group.docs.find(d => d.doc_id === id);
+    if (!doc && !group.docs.some(d => knownThreads(d).includes(id))) continue;
+    if (groupFolded(group.key)) revealedGroups.add(group.key);
+    if (!doc) return threadKey(group.key, id);
+    const thread_id = knownThreads(doc)[0];
+    if (thread_id) unfoldedThreads.add(thread_id);
+    return docKey(group.key, thread_id, id);
+  }
+  return null;
+}
+
+const markRows = markSelection(rowsEl);
+
+// A thread's rows are marked while the panel shows the thread.
+function markThreadRows() {
+  const { selected_thread } = store.getState();
+  for (const el of rowsEl.querySelectorAll('.table__row[data-thread]:not([data-id])')) {
+    setAria(el, 'aria-selected', el.dataset.thread === selected_thread);
+  }
+}
+store.subscribe(state => state.selected_thread, markThreadRows);
 
 function renderDocuments() {
   const state = store.getState();
@@ -298,6 +345,8 @@ function renderDocuments() {
 
   pruneRows();
   const groups = groupsOf(listed, state.selected_project);
+  const revealKey = revealId ? unfoldFor(groups, revealId) : null;
+  revealId = null;
 
   const projectNodes = [];
   const nodes = [];
@@ -320,6 +369,9 @@ function renderDocuments() {
   }
   placeChildren(projectsEl, projectNodes);
   placeChildren(rowsEl, projectNodes.length ? [projectsEl, ...nodes] : nodes);
+  markRows();
+  markThreadRows();
+  if (revealKey) rows.get(revealKey).scrollIntoView({ block: 'nearest' });
 
   docTypes.render(shown, counts);
   const hidden = [...counts].reduce((n, [type, count]) => n + (shown.has(type) ? 0 : count), 0);
@@ -335,7 +387,8 @@ export const scheduleRenderDocuments = oncePerFrame(renderDocuments);
 
 // ----------------------------------------------------------------------------
 // A click: a fold folds, Open makes the group's project the filter, a group
-// row folds.
+// row folds, a thread's row shows the thread in the panel, an entity's row
+// the entity, in the thread it is shown under.
 rowsEl.addEventListener('click', ev => {
   const row = ev.target.closest('.list-row');
   if (!row) return;
@@ -344,6 +397,10 @@ rowsEl.addEventListener('click', ev => {
     else toggleGroup(row.dataset.group);
   } else if (ev.target.closest('.docs__fold')) {
     toggleThread(row.dataset.thread);
+  } else if (row.dataset.id) {
+    selectDocument(row.dataset.id, row.dataset.thread ?? null);
+  } else {
+    selectById(row.dataset.thread);
   }
 });
 

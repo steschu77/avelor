@@ -6,6 +6,7 @@ import { rpcCall } from '../core/rpc.js';
 
 export const store = createStore({
   vault_name: '', // the open vault's folder name (the `vault` event)
+  vault_state: 'none', // 'none' | 'scanning' | 'open' (the `vault` event)
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
   // level: 'error' }; always replaced
   notices: [],
@@ -18,6 +19,8 @@ export const store = createStore({
   selected_project: null, // project filter: one, NO_PROJECT (in none) or null (all), see matchesFilter
   // the panel's width: 'closed', 'normal' or 'expanded' (full width)
   panel_size: 'normal',
+  selected_entity: null,
+  selected_thread: null, // the thread shown in the panel
   files_total: 0,
   // the Documents lens's order; `kind` is the last tiebreak, no column sorts by it
   sort_state: [

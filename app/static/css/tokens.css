@@ -20,6 +20,8 @@
   --c-ink-faint: #9a9aa3;
   --c-label: rgba(22, 22, 26, 0.55);
   --c-line: rgba(10, 10, 11, 0.16);
+  /* selection */
+  --c-accent: #8fd0d6;
   --c-danger: #de9193;
   /* hover tint */
   --c-hover: rgba(10, 10, 11, 0.04);
