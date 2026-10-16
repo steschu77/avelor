@@ -1,14 +1,19 @@
-// The selection: what the panel shows -- an entity, a
+// The selection (panel.md#selection): what the panel shows -- an entity, a
 // thread -- all in the store; every feature selects through it.
 
 import { setAria } from '../core/dom.js';
+import { rpcCall } from '../core/rpc.js';
 import { savePrefs, store } from '../model/state.js';
+import { showError } from '../model/state.js';
 import { entities, threadOf, threads } from '../model/entities.js';
+import { projects } from '../model/entities.js';
 
 // Selects an entity, in the thread `thread_id` if it is one of its members
 // (its row under that thread in the Documents lens). Otherwise the shown
 // thread is kept if the entity is one of its members (an entity may be in
-// several threads), or it becomes the entity's first thread, or none.
+// several threads; clicking a card must not jump to another one), or it
+// becomes the entity's first thread, or none -- renderPanel then shows it
+// standalone.
 export function selectDocument(doc_id, thread_id) {
   const selection = selectionOf(doc_id, thread_id);
   openPanel();
@@ -38,11 +43,35 @@ export function markSelection(containerEl) {
   return mark;
 }
 
-// Select whatever `id` names: a thread in the panel's thread view. A
-// thread's row.
+// Open a link clicked in a preview: a link into the vault, `id:<uuid>`
+// (vault.md#links-in-content), selects its target; a web, mail or phone
+// link opens in its default app, through the host (`open_url`).
+export function openLink(href) {
+  const vault = /^id:(.+)$/i.exec(href?.trim() ?? '');
+  if (vault) {
+    selectById(vault[1]);
+    return;
+  }
+  if (!/^(https?:[/][/]|mailto:|tel:)/i.test(href ?? '')) return;
+  rpcCall('open_url', { url: href }).catch(e => {
+    if (e.code !== 'cancelled') showError(e.message);
+  });
+}
+
+// Select whatever `id` names: an entity in the panel, a thread in the
+// panel's thread view, a project as the filter. A link's click
+// (`openLink`), a thread's row.
 export function selectById(id) {
-  openPanel();
-  store.setState({ selected_entity: null, selected_thread: id });
+  if (entities.has(id)) {
+    selectDocument(id);
+  } else if (threads.has(id)) {
+    openPanel();
+    store.setState({ selected_entity: null, selected_thread: id });
+  } else if (projects.has(id)) {
+    store.setState({ selected_project: id });
+  } else {
+    showError(`The linked entity ${id} is not in the vault.`);
+  }
 }
 
 // The selection comes back on the next start (app.js, after the lens): it
@@ -82,4 +111,22 @@ export function restoreSelection(reveal) {
 // (features/layout.js).
 function openPanel() {
   if (store.getState().panel_size === 'closed') store.setState({ panel_size: 'normal' });
+}
+
+// ----------------------------------------------------------------------------
+// Which panel shows what, derived from store state alone:
+// - 'thread': `selected_thread` exists and `selected_entity` (if any) is one
+//   of its members,
+// - 'document': `selected_entity` is a known entity, shown standalone,
+// - 'none': nothing selected (or the selection was deleted): the empty
+//   preview.
+export function panelMode({ selected_entity, selected_thread }) {
+  if (selected_thread && threads.has(selected_thread)
+    && (!selected_entity || entities.get(selected_entity)?.threads?.includes(selected_thread))) {
+    return 'thread';
+  }
+  if (selected_entity && entities.has(selected_entity)) {
+    return 'document';
+  }
+  return 'none';
 }

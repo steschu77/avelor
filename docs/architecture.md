@@ -38,7 +38,7 @@ read by OCR.
 | Constraint | Consequence |
 |---|---|
 | Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
-| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. UUIDv7, dates are hand-written |
+| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `pulldown-cmark`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. UUIDv7, dates are hand-written |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 | The vault is the source of truth | No database, no drafts; every edit is written to the file; the index is rebuilt by a scan |
@@ -54,7 +54,7 @@ read by OCR.
 | `vault.md` | the file format: identity, roles, types, sources, metadata; opening and scanning a vault |
 | `api.md` | the protocol: transport, rules, the page's side, every command and event |
 | `ui.md` | the main window: layout, vault panel and filters, lenses, status bar, jobs panel, keys, preferences |
-| `panel.md` | the side panel: projects, structural edits and how they are saved |
+| `panel.md` | the side panel: cards, threads, projects, structural edits and how they are saved |
 | `saving.md` | conflicts, closing |
 
 ## Doc conventions
@@ -73,7 +73,8 @@ read by OCR.
 - **`file:line`**: host files are under `app/src/`, page files under
   `app/static/`, crate files under `crates/<crate>/src/` (written
   `av-vault/vault.rs:201`).
-- **Flows** have ids by area (A vault, B navigation, C projects, F lenses): trigger
+- **Flows** have ids by area (A vault, B navigation, C projects, D
+  documents and cards, E threads, F lenses): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
@@ -151,7 +152,8 @@ while a task runs:
 queues a `UiTask::Modal`, whose `work` runs on the UI thread *after* the
 current handler has released `App`. The main window is the dialog's
 owner, and `apply` then runs with `App`. While the dialog is open,
-other messages run normally, and a close is refused. On Linux the dialog
+other messages run normally, and a close is refused. The folder pickers,
+Explorer and opening URLs or files use it. On Linux the dialog
 waits in a nested `glib::MainLoop` (`sys/linux/dialogs.rs`), as a Win32
 dialog waits in its modal loop.
 
@@ -183,8 +185,8 @@ pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
 
 av-vault's `Changes` names what an edit wrote, so the same push sends
 `entity` (`post_entity` serves scanned entries and edits alike). Taking
-in a change made outside the app (`Vault::reload`) isn't an edit by the
-app and stays apart. `Vault` (`app.rs`), the open
+in a change made outside the app (`Vault::reload`, `Vault::refresh`)
+isn't an edit by the app and stays apart. `Vault` (`app.rs`), the open
 vault's folder and index, keeps both private: the index is read through
 `Vault::index` and changed only by `App::edit`, the scan and these
 methods.
@@ -201,7 +203,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | Crate | Owns | Notes |
 |---|---|---|
 | av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), logger, random (BCrypt), text normalization, atomic writes (`fs`), cross-thread `Cancel` | |
-| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index` with structural ops and `Changes`, the scan (`scan`, events applied by `Index::apply`) | no network, no UI |
+| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index` with structural ops and `Changes`, the scan (`scan`, events applied by `Index::apply`), `to_html` | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 
 ### av-vault's core
@@ -239,13 +241,14 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `reload`, `changed_at`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `reload`, `refresh`, `changed_at`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
 | `vault_scan.rs` | the vault scan (`vault.md#opening`): `run_scan` with av-vault's `scan` on a worker, its batches into the index (`Vault::apply_scanned`) and to the page (`vault`, `entity`, `vault_error`, the scan's `job`), a replaced scan's batches dropped, `scanning`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
-| `api.rs` | `ready`, vault open, switch and reveal, `set_prefs` |
+| `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
+| `documents.rs` | a document's content in the editors: `load_doc_content`, taking in files changed outside the app (`post_taken_in`); their dispatch tests |
 | `structure.rs` | the structural commands: titles, stars, archiving, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
@@ -259,7 +262,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread, inside the task that woke it) |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux/mod.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
-| Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `FileLauncher` (they use the XDG desktop portal where there is one) |
+| Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `gtk::UriLauncher` and `FileLauncher` (they use the XDG desktop portal where there is one) |
 | Random | BCrypt | `av-utils/random.rs` | `getrandom` |
 | File permissions | `readonly()` | av-vault `vault.rs` | `readonly()` is true only when no one may write |
 | Icons and fonts | inline SVGs from Fluent UI System Icons (MIT), one sprite (`app/static/icons`, `build.rs`); Segoe UI | `css/tokens.css` (`--f-chrome`) | the same SVGs, since the Segoe font can't be shipped; `--f-chrome` already ends in `system-ui` |
@@ -277,7 +280,7 @@ the only `cfg(target_os)` in `app/src`:
   `pick_folder(&Owner, title)` waits in the platform's modal loop
   (`IFileOpenDialog`; `gtk::FileDialog` in a nested `glib::MainLoop`), so
   `App::on_ui` keeps its meaning.
-- `open_path`, `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
+- `open_url`, `open_path`, `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
   is up, else stderr), and `BRIDGE_JS`.
 
 **The shared shell.** `shell.rs` holds what the main window decides:
@@ -317,17 +320,18 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); the date helpers (`parseDate`), every date format of the page, and counts with their noun (`plural`) |
+| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`), every date format of the page, and counts with their noun (`plural`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`) |
-| `model/documents.js` | the conflicts |
-| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `vault`; `forgetVault`), the only writer of the Maps |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`, `threadMembers`); the selection published minus what is gone (`commitExistingSelection`) |
+| `model/documents.js` | the content cache, the conflicts |
+| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/field.js` | editing in place (`editTextInPlace`) |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
-| `features/selection.js` | the selection (`selectDocument`, `selectById`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
+| `features/selection.js` | the selection (`selectDocument`, `selectById`, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
+| `features/panel/panel.js` | the side panel renderer (thread, standalone card), its subscriptions |
 | `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, and shows an entity on request (`revealInDocuments`) |
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event answered `close_ready` |
@@ -383,7 +387,7 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, …) and the utilities (`icon`, `truncate-start`, `push`, `stack`) |
 | `css/components.css` | what several areas share: `btn`, `tool`, `chip`, `input`, `menu`, `list-row`, `pane-head`, the dialogs, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, header (the lens header, the titles edited in place) |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, editor, header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 
@@ -395,7 +399,8 @@ Conventions the page keeps:
   one fits, `is-*` otherwise; every class used is defined and nothing
   defined goes unused (`development.md#measuring-size`).
 - **Layers** (the Recede design): the chrome sits on `--c-shade`, lists on
-  `--c-paper`, the active content on `--c-card` with `--shadow-raise`. New
+  `--c-paper`, the active content on `--c-card` with `--shadow-raise` /
+  `--shadow-card`. New
   UI follows these layers.
 - **Specificity**: a block rule that sets the same property as a component
   overrides it, so a block class and a component are combined only when

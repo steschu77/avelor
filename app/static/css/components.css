@@ -103,13 +103,27 @@
   border-color: var(--c-ink);
 }
 
-/* buttons drawn as text: a chip's x that removes a label */
+/* buttons drawn as text: a chip's name, which shows what it names (a
+   card's thread, features/panel/panel.js), and a chip's x that removes a
+   label */
+.chip__name,
 .chip__remove {
   padding: 0;
   border: none;
   background: none;
   text-align: left;
   cursor: pointer;
+}
+
+.chip__name:hover {
+  text-decoration: underline;
+}
+
+.chip__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .chip__remove {
@@ -262,6 +276,31 @@
   color: var(--c-ink);
 }
 
+/* Nothing to show: the panel with nothing selected. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 16px;
+  color: var(--c-ink-faint);
+  text-align: center;
+}
+
+.empty__icon {
+  margin-bottom: 4px;
+}
+
+.empty__icon>.icon {
+  width: 32px;
+  height: 32px;
+}
+
+.empty__title {
+  color: var(--c-ink-mute);
+  font-size: var(--fs-body);
+}
+
 /* The strip atop a pane: the vault header. */
 .pane-head {
   width: 100%;
@@ -326,6 +365,16 @@
   align-items: center;
   gap: 10px;
   padding: 12px var(--p-gutter) 20px;
+}
+
+/* One part of the panel's stack; doc heads and the editor all share this
+   inset. --ruled draws a rule above it. */
+.pane-section {
+  padding: var(--p-section) var(--p-pane);
+}
+
+.pane-section--ruled {
+  border-top: 1px solid var(--c-line);
 }
 
 /* A modal dialog (a native <dialog>, opened with showModal): the brightest

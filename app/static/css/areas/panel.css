@@ -1,3 +1,5 @@
+/* The panel (features/panel/): its views, heads and cards. */
+
 .panel {
   position: absolute;
   top: 0;
@@ -32,6 +34,7 @@
   border-bottom: 1px solid var(--c-line);
 }
 
+/* the views (document, thread) swap inside; [hidden] hides them */
 .panel__body {
   grid-area: body;
   display: flex;
@@ -67,6 +70,11 @@
 }
 
 /* A document's, thread's or day's head: the title line, then a sub line. */
+.doc-head .icon {
+  width: var(--fs-doc-title);
+  height: var(--fs-doc-title);
+}
+
 .doc-head__title,
 .doc-head__sub {
   display: flex;
@@ -78,6 +86,71 @@
   margin-top: 4px;
 }
 
+/* the title takes the line, the rename pen (features/panel/panel.js) sits at its
+   end, at the size of small text */
 .doc-head__title>.doc-title {
   flex: 1 1 0;
+}
+
+.doc-head .doc-head__rename>.icon {
+  width: var(--fs-small);
+  height: var(--fs-small);
+}
+
+/* a card's threads, when it is in more than one (features/panel/panel.js): the one
+   shown is marked, the others show theirs */
+.doc-head__threads {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.doc-head__threads .icon {
+  width: var(--fs-small);
+  height: var(--fs-small);
+}
+
+.chip[aria-current="true"] {
+  border-color: var(--c-accent);
+}
+
+/* the open thread's head, over its messages */
+.doc-head--thread {
+  background: var(--c-paper);
+}
+
+/* Messages (#doc-content, #thread-messages): one card per message on the
+ * root-to-active path, each with its own head/editor. A lone
+ * document is a borderless white sheet. */
+.msg-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-pane);
+  background: var(--c-card);
+}
+
+.msg {
+  border: 1px solid transparent;
+  background: var(--c-card);
+}
+
+/* a thread's cards sit white on paper, the selected one ringed */
+.msg-list--thread {
+  padding: 12px;
+  gap: 12px;
+  background: var(--c-paper);
+}
+
+.msg-list--thread .msg {
+  border-color: var(--c-line);
+  box-shadow: var(--shadow-card);
+}
+
+.msg-list--thread .msg[aria-selected="true"] {
+  border-color: var(--c-accent);
 }

@@ -1,0 +1,116 @@
+/* The read-only preview. The container sets the inset. */
+.editor> :first-child {
+  margin-top: 0;
+}
+
+.editor> :last-child {
+  margin-bottom: 0;
+}
+
+.editor p,
+.editor ul,
+.editor ol,
+.editor blockquote,
+.editor pre,
+.editor table {
+  margin: 0 0 0.9em;
+}
+
+.editor h1,
+.editor h2,
+.editor h3,
+.editor h4,
+.editor h5,
+.editor h6 {
+  font: 500 var(--fs-body)/1.25 var(--f-serif);
+  color: var(--c-ink);
+  margin: 1.2em 0 0.4em;
+}
+
+.editor h1 {
+  font-size: var(--fs-doc-title);
+}
+
+.editor h2 {
+  font-size: 16px;
+}
+
+.editor h3 {
+  font-size: 14px;
+}
+
+.editor ul,
+.editor ol {
+  padding-left: 22px;
+}
+
+.editor li {
+  margin: 0 0 0.25em;
+}
+
+.editor blockquote {
+  padding-left: 12px;
+  border-left: 2px solid var(--c-line);
+  color: var(--c-ink-mute);
+}
+
+.editor blockquote> :last-child {
+  margin-bottom: 0;
+}
+
+/* Block code is a bare <pre> (no nested <code>), inline code is <code>. */
+.editor pre,
+.editor code {
+  font: 400 var(--fs-small)/1.5 var(--f-mono);
+}
+
+.editor pre {
+  padding: 8px 10px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.editor code {
+  background: var(--c-paper);
+  padding: 0.1em 0.35em;
+}
+
+.editor hr {
+  border: 0;
+  border-top: 1px solid var(--c-line);
+  margin: 1em 0;
+}
+
+.editor table {
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+
+.editor th,
+.editor td {
+  border: 1px solid var(--c-line);
+  padding: 3px 8px;
+  min-width: 2em;
+  text-align: left;
+}
+
+.editor th {
+  font-weight: 500;
+  background: var(--c-paper);
+}
+
+.editor a {
+  text-decoration: underline;
+  text-decoration-color: var(--c-ink-faint);
+}
+
+.editor img {
+  max-width: 100%;
+}
+
+.editor del {
+  color: var(--c-ink-mute);
+}

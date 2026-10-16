@@ -75,11 +75,26 @@ pub fn pick_folder(owner: &Owner, title: &str) -> Option<PathBuf> {
 }
 
 // ----------------------------------------------------------------------------
+/// Open `url` in the default browser.
+pub fn open_url(url: &str) -> Result<()> {
+    let launcher = gtk::UriLauncher::new(url);
+    launched(wait(|done| {
+        launcher.launch(None::<&gtk::Window>, None::<&gio::Cancellable>, done)
+    }))
+}
+
+// ----------------------------------------------------------------------------
 /// Open `path` in its default app: a folder in the file manager.
 pub fn open_path(path: &Path) -> Result<()> {
     let launcher = gtk::FileLauncher::new(Some(&gio::File::for_path(path)));
-    let launched =
-        wait(|done| launcher.launch(None::<&gtk::Window>, None::<&gio::Cancellable>, done));
+    launched(wait(|done| {
+        launcher.launch(None::<&gtk::Window>, None::<&gio::Cancellable>, done)
+    }))
+}
+
+// ----------------------------------------------------------------------------
+/// What a launcher called back with, as the app's result.
+fn launched(launched: Option<std::result::Result<(), glib::Error>>) -> Result<()> {
     match launched {
         Some(Ok(())) => Ok(()),
         Some(Err(e)) => Err(Error::Gtk { msg: e.to_string() }),

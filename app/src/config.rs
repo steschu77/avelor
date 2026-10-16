@@ -13,7 +13,7 @@ const CONFIG_FILE: &str = "config.yaml";
 const BROKEN_FILE: &str = "config.yaml.broken";
 
 // ----------------------------------------------------------------------------
-fn is_false(value: &bool) -> bool {
+pub(crate) fn is_false(value: &bool) -> bool {
     !*value
 }
 

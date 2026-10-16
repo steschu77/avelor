@@ -1,5 +1,6 @@
 // The host's events into the model (api.md#events): the entities as they
-// are on disk, those that left the vault, and the vault being opened. Each
+// are on disk, those that left the vault, their content sent unasked, and
+// the vault being opened. Each
 // handler writes the Maps (model/entities.js) and the documents' state
 // (model/documents.js) and bumps the store's counters; the renders follow
 // the counters (app.js), the model calls none of them. Only this module
@@ -12,6 +13,7 @@ import { entities } from './entities.js';
 import { projects } from './entities.js';
 import { threads } from './entities.js';
 import { forgetDocument, forgetDocuments } from './documents.js';
+import { onDocContent } from './documents.js';
 
 // ----------------------------------------------------------------------------
 function onProject(id, meta) {
@@ -21,7 +23,9 @@ function onProject(id, meta) {
 }
 
 // ----------------------------------------------------------------------------
-// A thread as it is now.
+// A thread as it is now: its title shows in the cards' threads lines,
+// refreshed on `entities_rev`, so one renamed shows without rebuilding the
+// cards.
 function onThread(thread_id, meta) {
   threads.set(thread_id, { id: thread_id, ...meta });
   store.setState({ entities_rev: store.getState().entities_rev + 1 });
@@ -29,8 +33,10 @@ function onThread(thread_id, meta) {
 
 // ----------------------------------------------------------------------------
 // The entity events (api.md#events): an entity as it is on disk
-// now, one shape for every kind; one that left the vault. One new after
-// the scan is one more file; the scan's are counted by its start.
+// now, one shape for every kind; one that left the vault; a body sent
+// unasked (`load_doc_content` answers with the same `source` and `html`).
+// One new after the scan is one more file; the scan's are counted by its
+// start.
 rpcOn('entity', meta => {
   const known = entities.has(meta.id) || threads.has(meta.id) || projects.has(meta.id);
   const { vault_state, files_total } = store.getState();
@@ -40,6 +46,7 @@ rpcOn('entity', meta => {
   else onDocMeta(meta.id, meta);
 });
 rpcOn('entity_deleted', ({ id }) => onEntityDeleted(id));
+rpcOn('content', ({ id, source, html }) => onDocContent(id, source, html));
 
 // ----------------------------------------------------------------------------
 function onDocMeta(doc_id, meta) {
@@ -78,11 +85,11 @@ function forgetVault() {
   projects.clear();
   threads.clear();
 
-  const { projects_rev, entities_rev } = store.getState();
+  const { projects_rev, threads_rev, entities_rev } = store.getState();
   store.setState({
     selected_entity: null, selected_thread: null,
     selected_project: null, selected_labels: [],
-    projects_rev: projects_rev + 1, entities_rev: entities_rev + 1,
+    projects_rev: projects_rev + 1, threads_rev: threads_rev + 1, entities_rev: entities_rev + 1,
   });
 }
 

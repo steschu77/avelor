@@ -1,6 +1,6 @@
 //! The app's own commands (`api.md#the-page-side`): `ready`, switching and
-//! revealing the vault, and the page's preferences; and opening a vault
-//! (`open_vault`).
+//! revealing the vault, opening a link, and the page's preferences; and
+//! opening a vault (`open_vault`).
 
 use std::path::{Path, PathBuf};
 
@@ -70,8 +70,8 @@ pub(crate) fn open_vault(app: &mut App, root: &Path) {
 
 // ----------------------------------------------------------------------------
 /// `reveal_vault`: show the open vault's folder in the file manager once the
-/// handler has returned. Answers `null`; `invalid_path` if no vault is
-/// open.
+/// handler has returned, as `open_url`. Answers `null`; `invalid_path` if no
+/// vault is open.
 pub fn reveal_vault(app: &mut App, req: Req) {
     let Some(root) = app.vault.root().map(Path::to_path_buf) else {
         let error = Error::InvalidPath {
@@ -92,6 +92,41 @@ pub fn reveal_vault(app: &mut App, req: Req) {
             }
         },
     );
+}
+
+// ----------------------------------------------------------------------------
+/// Open `url` in its default app (the browser, the mail app), once the
+/// handler has returned: `ShellExecuteW` may run a modal loop. Only web,
+/// mail and phone links; anything else could start a program or open a
+/// file.
+pub fn open_url(app: &mut App, req: Req, url: String) {
+    if !is_link(&url) {
+        let arg = format!("not a web, mail or phone link: {url}");
+        return req.err(Error::InvalidArgument { arg });
+    }
+    app.on_ui(
+        {
+            let url = url.clone();
+            move |_| sys::open_url(&url)
+        },
+        move |_, opened| match opened {
+            Ok(()) => req.ok(()),
+            Err(e) => {
+                log::warn!("Could not open {url}: {e}");
+                req.fail(e, format!("Could not open {url}."));
+            }
+        },
+    );
+}
+
+// ----------------------------------------------------------------------------
+/// Whether `url` is a link `open_url` hands to the shell: `http`, `https`,
+/// `mailto` or `tel`, the absolute links the editor allows.
+fn is_link(url: &str) -> bool {
+    let url = url.to_ascii_lowercase();
+    ["http://", "https://", "mailto:", "tel:"]
+        .iter()
+        .any(|scheme| url.starts_with(scheme))
 }
 
 // ----------------------------------------------------------------------------

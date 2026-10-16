@@ -1,7 +1,48 @@
-// The documents (saving.md): the conflicts the conflict dialog asks about
-// (features/conflict.js).
+// The documents' content in the editors (saving.md): the content cache,
+// and the conflicts the conflict dialog asks about (features/conflict.js).
 
+import { rpcCall } from '../core/rpc.js';
+import { createCache } from '../core/cache.js';
 import { store } from './state.js';
+import { commitExistingSelection } from './entities.js';
+
+const docContent = createCache();
+
+// ----------------------------------------------------------------------------
+// Show `doc_id`'s content in `root` whenever it arrives, and load it.
+// Returns the unsubscribe function.
+export function bindDocContent(doc_id, root) {
+  const unsubscribe = docContent.subscribe(doc_id, ({ html }) => {
+    root.innerHTML = html;
+  });
+  docContent.request(doc_id, () => loadDocContent(doc_id));
+  return unsubscribe;
+}
+
+// Load `doc_id`'s content, once the host has looked at its file: the
+// content as it is then, or -- the file gone -- the panel without it, or
+// the content with the conflict over it. A failed load can be asked again.
+function loadDocContent(doc_id) {
+  rpcCall('load_doc_content', { id: doc_id }).then(({ source, html, gone, conflict }) => {
+    if (gone) {
+      docContent.update(doc_id, { source: '', html: '' });
+      commitExistingSelection(store.getState());
+      return;
+    }
+    onDocContent(doc_id, source, html);
+    if (conflict) showConflict(doc_id, conflict.changed);
+  }, e => {
+    docContent.failed(doc_id);
+    throw e;
+  });
+}
+
+// ----------------------------------------------------------------------------
+// `onDocContent` is part of the document lifecycle -- see saving.md#messages.
+// `source` is the markdown body, `html` its editor rendering
+export function onDocContent(doc_id, source, html) {
+  docContent.update(doc_id, { source, html });
+}
 
 // ----------------------------------------------------------------------------
 // `id`'s file changed outside the app at `changed` (ISO 8601; empty: it
@@ -37,4 +78,5 @@ export function forgetDocument(id) {
 // conflict was about the old vault's files.
 export function forgetDocuments() {
   store.setState({ conflicts: [] });
+  docContent.clear();
 }

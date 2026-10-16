@@ -19,7 +19,9 @@ use av_utils::datetime::DateTime;
 use av_utils::error::Result;
 use av_utils::id::Id;
 use av_vault::envelope::{DocumentType, Roles, Source};
+use av_vault::markdown;
 use av_vault::shared::Genre;
+use av_vault::vault::Refresh;
 use av_vault::vault::{Changes, FileStamp};
 use av_vault::vault::{Entry, Index, ScanEvent};
 use serde::Serialize;
@@ -99,10 +101,28 @@ impl Vault {
     }
 
     // ------------------------------------------------------------------------
+    /// A document's content by its ID, as `(markdown source, editor HTML)`.
+    /// Both are empty for an unknown ID; the HTML is empty for YAML records,
+    /// which have no markdown body.
+    pub fn content(&self, id: &Id) -> (String, String) {
+        match self.index.get(id) {
+            Some(doc) => (doc.content().to_string(), markdown::to_html(doc.content())),
+            None => (String::new(), String::new()),
+        }
+    }
+
+    // ------------------------------------------------------------------------
     /// Read `id`'s file again (`Index::reload`): the id it has now, `None`
     /// if it is gone.
     pub fn reload(&mut self, id: &Id) -> Result<Option<Id>> {
         self.index.reload(id)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Take in a change made outside the app to `id`'s file, unless it
+    /// replaced the app's own edits (`Index::refresh`).
+    pub fn refresh(&mut self, id: &Id) -> Result<Refresh> {
+        self.index.refresh(id)
     }
 
     // ------------------------------------------------------------------------
@@ -359,11 +379,21 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
+    /// Send `id`'s body as it is now, unasked -- a view showing an older one
+    /// loads it: the `content` event, the markdown source and its editor
+    /// HTML.
+    pub fn post_content(&self, id: &Id) {
+        let (source, html) = self.vault.content(id);
+        let content = serde_json::json!({ "id": id, "source": source, "html": html });
+        self.post_event("content", content);
+    }
+
+    // ------------------------------------------------------------------------
     /// Run the vault edit `f` and send the page everything it wrote -- also
     /// when it failed part-way, since a multi-file edit stays part-way
     /// (`panel.md#saving-structure`). The one way the app edits the vault:
-    /// taking in a change made outside the app (`Vault::reload`) is not an
-    /// edit by the app.
+    /// taking in a change made outside the app (`Vault::reload`,
+    /// `Vault::refresh`) is not an edit by the app.
     pub fn edit<R>(&mut self, f: impl FnOnce(&mut Index, &mut Changes) -> Result<R>) -> Result<R> {
         let mut changes = Changes::default();
         let result = f(&mut self.vault.index, &mut changes);

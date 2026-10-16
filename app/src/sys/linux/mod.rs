@@ -14,6 +14,7 @@ use crate::config::ConfigStore;
 use crate::shell::Shell;
 use av_utils::error::Result;
 
+pub use dialogs::open_url;
 pub use dialogs::show_error;
 pub use dialogs::{Owner, open_path, pick_folder};
 pub use paths::Paths;

@@ -6,6 +6,7 @@ mod api;
 mod app;
 mod close;
 mod config;
+mod documents;
 mod jobs;
 mod page;
 mod protocol;

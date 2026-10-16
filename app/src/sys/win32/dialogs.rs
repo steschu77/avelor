@@ -62,6 +62,12 @@ fn item_path(item: &IShellItem) -> Option<PathBuf> {
 }
 
 // ----------------------------------------------------------------------------
+/// Open `url` in the default browser.
+pub fn open_url(url: &str) -> Result<()> {
+    shell_open(&HSTRING::from(url))
+}
+
+// ----------------------------------------------------------------------------
 /// Open `path` in its default app: a folder in Explorer.
 pub fn open_path(path: &Path) -> Result<()> {
     shell_open(&HSTRING::from(path))

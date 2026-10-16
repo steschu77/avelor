@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/areas/sidebar.css">
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/panel.css">
+  <link rel="stylesheet" href="css/areas/editor.css">
   <link rel="stylesheet" href="css/areas/header.css">
 </head>
 
@@ -87,7 +88,27 @@
         <button type="button" class="tool" id="doc-expand-btn"><svg class="icon"><use href="#i-panel-right-expand" /></svg></button>
         <button type="button" class="tool push" id="doc-close-btn"><svg class="icon"><use href="#i-dismiss" /></svg></button>
       </div>
-      <div class="panel__body"></div>
+      <div class="panel__body" id="panel-body">
+        <!-- Document View -->
+        <div class="stack" id="panel-doc-view">
+          <div id="doc-content" class="msg-list"></div>
+        </div>
+        <!-- Thread View -->
+        <div class="stack" id="panel-thread-view" hidden>
+          <div id="panel-thread-head" class="pane-section pane-section--ruled doc-head doc-head--thread">
+            <div class="doc-head__title">
+              <svg class="icon" id="thread-icon"><use /></svg>
+              <span class="doc-title" id="thread-title"></span>
+              <button type="button" class="icon-btn icon-btn--quiet doc-head__rename"
+                id="thread-rename-btn" title="Rename thread" hidden><svg class="icon"><use href="#i-edit" /></svg></button>
+            </div>
+            <div class="doc-head__sub">
+              <span class="meta truncate-start" id="thread-path"></span>
+            </div>
+          </div>
+          <div id="thread-messages" class="msg-list msg-list--thread"></div>
+        </div>
+      </div>
       <div class="panel__context">
         <div class="grip" id="context-divider"></div>
       </div>

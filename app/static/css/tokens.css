@@ -7,8 +7,8 @@
      z = z-index */
   /* Recede: chrome steps back, brightness rises toward the task. Darkest
      to brightest: chrome (sidebar, topbar, status bar) on shade, lists on
-     paper, the active content on card, raised with --shadow-raise, and
-     dialogs on top with --shadow-dialog. */
+     paper, the active content on card, raised with --shadow-raise or
+     --shadow-card, and dialogs on top with --shadow-dialog. */
   --c-shade: oklch(0.935 0.007 80);
   --c-paper: #f4f2ee;
   --c-card: #ffffff;
@@ -33,11 +33,14 @@
   --shadow-pop: 0 10px 28px rgba(0, 0, 0, .14);
   /* a pane lifted above the one to its left: the panel */
   --shadow-raise: -12px 0 24px -14px rgba(22, 22, 26, 0.28);
+  /* a card lifted off paper: thread cards */
+  --shadow-card: 0 1px 2px rgba(22, 22, 26, 0.06), 0 8px 18px -8px rgba(22, 22, 26, 0.16);
   /* the top layer: dialogs */
   --shadow-dialog: 0 2px 6px rgba(22, 22, 26, 0.08), 0 28px 56px -16px rgba(22, 22, 26, 0.38);
 
   --f-serif: Georgia, serif;
   --f-chrome: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --f-mono: ui-monospace, Menlo, monospace;
 
   --fs-label: 9px;
   --fs-meta: 10px;
@@ -65,6 +68,8 @@
   --p-gutter: 12px;
   /* x inset of content panes: the right panel */
   --p-pane: 20px;
+  /* y padding of the panel's stacked parts: doc heads, text */
+  --p-section: 8px;
 
   --w-sidebar: 232px;
   --w-vault-list: 232px;

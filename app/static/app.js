@@ -11,6 +11,7 @@ import { store } from './model/state.js';
 import './model/events.js';
 import './ui/menu.js';
 import './ui/statusbar.js';
+import './features/panel/panel.js';
 import './features/close.js';
 import './features/jobs.js';
 import './features/header.js';
@@ -25,15 +26,14 @@ initDocumentsLens();
 restoreSelection(revealInDocuments);
 
 // The lenses and the sidebar follow the model (model/events.js): the
-// entities as they are now, the projects the sidebar lists.
+// entities as they are now, the projects the sidebar lists, the threads
+// and projects the Documents lens groups by (`commitThreadChange`).
 store.subscribe(state => state.entities_rev, () => {
   scheduleRenderDocuments();
   scheduleRenderSidebar();
 });
-store.subscribe(state => state.projects_rev, () => {
-  scheduleRenderDocuments();
-  scheduleRenderSidebar();
-});
+store.subscribe(state => state.projects_rev, () => scheduleRenderSidebar());
+store.subscribe([state => state.threads_rev, state => state.projects_rev], () => scheduleRenderDocuments());
 
 // The filter changed: re-render the filtered lenses and the sidebar's
 // highlights.

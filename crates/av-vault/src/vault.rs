@@ -73,6 +73,20 @@ pub enum SaveOutcome {
 }
 
 // ----------------------------------------------------------------------------
+/// What [`Index::refresh`] found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refresh {
+    /// The file is as the app last read or wrote it.
+    Unchanged,
+    /// The file changed or went away outside the app, and the app had only
+    /// read it: taken in. The id the file has now; `None` if it is gone.
+    TakenIn(Option<Id>),
+    /// The file changed or went away outside the app after the app wrote
+    /// its own edits to it: nothing was taken in.
+    Conflict,
+}
+
+// ----------------------------------------------------------------------------
 #[derive(Debug)]
 pub struct Entry {
     pub path: PathBuf,
@@ -80,6 +94,10 @@ pub struct Entry {
     pub readonly: bool,
     pub bom: String,
     pub crlf: LineEnding,
+    /// Whether the app wrote the file since it last read it: a change made
+    /// outside the app afterwards replaced the app's own edits
+    /// ([`Index::refresh`]).
+    pub written: bool,
     pub doc: Document,
 }
 
@@ -92,6 +110,7 @@ impl Entry {
             readonly: false,
             bom: String::new(),
             crlf: LineEnding::default(),
+            written: false,
             doc,
         }
     }
@@ -272,7 +291,9 @@ impl Index {
         // Without a stamp the next save is a conflict: the safe side.
         let stamp = FileStamp::read(&entry.path).ok().flatten();
 
-        self.documents[i].doc.written(stamp);
+        let entry = &mut self.documents[i];
+        entry.written = true;
+        entry.doc.written(stamp);
         Ok(SaveOutcome::Saved)
     }
 
@@ -307,6 +328,25 @@ impl Index {
         self.by_id.insert(fresh_id, i);
         self.documents[i] = fresh;
         Ok(Some(fresh_id))
+    }
+
+    /// Look at `id`'s file and take in a change made outside the app when
+    /// that loses nothing of the app's (saving.md#file-checks):
+    /// if the app had only read the file, it is read again
+    /// ([`Index::reload`]); if the app had written its own edits to it,
+    /// which the change replaced, it is left alone for the user to decide.
+    /// For a document without unsaved edits; those go through a save.
+    pub fn refresh(&mut self, id: &Id) -> Result<Refresh> {
+        let Some(entry) = self.entry(id) else {
+            return Err(Error::NotFound);
+        };
+        if entry.is_unsaved() || !entry.changed_on_disk()? {
+            return Ok(Refresh::Unchanged);
+        }
+        if entry.written {
+            return Ok(Refresh::Conflict);
+        }
+        Ok(Refresh::TakenIn(self.reload(id)?))
     }
 
     // ------------------------------------------------------------------------
@@ -529,6 +569,7 @@ fn load(path: PathBuf, local: PathBuf, readonly: bool, doc_type: FileFormat) -> 
         readonly,
         bom,
         crlf,
+        written: false,
         doc,
     })
 }
@@ -1087,6 +1128,27 @@ mod tests {
         assert_eq!(index.reload(&ids[2]).unwrap(), None);
         assert!(index.get(&ids[2]).is_none());
         assert_eq!(index.all().len(), 2);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn refreshing_takes_in_a_change_to_a_file_only_read() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        assert_eq!(index.refresh(&ids[0]).unwrap(), Refresh::Unchanged);
+
+        edit_outside(&root, 0, &ids[0], "Theirs\n");
+        assert_eq!(
+            index.refresh(&ids[0]).unwrap(),
+            Refresh::TakenIn(Some(ids[0]))
+        );
+        assert_eq!(index.get(&ids[0]).unwrap().content(), "Theirs\n");
+        assert_eq!(index.refresh(&ids[0]).unwrap(), Refresh::Unchanged);
+
+        fs::remove_file(root.join("Notes/n1.md")).unwrap();
+        assert_eq!(index.refresh(&ids[1]).unwrap(), Refresh::TakenIn(None));
+        assert!(index.get(&ids[1]).is_none());
 
         fs::remove_dir_all(&root).ok();
     }

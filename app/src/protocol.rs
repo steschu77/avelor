@@ -9,6 +9,7 @@ use crate::api;
 use crate::app::Prefs;
 use crate::app::{App, UiQueue};
 use crate::close;
+use crate::documents;
 use crate::structure;
 use av_utils::error::Error;
 use av_utils::id::Id;
@@ -16,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 // ----------------------------------------------------------------------------
-/// A request from the page: `{"id": 17, "cmd": "ready", "args": {…}}`.
+/// A request from the page: `{"id": 17, "cmd": "open_url", "args": {…}}`.
 /// Read before its command, so a request whose command or arguments don't
 /// decode still has an `id` to answer.
 #[derive(Deserialize)]
@@ -37,8 +38,12 @@ enum Command {
     SwitchVault(SwitchTo),
     SetPrefs(PagePrefs),
     RevealVault,
+    /// Open a web, mail or phone link in its default app.
+    OpenUrl(Url),
     /// The page's answer to the event `close` (`close::close_ready`).
     CloseReady(close::Answer),
+    // A document's content in the editors (`documents`).
+    LoadDocContent(Target),
     // The structural commands (`structure`).
     SetTitle(Retitle),
     SetStarred(Star),
@@ -57,6 +62,12 @@ struct SwitchTo {
 #[derive(Deserialize)]
 struct PagePrefs {
     prefs: Prefs,
+}
+
+/// `{url}`
+#[derive(Deserialize)]
+struct Url {
+    url: String,
 }
 
 /// `{id}`: the entity the command is about.
@@ -96,7 +107,9 @@ impl Command {
             "switch_vault" => Command::SwitchVault(from_value(args)?),
             "set_prefs" => Command::SetPrefs(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
+            "open_url" => Command::OpenUrl(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
+            "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "set_title" => Command::SetTitle(from_value(args)?),
             "set_starred" => Command::SetStarred(from_value(args)?),
             "set_archived" => Command::SetArchived(from_value(args)?),
@@ -131,7 +144,9 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SwitchVault(a) => api::switch_vault(app, req, a.path),
         Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
         Command::RevealVault => api::reveal_vault(app, req),
+        Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::CloseReady(a) => close::close_ready(app, req, a),
+        Command::LoadDocContent(a) => documents::load_doc_content(app, req, a.id),
         Command::SetTitle(a) => structure::set_title(app, req, a.id, a.title),
         Command::SetStarred(a) => structure::set_starred(app, req, a.id, a.starred),
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),
@@ -215,6 +230,7 @@ fn error_reply(id: u64, error: &Error) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::UiTask;
     use crate::testing::{Harness, parse};
 
     // ------------------------------------------------------------------------
@@ -225,13 +241,51 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn links_that_are_no_web_mail_or_phone_links_are_refused() {
+        let mut h = Harness::new("refused");
+        let urls = [
+            "file:///C:/Windows/notepad.exe",
+            "javascript:alert(1)",
+            "C:/Windows/notepad.exe",
+            "notes/a.md",
+        ];
+        for (id, url) in (1..).zip(urls) {
+            let request = json!({ "id": id, "cmd": "open_url", "args": { "url": url } });
+            let replies = parse(&h.send(&request.to_string()));
+            assert_eq!(replies.len(), 1, "{url}");
+            assert_eq!(error_code(&replies[0], id), "invalid_argument", "{url}");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_web_link_is_opened_after_the_handler_and_answered_once() {
+        let mut h = Harness::new("web-link");
+        let request =
+            r#"{"id": 7, "cmd": "open_url", "args": {"url": "HTTPS://example.com/a?b=1"}}"#;
+        h.app.on_web_message(request.to_string());
+        // The shell runs as a dialog does, after the handler: nothing is
+        // opened or answered yet.
+        let Some(UiTask::Modal(open)) = h.ui.pop() else {
+            panic!("expected the link to be opened outside the handler");
+        };
+        assert!(h.take().is_empty());
+        // Dropped without running (the app closed), it still answers.
+        drop(open);
+        h.run_queue();
+        let replies = parse(&h.take());
+        assert_eq!(error_code(&replies[0], 7), "cancelled");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn a_request_that_does_not_decode_is_answered_as_a_bad_request() {
         let mut h = Harness::new("bad-request");
         let requests = [
             (2, r#"{"id": 2, "cmd": "no_such_command"}"#),
-            (3, r#"{"id": 3, "cmd": "set_prefs", "args": {}}"#),
-            (4, r#"{"id": 4, "cmd": "set_prefs"}"#),
-            (5, r#"{"id": 5, "cmd": "set_prefs", "args": {"prefs": 5}}"#),
+            (3, r#"{"id": 3, "cmd": "open_url", "args": {}}"#),
+            (4, r#"{"id": 4, "cmd": "open_url"}"#),
+            (5, r#"{"id": 5, "cmd": "open_url", "args": {"url": 5}}"#),
         ];
         for (id, request) in requests {
             let replies = parse(&h.send(request));
@@ -245,8 +299,8 @@ mod tests {
     fn a_message_without_an_id_is_not_answered() {
         let mut h = Harness::new("no-id");
         for message in [
-            r#"{"cmd": "ready"}"#,
-            r#"{"id": "x", "cmd": "ready"}"#,
+            r#"{"cmd": "open_url"}"#,
+            r#"{"id": "x", "cmd": "open_url"}"#,
             "{oops",
         ] {
             assert!(h.send(message).is_empty(), "{message}");
