@@ -22,6 +22,8 @@
   --c-line: rgba(10, 10, 11, 0.16);
   /* selection */
   --c-accent: #8fd0d6;
+  /* tags */
+  --c-accent-soft: rgba(143, 208, 214, 0.22);
   --c-danger: #de9193;
   /* hover tint */
   --c-hover: rgba(10, 10, 11, 0.04);
@@ -43,6 +45,7 @@
   --h-topbar: 36px;
   --h-row: 30px;
   --h-nav-row: 28px;
+  --h-control: 24px;
   --h-control-sm: 22px;
   /* an icon (index.html's sprite, build.rs) */
   --h-icon: 16px;
