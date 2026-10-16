@@ -97,3 +97,9 @@ export function threadMembers(threadId) {
     .filter(doc => doc.threads?.includes(threadId))
     .sort(compareMembers);
 }
+
+// A thread's projects are its members' (vault.md#thread): those in the
+// vault, each once, in thread order.
+export function threadProjects(threadId) {
+  return [...new Set(threadMembers(threadId).flatMap(projectsOf))];
+}
