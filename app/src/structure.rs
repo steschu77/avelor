@@ -1,11 +1,11 @@
-//! The structural commands (`panel.md#saving-structure`): projects,
-//! titles, stars, archiving, labels, links -- and
+//! The structural commands (`panel.md#saving-structure`): threads,
+//! projects, titles, stars, archiving, labels, links -- and
 //! `reload_entity`, the conflict dialog's Use theirs, which ends like
 //! them. Typed commands (`api.md#structure`): each edit goes through
 //! `App::step`, `App::edit` keeping the step to undo, which pushes every
-//! entity it wrote (`entity`) before the answer: `ok {id}`,
-//! `ok {conflict: {id, changed}}` if a file changed outside the app
-//! (nothing is written), or an error.
+//! entity it wrote (`entity`, `entity_deleted`) before the answer:
+//! `ok {id}`, `ok {conflict: {id, changed}}` if a file changed outside
+//! the app (nothing is written), or an error.
 
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
@@ -22,8 +22,8 @@ use crate::texts::Text;
 /// The answer of a structural command.
 #[derive(Serialize)]
 pub struct Done {
-    /// The entity the command is about: the new project, the project of a
-    /// membership edit, the entity itself.
+    /// The entity the command is about: the new thread or project, the
+    /// thread or project of a membership edit, the entity itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<Id>,
     /// Nothing was written: a file changed outside the app.
@@ -96,6 +96,20 @@ pub(crate) fn named(app: &App, id: &Id, instead: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// `create_thread`: a thread of `members`, titled `title`; it is written
+/// beside its first member (`panel.md#structural-edits`).
+pub fn create_thread(app: &mut App, req: Req, title: String, members: Vec<Id>) {
+    let mut created = None;
+    let step = Text::new("undo.create_thread").arg("title", title.clone());
+    let result = app.step(&req, step, |index, changes| {
+        let outcome = index.create_thread(title, &members, changes);
+        created = changes.created;
+        outcome
+    });
+    answer(app, req, result, created);
+}
+
+// ----------------------------------------------------------------------------
 /// `create_project`: a project titled `title`, in `Projects/`.
 pub fn create_project(app: &mut App, req: Req, title: String) {
     let step = Text::new("undo.create_project").arg("title", title.clone());
@@ -107,8 +121,9 @@ pub fn create_project(app: &mut App, req: Req, title: String) {
 }
 
 // ----------------------------------------------------------------------------
-/// An entity joining or leaving a group -- a project; the answer names the
-/// group. The step `name` names both.
+/// An entity joining or leaving a group -- a thread or a project; the
+/// answer names the group. Leaving a thread dissolves it below two members.
+/// The step `name` names both.
 pub fn membership(
     app: &mut App,
     req: Req,
@@ -251,6 +266,40 @@ mod tests {
             "set_title",
             json!({ "id": ids[0], "title": "Renamed" }),
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_new_thread_and_its_members_are_pushed_before_the_answer() {
+        let (mut h, ids) = notes("create-thread", 2);
+        let sent = h.call("create_thread", json!({ "title": "Trip", "members": ids }));
+        assert_eq!(shape(&sent), ["entity", "entity", "entity", "reply"]);
+        assert_eq!(sent[0]["data"]["kind"], "thread");
+        assert_eq!(sent[3]["ok"]["id"], sent[0]["data"]["id"]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_thread_made_or_dissolved_is_undone() {
+        let (mut h, ids) = notes("undo-thread", 2);
+        let sent = undoes(
+            &mut h,
+            "create_thread",
+            json!({ "title": "Trip", "members": ids }),
+        );
+        let thread = sent[0]["data"]["id"].as_str().unwrap().to_string();
+        let sent = h.call("undo", json!({}));
+        assert_eq!(
+            shape(&sent),
+            ["entity", "entity", "entity_deleted", "notice", "reply"],
+            "the members left it, the thread went to the trash"
+        );
+        h.call("redo", json!({}));
+
+        // Leaving dissolves it; the undo brings it back from the trash.
+        let args = json!({ "id": ids[0], "thread": thread });
+        let sent = undoes(&mut h, "leave_thread", args);
+        assert!(shape(&sent).contains(&"entity_deleted"), "{sent:?}");
     }
 
     // ------------------------------------------------------------------------

@@ -227,6 +227,65 @@ fn thread_vault() -> (PathBuf, Vec<Id>) {
     (root, ids)
 }
 
+/// Create a thread of `members`, which must succeed; its id.
+fn new_thread(index: &mut Index, title: &str, members: &[Id], changes: &mut Changes) -> Id {
+    let created = index.create_thread(title.into(), members, changes);
+    assert_eq!(created.unwrap(), SaveOutcome::Saved);
+    changes.created.expect("created thread")
+}
+
+fn threads_of(index: &Index, id: &Id) -> Vec<Id> {
+    let doc = index.get(id).unwrap();
+    doc.roles()
+        .message
+        .as_ref()
+        .map(|m| m.threads.clone())
+        .unwrap_or_default()
+}
+
+#[test]
+fn created_thread_and_membership_survive_reindexing() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+
+    let mut changes = Changes::default();
+    let thread = new_thread(&mut index, "Note 0", &ids[0..2], &mut changes);
+    assert_eq!(changes.saved, ids[0..2]);
+
+    let entry = index.entry(&thread).unwrap();
+    assert!(entry.local.starts_with("Notes"), "next to the first member");
+    let name = entry
+        .local
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    assert!(
+        name.contains(".note-0.") && name.ends_with(".thd.yaml"),
+        "{name}"
+    );
+
+    let mut changes = Changes::default();
+    let joined = index.join_thread(&ids[2], &thread, &mut changes);
+    assert_eq!(joined.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [ids[2]]);
+    let mut changes = Changes::default();
+    let joined = index.join_thread(&ids[2], &thread, &mut changes);
+    assert_eq!(joined.unwrap(), SaveOutcome::Unchanged);
+    assert!(changes.saved.is_empty(), "joining twice writes nothing");
+
+    let reindexed = Index::build(&root);
+    assert_eq!(reindexed.get(&thread).unwrap().kind(), DocumentType::Thread);
+    assert_eq!(reindexed.thread_members(&thread).len(), 3);
+    assert_eq!(
+        reindexed.get(&ids[0]).unwrap().content(),
+        "Body 0\n",
+        "body kept"
+    );
+
+    fs::remove_dir_all(&root).ok();
+}
+
 #[test]
 fn created_project_survives_reindexing() {
     let (root, _) = thread_vault();
@@ -257,6 +316,90 @@ fn created_project_survives_reindexing() {
     let doc = reindexed.get(&project).unwrap();
     assert_eq!(doc.kind(), DocumentType::Project);
     assert_eq!(doc.title(), "New project");
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn leaving_dissolves_a_thread_below_two_members() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let thread = new_thread(&mut index, "T", &ids, &mut changes);
+    let thread_file = index.entry(&thread).unwrap().local.clone();
+
+    let mut changes = Changes::default();
+    let left = index.leave_thread(&ids[2], &thread, &mut changes);
+    assert_eq!(left.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [ids[2]]);
+    assert!(changes.trashed.is_empty(), "two members left");
+
+    let mut changes = Changes::default();
+    let left = index.leave_thread(&ids[0], &thread, &mut changes);
+    assert_eq!(left.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [ids[0], ids[1]]);
+    assert_eq!(changes.trashed, [thread]);
+    assert!(index.get(&thread).is_none());
+    assert!(root.join(".trash").join(&thread_file).exists());
+
+    let reindexed = Index::build(&root);
+    assert!(reindexed.get(&thread).is_none());
+    for id in &ids {
+        assert!(threads_of(&reindexed, id).is_empty());
+        let doc = reindexed.get(id).unwrap();
+        assert!(doc.roles().message.is_none(), "empty message role dropped");
+    }
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_read_only_member_refuses_the_whole_operation() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let thread = new_thread(&mut index, "T", &ids[0..2], &mut changes);
+
+    // Leaving would dissolve the thread and rewrite ids[1] -- read-only.
+    let path = index.entry(&ids[1]).unwrap().path.clone();
+    index.documents[index.by_id[&ids[1]]].readonly = true;
+    let before = fs::read_to_string(&index.entry(&ids[0]).unwrap().path).unwrap();
+
+    let mut changes = Changes::default();
+    let err = index.leave_thread(&ids[0], &thread, &mut changes);
+    assert!(matches!(err, Err(Error::NotWritable { .. })));
+    assert!(changes.saved.is_empty() && changes.trashed.is_empty());
+    assert_eq!(
+        fs::read_to_string(&index.entry(&ids[0]).unwrap().path).unwrap(),
+        before
+    );
+    assert_eq!(threads_of(&index, &ids[0]), [thread]);
+    assert!(path.exists() && index.get(&thread).is_some());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn thread_ops_refuse_non_threads_and_unknown_ids() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+
+    let err = index.join_thread(&ids[0], &ids[1], &mut changes);
+    assert!(
+        matches!(err, Err(Error::WrongKind)),
+        "a document is not a thread"
+    );
+    let err = index.leave_thread(&ids[0], &Id::generate(), &mut changes);
+    assert!(matches!(err, Err(Error::NotFound)));
+    let err = index.create_thread("T".into(), &[ids[0], Id::generate()], &mut changes);
+    assert!(matches!(err, Err(Error::NotFound)));
+    assert!(changes.created.is_none() && changes.saved.is_empty());
+    assert_eq!(
+        fs::read_dir(root.join("Notes")).unwrap().count(),
+        3,
+        "no file written"
+    );
 
     fs::remove_dir_all(&root).ok();
 }
@@ -623,7 +766,9 @@ fn a_file_without_frontmatter_gets_one_only_when_metadata_is_set() {
 
     let mut undone = Changes::default();
     assert_eq!(
-        index.replay(&changes.files, Op::Undo, &mut undone).unwrap(),
+        index
+            .replay(&mut changes.files, Op::Undo, &mut undone)
+            .unwrap(),
         SaveOutcome::Saved
     );
     assert_eq!(
@@ -663,7 +808,7 @@ fn a_step_is_undone_and_redone() {
     );
 
     let mut changes = Changes::default();
-    let undone = index.replay(&step.files, Op::Undo, &mut changes);
+    let undone = index.replay(&mut step.files, Op::Undo, &mut changes);
     assert_eq!(undone.unwrap(), SaveOutcome::Saved);
     assert_eq!(changes.saved, [ids[0]]);
     let undone = fs::read_to_string(&path).unwrap();
@@ -675,7 +820,7 @@ fn a_step_is_undone_and_redone() {
     assert_eq!(index.get(&ids[0]).unwrap().title(), "Note 0");
 
     let mut changes = Changes::default();
-    let redone = index.replay(&step.files, Op::Redo, &mut changes);
+    let redone = index.replay(&mut step.files, Op::Redo, &mut changes);
     assert_eq!(redone.unwrap(), SaveOutcome::Saved);
     assert_eq!(fs::read_to_string(&path).unwrap(), renamed);
 
@@ -700,11 +845,11 @@ fn a_body_is_a_step_and_steps_join_into_one() {
     let after = fs::read_to_string(&path).unwrap();
 
     let files = FileStep::joined(first.files, title.files);
-    let files = FileStep::joined(files, second.files);
+    let mut files = FileStep::joined(files, second.files);
     assert_eq!(files.len(), 1, "one file, one part");
     let mut changes = Changes::default();
     assert_eq!(
-        index.replay(&files, Op::Undo, &mut changes).unwrap(),
+        index.replay(&mut files, Op::Undo, &mut changes).unwrap(),
         SaveOutcome::Saved
     );
     let undone = format!(
@@ -713,7 +858,7 @@ fn a_body_is_a_step_and_steps_join_into_one() {
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), undone);
     assert_eq!(
-        index.replay(&files, Op::Redo, &mut changes).unwrap(),
+        index.replay(&mut files, Op::Redo, &mut changes).unwrap(),
         SaveOutcome::Saved
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), after);
@@ -730,31 +875,36 @@ fn a_new_file_is_taken_away_and_made_again() {
     let mut titled = Changes::default();
     let renamed = index.set_title(&project, "Moving".into(), &mut titled);
     assert_eq!(renamed.unwrap(), SaveOutcome::Saved);
-    let files = FileStep::joined(step.files, titled.files);
+    let mut files = FileStep::joined(step.files, titled.files);
     let [
         FileStep {
             local,
-            before: Place::Gone,
+            before: Place::Trash(None),
             ..
         },
     ] = &files[..]
     else {
         panic!("{files:?}");
     };
+    let local_path = local.clone();
     let path = root.join(local);
     let made = fs::read_to_string(&path).unwrap();
 
     let mut changes = Changes::default();
     assert_eq!(
-        index.replay(&files, Op::Undo, &mut changes).unwrap(),
+        index.replay(&mut files, Op::Undo, &mut changes).unwrap(),
         SaveOutcome::Saved
     );
-    assert_eq!(changes.removed, [project]);
+    assert_eq!(changes.trashed, [project]);
     assert!(!path.exists() && index.get(&project).is_none());
+    assert!(
+        root.join(".trash").join(local_path).exists(),
+        "in the trash"
+    );
 
     let mut changes = Changes::default();
     assert_eq!(
-        index.replay(&files, Op::Redo, &mut changes).unwrap(),
+        index.replay(&mut files, Op::Redo, &mut changes).unwrap(),
         SaveOutcome::Saved
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), made);
@@ -763,7 +913,7 @@ fn a_new_file_is_taken_away_and_made_again() {
     // Changed since, it stays.
     let titled = index.set_title(&project, "Moved".into(), &mut changes);
     assert_eq!(titled.unwrap(), SaveOutcome::Saved);
-    let undone = index.replay(&files, Op::Undo, &mut Changes::default());
+    let undone = index.replay(&mut files, Op::Undo, &mut Changes::default());
     assert_eq!(undone.unwrap(), SaveOutcome::Conflict(project));
     assert!(path.exists());
 
@@ -782,7 +932,9 @@ fn undoing_a_title_keeps_the_text_written_since() {
 
     let mut changes = Changes::default();
     assert_eq!(
-        index.replay(&step.files, Op::Undo, &mut changes).unwrap(),
+        index
+            .replay(&mut step.files, Op::Undo, &mut changes)
+            .unwrap(),
         SaveOutcome::Saved
     );
     let doc = index.get(&ids[0]).unwrap();
@@ -804,7 +956,7 @@ fn a_step_whose_file_changed_since_is_not_undone() {
 
     // Written since by the app.
     let mut changes = Changes::default();
-    let undone = index.replay(&step.files, Op::Undo, &mut changes);
+    let undone = index.replay(&mut step.files, Op::Undo, &mut changes);
     assert_eq!(undone.unwrap(), SaveOutcome::Conflict(ids[0]));
     assert!(changes.saved.is_empty());
     assert_eq!(index.get(&ids[0]).unwrap().title(), "Again");
@@ -812,12 +964,12 @@ fn a_step_whose_file_changed_since_is_not_undone() {
     // Written since by another program.
     let path = edit_outside(&root, 0, &ids[0], "Theirs, longer\n");
     let theirs = fs::read_to_string(&path).unwrap();
-    let undone = index.replay(&later.files, Op::Undo, &mut changes);
+    let undone = index.replay(&mut later.files, Op::Undo, &mut changes);
     assert_eq!(undone.unwrap(), SaveOutcome::Conflict(ids[0]));
     assert_eq!(fs::read_to_string(&path).unwrap(), theirs);
 
     // Redone only from what it held before.
-    let redone = index.replay(&step.files, Op::Redo, &mut changes);
+    let redone = index.replay(&mut step.files, Op::Redo, &mut changes);
     assert_eq!(redone.unwrap(), SaveOutcome::Conflict(ids[0]));
     assert!(changes.saved.is_empty());
 
@@ -881,6 +1033,35 @@ fn a_deleted_file_is_a_conflict_until_overwritten() {
     let saved = index.save_content(&ids[0], "Mine\n".into(), true, &mut Changes::default());
     assert_eq!(saved.unwrap(), SaveOutcome::Saved);
     assert!(fs::read_to_string(&path).unwrap().ends_with("Mine\n"));
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_changed_member_stops_the_whole_operation() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let thread = new_thread(&mut index, "T", &ids[0..2], &mut changes);
+    let first = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+    edit_outside(&root, 1, &ids[1], "Theirs\n");
+
+    // Leaving would dissolve the thread and rewrite ids[1].
+    let mut changes = Changes::default();
+    let left = index.leave_thread(&ids[0], &thread, &mut changes);
+    assert_eq!(left.unwrap(), SaveOutcome::Conflict(ids[1]));
+    assert!(changes.saved.is_empty() && changes.trashed.is_empty());
+    assert_eq!(fs::read_to_string(root.join("Notes/n0.md")).unwrap(), first);
+    assert_eq!(threads_of(&index, &ids[0]), [thread]);
+    assert!(index.get(&thread).is_some());
+
+    // Nor is a thread created around it.
+    let files = fs::read_dir(root.join("Notes")).unwrap().count();
+    let mut changes = Changes::default();
+    let created = index.create_thread("U".into(), &ids[1..3], &mut changes);
+    assert_eq!(created.unwrap(), SaveOutcome::Conflict(ids[1]));
+    assert!(changes.created.is_none() && changes.saved.is_empty());
+    assert_eq!(fs::read_dir(root.join("Notes")).unwrap().count(), files);
 
     fs::remove_dir_all(&root).ok();
 }

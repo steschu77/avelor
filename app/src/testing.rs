@@ -117,11 +117,15 @@ impl Harness {
     }
 
     // ------------------------------------------------------------------------
-    /// The vault's files with what they hold, by their path in the vault.
+    /// The vault's files with what they hold, by their path in the vault;
+    /// not those in its dot-folders, the trash among them.
     pub fn files(&self) -> BTreeMap<PathBuf, String> {
         fn walk(root: &Path, dir: &Path, files: &mut BTreeMap<PathBuf, String>) {
             for entry in std::fs::read_dir(dir).unwrap() {
                 let path = entry.unwrap().path();
+                if path.file_name().unwrap().to_string_lossy().starts_with('.') {
+                    continue;
+                }
                 if path.is_dir() {
                     walk(root, &path, files);
                 } else {

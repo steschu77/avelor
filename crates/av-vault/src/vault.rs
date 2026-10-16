@@ -26,6 +26,7 @@ mod create;
 mod indexing;
 mod properties;
 mod structure;
+mod trash;
 
 pub use indexing::{IndexControl, IndexEvent, index_vault};
 
@@ -43,6 +44,20 @@ pub enum SaveOutcome {
     Unchanged,
     /// This entity's file changed outside the app; nothing was written.
     Conflict(Id),
+}
+
+impl SaveOutcome {
+    /// The outcome of this write followed by `next`: a conflict wins, then
+    /// a write.
+    fn and(self, next: SaveOutcome) -> SaveOutcome {
+        match (self, next) {
+            (conflict @ SaveOutcome::Conflict(_), _) | (_, conflict @ SaveOutcome::Conflict(_)) => {
+                conflict
+            }
+            (SaveOutcome::Saved, _) | (_, SaveOutcome::Saved) => SaveOutcome::Saved,
+            _ => SaveOutcome::Unchanged,
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -123,9 +138,9 @@ impl Entry {
 }
 
 // ----------------------------------------------------------------------------
-/// What a structural operation did, so the caller can push exactly the
-/// changed entities. Filled in as the operation goes, so it is accurate even
-/// when the operation fails part-way.
+/// What a structural operation (thread create/join/leave) did, so the
+/// caller can push exactly the changed entities. Filled in as the operation
+/// goes, so it is accurate even when the operation fails part-way.
 #[derive(Debug, Default)]
 pub struct Changes {
     /// An entity new in the index: made in the app, written to its own new
@@ -133,8 +148,8 @@ pub struct Changes {
     pub created: Option<Id>,
     /// Entities whose file was rewritten.
     pub saved: Vec<Id>,
-    /// Entities whose file an undo took away again: it left the index.
-    pub removed: Vec<Id>,
+    /// Entities whose file was moved to `.trash` and which left the index.
+    pub trashed: Vec<Id>,
     /// What each written file held before and after, in the order written:
     /// the operation's step, to undo and redo ([`Index::replay`]).
     pub files: Vec<FileStep>,
@@ -174,9 +189,18 @@ pub struct FileStep {
 pub enum Place {
     /// In the vault, holding a state.
     Vault(FileState),
-    /// Not in the vault: before the step made it, or once its undo took it
-    /// away again.
-    Gone,
+    /// In the trash, where a move put it; `None` before any did, for a file
+    /// the step made.
+    Trash(Option<InTrash>),
+}
+
+// ----------------------------------------------------------------------------
+/// Where a step's file is in the trash: its path, vault-relative (in
+/// `.trash/`), and its stamp, which it keeps while nothing changes it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InTrash {
+    at: PathBuf,
+    stamp: Option<FileStamp>,
 }
 
 impl FileStep {
@@ -206,8 +230,19 @@ impl FileStep {
         FileStep {
             id: doc.id(),
             local,
-            before: Place::Gone,
+            before: Place::Trash(None),
             after: Place::Vault(FileState::of(doc)),
+        }
+    }
+
+    /// The file of `id`, at `local` and holding `state`, moved to the trash
+    /// at `trashed`.
+    fn trashed(id: Id, local: PathBuf, state: FileState, trashed: InTrash) -> Self {
+        FileStep {
+            id,
+            local,
+            before: Place::Vault(state),
+            after: Place::Trash(Some(trashed)),
         }
     }
 
@@ -221,6 +256,14 @@ impl FileStep {
         match op {
             Op::Undo => (&self.after, &self.before),
             Op::Redo => (&self.before, &self.after),
+        }
+    }
+
+    /// Where `op` leaves the file, to note where in the trash it went.
+    fn target_mut(&mut self, op: Op) -> &mut Place {
+        match op {
+            Op::Undo => &mut self.before,
+            Op::Redo => &mut self.after,
         }
     }
 
@@ -281,14 +324,6 @@ impl FileState {
             envelope: envelope.map(Box::new),
             body: Some(body),
         }
-    }
-
-    /// A document of the format `format` holding this state, as read from
-    /// its file.
-    fn document(&self, format: FileFormat) -> Document {
-        let mut doc = Document::load(String::new(), format);
-        self.put(&mut doc);
-        Document::load(doc.save(), format)
     }
 
     /// Whether `doc` holds this state.
@@ -481,22 +516,24 @@ impl Index {
     // ------------------------------------------------------------------------
     /// Take a step, the files an operation wrote (`saving.md#undo`), back
     /// (`Op::Undo`, the last written first) or forth again (`Op::Redo`).
-    /// Nothing is written unless every file holds what the step expects of
-    /// it, on disk too; else the first that doesn't is the conflict.
+    /// Nothing is written unless every file is where the step expects it and
+    /// holds what it held, on disk too; else the first that isn't is the
+    /// conflict. Where a file goes in the trash is noted in `files`, for the
+    /// way back.
     pub fn replay(
         &mut self,
-        files: &[FileStep],
+        files: &mut [FileStep],
         op: Op,
         changes: &mut Changes,
     ) -> Result<SaveOutcome> {
         // Every file checked before any is written: a conflict writes nothing.
-        for file in files {
-            let (expected, _) = file.transition(op);
-            if !self.holds(file, expected)? {
+        for file in files.iter() {
+            let (expected, target) = file.transition(op);
+            if !self.holds(file, expected, target)? {
                 return Ok(SaveOutcome::Conflict(file.id));
             }
         }
-        let mut order: Vec<&FileStep> = files.iter().collect();
+        let mut order: Vec<&mut FileStep> = files.iter_mut().collect();
         if op == Op::Undo {
             order.reverse();
         }
@@ -511,50 +548,60 @@ impl Index {
         Ok(outcome)
     }
 
-    /// Whether `file` is at `place`: in the vault holding its state, in
-    /// memory and on disk, and writable; or gone, its place free.
-    fn holds(&self, file: &FileStep, place: &Place) -> Result<bool> {
+    /// Whether `file` is at `place`, to go to `target`: in the vault holding
+    /// its state, in memory and on disk, and writable, or deletable for the
+    /// trash; or in the trash as it went in, its place in the vault free.
+    fn holds(&self, file: &FileStep, place: &Place, target: &Place) -> Result<bool> {
         match place {
             Place::Vault(state) => {
                 let Some(entry) = self.entry(&file.id) else {
                     return Ok(false);
                 };
-                self.check_writable(&file.id)?;
+                let may = match target {
+                    Place::Vault(_) => entry.is_writable(),
+                    Place::Trash(_) => entry.is_deletable(),
+                };
+                if !may {
+                    return Err(Error::NotWritable {
+                        path: entry.local.clone(),
+                    });
+                }
                 Ok(state.held_by(&entry.doc) && !entry.changed_on_disk()?)
             }
-            Place::Gone => {
-                Ok(self.entry(&file.id).is_none() && !self.root.join(&file.local).exists())
-            }
+            Place::Trash(Some(trashed)) => Ok(self.in_trash(trashed)
+                && self.entry(&file.id).is_none()
+                && !self.root.join(&file.local).exists()),
+            Place::Trash(None) => Ok(false),
         }
     }
 
-    /// Move `file` from where `op` finds it to where it leaves it.
-    fn move_file(&mut self, file: &FileStep, op: Op, changes: &mut Changes) -> Result<SaveOutcome> {
+    /// Move `file` from where `op` finds it to where it leaves it: within
+    /// the vault, into the trash or out of it.
+    fn move_file(
+        &mut self,
+        file: &mut FileStep,
+        op: Op,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        let id = file.id;
         match file.transition(op) {
-            (Place::Vault(_), Place::Vault(state)) => {
-                self.update(&file.id, changes, |d| state.put(d))
+            (Place::Vault(_), Place::Vault(state)) => self.update(&id, changes, |d| state.put(d)),
+            (Place::Trash(Some(trashed)), Place::Vault(state)) => {
+                let state = state.clone();
+                self.out_of_trash(&id, trashed, &file.local, changes)?;
+                // Joined to a step before its move to the trash, it may
+                // have held something else then.
+                let put = self.update(&id, changes, |d| state.put(d))?;
+                Ok(SaveOutcome::Saved.and(put))
             }
-            (Place::Vault(_), Place::Gone) => self.take_away(&file.id, changes),
-            (Place::Gone, Place::Vault(state)) => {
-                let format = FileFormat::of_path(&file.local).unwrap_or(FileFormat::Markdown);
-                self.create_at(state.document(format), file.local.clone())?;
-                changes.saved.push(file.id);
+            (Place::Vault(_), Place::Trash(_)) => {
+                let trashed = self.move_to_trash(&id, changes)?;
+                *file.target_mut(op) = Place::Trash(Some(trashed));
                 Ok(SaveOutcome::Saved)
             }
-            (Place::Gone, Place::Gone) => Ok(SaveOutcome::Unchanged),
+            (Place::Trash(None), Place::Vault(_)) => Err(Error::NotFound),
+            (Place::Trash(_), Place::Trash(_)) => Ok(SaveOutcome::Unchanged),
         }
-    }
-
-    /// Take the file of `id`, made by a step undone now, away again: off
-    /// the disk and out of the index.
-    fn take_away(&mut self, id: &Id, changes: &mut Changes) -> Result<SaveOutcome> {
-        let Some(entry) = self.entry(id) else {
-            return Err(Error::NotFound);
-        };
-        fs::remove_file(&entry.path)?;
-        self.remove(id);
-        changes.removed.push(*id);
-        Ok(SaveOutcome::Saved)
     }
 
     /// Apply `change` to `id`'s document and save it if that changed
@@ -595,6 +642,20 @@ impl Index {
         }
     }
 
+    /// The first of `ids` whose file changed outside the app since it was
+    /// last read or written, so rewriting it would be a conflict.
+    fn first_changed(&self, ids: &[Id]) -> Result<Option<Id>> {
+        for id in ids {
+            let Some(entry) = self.entry(id) else {
+                return Err(Error::NotFound);
+            };
+            if entry.changed_on_disk()? {
+                return Ok(Some(*id));
+            }
+        }
+        Ok(None)
+    }
+
     /// `id` may link to `to`: another entity in the vault.
     fn check_link(&self, id: &Id, to: Option<&Id>) -> Result<()> {
         match to {
@@ -602,6 +663,14 @@ impl Index {
                 Err(Error::InvalidArgument { arg: "to".into() })
             }
             _ => Ok(()),
+        }
+    }
+
+    fn check_thread(&self, id: &Id) -> Result<()> {
+        match self.get(id) {
+            Some(doc) if doc.kind() == DocumentType::Thread => Ok(()),
+            Some(_) => Err(Error::WrongKind),
+            None => Err(Error::NotFound),
         }
     }
 

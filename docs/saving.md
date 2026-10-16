@@ -4,8 +4,8 @@
 > unsaved changes, what a delayed reply may and may not do, how a file
 > changed outside the app is handled, how a write is undone, and how the
 > app closes without losing edits. The messages are in
-> `api.md#documents`; how structural edits are saved,
-> `panel.md#saving-structure`.
+> `api.md#documents`; how structural edits (threads, projects, labels)
+> are saved, `panel.md#saving-structure`.
 
 ## Overview
 
@@ -258,12 +258,13 @@ changed it, so undoing a title keeps the text written since.
 before, the last written first: what they held, the frontmatter's keys
 in the app's order, as any write puts them; or forth again
 (`Op::Redo`), as the step left them. A file goes from one place to
-another (`Place`): one the operation made is gone again with the undo,
-off the disk and out of the index (`Changes::removed`), and made again by
-the redo. Neither writes anything unless every file is where it was at
-that point and holds what it held, in memory and on disk
-(`#the-stamp`): a file written since, by the app or another program, is
-the conflict.
+another (`Place`): one the operation made goes to the trash with the undo
+and comes out of it with the redo, from where the undo put it
+(`InTrash`); one it moved to the trash, a dissolved thread, comes back
+and goes again. Neither writes anything unless every file is where it
+was at that point and holds what it held, in memory and on disk
+(`#the-stamp`), one in the trash as it went in: a file written since, by
+the app or another program, is the conflict.
 
 Every edit the user makes through a command is a step (`App::step`,
 `undo.rs`): `App::edit` keeping the files it wrote, named by its command

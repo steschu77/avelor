@@ -108,14 +108,14 @@ impl App {
 /// step whose files changed since is said and dropped, as is one that
 /// failed. Answers `null`.
 pub fn replay(app: &mut App, req: Req, op: Op) {
-    let Some(step) = app.vault.history.take(op) else {
+    let Some(mut step) = app.vault.history.take(op) else {
         app.inform(match op {
             Op::Undo => Text::new("undo.nothing"),
             Op::Redo => Text::new("undo.nothing_redo"),
         });
         return req.ok(());
     };
-    let result = app.edit(|index, changes| index.replay(&step.files, op, changes));
+    let result = app.edit(|index, changes| index.replay(&mut step.files, op, changes));
     let name = step.name.clone();
     if result.is_ok() {
         for file in step.files.iter().filter(|file| file.writes_body()) {
