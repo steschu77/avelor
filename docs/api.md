@@ -92,6 +92,8 @@ rules are `panel.md#saving-structure`.
 | Command | Args | Does | Answer `id` |
 |---|---|---|---|
 | `set_title` | `{ id, title }` | Set the title of any entity; an empty title removes the `title` key. The file keeps its name. | the entity |
+| `set_starred` | `{ id, starred }` | Star or unstar any entity; unstarring removes the key. | the entity |
+| `set_archived` | `{ id, archived }` | Archive any entity, or take it out of the archive; unarchiving removes the key. | the entity |
 | `reload_entity` | `{ id }` | Read the file again and take in what it holds (the conflict dialog's Use theirs): pushes `entity`, or `entity_deleted` if the file is gone. | the id the file has now; none if it is gone |
 
 ### Jobs and closing

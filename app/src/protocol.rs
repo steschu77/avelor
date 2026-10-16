@@ -41,6 +41,8 @@ enum Command {
     CloseReady(close::Answer),
     // The structural commands (`structure`).
     SetTitle(Retitle),
+    SetStarred(Star),
+    SetArchived(Archive),
     ReloadEntity(Target),
 }
 
@@ -70,6 +72,20 @@ struct Retitle {
     title: String,
 }
 
+/// `{id, starred}`
+#[derive(Deserialize)]
+struct Star {
+    id: Id,
+    starred: bool,
+}
+
+/// `{id, archived}`
+#[derive(Deserialize)]
+struct Archive {
+    id: Id,
+    archived: bool,
+}
+
 impl Command {
     // ------------------------------------------------------------------------
     /// The command `cmd` with its `args`.
@@ -82,6 +98,8 @@ impl Command {
             "reveal_vault" => Command::RevealVault,
             "close_ready" => Command::CloseReady(from_value(args)?),
             "set_title" => Command::SetTitle(from_value(args)?),
+            "set_starred" => Command::SetStarred(from_value(args)?),
+            "set_archived" => Command::SetArchived(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
@@ -115,6 +133,8 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::RevealVault => api::reveal_vault(app, req),
         Command::CloseReady(a) => close::close_ready(app, req, a),
         Command::SetTitle(a) => structure::set_title(app, req, a.id, a.title),
+        Command::SetStarred(a) => structure::set_starred(app, req, a.id, a.starred),
+        Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),
     }
 }

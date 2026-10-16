@@ -1,6 +1,6 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
 // archived folded) after No project, with their counts, each a filter;
-// renaming projects; the vault's name and menu. It renders at most once per frame
+// renaming and starring projects; the vault's name and menu. It renders at most once per frame
 // (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
@@ -122,11 +122,19 @@ function renderSidebar() {
   const projectRows = [];
   const archivedRows = [];
   for (const { id, name, starred, archived } of projectsInOrder()) {
-    const row = rowFor(`project:${id}`, name, () =>
-      sidebarNavItem('nav-item nav-item--project', name, 'nav-item__icon nav-item__icon--star', '#i-star-filled', () => selectProject(id),
-        { icon: '#i-edit', title: 'Rename project', onClick: row => editProject(id, row) }));
+    const row = rowFor(`project:${id}`, name, () => {
+      const row = sidebarNavItem('nav-item nav-item--project', name, 'nav-item__icon nav-item__icon--star', '#i-star', () => selectProject(id),
+        { icon: '#i-edit', title: 'Rename project', onClick: row => editProject(id, row) });
+      row.querySelector('.nav-item__icon').addEventListener('click', e => {
+        e.stopPropagation();
+        toggleStar(id);
+      });
+      return row;
+    });
     row.classList.toggle('nav-item--archived', archived);
     updateNavItem(row, projectCounts.get(id) ?? 0, id === selected_project, starred);
+    // The star's symbol follows `starred`: an SVG's can't change in CSS.
+    row.querySelector('.nav-item__icon use').setAttribute('href', starred ? '#i-star-filled' : '#i-star');
     (archived ? archivedRows : projectRows).push(row);
   }
   if (archivedRows.length) {
@@ -161,6 +169,14 @@ function editProject(project_id, row) {
 
 allProjectsEl.addEventListener('click', () => store.setState({ selected_project: null }));
 noProjectEl.addEventListener('click', () => selectProject(NO_PROJECT));
+
+// The star on a project pill: the host writes `starred` (unstarring removes
+// it) and pushes the project back as `entity`, which re-sorts the pills.
+// The selection and the filter stay.
+function toggleStar(project_id) {
+  const starred = !projects.get(project_id)?.starred;
+  structureCall('set_starred', { id: project_id, starred });
+}
 
 // The "Archived" row folds and unfolds the archived projects; not kept
 // across restarts.

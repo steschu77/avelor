@@ -273,6 +273,20 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// Star or unstar the entity. Unstarring removes the `starred` key; a
+    /// missing key loads as not starred.
+    pub fn set_starred(&mut self, starred: bool) {
+        self.envelope_mut().starred = starred.then_some(true);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Archive the entity or take it out of the archive. Unarchiving removes
+    /// the `archived` key; a missing key loads as not archived.
+    pub fn set_archived(&mut self, archived: bool) {
+        self.envelope_mut().archived = archived.then_some(true);
+    }
+
+    // ------------------------------------------------------------------------
     /// The envelope to change; a file without frontmatter gets one.
     fn envelope_mut(&mut self) -> &mut Envelope {
         self.envelope.get_or_insert_default()
@@ -409,6 +423,42 @@ mod tests {
         assert_eq!(md.kind(), DocumentType::Document);
         let yaml = Document::load("title: x\n".into(), FileFormat::YAML);
         assert_eq!(yaml.kind(), DocumentType::Record);
+    }
+
+    #[test]
+    fn starring_round_trips_and_unstarring_drops_the_key() {
+        let mut doc = Document::load("---\nproject: {}\n---\n".into(), FileFormat::Markdown);
+        assert!(!doc.starred());
+
+        doc.set_starred(true);
+        let saved = doc.save();
+        assert!(saved.contains("starred: true"));
+        assert!(Document::load(saved, FileFormat::Markdown).starred());
+
+        doc.set_starred(false);
+        assert!(!doc.starred());
+        assert!(
+            !doc.save().contains("starred"),
+            "unstarring removes the key"
+        );
+    }
+
+    #[test]
+    fn archiving_round_trips_and_unarchiving_drops_the_key() {
+        let mut doc = Document::load("---\nproject: {}\n---\n".into(), FileFormat::Markdown);
+        assert!(!doc.archived());
+
+        doc.set_archived(true);
+        let saved = doc.save();
+        assert!(saved.contains("archived: true"));
+        assert!(Document::load(saved, FileFormat::Markdown).archived());
+
+        doc.set_archived(false);
+        assert!(!doc.archived());
+        assert!(
+            !doc.save().contains("archived"),
+            "unarchiving removes the key"
+        );
     }
 
     #[test]

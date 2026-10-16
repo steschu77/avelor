@@ -246,7 +246,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs` |
-| `structure.rs` | the structural commands: titles, `reload_entity`; their answers; their dispatch tests |
+| `structure.rs` | the structural commands: titles, stars, archiving, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>

@@ -31,7 +31,7 @@ the page, once per frame.
   entities in no project of the vault (`NO_PROJECT` as
   `selected_project`); starred projects come first; archived projects are
   folded under an "Archived" row at the end, still selectable
-  (`projectsInOrder`).
+  (`projectsInOrder`). Editing projects is `panel.md#projects`.
 
 **Labels** filter from the lens head, for every lens: after the project's
 name the active labels, each a label chip whose × takes it out of the

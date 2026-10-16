@@ -1,6 +1,7 @@
 // The lens header (panel.md#projects): the selected project's name, the
 // active labels with the "+" that filters by another one
-// (ui.md#vault-panel), and the project's details -- a toolbar (rename).
+// (ui.md#vault-panel), and the project's details -- a toolbar (rename,
+// archive).
 
 import { $, accEl, oncePerFrame } from '../core/dom.js';
 import { store } from '../model/state.js';
@@ -61,7 +62,7 @@ labelAddBtn.addEventListener('click', () => {
 });
 
 // The selected project's details under the header, shown while the fold
-// button (the chevron) is unfolded: a toolbar (rename).
+// button (the chevron) is unfolded: a toolbar (rename, archive).
 const projectFoldBtn = $('project-fold-btn');
 const projectToolsEl = $('project-tools');
 let descProjectId = null; // the project the details are bound to
@@ -93,6 +94,24 @@ projectFoldBtn.addEventListener('click', () => {
 
 $('project-rename-btn').addEventListener('click', editProjectName);
 
+// Archive toggles: an archived project's button is pressed and unarchives.
+const projectArchiveBtn = $('project-archive-btn');
+projectArchiveBtn.addEventListener('click', () => {
+  if (projectArchiveBtn.getAttribute('aria-disabled') !== 'true') toggleArchive(descProjectId);
+});
+
+// The buttons follow the selected project: what the host may do with its
+// file, and whether it is archived.
+store.subscribe(
+  [state => state.selected_project, state => state.projects_rev],
+  ([selected_project]) => {
+    const project = selected_project ? projects.get(selected_project) : null;
+    const archived = Boolean(project?.archived);
+    projectArchiveBtn.setAttribute('aria-disabled', String(!project?.writable));
+    projectArchiveBtn.setAttribute('aria-pressed', String(archived));
+    projectArchiveBtn.title = archived ? 'Unarchive project' : 'Archive project';
+  });
+
 // Another project selected: the fold state stays. All Projects and No
 // project have no details.
 store.subscribe(state => state.selected_project, () => {
@@ -100,6 +119,14 @@ store.subscribe(state => state.selected_project, () => {
   projectFoldBtn.hidden = !descProjectId;
   updateProjectDesc();
 });
+
+// The project header's Archive: the host writes `archived` (unarchiving
+// removes it) and pushes the project back, which moves its pill between
+// the active and the archived projects. The selection stays.
+function toggleArchive(project_id) {
+  const archived = !projects.get(project_id)?.archived;
+  structureCall('set_archived', { id: project_id, archived });
+}
 
 // ----------------------------------------------------------------------------
 // Labels (`tags`) as chips, each with an x that calls `onChange(tags)` with

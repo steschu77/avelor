@@ -329,6 +329,31 @@ impl Index {
         self.update(id, changes, |d| d.set_title(title))
     }
 
+    /// Star or unstar `id`, which may be any entity; unstarring removes the
+    /// key ([`Document::set_starred`]). Nothing is written if it already is.
+    pub fn set_starred(
+        &mut self,
+        id: &Id,
+        starred: bool,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        self.update(id, changes, |d| d.set_starred(starred))
+    }
+
+    /// Archive `id`, which may be any entity, or take it out of the archive;
+    /// unarchiving removes the key ([`Document::set_archived`]). Nothing is
+    /// written if it already is.
+    pub fn set_archived(
+        &mut self,
+        id: &Id,
+        archived: bool,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        self.update(id, changes, |d| d.set_archived(archived))
+    }
+
     /// Apply `change` to `id`'s document and save it, recording a write in
     /// `changes`.
     fn update(
@@ -802,6 +827,86 @@ mod tests {
 
         let err = index.set_title(&Id::generate(), "X".into(), &mut changes);
         assert!(matches!(err, Err(Error::NotFound)));
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn starring_rewrites_any_entity() {
+        let (root, ids) = thread_vault();
+        let project = Id::generate();
+        fs::write(
+            root.join("p.yaml"),
+            format!("id: {project}\nproject: {{}}\ntitle: P\n"),
+        )
+        .unwrap();
+        let mut index = Index::scan(&root);
+
+        let mut changes = Changes::default();
+        assert_eq!(
+            index.set_starred(&project, true, &mut changes).unwrap(),
+            SaveOutcome::Saved
+        );
+        assert_eq!(
+            index.set_starred(&ids[0], true, &mut changes).unwrap(),
+            SaveOutcome::Saved
+        );
+        assert_eq!(changes.saved, [project, ids[0]]);
+        let yaml = fs::read_to_string(root.join("p.yaml")).unwrap();
+        assert!(yaml.contains("starred: true\n"), "{yaml}");
+        let rescanned = Index::scan(&root);
+        assert!(rescanned.get(&project).unwrap().starred());
+        assert!(!rescanned.get(&ids[1]).unwrap().starred());
+
+        // Starring again writes nothing; unstarring removes the key.
+        let mut changes = Changes::default();
+        assert_eq!(
+            index.set_starred(&project, true, &mut changes).unwrap(),
+            SaveOutcome::Unchanged
+        );
+        assert!(changes.saved.is_empty());
+        assert_eq!(
+            index.set_starred(&project, false, &mut changes).unwrap(),
+            SaveOutcome::Saved
+        );
+        assert_eq!(changes.saved, [project]);
+        let yaml = fs::read_to_string(root.join("p.yaml")).unwrap();
+        assert!(!yaml.contains("starred"), "{yaml}");
+
+        let err = index.set_starred(&Id::generate(), true, &mut changes);
+        assert!(matches!(err, Err(Error::NotFound)));
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn archiving_writes_the_flag_and_unarchiving_removes_it() {
+        let (root, _) = thread_vault();
+        let project = Id::generate();
+        let path = root.join("p.yaml");
+        fs::write(&path, format!("id: {project}\nproject: {{}}\ntitle: P\n")).unwrap();
+        let mut index = Index::scan(&root);
+
+        let mut changes = Changes::default();
+        assert_eq!(
+            index.set_archived(&project, true, &mut changes).unwrap(),
+            SaveOutcome::Saved
+        );
+        assert_eq!(changes.saved, [project]);
+        assert!(Index::scan(&root).get(&project).unwrap().archived());
+
+        // Archiving again writes nothing; unarchiving removes the key.
+        let mut changes = Changes::default();
+        assert_eq!(
+            index.set_archived(&project, true, &mut changes).unwrap(),
+            SaveOutcome::Unchanged
+        );
+        assert_eq!(
+            index.set_archived(&project, false, &mut changes).unwrap(),
+            SaveOutcome::Saved
+        );
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("archived"), "{text}");
 
         fs::remove_dir_all(&root).ok();
     }
