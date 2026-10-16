@@ -163,6 +163,10 @@ for (const section of sidebar.querySelectorAll(".nav-section")) {
   });
 }
 
+for (const btn of sidebar.querySelectorAll(".nav-section__add")) {
+  btn.addEventListener('click', e => e.stopPropagation());
+}
+
 btnClose.addEventListener('click', () => store.setState({ panel_size: "closed" }));
 
 btnExpand.addEventListener('click', () => {

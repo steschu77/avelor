@@ -117,6 +117,7 @@
   "selection.gone": "The linked entity {id} is not in the vault.",
   "sidebar.all_projects": "All Projects",
   "sidebar.archived": "Archived",
+  "sidebar.new_project": "Add project",
   "sidebar.no_project": "No project",
   "sidebar.no_project_title": "Documents without a project",
   "sidebar.no_vault": "No vault",

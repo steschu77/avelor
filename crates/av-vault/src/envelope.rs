@@ -41,7 +41,7 @@ pub enum DocumentType {
 
 // ----------------------------------------------------------------------------
 impl DocumentType {
-    /// The three-letter code used in filenames.
+    /// The three-letter code used in filenames (vault.md#filenames).
     pub fn type_id(&self) -> &'static str {
         match self {
             DocumentType::Project => "prj",

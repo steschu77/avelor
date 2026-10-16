@@ -120,6 +120,7 @@
   "selection.gone": "El elemento enlazado {id} no está en la bóveda.",
   "sidebar.all_projects": "Todos los proyectos",
   "sidebar.archived": "Archivados",
+  "sidebar.new_project": "Añadir proyecto",
   "sidebar.no_project": "Sin proyecto",
   "sidebar.no_project_title": "Documentos sin proyecto",
   "sidebar.no_vault": "Sin bóveda",
