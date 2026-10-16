@@ -56,6 +56,7 @@
   "editor.ul": "Bullet list (Ctrl+Shift+8)",
   "error.code": "Something went wrong ({code}).",
   "header.archive": "Archive project",
+  "header.edit_description": "Edit description",
   "header.filter_label": "Filter by a label",
   "header.filter_labels": "Filter labels",
   "header.hide_details": "Hide project details",

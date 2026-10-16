@@ -257,8 +257,9 @@ metadata fields above. The type-id each role leads to is listed in
 Block: `project:`
 
 A project file is either a markdown or a pure YAML file. The content of
-the markdown is the project's description. Entities are linked to the
-project via their `projects` metadata field.
+the markdown is the project's description, shown and edited under the
+vault header. Entities are linked to the project via their `projects`
+metadata field.
 
 ### Document <a id="document"></a>
 

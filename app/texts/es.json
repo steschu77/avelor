@@ -59,6 +59,7 @@
   "editor.ul": "Lista con viñetas (Ctrl+Mayús+8)",
   "error.code": "Algo ha fallado ({code}).",
   "header.archive": "Archivar proyecto",
+  "header.edit_description": "Editar descripción",
   "header.filter_label": "Filtrar por una etiqueta",
   "header.filter_labels": "Filtrar etiquetas",
   "header.hide_details": "Ocultar los detalles del proyecto",
