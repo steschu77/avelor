@@ -14,6 +14,12 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   becomes an input; Enter
   or leaving it sends `set_title` if the text changed, Esc cancels. The
   pushed `entity` bumps `projects_rev`, so the header follows.
+- **Star**: the star at the start of a sidebar project row (`toggleStar`)
+  sends `set_starred`; starred projects are listed first.
+- **Archive**: the Archive button in the project header's toolbar, pressed
+  while the project is archived (`toggleArchive`), sends `set_archived`;
+  the sidebar folds archived projects under an "Archived" row
+  (`toggleArchived`, not kept across restarts).
 
 ## Saving structural edits <a id="saving-structure"></a>
 
@@ -48,3 +54,5 @@ something in it changed, and the host answers with what is now on disk.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | C2 | Rename a project | pill pen or header rename → inline input, Enter/blur | `set_title` → `entity` | header follows (`projects_rev`) |
+| C3 | Star | star icon → `toggleStar` | `set_starred {starred}` → `entity` | starred first |
+| C7 | Archive | header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |

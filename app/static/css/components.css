@@ -35,6 +35,16 @@
   background: var(--c-hover);
 }
 
+.tool[aria-pressed="true"] {
+  background: var(--c-accent-soft);
+  border-color: var(--c-line);
+}
+
+.tool[aria-disabled="true"] {
+  color: var(--c-ink-faint);
+  pointer-events: none;
+}
+
 /* A round icon button; --quiet shows its ring only on hover. */
 .icon-btn {
   flex: none;
