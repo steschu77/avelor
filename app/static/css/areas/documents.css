@@ -60,6 +60,11 @@
   background: var(--c-hover);
 }
 
+.table__row[aria-selected="true"] {
+  background: var(--c-card);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
 .table__icon {
   color: var(--c-label);
 }
@@ -88,6 +93,16 @@
 
 .docs .table__body {
   flex: none;
+}
+
+/* a row scrolled to stays clear of the sticky head, and in a project of
+   its group row */
+.docs .table__row {
+  scroll-margin-top: var(--h-table-head);
+}
+
+.docs__projects .table__row {
+  scroll-margin-top: calc(var(--h-table-head) + var(--h-group));
 }
 
 /* the projects' groups, then the entities in no project after a gap and a

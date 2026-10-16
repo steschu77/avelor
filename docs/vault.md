@@ -633,4 +633,4 @@ An indexing starts only when a vault opens, so `vault` (indexing) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 
 - the entities, projects and threads;
-- the filter.
+- the selection and the filter.
