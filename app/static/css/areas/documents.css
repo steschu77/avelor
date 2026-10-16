@@ -1,7 +1,7 @@
 /* The Documents lens (features/lenses/documents.js). */
 
-/* features/lenses/documents.js: the table of the rows under their
-   projects and threads. */
+/* features/lenses/documents.js: the bar of type toggles, then the table of
+   the rows under their projects and threads, then what the types hide. */
 .table {
   display: flex;
   flex-direction: column;
@@ -62,6 +62,17 @@
 
 .table__icon {
   color: var(--c-label);
+}
+
+/* the lens head: the documents shown and hidden, and the bar's fold */
+.docs-count {
+  margin-left: auto;
+}
+
+/* the lens head's menus: the Types of the Documents lens */
+.lens-types {
+  gap: 6px;
+  font: 400 var(--fs-ui)/1 var(--f-chrome);
 }
 
 .docs {

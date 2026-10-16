@@ -123,6 +123,10 @@ To simplify the representation of an entity's roles, the app maintains a
 set of well-known types, which are derived only, never set or stored
 (`vault.md#type-derivation`).
 
+The type of an entity is used for filtering, sorting, and visual indication
+using icons. It is also used in the filename, so users can filter by type
+in any file manager.
+
 ### Source <a id="source"></a>
 
 The source describes the entity's provenance: the channel through which it

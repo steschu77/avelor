@@ -2,12 +2,14 @@
 // filter as rows -- under All Projects in a group per project, then those
 // in no project; a thread's members under the thread's row -- each group
 // and thread folding (the projects folded kept in the `doc_folded`
-// preference). This file owns the rows, the folds and the sort-state UI,
-// model/entities.js the entities.
+// preference); its own type selection (features/lenses/types.js; the
+// `doc_types` and `doc_types_bar` preferences). This file owns the rows,
+// the folds and the sort-state UI, model/entities.js the entities.
 
 import { $, accEl, oncePerFrame, placeChildren } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
 import { shortDate } from '../../core/format.js';
+import { plural } from '../../core/format.js';
 import { store } from '../../model/state.js';
 import { savePrefs } from '../../model/state.js';
 import { entities } from '../../model/entities.js';
@@ -16,13 +18,27 @@ import { projects, projectsInOrder, projectsOf } from '../../model/entities.js';
 import { knownThreads, threads } from '../../model/entities.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
+import { hiddenText, typeBar, typeOf } from './types.js';
 
 const lensEl = $('lens-documents');
 const rowsEl = $('doc-rows');
+const countEl = $('doc-count');
+const hiddenEl = $('doc-hidden');
+const hiddenTextEl = $('doc-hidden-text');
 
 // Sorting through a shared instance: `localeCompare` builds a collator per
 // call.
 const TEXT_ORDER = new Intl.Collator();
+
+// ----------------------------------------------------------------------------
+// The type selection (features/lenses/types.js): Documents, Mail and Notes
+// shown at first.
+const docTypes = typeBar({
+  el: $('doc-types'), pref: 'doc_types', barPref: 'doc_types_bar',
+  shownAtFirst: ['documents', 'mail', 'notes'],
+});
+
+$('doc-show-all').addEventListener('click', docTypes.showAll);
 
 // ----------------------------------------------------------------------------
 const SORT_COMPARATORS = {
@@ -265,9 +281,15 @@ function docRow(group, thread_id, doc, depth) {
 
 function renderDocuments() {
   const state = store.getState();
+  const shown = docTypes.shown();
+  // the filter's entities, counted by type; those of a type shown are listed
+  const counts = new Map();
   const listed = [];
   for (const doc of entities.values()) {
-    if (matchesFilter(doc, state)) listed.push(doc);
+    if (!matchesFilter(doc, state)) continue;
+    const type = typeOf(doc);
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+    if (shown.has(type)) listed.push(doc);
   }
   const memberTotals = new Map(); // thread id -> its members in the vault
   for (const doc of entities.values()) {
@@ -298,6 +320,13 @@ function renderDocuments() {
   }
   placeChildren(projectsEl, projectNodes);
   placeChildren(rowsEl, projectNodes.length ? [projectsEl, ...nodes] : nodes);
+
+  docTypes.render(shown, counts);
+  const hidden = [...counts].reduce((n, [type, count]) => n + (shown.has(type) ? 0 : count), 0);
+  const listedText = plural(listed.length, 'document');
+  countEl.textContent = hidden ? `${listedText} \u00b7 ${hidden} hidden` : listedText;
+  hiddenEl.hidden = !hidden;
+  hiddenTextEl.textContent = hidden ? `${hiddenText(shown, counts)} hidden` : '';
 }
 
 // The lenses showing entities render at most once per frame. A scan sends

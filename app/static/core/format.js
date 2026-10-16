@@ -1,4 +1,4 @@
-// Dates as the page shows them.
+// Dates and counts as the page shows them.
 
 // ----------------------------------------------------------------------------
 // A host date: `YYYY-MM-DD` as that local day's start (not UTC midnight,
@@ -23,4 +23,11 @@ const DAY_MONTH = format({ day: '2-digit', month: '2-digit' });         // 10/14
 // thread's days in the Documents lens).
 export function shortDate(date) {
   return date.getFullYear() === new Date().getFullYear() ? DAY_MONTH.format(date) : DATE_FORMAT.format(date);
+}
+
+// ----------------------------------------------------------------------------
+// A count with its noun, "1 file", "3 files"; `many` for a plural that
+// isn't `one` + "s".
+export function plural(n, one, many = `${one}s`) {
+  return `${n} ${n === 1 ? one : many}`;
 }

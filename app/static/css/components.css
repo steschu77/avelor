@@ -122,3 +122,57 @@
   padding: 0 var(--p-gutter);
   font: 500 var(--fs-sub)/1 var(--f-serif);
 }
+
+/* The lenses that list entities (Documents): the bar of type toggles --
+   dashed while off, outlined while shown, faint while the filter has none
+   of the type -- and the note of what it hides. */
+.filter-bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px var(--p-gutter);
+  border-top: 1px solid var(--c-line);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.type-toggle {
+  height: var(--h-control-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px dashed var(--c-line);
+  background: transparent;
+  color: var(--c-label);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.type-toggle:hover {
+  color: var(--c-ink);
+}
+
+.type-toggle[aria-pressed="true"] {
+  border: 1px solid var(--c-ink);
+  background: var(--c-card);
+  color: var(--c-ink);
+}
+
+.type-toggle.is-empty {
+  color: var(--c-ink-faint);
+}
+
+.type-toggle__n {
+  color: var(--c-label);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.lens-hidden {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px var(--p-gutter) 20px;
+}

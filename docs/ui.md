@@ -58,6 +58,17 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   before the first fold, the archived projects are folded. Threads fold while
   the app runs: folded at first, a thread unfolded shows unfolded in every
   group.
+- **Types**: the bar under the lens head (`#doc-types`; `typeBar`,
+  `features/lenses/types.js`), the lens's own filter — the vault panel's
+  counts don't follow it: Documents (a `document` but a note, a `message`),
+  Mail, Notes (the genre `note`), Chats, Bank (bank accounts and
+  transactions), Lists, Records, Contacts, Tasks and Events (with
+  calendars), each a toggle with its count in the vault panel's filter,
+  faint at none. Documents, Mail and Notes are shown at first. The lens
+  head says how many entities are shown and hidden ("62 documents · 34
+  hidden"), and its Types button folds the bar; the rows end with what is
+  hidden and Show all types. The types shown and the bar's fold are
+  preferences.
 - **Keyed rows** (by group, thread and entity) stay built while filtered
   out or folded, so a scan only adds rows.
 
@@ -87,9 +98,11 @@ What a key, a menu or a button starts is a registered action
 
 The page keeps its preferences as one JSON object of strings
 (`savePrefs`, `model/state.js` → `set_prefs`): `sidebar_width`,
-`panel_width` and `context_width`; the Documents lens's folded projects
-(`doc_folded`, project ids joined by commas; project ids are unique
-across vaults, so one list serves every vault). The host stores them as given
+`panel_width` and `context_width`; the Documents lens's types shown
+(`doc_types`, type ids joined by commas; an id the page doesn't know is
+dropped), its bar (`doc_types_bar`: `open` or `closed`) and its folded
+projects (`doc_folded`, project ids joined by commas; project ids are
+unique across vaults, so one list serves every vault). The host stores them as given
 (`config.yaml` `prefs`) and never reads them; it fills them into the page
 it loads on the next start, as JSON in
 `<script type="application/json" id="prefs">` (`page::html`), which
@@ -104,4 +117,4 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, counts re-render |
 | F1 | Sort in Documents | header click (`onSortClick`, `features/lenses/documents.js`) | — | multi-key sort in `sort_state` |
-| F6 | Fold in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selected_project` | `set_prefs {prefs}` (`doc_folded`) | rows folded or shown; the projects' folds kept across restarts |
+| F6 | Fold, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selected_project`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the projects' folds and the types kept across restarts |

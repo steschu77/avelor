@@ -283,7 +283,7 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`); the date helpers (`parseDate`), every date format of the page |
+| `core/dom.js`, `core/store.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`); the date helpers (`parseDate`), every date format of the page, and counts with their noun (`plural`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
 | `model/state.js` | the store and its schema (the vault's state, the filters, the counters, `notices`, the preferences); `savePrefs`, `showError` |
@@ -292,6 +292,7 @@ nothing imports `app.js`.
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
 | `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread |
+| `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/close.js` | closing the app: the `close` event answered `close_ready` |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/sidebar.js` | the vault panel: projects, No project with their counts, the filter, the vault menu |

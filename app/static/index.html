@@ -48,14 +48,24 @@
     </aside>
 
     <main class="main" id="main">
+      <div class="pane-head">
+        <span class="meta docs-count" id="doc-count"></span>
+        <button type="button" class="tool lens-types" id="types-btn" title="Show or hide the types"><span>Types</span><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
+      </div>
+
       <!-- Documents (features/lenses/documents.js) -->
       <div class="stack docs-lens" id="lens-documents">
+        <div class="filter-bar" id="doc-types" hidden></div>
         <div class="table docs">
           <div class="list-row table__head">
             <button class="tool table__sort" data-sort="title"><span class="label">Name</span></button>
             <button class="tool table__sort docs__head-date" data-sort="date"><span class="label">Date</span></button>
           </div>
           <div class="table__body" id="doc-rows"></div>
+          <div class="lens-hidden" id="doc-hidden" hidden>
+            <span class="note" id="doc-hidden-text"></span>
+            <button type="button" class="tool label" id="doc-show-all">Show all types</button>
+          </div>
         </div>
       </div>
     </main>
