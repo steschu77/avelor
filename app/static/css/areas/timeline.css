@@ -1,0 +1,213 @@
+/* The Timeline lens (features/lenses/timeline.js): the scrubber and the
+   feed. */
+
+/* features/lenses/timeline.js: the bar of type toggles, the scrubber (a bar
+   per week over last year and this one, a range dragged across it), then
+   the feed of day blocks, the newest first, a line at today. */
+.scrub {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px var(--p-gutter) 6px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.scrub__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.scrub__head>* {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* the range picked */
+.scrub__range {
+  padding: 3px 8px;
+  border: 1px solid var(--c-ink);
+  color: var(--c-ink);
+}
+
+.scrub__track {
+  position: relative;
+  height: var(--h-scrub);
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.scrub__bar {
+  flex: 1 1 0;
+  min-width: 0;
+  background: var(--c-ink-mute);
+}
+
+.scrub__bar.is-future {
+  background: var(--c-line);
+}
+
+/* while a range is picked, its weeks stand out */
+.scrub__track.has-range .scrub__bar {
+  background: var(--c-ink-faint);
+}
+
+.scrub__track.has-range .scrub__bar.is-future {
+  background: var(--c-line);
+}
+
+.scrub__track.has-range .scrub__bar.is-in {
+  background: var(--c-ink);
+}
+
+.scrub__today {
+  position: absolute;
+  top: -4px;
+  bottom: -1px;
+  border-left: 1px dashed var(--c-ink);
+  pointer-events: none;
+}
+
+.scrub__years {
+  position: relative;
+  height: 15px;
+  border-top: 1px solid var(--c-line);
+}
+
+.scrub__year {
+  position: absolute;
+  top: 0;
+  padding: 3px 0 0 4px;
+  border-left: 1px solid var(--c-line);
+}
+
+/* the feed; positioned, so a part's offsetTop is its place in it */
+.tl {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow-y: auto;
+  padding: 0 var(--p-gutter) 24px;
+  container-type: inline-size;
+}
+
+.tl>.lens-hidden {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.tl__month {
+  padding: 22px 0 8px;
+  border-bottom: 1px solid var(--c-ink);
+  font: 500 var(--fs-sub)/1.2 var(--f-serif);
+  color: var(--c-ink);
+}
+
+/* a day: its date, which stays while its entries scroll, beside them */
+.tl__day {
+  display: grid;
+  grid-template-columns: var(--w-tl-date) minmax(0, 1fr);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.tl__date {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 0;
+}
+
+.tl__num {
+  font: 500 var(--fs-page-title)/1 var(--f-serif);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.tl__entries {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+}
+
+.tl__row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 0 10px;
+  align-items: baseline;
+  margin: 0 -8px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.tl__row:hover {
+  background: var(--c-hover);
+}
+
+.tl__row[aria-selected="true"] {
+  background: var(--c-card);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+.tl__text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tl__title {
+  font: 400 var(--fs-sub)/1.3 var(--f-serif);
+  color: var(--c-ink);
+}
+
+.tl__meta {
+  margin-left: 10px;
+}
+
+.tl__labels {
+  white-space: nowrap;
+}
+
+/* the days to come */
+.tl__day--future .tl__title {
+  color: var(--c-ink-mute);
+}
+
+/* the line between the days to come and the past */
+.tl__today {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0 2px;
+  color: var(--c-ink);
+}
+
+.tl__today::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--c-ink);
+}
+
+.tl__empty {
+  padding: 24px 0;
+}
+
+@container (max-width: 560px) {
+  .tl__day {
+    grid-template-columns: var(--w-tl-date-narrow) minmax(0, 1fr);
+  }
+
+  .tl__labels {
+    display: none;
+  }
+}

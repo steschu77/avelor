@@ -49,7 +49,7 @@ export function projectsOf(doc) {
 }
 
 // The names of `doc`'s projects, joined, while no project is selected (the
-// filter names it already): the dashboard's cards.
+// filter names it already): the dashboard's cards, the Timeline lens.
 export function projectNames(doc, { selected_project } = store.getState()) {
   if (selected_project) return '';
   return projectsOf(doc).map(id => projects.get(id).name).filter(Boolean).join(' \u00b7 ');

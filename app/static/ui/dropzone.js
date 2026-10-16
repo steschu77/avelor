@@ -1,14 +1,14 @@
 // Dragging on the page (panel.md#structural-edits): what takes a drop and
 // marks where it would land (one mark page-wide); the drag preview chip a
 // lens's row and a card's head both show; the type a card dragged out of its
-// thread carries and the lens that takes it; and the panel's drop zones.
+// thread carries and the lenses that take it; and the panel's drop zones.
 
 import { accEl } from '../core/dom.js';
 import { iconEl } from './icons.js';
 
 // A card dragged out of its thread by its head carries the thread it
-// leaves as this type, beside its id as `text/plain`: the Documents lens
-// takes it, the panel's drop zones don't.
+// leaves as this type, beside its id as `text/plain`: the Documents and
+// Timeline lenses take it, the panel's drop zones don't.
 export const MEMBER_DRAG = 'application/x-avelor-thread';
 
 // ----------------------------------------------------------------------------
@@ -65,11 +65,12 @@ export function dropTarget(target, { over, drop, effect = 'copy' }) {
 
 // ----------------------------------------------------------------------------
 // Shared drag-preview chip, used for both a row dragged out of a lens
-// (features/lenses/documents.js) and a card dragged out of its thread by
-// its head (features/panel/panel.js) -- the same small icon+title pill,
-// since both carry an entity's id. `icon` is the symbol of its kind
-// (ui/icons.js). `effectAllowed`: 'copy' for a row, which joins what it is
-// dropped on; 'copyMove' for a card, which also moves out of its thread.
+// (features/lenses/documents.js, features/lenses/timeline.js) and a card
+// dragged out of its thread by its head (features/panel/panel.js) -- the
+// same small icon+title pill, since both carry an entity's id. `icon` is
+// the symbol of its kind (ui/icons.js). `effectAllowed`: 'copy' for a row,
+// which joins what it is dropped on; 'copyMove' for a card, which also
+// moves out of its thread.
 let dragPreviewEl = null;
 
 export function startDragPreview(ev, icon, title, effectAllowed = 'copy') {

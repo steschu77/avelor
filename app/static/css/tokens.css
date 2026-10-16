@@ -72,6 +72,11 @@
      under it */
   --h-table-head: 28px;
   --h-group: 34px;
+  /* the Timeline lens: the scrubber's bars, and the date beside a day's
+     entries (narrow: the lens under 560px) */
+  --h-scrub: 30px;
+  --w-tl-date: 112px;
+  --w-tl-date-narrow: 64px;
 
   /* sidebar inset */
   --p-gutter: 12px;
