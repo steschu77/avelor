@@ -4,5 +4,9 @@
   "conflict.deleted_editing": "Die Datei wurde außerhalb der App gelöscht, während Sie sie hier bearbeitet haben. Wählen Sie, ob Ihre Fassung bleiben soll.",
   "conflict.deleted_unsaved": "Die Datei wurde außerhalb der App gelöscht, daher wurde Ihre Änderung nicht gespeichert.",
   "linked.select_hint": "Wählen Sie ein Dokument, um seine Verknüpfungen zu sehen.",
+  "new.enter_name": "Geben Sie zuerst einen Namen ein",
+  "new.enter_title": "Geben Sie zuerst einen Titel ein",
+  "new.pick_date": "Wählen Sie zuerst ein Datum",
+  "new.pick_start": "Wählen Sie zuerst ein Startdatum",
   "panel.select_hint": "Wählen Sie ein Dokument aus der Liste."
 }

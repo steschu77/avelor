@@ -49,6 +49,7 @@
   --fs-body: 13px;
   --fs-sub: 15px;
   --fs-doc-title: 18px;
+  --fs-pane-title: 22px;
   --fs-page-title: 26px;
   --lh-body: 1.55;
   --track-label: 0.13em;
@@ -58,6 +59,8 @@
   --h-nav-row: 28px;
   --h-control: 24px;
   --h-control-sm: 22px;
+  /* the title input of the New page */
+  --h-new-title: 40px;
   /* an icon (index.html's sprite, build.rs) */
   --h-icon: 16px;
   /* the Documents lens: its sticky head, and a project's group row stuck
@@ -74,6 +77,9 @@
   /* the Workspace pages */
   --p-page-x: 40px;
   --p-page-y: 28px;
+  /* the sheet of the New page */
+  --p-sheet-x: 28px;
+  --p-sheet-y: 22px;
 
   --w-sidebar: 232px;
   --w-vault-list: 232px;
@@ -82,6 +88,10 @@
   --o-panel: 0px;
   /* a dialog */
   --w-dialog: 500px;
+  /* the New page: its sheet, and its date and time inputs */
+  --w-new-sheet: 720px;
+  --w-new-date: 150px;
+  --w-new-time: 96px;
 
   /* the only radius */
   --r-pill: 99px;

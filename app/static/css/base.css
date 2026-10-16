@@ -1,5 +1,5 @@
 /* Base: the box model, the page's ground and font, links, the global
-   states ([hidden], .is-resizing) and controls. */
+   states ([hidden], .is-resizing), controls and keyboard hints. */
 
 * {
   box-sizing: border-box;
@@ -51,4 +51,13 @@ button:disabled,
 input:disabled {
   opacity: .5;
   cursor: default;
+}
+
+/* keyboard hints at the right end of sidebar rows */
+kbd {
+  margin-left: auto;
+  font: inherit;
+  font-size: var(--fs-label);
+  letter-spacing: var(--track-label);
+  color: var(--c-label);
 }

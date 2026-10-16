@@ -6,6 +6,7 @@
 
 import { $ } from '../core/dom.js';
 import { setAria } from '../core/dom.js';
+import { runAction } from '../core/actions.js';
 import { savePrefs, store } from '../model/state.js';
 import { openVaultOp } from '../ui/page.js';
 
@@ -171,10 +172,15 @@ store.subscribe(state => state.vault_expanded, vault_expanded => {
   applyVaultLayout();
 });
 
-// A page item is highlighted only while its page is shown.
+// A page item is highlighted only while its page is shown. An item with
+// an action (New: its menu of types) runs it, at the item; the others
+// open their page.
 const vaultOpNavs = sidebar.querySelectorAll("[data-vault-op]");
 for (const nav of vaultOpNavs) {
-  nav.addEventListener('click', () => openVaultOp(nav.dataset.vaultOp));
+  nav.addEventListener('click', () => {
+    if (nav.dataset.action) runAction(nav.dataset.action, nav);
+    else openVaultOp(nav.dataset.vaultOp);
+  });
 }
 store.subscribe([state => state.vault_op, state => state.vault_expanded], ([vault_op, vault_expanded]) => {
   for (const nav of vaultOpNavs) setAria(nav, "aria-current", vault_expanded && nav.dataset.vaultOp === vault_op);
