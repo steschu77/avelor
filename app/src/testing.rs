@@ -1,7 +1,9 @@
-//! For tests: an `App` without a window, on a temporary config folder.
-//! What it sends to the page is collected, and the test runs its UI queue.
+//! For tests: an `App` without a window, on a temporary config folder and,
+//! if asked, a temporary vault. What it sends to the page is collected, and
+//! the test runs its UI queue.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -9,9 +11,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+use crate::api;
 use crate::app::{App, UiQueue, UiTask};
 use crate::config::load_config;
 use crate::sys::UiSignal;
+use av_utils::id::Id;
 
 // ----------------------------------------------------------------------------
 pub struct Harness {
@@ -46,7 +50,25 @@ impl Harness {
     }
 
     // ------------------------------------------------------------------------
-    /// A vault's folder in the test's folder.
+    /// An `App` with a vault of `files` (vault-relative path, text), opened
+    /// and indexed as the app does it (`api::switch_to`); what the indexing sent is
+    /// dropped.
+    pub fn with_vault(name: &str, files: &[(impl AsRef<Path>, impl AsRef<str>)]) -> Self {
+        let mut harness = Self::new(name);
+        let root = harness.vault();
+        for (path, text) in files {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text.as_ref()).unwrap();
+        }
+        api::switch_to(&mut harness.app, root.clone());
+        harness.wait_indexed();
+        harness.take();
+        harness
+    }
+
+    // ------------------------------------------------------------------------
+    /// The vault's folder (`with_vault`).
     pub fn vault(&self) -> PathBuf {
         self.dir.join("vault")
     }
@@ -95,6 +117,25 @@ impl Harness {
     }
 
     // ------------------------------------------------------------------------
+    /// The vault's files with what they hold, by their path in the vault.
+    pub fn files(&self) -> BTreeMap<PathBuf, String> {
+        fn walk(root: &Path, dir: &Path, files: &mut BTreeMap<PathBuf, String>) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(root, &path, files);
+                } else {
+                    let text = std::fs::read_to_string(&path).unwrap();
+                    files.insert(path.strip_prefix(root).unwrap().to_path_buf(), text);
+                }
+            }
+        }
+        let mut files = BTreeMap::new();
+        walk(&self.vault(), &self.vault(), &mut files);
+        files
+    }
+
+    // ------------------------------------------------------------------------
     /// What the page got since the last call.
     pub fn take(&self) -> Vec<String> {
         std::mem::take(&mut *self.sent.borrow_mut())
@@ -116,6 +157,42 @@ pub fn parse(sent: &[String]) -> Vec<Value> {
 }
 
 // ----------------------------------------------------------------------------
+/// A text the host sent (`{key, args}`, `texts::Text`) as it reads in
+/// English, the tests' language; a list of them a job's summary, its parts
+/// joined.
+pub fn shown(text: &Value) -> String {
+    match text {
+        Value::Array(parts) => {
+            let parts: Vec<String> = parts.iter().map(shown).collect();
+            parts.join(" · ")
+        }
+        Value::Object(text) => {
+            let key = text.get("key").and_then(Value::as_str).unwrap_or_default();
+            let args = text.get("args").and_then(Value::as_object);
+            crate::texts::rendered(key, &args.cloned().unwrap_or_default())
+        }
+        _ => String::new(),
+    }
+}
+
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+/// Call the edit `cmd` with `args`, then `undo` and `redo`
+/// (`saving.md#undo`): the vault's files after the undo as they were
+/// before the edit, after the redo as the edit left them. What the page got
+/// from the edit.
+pub fn undoes(h: &mut Harness, cmd: &str, args: Value) -> Vec<Value> {
+    let before = h.files();
+    let sent = h.call(cmd, args);
+    let after = h.files();
+    assert_ne!(before, after, "{cmd} wrote nothing");
+    h.call("undo", json!({}));
+    assert_eq!(h.files(), before, "{cmd} undone");
+    h.call("redo", json!({}));
+    assert_eq!(h.files(), after, "{cmd} redone");
+    sent
+}
 
 // ----------------------------------------------------------------------------
 /// Each message as its event's name, `reply` for an answer.
@@ -123,4 +200,20 @@ pub fn shape(sent: &[Value]) -> Vec<&str> {
     sent.iter()
         .map(|m| m["ev"].as_str().unwrap_or("reply"))
         .collect()
+}
+
+// ----------------------------------------------------------------------------
+/// A vault of `n` documents, `Notes/n<i>.md`, titled `Note <i>`, with the
+/// body `Body <i>`.
+pub fn notes(name: &str, n: usize) -> (Harness, Vec<Id>) {
+    let ids: Vec<Id> = (0..n).map(|_| Id::generate()).collect();
+    let files: Vec<(String, String)> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            let text = format!("---\nid: {id}\ntitle: Note {i}\ndocument: {{}}\n---\nBody {i}\n");
+            (format!("Notes/n{i}.md"), text)
+        })
+        .collect();
+    (Harness::with_vault(name, &files), ids)
 }

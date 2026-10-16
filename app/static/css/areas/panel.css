@@ -65,3 +65,19 @@
   overflow: visible;
   z-index: 1;
 }
+
+/* A document's, thread's or day's head: the title line, then a sub line. */
+.doc-head__title,
+.doc-head__sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.doc-head__sub {
+  margin-top: 4px;
+}
+
+.doc-head__title>.doc-title {
+  flex: 1 1 0;
+}

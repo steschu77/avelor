@@ -39,6 +39,12 @@ export function projectsOf(doc) {
   return (doc.projects ?? []).filter(id => projects.has(id));
 }
 
+// The project the header shows: the selected one, null for All Projects
+// and No project.
+export function projectScope({ selected_project } = store.getState()) {
+  return selected_project === NO_PROJECT ? null : selected_project;
+}
+
 // ----------------------------------------------------------------------------
 // The vault panel's filter: `doc` is in `selected_project` (if one is set;
 // in none for `NO_PROJECT`), and carries every one of `selected_labels`.

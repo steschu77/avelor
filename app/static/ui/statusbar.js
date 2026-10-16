@@ -1,28 +1,65 @@
 // The status bar (index.html footer.statusbar), a snackbar: it floats over
 // the bottom of the main area and slides in while the store's `notices` has
 // one to show -- the newest -- and out when it has none. A notice is
-// something the host reported: an error (`showError`, model/state.js; the
-// `notice` event, or a failed call nobody handled, below), like settings
-// it couldn't write. It stays until its x dismisses it; the same text again
-// doesn't stack up.
+// something the host reported:
+// - an error (`showError`, model/state.js; the `notice` event at level
+//   error, or a failed call nobody handled, below), like settings it
+//   couldn't write. It stays until its x dismisses it; the same text again
+//   doesn't stack up.
+// - what an undo or a redo did (the `notice` event at level info). It goes
+//   on its own after `NOTICE_INFO_MS`, not while the mouse is over the bar.
 
 import { accEl } from '../core/dom.js';
 import { titled } from '../core/dom.js';
 import { RpcError, rpcOn } from '../core/rpc.js';
 import { t, textOf } from '../core/text.js';
 import { showError, store } from '../model/state.js';
+import { setNotice } from '../model/state.js';
+
+const NOTICE_INFO_MS = 6000;
 
 const statusbarEl = document.querySelector('footer.statusbar');
 // The live region that reads a new notice out: always there, unlike the
 // bar, which is hidden while it has nothing to tell.
 const saidEl = document.getElementById('statusbar-said');
+const noticeTimers = new Map(); // key of an info notice -> the timeout that removes it
+let statusbarHovered = false;
 
 function clearNotice(key) {
+  clearTimeout(noticeTimers.get(key));
+  noticeTimers.delete(key);
   const { notices } = store.getState();
   if (notices.some(n => n.key === key)) {
     store.setState({ notices: notices.filter(n => n.key !== key) });
   }
 }
+
+// What an undo or a redo did.
+function showInfo(text) {
+  const key = `info\n${text}`;
+  setNotice({ key, text, level: 'info' });
+  startNoticeTimer(key);
+}
+
+// (Re)start the time the info notice `key` is shown; while the mouse is
+// over the bar, it waits until the mouse leaves.
+function startNoticeTimer(key) {
+  clearTimeout(noticeTimers.get(key));
+  noticeTimers.delete(key);
+  if (!statusbarHovered) noticeTimers.set(key, setTimeout(() => clearNotice(key), NOTICE_INFO_MS));
+}
+
+statusbarEl.addEventListener('mouseenter', () => {
+  statusbarHovered = true;
+  for (const timer of noticeTimers.values()) clearTimeout(timer);
+  noticeTimers.clear();
+});
+statusbarEl.addEventListener('mouseleave', () => {
+  statusbarHovered = false;
+  for (const notice of store.getState().notices) {
+    if (notice.level === 'info') startNoticeTimer(notice.key);
+  }
+});
 
 function renderStatusbar(notices) {
   const notice = notices.at(-1);
@@ -32,7 +69,7 @@ function renderStatusbar(notices) {
   if (!notice) return;
 
   statusbarEl.replaceChildren();
-  const el = accEl('div', 'statusbar__notice error-note');
+  const el = accEl('div', notice.level === 'info' ? 'statusbar__notice' : 'statusbar__notice error-note');
   const text = accEl('span', 'statusbar__text', notice.text);
   text.title = notice.text;
   const dismiss = accEl('button', 'tool', '\u00d7');
@@ -45,7 +82,10 @@ function renderStatusbar(notices) {
 }
 
 store.subscribe(state => state.notices, renderStatusbar);
-rpcOn('notice', ({ text }) => showError(textOf(text)));
+rpcOn('notice', ({ level, text }) => {
+  if (level === 'info') showInfo(textOf(text));
+  else showError(textOf(text));
+});
 
 // A failed call nobody handled is shown here too, so no failure is only a
 // console line. Cancelled calls are expected, and stay quiet.

@@ -16,7 +16,21 @@ it last read or wrote it, with what the file held then (`Document`'s
 a conflict, never as a missed one. Before a write, the host compares it
 with the file; a mismatch, or a missing file, is `SaveOutcome::Conflict`,
 and nothing is written. A conflict is an expected outcome, not an error:
-saves return `SaveOutcome::{Saved, Unchanged, Conflict}`.
+saves return `SaveOutcome::{Saved, Unchanged, Conflict}`, and the reply is
+`{"ok": {"conflict": …}}`.
+
+### The dialog <a id="the-dialog"></a>
+
+A `conflict` in the answer of a structural edit opens the conflict dialog
+(`features/conflict.js`): modal, over the shaded app,
+and it has to be answered (Escape doesn't close it). It names the entity,
+its file and when the file changed, or that it was deleted.
+
+- **Use theirs** sends `reload_entity`: the file is taken in (or the
+  entity leaves, if the file is gone).
+- A refused structural edit only offers Use theirs; the user makes the edit
+  again afterwards.
+- Several conflicts wait in a queue and are shown one at a time.
 
 ### Atomic writes <a id="atomic-writes"></a>
 
@@ -45,6 +59,17 @@ in the app's order, as any write puts them; or forth again
 file still holds what it held at that point, in memory and on disk
 (`#the-stamp`): a file written since, by the app or another program, is
 the conflict.
+
+Every edit the user makes through a command is a step (`App::step`,
+`undo.rs`): `App::edit` keeping the files it wrote, named by its command
+("Renamed The Money Pit"). Ctrl+Z takes the last step back (`undo`), and
+Ctrl+Y or Ctrl+Shift+Z does it again (`redo`), each an edit through
+`App::edit` like any other; outside a field or an editor, which keep the
+keys for their own undo (`features/undo.js`). The status bar says what
+was done ("Undone: Renamed The Money Pit"), or that it wasn't: a step
+whose files changed since is dropped. The steps are the open vault's, in
+memory, at most 100: opening a vault forgets them, and a new step drops
+the ones to redo.
 
 ## Closing the app <a id="closing-the-app"></a>
 

@@ -11,10 +11,12 @@ mod jobs;
 mod page;
 mod protocol;
 mod shell;
+mod structure;
 mod sys;
 #[cfg(test)]
 mod testing;
 mod texts;
+mod undo;
 
 use av_utils::error::Result;
 use av_utils::logger;

@@ -1,3 +1,4 @@
+import { t } from '../core/text.js';
 // The icons (symbols of the page's sprite, build.rs): an entity's by its
 // kind, a document's by its type (`getDocIcon`), and `iconEl`, an icon
 // made in a script.
@@ -22,6 +23,26 @@ export const KIND_ICONS = {
   record: { icon: '#i-lock-closed' },
   list: { icon: '#i-task-list-ltr' },
 };
+
+// An entity's kind in words (the conflict dialog, a card's head).
+const KIND_NAMES = {
+  document: t('kind.document'),
+  message: t('kind.message'),
+  email: t('kind.email'),
+  conversation: t('kind.conversation'),
+  thread: t('kind.thread'),
+  project: t('kind.project'),
+  statement: t('kind.statement'),
+  'bank-account': t('kind.bank_account'),
+  'recurring-payment': t('kind.recurring_payment'),
+  calendar: t('kind.calendar'),
+  event: t('kind.event'),
+  task: t('kind.task'),
+  contact: t('kind.contact'),
+  record: t('kind.record'),
+  list: t('kind.list'),
+};
+export const kindName = kind => KIND_NAMES[kind] ?? kind;
 
 // ----------------------------------------------------------------------------
 const DOC_SUB_ICONS = {

@@ -104,6 +104,56 @@ impl Text {
         self.args.insert(name.to_string(), value.into());
         self
     }
+
+    // ------------------------------------------------------------------------
+    /// The text in the run's language, for what the host writes into the
+    /// vault itself: its placeholders filled in, a text given rendered too,
+    /// a count's form `one` for 1 and `other` else.
+    pub fn render(&self) -> String {
+        rendered(self.key, &self.args)
+    }
+}
+
+/// The text of `key` with `args`, as `Text::render` writes it.
+pub(crate) fn rendered(key: &str, args: &Map<String, Value>) -> String {
+    let form = match args.get("n").and_then(Value::as_u64) {
+        Some(1) => "one",
+        _ => "other",
+    };
+    let text = match texts().get(key) {
+        Some(Value::String(text)) => text.as_str(),
+        Some(Value::Object(forms)) => {
+            let text = forms.get(form).or_else(|| forms.get("other"));
+            text.and_then(Value::as_str).unwrap_or(key)
+        }
+        _ => key,
+    };
+    let mut out = text.to_string();
+    for (name, value) in args {
+        let value = match value {
+            Value::String(value) => value.clone(),
+            Value::Object(text) => match (text.get("key"), text.get("args"), text.get("date")) {
+                (Some(Value::String(key)), Some(Value::Object(args)), _) => rendered(key, args),
+                (Some(Value::String(key)), ..) => rendered(key, &Map::new()),
+                (.., Some(Value::String(date))) => date.clone(),
+                _ => match (
+                    text.get("amount").and_then(Value::as_f64),
+                    text.get("currency"),
+                ) {
+                    (Some(amount), Some(Value::String(currency))) if currency == "USD" => {
+                        format!("${amount:.2}")
+                    }
+                    (Some(amount), Some(Value::String(currency))) => {
+                        format!("{amount:.2} {currency}")
+                    }
+                    _ => value.to_string(),
+                },
+            },
+            value => value.to_string(),
+        };
+        out = out.replace(&format!("{{{name}}}"), &value);
+    }
+    out
 }
 
 impl From<Text> for Value {

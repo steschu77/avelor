@@ -69,6 +69,12 @@ export function titled(el, text) {
   return el;
 }
 
+// Whether the focus is where keys go to typing: a field, a select or
+// an editor, whose own Ctrl+Z, Esc and the like come first.
+export function typing(el = document.activeElement) {
+  return !!el && (el.matches?.('input, textarea, select') || el.isContentEditable);
+}
+
 // A boolean ARIA state: present as "true" when `on`, absent otherwise.
 export function setAria(el, name, on) {
   if (on) el.setAttribute(name, 'true');

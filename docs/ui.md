@@ -11,7 +11,7 @@ Three panels:
   (`ui.md#vault-panel`); its lower area holds the jobs panel
   (`ui.md#jobs-panel`);
 - the **main view** with the lenses (`ui.md#lenses`), and above them the vault
-  header (the selected project's name);
+  header (the selected project's name, `panel.md#projects`);
 - the **side panel** on the right.
 
 Both side panels have grips to resize them; the widths are remembered
@@ -101,6 +101,8 @@ tell (the `notice` event, a failed call), the newest message with a count
 of the others.
 
 - An error (a failed save) stays until dismissed with ×.
+- What an undo or a redo did goes after 6 s, not while the mouse is over
+  the bar.
 
 ## Jobs panel <a id="jobs-panel"></a>
 
@@ -114,6 +116,8 @@ What a key, a menu or a button starts is a registered action
 (`architecture.md#actions`). The page keys:
 
 - **Esc** closes an open menu.
+- **Ctrl+Z** undoes the last edit, **Ctrl+Y** or **Ctrl+Shift+Z** does it
+  again, outside a field or an editor (`saving.md#undo`).
 
 ## Preferences <a id="preferences"></a>
 

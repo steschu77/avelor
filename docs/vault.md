@@ -239,7 +239,7 @@ named block and carries a set of additional fields beyond the well-known
 metadata fields above. The type-id each role leads to is listed in
 `vault.md#kind-derivation`.
 
-### Project
+### Project <a id="project"></a>
 
 Block: `project:`
 
@@ -631,4 +631,5 @@ An indexing starts only when a vault opens, so `vault` (indexing) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 
 - the entities, projects and threads;
+- the conflicts;
 - the selection and the filter.

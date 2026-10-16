@@ -8,8 +8,11 @@ export const store = createStore({
   vault_name: '', // the open vault's folder name (the `vault` event)
   vault_state: 'none', // 'none' | 'indexing' | 'open' (the `vault` event)
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
-  // level: 'error' }; always replaced
+  // level: 'error' | 'info' }; always replaced
   notices: [],
+  // files changed outside the app, oldest first, each asked about in the
+  // conflict dialog (features/conflict.js): { id, changed }; always replaced
+  conflicts: [],
   // the page's preferences, strings by key: the host fills them into the
   // page (#prefs, page.rs); `savePrefs` changes them; always replaced
   prefs: JSON.parse($('prefs')?.textContent || '{}'),
@@ -43,7 +46,7 @@ export function savePrefs(patch) {
 
 // ----------------------------------------------------------------------------
 // Show `notice`, replacing the one with the same key.
-function setNotice(notice) {
+export function setNotice(notice) {
   const notices = store.getState().notices.filter(n => n.key !== notice.key);
   store.setState({ notices: [...notices, notice] });
 }
