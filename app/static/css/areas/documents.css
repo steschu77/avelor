@@ -74,12 +74,6 @@
   margin-left: auto;
 }
 
-/* the lens head's menus: the Types of the Documents lens */
-.lens-types {
-  gap: 6px;
-  font: 400 var(--fs-ui)/1 var(--f-chrome);
-}
-
 .docs {
   --cols: minmax(0, 1fr) 84px;
 }

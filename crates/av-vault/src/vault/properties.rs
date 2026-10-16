@@ -2,6 +2,10 @@
 //! fields, its body.
 
 use super::{Changes, Index, SaveOutcome};
+use crate::change::Change;
+use crate::document::Document;
+use av_utils::datetime::DateTime;
+use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::id::Id;
 use av_utils::text::unique_trimmed;
@@ -73,5 +77,44 @@ impl Index {
     ) -> Result<SaveOutcome> {
         self.check_writable(id)?;
         self.update(id, changes, |d| d.set_archived(archived))
+    }
+
+    /// Apply `change` to `id`, which may be any entity, as one write: for
+    /// edits that touch several properties at once. Nothing is written if
+    /// nothing changed.
+    pub fn edit(
+        &mut self,
+        id: &Id,
+        changes: &mut Changes,
+        change: impl FnOnce(&mut Document),
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        self.update(id, changes, change)
+    }
+
+    /// Write `change` to each of `ids` as its own write: the outcome per
+    /// id, in their order. An entity the change doesn't fit ([`Change::fits`])
+    /// is refused (`InvalidArgument`), one that can't be written as by
+    /// [`Index::edit`]; either way the others are still written. `now` is
+    /// when a task is marked done.
+    pub fn edit_entities(
+        &mut self,
+        ids: &[Id],
+        change: &Change,
+        now: DateTime,
+        changes: &mut Changes,
+    ) -> Vec<(Id, Result<SaveOutcome>)> {
+        ids.iter()
+            .map(|id| {
+                let outcome = match self.get(id) {
+                    None => Err(Error::NotFound),
+                    Some(doc) if !change.fits(doc.kind()) => Err(Error::InvalidArgument {
+                        arg: "change".into(),
+                    }),
+                    Some(_) => self.edit(id, changes, |d| change.apply(d, now)),
+                };
+                (*id, outcome)
+            })
+            .collect()
     }
 }
