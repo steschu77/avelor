@@ -50,12 +50,17 @@
 
     <main class="main" id="main">
       <div class="pane-head">
+        <button type="button" class="tool" id="project-fold-btn" aria-expanded="false"
+          title="Show project details" hidden><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
         <span class="project-name" id="project-name">All Projects</span>
         <span class="label-filter" id="label-filter"></span>
         <button type="button" class="chip chip--action" id="label-add-btn" title="Filter by a label"
           aria-haspopup="menu" hidden>+</button>
         <span class="meta docs-count" id="doc-count"></span>
         <button type="button" class="tool lens-types" id="types-btn" title="Show or hide the types"><span>Types</span><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
+      </div>
+      <div class="toolbar project-tools" id="project-tools" hidden>
+        <button type="button" class="tool" id="project-rename-btn" title="Rename project"><svg class="icon"><use href="#i-rename" /></svg></button>
       </div>
 
       <!-- Documents (features/lenses/documents.js) -->
@@ -89,6 +94,25 @@
 
     <footer class="statusbar" role="status"></footer>
   </div>
+
+  <!-- A file changed outside the app (features/conflict.js, saving.md#the-dialog). -->
+  <dialog id="conflict-dialog" class="dialog" role="alertdialog" tabindex="-1" aria-labelledby="conflict-title"
+    aria-describedby="conflict-text">
+    <div class="dialog__head">
+      <div class="doc-head__kind label">
+        <svg class="icon" id="conflict-icon"><use href="" /></svg>
+        <span class="doc-head__kind-name" id="conflict-kind"></span>
+      </div>
+      <div class="doc-head__title"><span class="doc-title" id="conflict-title"></span></div>
+      <div class="doc-head__sub"><span class="meta truncate-start" id="conflict-path"></span></div>
+    </div>
+    <div class="dialog__body">
+      <p class="prose" id="conflict-text"></p>
+    </div>
+    <div class="dialog__foot">
+      <button type="button" class="btn push" id="conflict-theirs">Use theirs</button>
+    </div>
+  </dialog>
 
   <!-- the bridge to the host, filled in by the host (page.rs) -->
   <script id="bridge"></script>

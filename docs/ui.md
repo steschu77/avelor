@@ -11,7 +11,7 @@ Three panels:
   (`ui.md#vault-panel`); its lower area holds the jobs panel
   (`ui.md#jobs-panel`);
 - the **main view** with the lenses (`ui.md#lenses`), and above them the vault
-  header (the selected project's name);
+  header (the selected project's name, `panel.md#projects`);
 - the **side panel** on the right.
 
 Both side panels have grips to resize them; the widths are remembered

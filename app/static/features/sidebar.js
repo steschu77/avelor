@@ -1,6 +1,6 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
 // archived folded) after No project, with their counts, each a filter;
-// the vault's name and menu. It renders at most once per frame
+// renaming projects; the vault's name and menu. It renders at most once per frame
 // (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
@@ -8,7 +8,10 @@ import { $ } from '../core/dom.js';
 import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
 import { store } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
+import { projects } from '../model/entities.js';
+import { structureCall } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
+import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
@@ -24,6 +27,8 @@ const noProjectEl = $('no-project');
 export const scheduleRenderSidebar = oncePerFrame(renderSidebar);
 
 // A sidebar row without its count and highlight, which `updateNavItem` sets.
+// `action` ({ icon, title, onClick }) becomes a circular icon button at the
+// row's right end, shown while the row is hovered; `onClick` gets the row.
 function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
   const el = accEl('a', className);
   const elName = accEl('span', 'nav-item__name', name);
@@ -32,6 +37,17 @@ function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
   el.appendChild(elIcon);
   el.appendChild(elName);
   el.appendChild(elCount);
+  if (action) {
+    const btn = accEl('button', 'icon-btn icon-btn--quiet nav-item__action');
+    btn.type = 'button';
+    btn.title = action.title;
+    btn.append(iconEl(action.icon));
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      action.onClick(el);
+    });
+    el.appendChild(btn);
+  }
   el.addEventListener('click', onClick);
   return el;
 }
@@ -45,13 +61,40 @@ function updateNavItem(row, count, current, starred) {
   setAria(row, 'aria-selected', starred);
 }
 
+// The row being renamed in place (see `editSidebarName`): while it is,
+// `renderSidebar` leaves the sidebar alone, and runs once the edit ends.
+let sidebarEditing = false;
+
+// Swap `row`'s name for a text input: Enter or leaving it commits (calling
+// `commit` with the trimmed text if it changed), Esc cancels.
+function editSidebarName(row, name, commit) {
+  const nameEl = row.querySelector('.nav-item__name');
+  const input = accEl('input', 'nav-item__edit');
+  input.value = name;
+  nameEl.replaceWith(input);
+  row.classList.add('nav-item--editing');
+  sidebarEditing = true;
+
+  onEditEnd(input, save => {
+    sidebarEditing = false;
+    input.replaceWith(nameEl);
+    row.classList.remove('nav-item--editing');
+    const title = input.value.trim();
+    if (save && title !== name) commit(title);
+    scheduleRenderSidebar();
+  });
+  input.focus();
+  input.select();
+}
+
 // The sidebar's rows by key (`project:<id>`), kept across renders:
 // `renderSidebar` patches counts and highlights in place and rebuilds a row
 // only when its name changed. A scan re-renders the sidebar every frame,
-// and a replaced row would lose its hover.
+// and a replaced row would lose its hover (flickering its action button).
 let sidebarRows = new Map();
 
 function renderSidebar() {
+  if (sidebarEditing) return;
   const projectCounts = new Map();
   let noProjectCount = 0;
   for (const doc of entities.values()) {
@@ -80,7 +123,8 @@ function renderSidebar() {
   const archivedRows = [];
   for (const { id, name, starred, archived } of projectsInOrder()) {
     const row = rowFor(`project:${id}`, name, () =>
-      sidebarNavItem('nav-item nav-item--project', name, 'nav-item__icon nav-item__icon--star', '#i-star-filled', () => selectProject(id)));
+      sidebarNavItem('nav-item nav-item--project', name, 'nav-item__icon nav-item__icon--star', '#i-star-filled', () => selectProject(id),
+        { icon: '#i-edit', title: 'Rename project', onClick: row => editProject(id, row) }));
     row.classList.toggle('nav-item--archived', archived);
     updateNavItem(row, projectCounts.get(id) ?? 0, id === selected_project, starred);
     (archived ? archivedRows : projectRows).push(row);
@@ -106,6 +150,13 @@ function renderSidebar() {
 function selectProject(project_id) {
   const current = store.getState().selected_project;
   store.setState({ selected_project: project_id === current ? null : project_id });
+}
+
+// Rename a project in place; the host writes the new title (an empty one
+// removes it) and pushes the project back as `entity`.
+function editProject(project_id, row) {
+  const name = projects.get(project_id)?.name ?? '';
+  editSidebarName(row, name, title => structureCall('set_title', { id: project_id, title }));
 }
 
 allProjectsEl.addEventListener('click', () => store.setState({ selected_project: null }));

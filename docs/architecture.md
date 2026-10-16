@@ -51,10 +51,11 @@ read by OCR.
 |---|---|
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
-| `saving.md` | closing |
-| `vault.md` | the file format: identity, roles, types, sources, metadata |
-| `api.md` | the protocol: transport, rules, the page's side, every command |
-| `ui.md` | the main window: layout, status bar, preferences |
+| `vault.md` | the file format: identity, roles, types, sources, metadata; opening and scanning a vault |
+| `api.md` | the protocol: transport, rules, the page's side, every command and event |
+| `ui.md` | the main window: layout, vault panel and filters, lenses, status bar, jobs panel, keys, preferences |
+| `panel.md` | the side panel: projects, structural edits and how they are saved |
+| `saving.md` | conflicts, closing |
 
 ## Doc conventions
 
@@ -72,7 +73,7 @@ read by OCR.
 - **`file:line`**: host files are under `app/src/`, page files under
   `app/static/`, crate files under `crates/<crate>/src/` (written
   `av-vault/vault.rs:201`).
-- **Flows** have ids by area (A vault, B navigation, F lenses): trigger
+- **Flows** have ids by area (A vault, B navigation, C projects, F lenses): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
@@ -167,6 +168,34 @@ for nothing (principle 8); on Linux the session manager's `query-end`,
 SIGTERM and SIGHUP end it the same way. Both are
 `saving.md#closing-the-app`.
 
+### Vault edits and the outbox <a id="vault-edits"></a>
+
+Every vault edit by the app goes through `App::edit`, which hands the
+edit av-vault's `Index` and pushes every entity it wrote —
+also when it failed part-way:
+
+```rust
+pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
+    let result = app.edit(|index, changes| index.set_title(&id, title, changes));
+    answer(app, req, result, Some(id));
+}
+```
+
+av-vault's `Changes` names what an edit wrote, so the same push sends
+`entity` (`post_entity` serves scanned entries and edits alike). Taking
+in a change made outside the app (`Vault::reload`) isn't an edit by the
+app and stays apart. `Vault` (`app.rs`), the open
+vault's folder and index, keeps both private: the index is read through
+`Vault::index` and changed only by `App::edit`, the scan and these
+methods.
+
+`App` posts through an **outbox** (`Box<dyn Fn(String)>`, given to
+`App::new`): the web view in the app, a `Vec<String>` in tests. With the
+test running the UI queue itself, a command is dispatched against a
+temporary vault and its events and reply asserted (`testing.rs`:
+`Harness::call`, `notes`); work on a worker is waited for
+(`wait_scanned`).
+
 ## Crates <a id="crates"></a>
 
 | Crate | Owns | Notes |
@@ -210,13 +239,14 @@ SIGTERM and SIGHUP end it the same way. Both are
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `run*`, `on_ui`, `Progress` (`send`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `reload`, `changed_at`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
 | `vault_scan.rs` | the vault scan (`vault.md#opening`): `run_scan` with av-vault's `scan` on a worker, its batches into the index (`Vault::apply_scanned`) and to the page (`vault`, `entity`, `vault_error`, the scan's `job`), a replaced scan's batches dropped, `scanning`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs` |
+| `structure.rs` | the structural commands: titles, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>
@@ -290,17 +320,19 @@ nothing imports `app.js`.
 | `core/dom.js`, `core/store.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); the date helpers (`parseDate`), every date format of the page, and counts with their noun (`plural`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
-| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `notices`, the preferences); `savePrefs`, `showError` |
+| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`) |
-| `model/events.js` | the host's events into the model (`entity`, `vault`; `forgetVault`), the only writer of the Maps |
+| `model/documents.js` | the conflicts |
+| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `vault`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
+| `ui/field.js` | editing in place (`editTextInPlace`) |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
 | `features/selection.js` | the selection (`selectDocument`, `selectById`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
 | `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, and shows an entity on request (`revealInDocuments`) |
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
-| `features/close.js` | closing the app: the `close` event answered `close_ready` |
+| `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event answered `close_ready` |
 | `features/jobs.js` | job cards from the `job` event |
-| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu; the vault panel: projects, No project with their counts, the filter, the vault menu |
+| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details; the vault panel: projects, No project with their counts, the filter, the vault menu |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the sidebar's sections, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, `ready` |
@@ -314,14 +346,15 @@ A page is drawn by what it must keep while it changes:
 
 ### Page state <a id="page-state"></a>
 
-The store (`model/state.js`) holds selection and UI state and the notices, plus revision counters
+The store (`model/state.js`) holds selection and UI state, the conflicts and the notices, plus revision counters
 (`projects_rev`, `entities_rev`). The domain data lives
 in Maps outside it (`entities`, `projects`, `threads`, in `model/entities.js`), changed in place. Only the host's
 events write them, in `model/events.js`, each followed by a counter's
 bump; a vault being opened clears them (`forgetVault`).
 
 The model calls no render. The renders subscribe to the store (`app.js`,
-the features): the lenses and the sidebar to the counters, the status bar to
+the features): the lenses and the sidebar to the counters, the conflict
+dialog to `conflicts`, the status bar to
 `notices`. A render that follows several values subscribes with an array
 of selectors (`store.subscribe([s => s.selected_project, s =>
 s.projects_rev], …)`), called when any of them changed.
@@ -348,9 +381,9 @@ order into the page's one `<style>`. The order stands in one place, as
 |---|---|
 | `css/tokens.css` | the colors, fonts, sizes, insets, heights, radii, shadows and layers |
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
-| `css/type.css` | the type roles (`label`, `meta`, `row-title`, …) and the utilities (`icon`, `push`, `stack`) |
-| `css/components.css` | what several areas share: `tool`, `chip`, `input`, `menu`, `list-row`, `pane-head`, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, header (the lens header) |
+| `css/type.css` | the type roles (`label`, `meta`, `row-title`, …) and the utilities (`icon`, `truncate-start`, `push`, `stack`) |
+| `css/components.css` | what several areas share: `btn`, `tool`, `chip`, `input`, `menu`, `list-row`, `pane-head`, the dialogs, … |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 

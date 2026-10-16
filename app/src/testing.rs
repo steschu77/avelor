@@ -1,5 +1,6 @@
-//! For tests: an `App` without a window, on a temporary config folder.
-//! What it sends to the page is collected, and the test runs its UI queue.
+//! For tests: an `App` without a window, on a temporary config folder and,
+//! if asked, a temporary vault. What it sends to the page is collected, and
+//! the test runs its UI queue.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -9,9 +10,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+use crate::api;
 use crate::app::{App, UiQueue, UiTask};
 use crate::config::load_config;
 use crate::sys::UiSignal;
+use av_utils::id::Id;
 
 // ----------------------------------------------------------------------------
 pub struct Harness {
@@ -46,7 +49,25 @@ impl Harness {
     }
 
     // ------------------------------------------------------------------------
-    /// A vault's folder in the test's folder.
+    /// An `App` with a vault of `files` (vault-relative path, text), opened
+    /// and scanned as the app does it (`api::switch_to`); what the scan sent is
+    /// dropped.
+    pub fn with_vault(name: &str, files: &[(impl AsRef<Path>, impl AsRef<str>)]) -> Self {
+        let mut harness = Self::new(name);
+        let root = harness.vault();
+        for (path, text) in files {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text.as_ref()).unwrap();
+        }
+        api::switch_to(&mut harness.app, root.clone());
+        harness.wait_scanned();
+        harness.take();
+        harness
+    }
+
+    // ------------------------------------------------------------------------
+    /// The vault's folder (`with_vault`).
     pub fn vault(&self) -> PathBuf {
         self.dir.join("vault")
     }
@@ -121,4 +142,20 @@ pub fn shape(sent: &[Value]) -> Vec<&str> {
     sent.iter()
         .map(|m| m["ev"].as_str().unwrap_or("reply"))
         .collect()
+}
+
+// ----------------------------------------------------------------------------
+/// A vault of `n` documents, `Notes/n<i>.md`, titled `Note <i>`, with the
+/// body `Body <i>`.
+pub fn notes(name: &str, n: usize) -> (Harness, Vec<Id>) {
+    let ids: Vec<Id> = (0..n).map(|_| Id::generate()).collect();
+    let files: Vec<(String, String)> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            let text = format!("---\nid: {id}\ntitle: Note {i}\ndocument: {{}}\n---\nBody {i}\n");
+            (format!("Notes/n{i}.md"), text)
+        })
+        .collect();
+    (Harness::with_vault(name, &files), ids)
 }

@@ -1,19 +1,24 @@
-// The lens header: the selected project's name, the
+// The lens header (panel.md#projects): the selected project's name, the
 // active labels with the "+" that filters by another one
-// (ui.md#vault-panel).
+// (ui.md#vault-panel), and the project's details -- a toolbar (rename).
 
 import { $, accEl, oncePerFrame } from '../core/dom.js';
 import { store } from '../model/state.js';
 import { NO_PROJECT, entities, matchesFilter, projects } from '../model/entities.js';
+import { projectScope } from '../model/entities.js';
+import { structureCall } from '../model/structure.js';
 import { showMenu } from '../ui/menu.js';
+import { editTextInPlace } from '../ui/field.js';
 
 const projectNameEl = $('project-name');
 
 // The header names the selected project, No project or All Projects;
-// `projects_rev` catches a rename.
+// `projects_rev` catches a rename. A name being edited in place is left
+// alone.
 store.subscribe(
   [state => state.selected_project, state => state.projects_rev],
   ([selected_project]) => {
+    if (projectNameEl.hasAttribute('contenteditable')) return;
     if (selected_project === NO_PROJECT) projectNameEl.textContent = 'No project';
     else if (selected_project) projectNameEl.textContent = projects.get(selected_project)?.name ?? '';
     else projectNameEl.textContent = 'All Projects';
@@ -53,6 +58,47 @@ labelAddBtn.addEventListener('click', () => {
     }));
   showMenu(labelAddBtn, items.length ? items : [{ label: 'No other labels', dim: true }],
     { head: 'Filter by a label', filter: { placeholder: 'Filter labels' } });
+});
+
+// The selected project's details under the header, shown while the fold
+// button (the chevron) is unfolded: a toolbar (rename).
+const projectFoldBtn = $('project-fold-btn');
+const projectToolsEl = $('project-tools');
+let descProjectId = null; // the project the details are bound to
+
+function projectUnfolded() {
+  return projectFoldBtn.getAttribute('aria-expanded') === 'true';
+}
+
+function updateProjectDesc() {
+  const shown = Boolean(descProjectId) && projectUnfolded();
+  projectToolsEl.hidden = !shown;
+}
+
+// Rename the selected project in the header itself, like its sidebar pill
+// (`editProject`): the host writes the new title and pushes the project
+// back as `entity`, which renames the header.
+function editProjectName() {
+  const project_id = descProjectId;
+  editTextInPlace(projectNameEl, () => projects.get(project_id)?.name ?? '',
+    title => structureCall('set_title', { id: project_id, title }));
+}
+
+projectFoldBtn.addEventListener('click', () => {
+  const unfold = !projectUnfolded();
+  projectFoldBtn.setAttribute('aria-expanded', String(unfold));
+  projectFoldBtn.title = unfold ? 'Hide project details' : 'Show project details';
+  updateProjectDesc();
+});
+
+$('project-rename-btn').addEventListener('click', editProjectName);
+
+// Another project selected: the fold state stays. All Projects and No
+// project have no details.
+store.subscribe(state => state.selected_project, () => {
+  descProjectId = projectScope();
+  projectFoldBtn.hidden = !descProjectId;
+  updateProjectDesc();
 });
 
 // ----------------------------------------------------------------------------

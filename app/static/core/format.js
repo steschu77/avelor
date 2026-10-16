@@ -18,6 +18,8 @@ const format = options => new Intl.DateTimeFormat(undefined, options);
 
 export const DATE_FORMAT = format();                                    // 10/14/2026
 const DAY_MONTH = format({ day: '2-digit', month: '2-digit' });         // 10/14
+// A time of day, wherever the page shows one: 9:05 AM.
+export const TIME_FORMAT = format({ hour: 'numeric', minute: '2-digit' });
 
 // A date in a list: day and month, with the year if it isn't this one (a
 // thread's days in the Documents lens).

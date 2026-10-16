@@ -36,9 +36,10 @@ which answers through a `Req`.
   its reply (`PostWebMessageAsString` keeps order), so the page's data is
   current when the reply arrives.
 - **Error codes** are the names of `av_utils::Error`'s variants in
-  snake_case (`Error::code()`): `bad_request`, `cancelled`, `file_write`,
-  `win32`, `gtk`, …. `Req::fail` answers in the host's own words where
-  the page shows the message.
+  snake_case (`Error::code()`): `bad_request`, `invalid_argument`,
+  `cancelled`, `not_found` (no entity with that id), `not_writable`,
+  `file_write`, `win32`, `gtk`, …. `Req::fail` answers in the host's own
+  words where the page shows the message.
 - The page sends **strings** (`JSON.stringify`), since the host reads with
   `TryGetWebMessageAsString`.
 - **Decoding is written by hand**: `Command::decode` matches on `cmd` and
@@ -64,6 +65,8 @@ which answers through a `Req`.
   stays until dismissed, unless it is `cancelled`, so no
   failure is only a console line.
 
+The structural commands go through `structureCall`.
+
 ## Commands
 
 ### Vault commands
@@ -76,6 +79,20 @@ Host modules: `api.rs`, `vault_scan.rs`.
 | `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and scanned as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
 | `reveal_vault` | — | Open the vault's folder in Explorer (on Linux the file manager) once the handler has returned. `null`; `invalid_path` ("No vault is open."), or the shell's error ("Could not show the vault's folder."). |
+
+### Structural commands <a id="structure"></a>
+
+Host module: `structure.rs`. Each pushes the `entity` / `entity_deleted`
+events of what it wrote, then answers `ok {id}` with the id below, or
+`ok {conflict: {id, changed}}` when a file changed outside the app and
+nothing was written, or an error: `not_writable` when an entity to rewrite
+has no file, is read-only or has broken frontmatter, `not_found`, …. The
+rules are `panel.md#saving-structure`.
+
+| Command | Args | Does | Answer `id` |
+|---|---|---|---|
+| `set_title` | `{ id, title }` | Set the title of any entity; an empty title removes the `title` key. The file keeps its name. | the entity |
+| `reload_entity` | `{ id }` | Read the file again and take in what it holds (the conflict dialog's Use theirs): pushes `entity`, or `entity_deleted` if the file is gone. | the id the file has now; none if it is gone |
 
 ### Jobs and closing
 
@@ -95,5 +112,6 @@ What the host pushes; the page listens with `rpcOn`.
 | `vault_error` | `{ path, error }` | A file of the scan couldn't be read; it stays out of the index. The scan's job ends with the count as its note. |
 | `close` | `{ id }` | The window's Close (`saving.md#closing-the-app`). |
 | `job` | `{ id, label, state: "running"\|"done", done, total, note, stoppable }` | A job started, made progress, or ended: a vault scan. `note` is an ended job's summary (what it did, what failed, or why it failed); a job that ended did all its steps (`done` = `total`). |
-| `entity` | `{ id, kind, title, path, source, genre, date, projects, tags, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during a vault scan. `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
+| `entity` | `{ id, kind, title, path, source, genre, date, projects, tags, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during a vault scan, and for every entity an edit rewrote, whatever the edit (a structural command, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
+| `entity_deleted` | `{ id }` | The entity left the vault: its file is gone. |
 | `notice` | `{ level: "error", message }` | `error`: the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), or `config.yaml` couldn't be read at start (on `ready`). A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |

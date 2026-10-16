@@ -10,6 +10,9 @@ export const store = createStore({
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
   // level: 'error' }; always replaced
   notices: [],
+  // files changed outside the app, oldest first, each asked about in the
+  // conflict dialog (features/conflict.js): { id, changed }; always replaced
+  conflicts: [],
   // the page's preferences, strings by key: the host fills them into the
   // page (#prefs, page.rs); `savePrefs` changes them; always replaced
   prefs: JSON.parse($('prefs')?.textContent || '{}'),

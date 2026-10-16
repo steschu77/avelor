@@ -9,7 +9,9 @@ use crate::api;
 use crate::app::Prefs;
 use crate::app::{App, UiQueue};
 use crate::close;
+use crate::structure;
 use av_utils::error::Error;
+use av_utils::id::Id;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -37,6 +39,9 @@ enum Command {
     RevealVault,
     /// The page's answer to the event `close` (`close::close_ready`).
     CloseReady(close::Answer),
+    // The structural commands (`structure`).
+    SetTitle(Retitle),
+    ReloadEntity(Target),
 }
 
 /// `{path?}`: no `path` shows the folder picker.
@@ -52,6 +57,19 @@ struct PagePrefs {
     prefs: Prefs,
 }
 
+/// `{id}`: the entity the command is about.
+#[derive(Deserialize)]
+struct Target {
+    id: Id,
+}
+
+/// `{id, title}`
+#[derive(Deserialize)]
+struct Retitle {
+    id: Id,
+    title: String,
+}
+
 impl Command {
     // ------------------------------------------------------------------------
     /// The command `cmd` with its `args`.
@@ -63,6 +81,8 @@ impl Command {
             "set_prefs" => Command::SetPrefs(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
             "close_ready" => Command::CloseReady(from_value(args)?),
+            "set_title" => Command::SetTitle(from_value(args)?),
+            "reload_entity" => Command::ReloadEntity(from_value(args)?),
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
                 return Err(serde::de::Error::custom(unknown));
@@ -94,6 +114,8 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
         Command::RevealVault => api::reveal_vault(app, req),
         Command::CloseReady(a) => close::close_ready(app, req, a),
+        Command::SetTitle(a) => structure::set_title(app, req, a.id, a.title),
+        Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),
     }
 }
 

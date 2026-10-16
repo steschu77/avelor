@@ -10,6 +10,7 @@ mod jobs;
 mod page;
 mod protocol;
 mod shell;
+mod structure;
 mod sys;
 #[cfg(test)]
 mod testing;

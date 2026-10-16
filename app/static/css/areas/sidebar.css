@@ -49,8 +49,8 @@
 }
 
 /* collapse arrow: chevron down when expanded, right when collapsed; also
-   the icon of the sidebar's Archived row, which carries aria-expanded
-   itself */
+   the fold button in the project header and the icon of the sidebar's
+   Archived row, which carries aria-expanded itself */
 .disclosure {
   width: 12px;
   height: 12px;
@@ -66,12 +66,15 @@
 }
 
 .nav-item {
+  /* the pill's side padding; the round controls at its ends are placed
+     from it and the row height */
+  --nav-pad: 10px;
   margin: 0 var(--p-gutter);
   height: var(--h-nav-row);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 10px;
+  padding: 0 var(--nav-pad);
   font: 400 var(--fs-small)/1 var(--f-chrome);
   border: 1px solid transparent;
   border-radius: var(--r-pill);
@@ -124,6 +127,44 @@
 
 .nav-item__count {
   margin-left: auto;
+}
+
+.nav-item__action {
+  display: none;
+  margin-left: auto;
+  /* concentric with the pill's round end: as far from its right edge as
+     from top and bottom (2px: the pill's own borders) */
+  margin-right: calc((var(--h-nav-row) - 2px - var(--h-control-sm)) / 2 - var(--nav-pad));
+}
+
+.nav-item:hover .nav-item__action {
+  display: flex;
+}
+
+.nav-item:hover .nav-item__count {
+  display: none;
+}
+
+/* a row's name being renamed in place: the input takes the whole row, its
+   round ends concentric with the pill's like .nav-item__action */
+.nav-item__edit {
+  --edit-h: 20px;
+  flex: 1;
+  min-width: 0;
+  height: var(--edit-h);
+  margin: 0 calc((var(--h-nav-row) - 2px - var(--edit-h)) / 2 - var(--nav-pad));
+  padding: 0 6px;
+  color: var(--c-ink);
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-pill);
+  outline: none;
+}
+
+.nav-item--editing .nav-item__icon,
+.nav-item--editing .nav-item__action,
+.nav-item--editing .nav-item__count {
+  display: none !important;
 }
 
 /* job progress (features/jobs.js) */

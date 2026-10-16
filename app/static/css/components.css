@@ -1,6 +1,22 @@
-/* Components: the parts several areas share (tools, menus, grips, pane
-   heads, ...). They come before the areas, so an area's rule can override
+/* Components: the parts several areas share (buttons, tools, chips,
+   inputs, menus, grips, pane heads, dialogs, ...). They come before the areas, so an area's rule can override
    them. */
+
+/* Buttons: bordered and set like a label. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-line);
+  background: transparent;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--c-hover);
+}
 
 /* Tool buttons (toolbars, pane heads): no chrome until hovered or pressed. */
 .tool {
@@ -17,6 +33,37 @@
 
 .tool:hover {
   background: var(--c-hover);
+}
+
+/* A round icon button; --quiet shows its ring only on hover. */
+.icon-btn {
+  flex: none;
+  width: var(--h-control-sm);
+  height: var(--h-control-sm);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--c-line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: var(--c-hover);
+}
+
+.icon-btn--quiet {
+  border-color: transparent;
+  color: var(--c-ink-mute);
+  cursor: default;
+}
+
+.icon-btn--quiet:hover {
+  border-color: var(--c-line);
+  color: var(--c-ink);
 }
 
 /* Pills: --tag fills with the accent, --action can be clicked. */
@@ -269,4 +316,85 @@
   align-items: center;
   gap: 10px;
   padding: 12px var(--p-gutter) 20px;
+}
+
+/* A modal dialog (a native <dialog>, opened with showModal): the brightest
+   layer; its ::backdrop shades the rest of the app. */
+.dialog {
+  width: var(--w-dialog);
+  max-width: calc(100% - 40px);
+  max-height: calc(100% - 40px);
+  padding: 0;
+  border: none;
+  background: var(--c-card);
+  color: var(--c-ink);
+  box-shadow: var(--shadow-dialog);
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog:focus {
+  outline: none;
+}
+
+.dialog::backdrop {
+  background: var(--c-scrim);
+}
+
+.dialog__head {
+  flex: none;
+  padding: 18px var(--p-pane) 0;
+}
+
+.dialog__head .doc-head__sub {
+  margin-top: 2px;
+}
+
+.dialog__body {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px var(--p-pane) 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dialog__body>p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.dialog__foot {
+  flex: none;
+  padding: 12px var(--p-pane);
+  border-top: 1px solid var(--c-line);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dialog__foot>.btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The kind over a head's title: its icon and name, set as a label. */
+.doc-head__kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.doc-head__kind>.icon {
+  width: var(--fs-small);
+  height: var(--fs-small);
+  color: var(--c-ink);
+}
+
+.doc-head__kind-name {
+  color: var(--c-ink);
 }

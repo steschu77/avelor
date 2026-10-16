@@ -42,6 +42,10 @@ impl FileStamp {
         }
     }
 
+    pub fn modified(&self) -> SystemTime {
+        self.modified
+    }
+
     /// The stamp of the file at `path` now; `None` if there is no file.
     pub fn read(path: &Path) -> Result<Option<Self>> {
         match fs::metadata(path) {
