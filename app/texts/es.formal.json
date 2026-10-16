@@ -5,5 +5,7 @@
   "conflict.deleted_unsaved": "El archivo se eliminó fuera de la aplicación, así que su cambio no se guardó.",
   "header.delete_armed": "Haga clic otra vez para eliminar el proyecto",
   "panel.delete_armed": "Haga clic otra vez para eliminar",
-  "panel.select_hint": "Seleccione un documento de la lista."
+  "panel.select_hint": "Seleccione un documento de la lista.",
+  "trash.delete_again": "Haga clic de nuevo para eliminar para siempre",
+  "trash.empty_again": "Haga clic de nuevo para vaciar la papelera"
 }
