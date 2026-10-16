@@ -265,6 +265,12 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// Replace the body.
+    pub fn set_content(&mut self, content: String) {
+        self.content = content;
+    }
+
+    // ------------------------------------------------------------------------
     /// Set the entity's title. An empty (or all-whitespace) title removes the
     /// `title` key altogether; a missing title loads as `""` again.
     pub fn set_title(&mut self, title: String) {

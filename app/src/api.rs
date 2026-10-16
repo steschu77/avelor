@@ -121,7 +121,8 @@ pub fn open_url(app: &mut App, req: Req, url: String) {
 
 // ----------------------------------------------------------------------------
 /// Whether `url` is a link `open_url` hands to the shell: `http`, `https`,
-/// `mailto` or `tel`, the absolute links the editor allows.
+/// `mailto` or `tel`, the absolute links the editor allows
+/// (`editor.md#links`).
 fn is_link(url: &str) -> bool {
     let url = url.to_ascii_lowercase();
     ["http://", "https://", "mailto:", "tel:"]

@@ -2,9 +2,11 @@
 // the bottom of the main area and slides in while the store's `notices` has
 // one to show -- the newest -- and out when it has none. A notice is
 // something the host reported: an error (`showError`, model/state.js; the
-// `notice` event, or a failed call nobody handled, below), like settings
-// it couldn't write. It stays until its x dismisses it; the same text again
-// doesn't stack up.
+// `notice` event, or a failed call nobody handled, below): a failed save,
+// settings it couldn't write. It stays until its x dismisses it; the same
+// text again doesn't stack up (autosave retries a failed save every 4 s).
+// A file changed outside the app is asked about in a dialog instead
+// (features/conflict.js).
 
 import { accEl } from '../core/dom.js';
 import { RpcError, rpcOn } from '../core/rpc.js';

@@ -2,20 +2,28 @@
 // a thread (all members of `selected_thread` as a flat, date-ordered card list
 // in #panel-thread-view, vault.md#thread), or a standalone entity (one card in
 // #doc-content) -- driven only by store state (`selected_entity`,
-// `selected_thread`, `threads_rev`).
+// `selected_thread`, `threads_rev`). app.js reaches into `msgControllers` for
+// the cards' dirty dots, and features/header.js leaves edit mode; autosave
+// lives in model/documents.js and covers every editor in edit mode.
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
+import { createEditor } from '../../editor/editor.js';
 import { store } from '../../model/state.js';
 import { entities, knownThreads, threadMembers, threads } from '../../model/entities.js';
 import { bindDocContent } from '../../model/documents.js';
+import { editorRoots, isDirty, onEdited, trySave } from '../../model/documents.js';
 import { structureCall } from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
+import {
+  createDocPreviewToolbar, createEditorToolbar,
+} from '../../ui/toolbar.js';
 import { editTextInPlace } from '../../ui/field.js';
 import { openLink, panelMode, selectDocument } from '../selection.js';
 
-const msgControllers = new Map(); // doc_id -> controller
+export const msgControllers = new Map(); // doc_id -> controller
+let activeEditId = null; // the one card currently in edit mode, or null
 
 let renderedThreadId = null;
 let renderedMembers = []; // entities entries, in thread order, as currently rendered
@@ -39,7 +47,8 @@ threadRenameBtn.addEventListener('click', () => {
 
 // ----------------------------------------------------------------------------
 // The cards' heads and threads lines follow every entity change -- a title
-// changed -- without rebuilding the cards; subscribed below.
+// changed -- without rebuilding the cards (and their editors); subscribed
+// below.
 const refreshCardChips = oncePerFrame(() => {
   for (const controller of msgControllers.values()) {
     renderCardHead(controller);
@@ -120,7 +129,7 @@ function switchThread(doc_id, thread_id) {
 // below runs against it -- scrolling inside a hidden ancestor is a silent
 // no-op. Cards are only rebuilt when the shown thread/entity or
 // `threads_rev` changed; otherwise a new `selected_entity` within the shown
-// thread just moves the focus, keeping the scroll position.
+// thread just moves the focus, keeping editors and scroll position.
 function renderPanel(state) {
   const mode = panelMode(state);
   panelThreadViewEl.hidden = mode !== 'thread';
@@ -149,8 +158,8 @@ function renderPanel(state) {
 }
 
 // ----------------------------------------------------------------------------
-// Tears down every rendered card -- its content subscription -- and
-// empties the card containers.
+// Tears down every rendered card -- its editor, content subscription, and
+// save state registration -- and empties the card containers.
 function destroyRenderedCards() {
   for (const doc of renderedMembers) destroyMessageController(doc.doc_id);
   if (renderedDocId) destroyMessageController(renderedDocId);
@@ -256,8 +265,9 @@ function renderDocument(doc) {
 }
 
 // ----------------------------------------------------------------------------
-// One card: header and body. `selectable`: a click selects its entity,
-// which only makes sense with other cards on screen (a thread).
+// One card: header, toolbars, and its own editor. `selectable`: a click
+// selects its entity, which only makes sense with other cards on screen (a
+// thread).
 function createMessageController(msg, { selectable = false, thread = false } = {}) {
   const doc_id = msg.doc_id;
 
@@ -268,6 +278,8 @@ function createMessageController(msg, { selectable = false, thread = false } = {
   const headTitle = accEl('div', 'doc-head__title');
   const kindIconEl = iconEl('');
   const titleEl = accEl('span', 'doc-title');
+  const dirtyDot = accEl('span', 'dirty-dot');
+  dirtyDot.hidden = !isDirty(doc_id);
   // The pen renames the entity in place (`renameEntity`), shown where
   // `renderCardHead` says so -- like the thread header's.
   const renameBtn = accEl('button', 'icon-btn icon-btn--quiet doc-head__rename');
@@ -277,6 +289,7 @@ function createMessageController(msg, { selectable = false, thread = false } = {
   renameBtn.addEventListener('click', () => renameEntity(doc_id, titleEl));
   headTitle.appendChild(kindIconEl);
   headTitle.appendChild(titleEl);
+  headTitle.appendChild(dirtyDot);
   headTitle.appendChild(renameBtn);
 
   const headSub = accEl('div', 'doc-head__sub');
@@ -297,32 +310,49 @@ function createMessageController(msg, { selectable = false, thread = false } = {
   head.appendChild(threadsEl);
   card.appendChild(head);
 
+  const previewToolbar = createDocPreviewToolbar();
+  card.appendChild(previewToolbar);
+
+  const editorToolbar = createEditorToolbar();
+  card.appendChild(editorToolbar);
+
   const editorRoot = accEl('div', 'pane-section editor prose');
   card.appendChild(editorRoot);
 
-  // A link in the body never navigates the app away: it opens as a link
-  // does (`openLink`).
-  editorRoot.addEventListener('click', ev => {
-    const a = ev.target.closest('a');
-    if (!a) return;
-    ev.preventDefault();
-    openLink(a.getAttribute('href'));
+  const editor = createEditor(editorRoot, {
+    toolbar: editorToolbar,
+    onEscape: () => setMessageEditMode(doc_id, false),
+    onChange: () => onEdited(doc_id),
+    onLinkClick: openLink,
   });
 
-  const unsubscribeContent = bindDocContent(doc_id, editorRoot);
+  editorRoots.set(doc_id, editorRoot);
+
+  const editable = Boolean(entities.get(doc_id)?.editable);
+  const editBtn = previewToolbar.querySelector('button[data-cmd="edit"]');
+  editBtn.setAttribute('aria-disabled', String(!editable));
+  editBtn.title = editable ? 'Edit message' : 'Read-only';
+
+  const unsubscribeContent = bindDocContent(doc_id, editor, editorRoot);
+
+  editBtn.addEventListener('click', () => {
+    if (editBtn.getAttribute('aria-disabled') === 'true') return;
+    setMessageEditMode(doc_id, !editor.isEditable());
+  });
 
   const controller = {
-    doc_id, card, renameBtn, editorRoot, iconEl: kindIconEl, titleEl, dateEl, threadsEl,
-    unsubscribeContent,
+    doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
+    dateEl, threadsEl, unsubscribeContent,
   };
   msgControllers.set(doc_id, controller);
   renderCardHead(controller);
 
   if (selectable) {
     // Clicking a card selects that entity, except when the click landed on
-    // one of its own buttons (those already have their own behavior).
-    // Clicking inside the body itself still selects the card; it's not
-    // exempted.
+    // one of its own toolbar buttons (those already have their own
+    // behavior). Clicking inside the editor body itself -- read-only text,
+    // or placing a cursor while editing -- still selects the card; it's
+    // not exempted.
     card.addEventListener('click', ev => {
       if (ev.target.closest('button')) return;
       selectDocument(doc_id);
@@ -333,13 +363,43 @@ function createMessageController(msg, { selectable = false, thread = false } = {
 }
 
 // ----------------------------------------------------------------------------
+function setMessageEditMode(doc_id, on) {
+  if (on && activeEditId && activeEditId !== doc_id) {
+    setMessageEditMode(activeEditId, false);
+  }
+
+  const controller = msgControllers.get(doc_id);
+  if (!controller) return;
+
+  if (!on && controller.editor.isEditable()) {
+    trySave(doc_id);
+  }
+  controller.editor.setEditable(on);
+  controller.editBtn.setAttribute('aria-pressed', String(on));
+
+  if (on) activeEditId = doc_id;
+  else if (activeEditId === doc_id) activeEditId = null;
+}
+
+// ----------------------------------------------------------------------------
 function destroyMessageController(doc_id) {
   const controller = msgControllers.get(doc_id);
   if (!controller) return;
 
+  if (controller.editor.isEditable()) trySave(doc_id);
   controller.unsubscribeContent();
+  controller.editor.destroy();
   controller.card.remove();
+  editorRoots.delete(doc_id);
   msgControllers.delete(doc_id);
+  if (activeEditId === doc_id) activeEditId = null;
+}
+
+// ----------------------------------------------------------------------------
+// The card in edit mode, if any, leaves it, saving as it does (closing the
+// app, switching the vault: `leaveEditModes`, features/header.js).
+export function leaveCardEditMode() {
+  if (activeEditId) setMessageEditMode(activeEditId, false);
 }
 
 // ----------------------------------------------------------------------------

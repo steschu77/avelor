@@ -13,12 +13,15 @@
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
   tests.
 - `cargo clippy --workspace`.
+- `markdown.selftest.html` for the editor's markdown: the build's copy in
+  `OUT_DIR`, opened from disk (`markdown.md#testing`).
 - The user tests new flows by hand against `data/forged`.
 
 ## The bundled page <a id="the-bundled-page"></a>
 
 `build.rs` bundles the page into
-`target/debug/build/avelor/<hash>/out/index.html`. Several hash
+`target/debug/build/avelor/<hash>/out/index.html`, and the
+markdown selftest beside it (`markdown.selftest.html`). Several hash
 folders exist, so take the one newer than the edited file. While the app
 runs, `cargo build` compiles but can't replace the locked exe; `cargo test
 -p avelor --no-run` still runs `build.rs`, so the page is bundled

@@ -72,6 +72,12 @@ detects such a change before it writes and when it looks at a file again;
 if nothing of the app's own is lost, it takes the change in, otherwise it
 asks the user which version to keep. The rules are in `saving.md#conflicts`.
 
+## Saving and Versioning <a id="versioning"></a>
+
+There are no drafts or temporary copies: the app always saves edits
+directly to the original vault file. As a safety net, the vault is meant to
+be versioned with git, so any earlier state of a file can be recovered.
+
 ## Roles, Types and Sources
 
 An entity is described along two independent, stored axes:
@@ -640,5 +646,8 @@ A scan starts only when a vault opens, so `vault` (scanning) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 
 - the entities, projects and threads and their content (`docContent`);
+- the unsaved state. No editor of the old vault saves any more: its edits
+  were sent before the switch, when every editor left edit mode
+  (`switchVault`).
 - the conflicts;
 - the selection and the filter.

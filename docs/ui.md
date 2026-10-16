@@ -25,7 +25,7 @@ what the lens shows, and so do the labels picked in the lens head.
 Filtering is entirely on the page: all metadata
 arrives with the scan (`renderSidebar`, `features/sidebar.js`;
 `matchesFilter`, `model/entities.js`). The counts per project are derived on
-the page, once per frame.
+the page, once per frame (`panel.md#host-pushes`).
 
 - **Projects**: "All Projects" clears the filter; "No project" shows the
   entities in no project of the vault (`NO_PROJECT` as

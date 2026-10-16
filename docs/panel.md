@@ -3,12 +3,14 @@
 > The side panel and what the user organizes in it: the card every entity
 > is shown as, a thread's members, projects, and the structural edits
 > (titles) with how they are saved. The lenses and the vault panel are
-> `ui.md`.
+> `ui.md`; the editor inside each card, `editor.md`; saving its content,
+> `saving.md`.
 
 ## Overview
 
 The panel on the right shows what is selected: one card for an entity
-outside any thread, or all members of a thread as a stack of cards. It can
+outside any thread, or all members of a thread as a stack of individually
+editable cards. It can
 be closed, expanded to full width and resized (`panel_size` in the store;
 the widths are preferences, `ui.md#preferences`).
 
@@ -39,9 +41,12 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
 `createMessageController(doc, { selectable })`
 (`app/static/features/panel/panel.js`) builds a `.msg` card:
 
-- a header: icon, title, a pen that renames it
+- a header: icon, title, dirty dot, a pen that renames it
   (`panel.md#titles`), date, path, and for an entity in
-  several threads a line of them (`panel.md#thread-switch`).
+  several threads a line of them (`panel.md#thread-switch`);
+- an action toolbar (edit, cloned from
+  `#preview-toolbar-template`), an editing toolbar (cloned from
+  `#editor-toolbar-template`), and its own `createEditor()` instance.
 
 It is used from exactly two places:
 
@@ -61,6 +66,18 @@ its entity (`panel.md#selection`), in a thread,
 but not for a lone document, with nothing else on screen to select. A
 card's head (title, date) follows its entity in place on `entities_rev`,
 with its threads line (`refreshCardChips`).
+
+Two `<template>` elements in `index.html` hold the markup each card
+clones from, via `createEditorToolbar()`/`createDocPreviewToolbar()`
+(`ui/toolbar.js`) — cloning and appending only, never mutating or replacing the
+template itself:
+
+- **`#editor-toolbar-template`** — the bold/italic/heading/list/etc.
+  editing toolbar, passed to `createEditor()`'s `toolbar` option.
+- **`#preview-toolbar-template`** — the action row:
+  `data-cmd="edit"` (edit mode, if the entity is `editable`; one card in
+  edit mode at a time). The template's elements
+  carry no ids, since it is cloned for every card.
 
 ## Panel state <a id="panel-state"></a>
 
@@ -91,10 +108,11 @@ remembers what it built (`renderedThreadId`, `renderedDocId`,
 standalone entity, or `threads_rev`, changed.
 
 All card-building paths start from `destroyRenderedCards()`, which tears
-down every rendered card's controller (content subscription) and empties
-the containers. So switching from the standalone card to the thread (or
-back; `renderedDocId` / `renderedMembers`) never leaves an entity's
-content subscription twice. `renderEmpty()` is the `none` mode's builder:
+down every rendered card's controller (editor, content subscription,
+`editorRoots` entry) and empties the containers. So switching from the
+standalone card to the thread (or back; `renderedDocId` /
+`renderedMembers`) never leaves an entity's editor and content
+subscription twice. `renderEmpty()` is the `none` mode's builder:
 after the teardown it shows a placeholder ("No document selected",
 `.empty`) in `#doc-content`; the panel itself stays open.
 
@@ -128,14 +146,14 @@ one in view":
   another member of the thread already shown — a different row in the
   same thread, or clicking a card directly — only calls
   `focusMessage`: switching focus within an open thread never tears down
-  and rebuilds every card, and never fights the user's own
+  and rebuilds every card's editor, and never fights the user's own
   scroll position.
 
-Clicking a card (anywhere except one of its own buttons —
+Clicking a card (anywhere except one of its own toolbar buttons —
 `ev.target.closest('button')`) calls `selectDocument(doc_id)`, so
 selecting from inside the panel is symmetric with selecting from the
-Documents lens. Clicking inside the editor body itself (read-only text)
-still selects the card — a card is mostly editor
+Documents lens. Clicking inside the editor body itself (read-only text,
+or placing a cursor while editing) still selects the card — a card is mostly editor
 body, and exempting more than buttons would leave most of it unclickable.
 
 ## Threads
@@ -235,12 +253,37 @@ something in it changed, and the host answers with what is now on disk.
   in-memory roles and envelope, so the index keeps matching the disk.
   What was written is recorded (`vault::Changes`) and pushed
   (`architecture.md#vault-edits`).
+- **Content and structure share the file.** `Index::save` writes the
+  frontmatter together with the host's last saved body, so a pending
+  content edit in an open card isn't lost: the next content save writes
+  it along with the new frontmatter.
+
+## What the host sends <a id="host-pushes"></a>
+
+`app.rs` sends every scanned or written entity as the `entity` event,
+one shape for every kind (`post_entity`); the page sorts it by its derived
+type (`kind`, `Document::kind()`):
+
+- `project` → `onProject` (the sidebar),
+- `thread` → `onThread` into the page's `threads` Map, which
+  the Documents lens reads for a thread's row,
+- everything else → `onDocMeta` into `entities`: an entity's rows in the
+  Documents lens, including thread members.
+
+The sidebar's per-project counts are derived on the page,
+never sent: `renderSidebar` counts the `entities` entries whose `projects`
+list the project, re-rendered at most once per frame
+after any `entity` or `entity_deleted` event. So every structural edit, and
+every scanned entity, keeps them current. The content load and save
+messages are keyed by an arbitrary `doc_id`, so any number of cards load
+and save their bodies at once.
 
 ## Flows
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | D1 | Open | an entity's row in Documents → `selectDocument` (`features/selection.js`) → `openPanel`, `selected_entity` / `selected_thread` → `renderPanel` (`features/panel/panel.js`) → `panelMode` | — | one card, or the thread's cards |
+| D3 | Edit | card Edit (if `editable`) → `setMessageEditMode` | — | one card in edit mode at a time; Esc leaves |
 | D11 | Follow a link | an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |
 | D12 | Rename | the pen in a card's head or the thread header → `renameEntity` → `editTextInPlace`; Enter or blur | `set_title` → `entity` | the card's head and the thread header follow; the file keeps its name |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |

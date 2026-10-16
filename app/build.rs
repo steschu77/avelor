@@ -13,7 +13,7 @@ use std::{
 /// The page's layers, lowest first: a module in one of these folders imports
 /// only from its own layer or a lower one, and every module but an entry is
 /// in one (`av_bundle::bundle`, `architecture.md#page`).
-const LAYERS: &[&str] = &["core/", "model/", "ui/", "features/"];
+const LAYERS: &[&str] = &["core/", "editor/", "model/", "ui/", "features/"];
 
 // ----------------------------------------------------------------------------
 /// The page source `path` under `static_dir`. The sources are ASCII-only,
@@ -296,8 +296,9 @@ fn icon_refs(text: &str) -> impl Iterator<Item = String> + '_ {
 
 // ----------------------------------------------------------------------------
 /// The page, `index.html` with its CSS, its icons and the bundle of `app.js`
-/// inlined, and what the bundle's modules import (`page-deps.txt`), written
-/// to `out_dir`.
+/// inlined, and what the bundle's modules import (`page-deps.txt`); and the
+/// markdown selftest with its own bundle (`markdown.md#testing`), which
+/// opens from disk. All are written to `out_dir`.
 fn build_pages(root: &Path, out_dir: &Path) {
     let static_dir = root.join("static");
 
@@ -315,6 +316,15 @@ fn build_pages(root: &Path, out_dir: &Path) {
         &process_javascript(&page.js),
     );
     fs::write(out_dir.join("index.html"), html).unwrap();
+
+    let selftest = bundle(&static_dir, "editor/markdown.selftest.js");
+    let html = source(&static_dir, "editor/markdown.selftest.html");
+    let html = inline_script(
+        &html,
+        "<script type=\"module\" src=\"./markdown.selftest.js\"></script>",
+        &process_javascript(&selftest.js),
+    );
+    fs::write(out_dir.join("markdown.selftest.html"), html).unwrap();
 
     println!("cargo:rerun-if-changed=static");
 }

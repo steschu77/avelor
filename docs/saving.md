@@ -1,16 +1,160 @@
 # Avelor — Saving and closing
 
-> How a file changed outside the app is handled, and how the app closes
-> without losing edits. The messages are in `api.md#documents`; how
-> structural edits are saved, `panel.md#saving-structure`.
+> When an edited document is saved, how the page knows a document has
+> unsaved changes, what a delayed reply may and may not do, how a file
+> changed outside the app is handled, and how the app closes without losing
+> edits. The messages are in `api.md#documents`; how structural edits
+> are saved, `panel.md#saving-structure`.
+
+## Overview
+
+```mermaid
+sequenceDiagram
+    participant U as user
+    participant E as editor.js (DOM)
+    participant A as model/documents.js
+    participant H as host (Rust)
+
+    A->>H: load_doc_content {id}
+    H-->>A: ok {source, html}
+    A->>E: setHTML(html)
+    A->>A: baseline[id] = serializeMarkdown(root)
+
+    U->>E: edits
+    E->>A: onChange
+    A->>A: editSeq[id]++ ; dirty = serialize(root) != baseline[id]
+
+    Note over A: 1 s after typing pauses (at the latest 4 s), and on leaving edit mode
+    A->>A: markdown = serializeMarkdown(root)
+    alt markdown == baseline[id]
+        A->>A: dirty = false (nothing to send)
+    else
+        A->>A: seq = editSeq[id]
+        A->>H: save_doc_content {id, markdown}
+        H->>H: write file if it differs; re-render
+        H-->>A: ok {source, html}
+        A->>A: baseline[id] = source ; recompute dirty
+        A->>E: setHTML(html) — only if seq is current and not editing
+    end
+```
+
+Everything document-shaped happens in `app/static/model/documents.js`;
+the editor (`editor.js`) knows nothing about documents, markdown, or the
+host, and the serializer (`markdown.js`) knows nothing about saving.
+Edits are written straight to the vault file: there are no drafts
+(`vault.md#versioning`).
+
+## Triggers <a id="triggers"></a>
+
+A save is attempted:
+
+- when the card's Edit button is toggled off, or Escape is pressed;
+- when a different document is selected while the current one
+  is in edit mode — the outgoing one is saved first; also when a card is
+  closed;
+- for a document in edit mode, once its typing has paused for a second,
+  and at the latest 4 seconds after its first unsaved edit while the typing
+  goes on. It is a flat poll every 250 ms over the documents edited since
+  their last autosave (`editedAt`, `unsavedSince` in
+  `model/documents.js`): simple, and cheap, since a document nobody edits
+  isn't looked at. The file is at most about a second behind the typing,
+  which is all Windows ending the session can count on
+  (`saving.md#session-end`).
+
+"Attempted" because `trySave` first serializes the DOM and compares it to
+the document's baseline (`saving.md#dirty-state`); only a difference produces a
+message.
 
 ## Messages <a id="messages"></a>
 
-`load_doc_content` carries a document's content
+`load_doc_content` and `save_doc_content` carry a document's content
 (`api.md#documents`); a body the host sends unasked (a file read
 again) is the `content` event, handled the same way (`onDocContent`).
 `reload_entity` is the conflict dialog's Use theirs; `close` and
 `close_ready` are `saving.md#closing-the-app`.
+
+A failed save is answered with an error, shown in the status bar
+(in the host's words, "Could not save the document.", `showError` in
+`model/state.js`); the document stays dirty and the next poll retries.
+
+On the host, `Vault::save_content` hands the markdown to
+`vault::Index::save_content`, which writes only if the document's content
+or frontmatter differ from what is on disk (`Document::is_dirty`), then
+re-reads and re-renders (`Vault::content`) for the reply.
+
+## Dirty state <a id="dirty-state"></a>
+
+A document is **dirty** when its current content differs from what the
+file holds. The webview decides this itself, by content, because it has
+the serializer:
+
+- **`baseline[doc_id]`** is the markdown the editor's content last
+  matched on disk. It is set in two places: to `serializeMarkdown(root)`
+  right after `setHTML()` loads a document into the editor, and to
+  `source` from every save's answer.
+- **`dirty[doc_id]`** is `serializeMarkdown(root) !== baseline[doc_id]`,
+  recomputed once per animation frame after any edit (`onChange` from the
+  editor), and again whenever the baseline changes (`dirty_docs`). The dot on the
+  document's row and on its card's title follow it.
+- Only a document currently loaded into *some* editor has a DOM to
+  compare (`editorRoots[doc_id]`): every open document or thread member is
+  its own card with its own editor (`panel.md#cards`). Any other document
+  keeps the state its last save reply left it in: a reply covering its
+  latest edit clears it; a failed save leaves it dirty.
+
+Two consequences are the point of doing it this way:
+
+- **Typing something and undoing it leaves the document clean**, and the
+  next poll sends nothing. A counter-based scheme ("any edit happened")
+  can't tell.
+- **A file whose markdown is not in the serializer's canonical form is not
+  dirty for being opened.** The baseline is the serialization of the *loaded
+  DOM*, not the host's `source`: a file with `* item` bullets renders to the
+  same DOM as `- item` and would compare unequal to its own source forever.
+  Measured against the loaded DOM, it is clean until the user actually
+  changes something — and only then is it rewritten, in canonical form
+  (`markdown.md#round-trip`). "Unchanged documents are never rewritten"
+  holds without the host having to know about canonical forms.
+
+## The staleness guard <a id="staleness"></a>
+
+`editSeq[doc_id]` is a per-document generation counter, bumped on every
+edit. A save remembers the generation it covers with its call
+(`saveDocContent`); the host never sees it. On the save's answer
+(`onDocSaved`), the webview compares that value with the document's
+*current* `editSeq`:
+
+- **Equal** — the reply describes the latest edit. Its `html` may be shown
+  (subject to `saving.md#live-document`).
+- **Lower** — a newer edit or a newer save exists locally that this reply
+  knows nothing about. Its `html` is *not* shown; its `source` still
+  updates the baseline (it is what the file held as of that save, and the
+  newer save's reply will update it again).
+
+The race this closes: a save issued while an earlier save's reply is still
+in flight would otherwise let that stale reply overwrite the editor's live
+view with older content the moment the user returns to read-only preview.
+Checking "is the document read-only right now" is not enough, because it
+is read-only again by the time the stale reply lands.
+
+Dropping a stale reply's `html` is safe because **the file on disk is
+always correct regardless**: each save writes exactly the serialization
+of the real last edit. A dropped reply only means the preview might not
+show a cosmetic correction for a moment — never a mismatch between the
+file and what was typed.
+
+## The live document is never replaced while editing <a id="live-document"></a>
+
+A save answer's `html` is applied via `editor.setHTML()`, which replaces
+the whole DOM and therefore resets the caret. So while the document it
+concerns is the one in the editor *and* edit mode is on, the reply updates
+the baseline and the dirty state only; neither the editor nor the content
+cache (`docContent`, whose subscription would also call `setHTML()`) is
+touched. Once editing stops, the next save brings its own, then-safe
+re-render if one is still needed.
+
+Even when not editing, the re-render is applied only if it differs from
+the editor's current HTML — usually it doesn't (`markdown.md#round-trip`).
 
 ## Conflicts <a id="conflicts"></a>
 
@@ -44,17 +188,29 @@ saves return `SaveOutcome::{Saved, Unchanged, Conflict}`, and the reply is
 
 ### The dialog <a id="the-dialog"></a>
 
-A `conflict` in the answer of `load_doc_content` (and of a structural
-edit) opens the conflict dialog
+A `conflict` in the answer of `load_doc_content` or `save_doc_content`
+(and of a structural edit) opens the conflict dialog
 (`features/conflict.js`): modal, over the shaded app,
 and it has to be answered (Escape doesn't close it). It names the entity,
 its file and when the file changed, or that it was deleted.
 
-- **Use theirs** sends `reload_entity`: the file is taken in (or the
-  entity leaves, if the file is gone).
+- **Use theirs** sends `reload_entity`: the edits made here are dropped
+  and the file is taken in (or the entity leaves, if the file is gone).
+- **Use ours** — only for a document's content — sends `save_doc_content`
+  with `overwrite`: the version edited here is written over the file, or as
+  the deleted file again, even when the host's copy didn't change.
 - A refused structural edit only offers Use theirs; the user makes the edit
   again afterwards.
 - Several conflicts wait in a queue and are shown one at a time.
+
+### Held saves <a id="held-saves"></a>
+
+- **On the page.** While a document's conflict waits, `trySave` sends
+  nothing and keeps its latest markdown for Use ours — also once its card
+  is gone. After Use theirs they stay held back until the file's content
+  has arrived, so none of the old content can follow the reload and
+  overwrite the file after all; the reload bumps `editSeq`, making any
+  in-flight reply stale.
 
 ### Atomic writes <a id="atomic-writes"></a>
 
@@ -76,9 +232,18 @@ The window's Close doesn't destroy the window at once: the host asks
 the page first (`close::on_close`; `close.rs`, `features/close.js`).
 
 - **Refused** while a dialog or a handler runs.
-- **The request.** The host sends the event `close {id}` on every Close.
-  A second Close while it is asked asks nothing more.
-- **What the page does.** The page answers `close_ready {id, ready}`.
+- **The request.** The host sends the event `close {id}` on every Close,
+  also with nothing in edit mode — an edit held for the conflict dialog or
+  a save on its way is the page's to know. A second Close while it is asked
+  asks nothing more.
+- **What the page does.** Every editor leaves edit mode — the card being
+  edited — which saves it as the Edit button does
+  (`saving.md#triggers`). Once every save sent is answered (`savesInFlight`,
+  `model/documents.js`), the page answers `close_ready {id, ready}`.
+- **Not ready.** A save answered as a conflict, or a conflict already
+  waiting, keeps the window: the conflict dialog is on screen, and closing
+  again once it is answered goes on. A save that failed otherwise doesn't
+  hold the close; its error was shown in the status bar.
 - **No answer.** A page that doesn't answer within 4 s is hung or broken
   and can't save anything: the window closes anyway.
 - The host closes the window through the UI queue
@@ -93,3 +258,11 @@ ended its processes by then; the UI thread never waits for the page
 (`architecture.md#principles`, principle 8). So the host answers yes.
 Both messages are logged as they arrive. How to test it:
 `development.md#session-end`.
+
+## Flows <a id="flows"></a>
+
+| # | Flow | Trigger → page | Host → events | Result |
+|---|---|---|---|---|
+| D2 | Load content | `createMessageController` → `bindDocContent` (`model/documents.js`) → `docContent` cache | `load_doc_content {id}` → the file looked at (`Index::refresh`) → `ok {source, html}`, `ok {gone}` or with `conflict` | `setHTML`; baseline = serialization of the loaded DOM |
+| D4 | Save | a pause of 1 s (at the latest 4 s), leaving edit mode, switching, closing a card → `trySave` | `save_doc_content {id, markdown}` → `Index::save_content` (writes only if changed, never over a file changed outside the app) → `ok {source, html}`, `ok {conflict}` (the dialog) or an error (the status bar) | baseline updated; HTML applied only if current and not editing |
+| A6 | Close the app | the window's Close → `close::on_close` (`shell.rs`) | refused while a dialog or a handler runs; otherwise `close {id}`: every editor leaves edit mode, saving, and once the saves are answered the page answers `close_ready`; ready, the host closes the window (`WM_CLOSE_NOW`; on Linux an idle callback); a conflict keeps it; no answer in 4 s closes it anyway | nothing is synced before the window goes |

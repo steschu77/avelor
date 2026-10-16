@@ -43,9 +43,10 @@ export function markSelection(containerEl) {
   return mark;
 }
 
-// Open a link clicked in a preview: a link into the vault, `id:<uuid>`
-// (vault.md#links-in-content), selects its target; a web, mail or phone
-// link opens in its default app, through the host (`open_url`).
+// Open a link clicked in a preview (an editor's `onLinkClick`): a link
+// into the vault, `id:<uuid>` (vault.md#links-in-content), selects its
+// target; a web, mail or phone link opens in its default app, through the
+// host (`open_url`).
 export function openLink(href) {
   const vault = /^id:(.+)$/i.exec(href?.trim() ?? '');
   if (vault) {

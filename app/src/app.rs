@@ -22,6 +22,7 @@ use av_vault::envelope::{DocumentType, Roles, Source};
 use av_vault::markdown;
 use av_vault::shared::Genre;
 use av_vault::vault::Refresh;
+use av_vault::vault::SaveOutcome;
 use av_vault::vault::{Changes, FileStamp};
 use av_vault::vault::{Entry, Index, ScanEvent};
 use serde::Serialize;
@@ -109,6 +110,21 @@ impl Vault {
             Some(doc) => (doc.content().to_string(), markdown::to_html(doc.content())),
             None => (String::new(), String::new()),
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Save `markdown` (serialized from the editor's DOM by the webview,
+    /// `app/static/editor/markdown.js`) as `id`'s new content: write it to
+    /// disk if that changed anything (`saving.md#messages`,
+    /// `markdown.md#round-trip`). A file changed outside the app is a
+    /// conflict and isn't written, unless `overwrite`.
+    pub fn save_content(
+        &mut self,
+        id: &Id,
+        markdown: &str,
+        overwrite: bool,
+    ) -> Result<SaveOutcome> {
+        self.index.save_content(id, markdown.to_string(), overwrite)
     }
 
     // ------------------------------------------------------------------------
@@ -392,8 +408,9 @@ impl App {
     /// Run the vault edit `f` and send the page everything it wrote -- also
     /// when it failed part-way, since a multi-file edit stays part-way
     /// (`panel.md#saving-structure`). The one way the app edits the vault:
-    /// taking in a change made outside the app (`Vault::reload`,
-    /// `Vault::refresh`) is not an edit by the app.
+    /// the editor's own save, which is answered with what it wrote
+    /// (`Vault::save_content`), and taking in a change made outside the app
+    /// (`Vault::reload`, `Vault::refresh`) are not edits by the app.
     pub fn edit<R>(&mut self, f: impl FnOnce(&mut Index, &mut Changes) -> Result<R>) -> Result<R> {
         let mut changes = Changes::default();
         let result = f(&mut self.vault.index, &mut changes);

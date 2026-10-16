@@ -46,3 +46,9 @@ input {
   text-transform: inherit;
   color: inherit;
 }
+
+button:disabled,
+input:disabled {
+  opacity: .5;
+  cursor: default;
+}

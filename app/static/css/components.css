@@ -156,6 +156,13 @@
   gap: 4px;
 }
 
+.toolbar__sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--c-line);
+}
+
 /* Popup menu (showMenu, ui/menu.js): the vault menu */
 .menu {
   position: fixed;

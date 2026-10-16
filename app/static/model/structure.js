@@ -7,7 +7,8 @@
 import { rpcCall } from '../core/rpc.js';
 import { store } from './state.js';
 import { commitExistingSelection } from './entities.js';
-import { endConflict, showConflict } from './documents.js';
+import { showConflict } from './documents.js';
+import { isDirty, startReload, trySave } from './documents.js';
 
 // ----------------------------------------------------------------------------
 // Structural edits are applied and saved by the host (panel.md#saving-structure),
@@ -21,12 +22,16 @@ import { endConflict, showConflict } from './documents.js';
 // (`threads_rev`). Without `select`, nothing is published: an entity's own
 // fields, which the cards follow from its push (features/panel/panel.js's
 // `refreshCardChips`). A conflict (a file changed outside the app, nothing
-// written) opens the conflict dialog. A failure shows in the status bar,
-// in the host's words (core/rpc.js).
+// written) opens the conflict dialog; unsaved edits of it are sent first,
+// so their own conflict offers Use ours too. A failure shows in the status
+// bar, in the host's words (core/rpc.js).
 export function structureCall(cmd, args, select = null) {
-  return rpcCall(cmd, args).then(reply => {
+  rpcCall(cmd, args).then(reply => {
     const conflict = reply?.conflict;
-    if (conflict) showConflict(conflict.id, false, conflict.changed);
+    if (conflict) {
+      showConflict(conflict.id, false, conflict.changed);
+      if (isDirty(conflict.id)) trySave(conflict.id);
+    }
     if (select) commitExistingSelection(conflict ? store.getState() : select(reply?.id ?? null));
   }, e => {
     if (select) commitExistingSelection(store.getState());
@@ -35,14 +40,17 @@ export function structureCall(cmd, args, select = null) {
 }
 
 // ----------------------------------------------------------------------------
-// Reload: read `id`'s file again. It ends like a structural edit
-// (`structureCall`), so the panel is rebuilt -- without the entity if its
-// file is gone, with its new id if that was changed by hand -- and with
-// its answer the conflict over `id` ends.
+// Reload: read `id`'s file again, dropping the unsaved changes. It ends
+// like a structural edit (`structureCall`), so the panel is rebuilt --
+// without the entity if its file is gone, with its new id if that was
+// changed by hand. Saves stay held back until the content arrives
+// (`onDocContent`), so none of the old content can follow the reload and
+// overwrite the file after all.
 export function reloadEntity(id) {
+  startReload(id);
   const { selected_entity, selected_thread } = store.getState();
   structureCall('reload_entity', { id }, now => ({
     selected_entity: selected_entity === id ? now : selected_entity,
     selected_thread,
-  })).then(() => endConflict(id));
+  }));
 }

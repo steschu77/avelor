@@ -8,10 +8,11 @@
 
 import { rpcCall } from './core/rpc.js';
 import { store } from './model/state.js';
+import { isDirty } from './model/documents.js';
 import './model/events.js';
 import './ui/menu.js';
 import './ui/statusbar.js';
-import './features/panel/panel.js';
+import { msgControllers } from './features/panel/panel.js';
 import './features/close.js';
 import './features/jobs.js';
 import './features/header.js';
@@ -20,6 +21,7 @@ import './features/layout.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
 import { initDocumentsLens, scheduleRenderDocuments } from './features/lenses/documents.js';
 import { revealInDocuments } from './features/lenses/documents.js';
+import { getDocRows } from './features/lenses/documents.js';
 import { restoreSelection } from './features/selection.js';
 
 initDocumentsLens();
@@ -34,6 +36,22 @@ store.subscribe(state => state.entities_rev, () => {
 });
 store.subscribe(state => state.projects_rev, () => scheduleRenderSidebar());
 store.subscribe([state => state.threads_rev, state => state.projects_rev], () => scheduleRenderDocuments());
+
+function updateDirtyIndicator(doc_id) {
+  for (const row of getDocRows(doc_id)) row.querySelector('.dirty-dot').hidden = !isDirty(doc_id);
+  const controller = msgControllers.get(doc_id);
+  if (controller) controller.dirtyDot.hidden = !isDirty(doc_id);
+}
+
+// The dots of the documents with unsaved edits, in the table's rows and on
+// the cards, follow `dirty_docs` (`setDirty`, model/documents.js); a row or
+// a card built later shows its own (`isDirty`).
+let dirtyShown = new Set();
+store.subscribe(state => state.dirty_docs, dirty_docs => {
+  for (const doc_id of dirtyShown) if (!dirty_docs.has(doc_id)) updateDirtyIndicator(doc_id);
+  for (const doc_id of dirty_docs) if (!dirtyShown.has(doc_id)) updateDirtyIndicator(doc_id);
+  dirtyShown = dirty_docs;
+});
 
 // The filter changed: re-render the filtered lenses and the sidebar's
 // highlights.

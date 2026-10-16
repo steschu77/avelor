@@ -1,9 +1,12 @@
 //! Closing the app (`saving.md#closing-the-app`): the window's Close asks the
-//! page first, with the event `close {id}`, and the page says whether it is
-//! ready (`close_ready`). Not ready, the window stays, and closing again goes
-//! on. A page that doesn't answer within `CLOSE_WAIT` is hung or broken and
-//! can't save anything: the window closes then. The app closes the window
-//! through the UI queue (`UiQueue::close_window`), never from a worker.
+//! page first, with the event `close {id}`. The page leaves edit mode in every
+//! editor, saving as it does, and once every save is answered it says whether
+//! it is ready (`close_ready`). Not ready -- a save found its file changed
+//! outside the app, and the conflict dialog asks -- the window stays, and
+//! closing again goes on once that is answered. A page that doesn't answer
+//! within `CLOSE_WAIT` is hung or broken and can't save anything: the window
+//! closes then. The app closes the window through the UI queue
+//! (`UiQueue::close_window`), never from a worker.
 
 use std::time::Duration;
 
@@ -53,9 +56,10 @@ pub fn on_close(app: &mut App) {
 }
 
 // ----------------------------------------------------------------------------
-/// `close_ready {id, ready}`: the page's answer to the close `id`. Ready,
-/// the window closes; not ready, it stays. An answer to another close is
-/// too late and changes nothing. Answered `null` either way.
+/// `close_ready {id, ready}`: the page's answer to the close `id`, once
+/// every save it sent is answered. Ready, the window closes; not ready,
+/// it stays. An answer to another close is too late and changes nothing.
+/// Answered `null` either way.
 pub fn close_ready(app: &mut App, req: Req, answer: Answer) {
     let Answer { id, ready } = answer;
     if app.close.asked != Some(id) {
@@ -69,7 +73,7 @@ pub fn close_ready(app: &mut App, req: Req, answer: Answer) {
             log::info!("Close {id}: the page is ready");
             app.ui().close_window();
         }
-        false => log::info!("Close {id}: not ready"),
+        false => log::info!("Close {id}: not ready, a file changed outside the app"),
     }
 }
 

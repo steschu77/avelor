@@ -1,11 +1,14 @@
 //! A document's content in the page's editors (`saving.md`): loading
-//! it. Typed commands (`api.md#documents`). A file changed
+//! it, and saving the editor's markdown. Typed commands
+//! (`api.md#documents`). A file changed
 //! outside the app is taken in if the app had only read it -- `entity` and
 //! `content` pushed before the answer -- and otherwise answered as a
 //! conflict for the dialog, nothing written (`saving.md#conflicts`).
 
+use av_utils::error::Error;
 use av_utils::id::Id;
 use av_vault::vault::Refresh;
+use av_vault::vault::SaveOutcome;
 use serde::Serialize;
 
 use crate::app::App;
@@ -14,7 +17,7 @@ use crate::protocol::Req;
 use crate::structure::Conflict;
 
 // ----------------------------------------------------------------------------
-/// The answer of `load_doc_content`: the content as
+/// The answer of `load_doc_content` and `save_doc_content`: the content as
 /// the file holds it now -- its markdown `source` and the editor `html`
 /// rendered from it, as in the `content` event -- or that the file is gone,
 /// or the conflict to ask about.
@@ -47,7 +50,8 @@ impl Content {
 
 // ----------------------------------------------------------------------------
 /// `load_doc_content`: `id`'s content, once its file was looked at -- the
-/// content as it is then, `gone`, or with the `conflict` over it.
+/// content as it is then, `gone`, or with the `conflict` over it (the app's
+/// version is shown, so Use ours can write it back).
 pub fn load_doc_content(app: &mut App, req: Req, id: Id) {
     let refreshed = refresh(app, &id);
     if app.vault.index().entry(&id).is_none() {
@@ -61,6 +65,34 @@ pub fn load_doc_content(app: &mut App, req: Req, id: Id) {
         content.conflict = Some(Conflict::of(app, id));
     }
     req.ok(content);
+}
+
+// ----------------------------------------------------------------------------
+/// `save_doc_content`: save `markdown` (the page's serialization of the
+/// editor's DOM, `saving.md#messages`) as `id`'s new content, answered with
+/// what the file holds then (also when nothing changed: the page takes it
+/// as the acknowledgment). A file changed outside the app is answered as a
+/// conflict and not written, unless `overwrite`, the dialog's Use ours.
+/// A failure is answered in the host's words.
+pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overwrite: bool) {
+    match app.vault.save_content(&id, &markdown, overwrite) {
+        Ok(SaveOutcome::Conflict(_)) => {
+            log::info!("Not saving {id}: changed outside the app");
+            req.ok(Content {
+                conflict: Some(Conflict::of(app, id)),
+                ..Default::default()
+            });
+        }
+        Ok(SaveOutcome::Saved | SaveOutcome::Unchanged) => req.ok(Content::of(app, &id)),
+        Err(err) => {
+            log::warn!("Could not save {id}: {err}");
+            let message = match err {
+                Error::NotFound => "Could not save the document: it is no longer in the vault.",
+                _ => "Could not save the document.",
+            };
+            req.fail(err, message);
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -152,5 +184,38 @@ mod tests {
         let sent = h.call("load_doc_content", json!({ "id": ids[0] }));
         assert_eq!(shape(&sent), ["entity_deleted", "reply"]);
         assert_eq!(sent[1]["ok"], json!({ "gone": true }));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn saving_writes_and_answers_with_what_the_file_holds() {
+        let (mut h, ids) = notes("save", 1);
+        let args = json!({ "id": ids[0], "markdown": "Ours\n" });
+        let sent = h.call("save_doc_content", args);
+        assert_eq!(shape(&sent), ["reply"]);
+        assert_eq!(sent[0]["ok"]["source"], "Ours\n");
+        let text = fs::read_to_string(h.vault().join("Notes/n0.md")).unwrap();
+        assert!(text.ends_with("---\nOurs\n"), "{text}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_save_over_a_changed_file_is_a_conflict_until_overwritten() {
+        let (mut h, ids) = notes("save-conflict", 1);
+        let path = h.vault().join("Notes/n0.md");
+        fs::write(&path, theirs(ids[0])).unwrap();
+
+        let args = json!({ "id": ids[0], "markdown": "Ours\n" });
+        let sent = h.call("save_doc_content", args);
+        assert_eq!(shape(&sent), ["reply"]);
+        let ok = &sent[0]["ok"];
+        assert_eq!(ok["conflict"]["id"], ids[0].to_string());
+        assert!(ok.get("source").is_none(), "{ok}");
+        assert_eq!(fs::read_to_string(&path).unwrap(), theirs(ids[0]));
+
+        let args = json!({ "id": ids[0], "markdown": "Ours\n", "overwrite": true });
+        let sent = h.call("save_doc_content", args);
+        assert_eq!(sent[0]["ok"]["source"], "Ours\n");
+        assert!(fs::read_to_string(&path).unwrap().ends_with("---\nOurs\n"));
     }
 }

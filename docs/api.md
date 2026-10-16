@@ -76,10 +76,10 @@ Host modules: `api.rs`, `vault_scan.rs`.
 | Command | Args | Reply and pushes |
 |---|---|---|
 | `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one: the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `null` once the scan has started. |
-| `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and scanned as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. |
+| `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and scanned as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. The page sends its unsaved edits first. |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
 | `reveal_vault` | — | Open the vault's folder in Explorer (on Linux the file manager) once the handler has returned. `null`; `invalid_path` ("No vault is open."), or the shell's error ("Could not show the vault's folder."). |
-| `open_url` | `{ url }` | Open a link in its default app (the browser, the mail app). Only `http://`, `https://`, `mailto:` and `tel:` links, else `invalid_argument`: anything else could start a program or open a file. `null` once the shell has taken the link, or the shell's error ("Could not open …"). An `id:` link never reaches the host. |
+| `open_url` | `{ url }` | Open a link in its default app (the browser, the mail app). Only `http://`, `https://`, `mailto:` and `tel:` links, else `invalid_argument`: anything else could start a program or open a file. `null` once the shell has taken the link, or the shell's error ("Could not open …"). An `id:` link never reaches the host (`editor.md#links`). |
 
 ### Document commands <a id="documents"></a>
 
@@ -88,6 +88,7 @@ Host module: `documents.rs`. The page side is `saving.md`.
 | Command | Args | Reply and pushes |
 |---|---|---|
 | `load_doc_content` | `{ id }` | A document's content for an editor, once its file was looked at (`saving.md#conflicts`). What was taken in is pushed first (`entity`, `content`, `entity_deleted`). `ok {source, html}`: the markdown body and its `to_html` rendering, `html` empty for a YAML record; with `conflict: {id, changed}` too if the app's own saved edits were written over; or `ok {gone: true}` if the entity left the vault (its file gone, or its `id` changed by hand), after `entity_deleted`. |
+| `save_doc_content` | `{ id, markdown, overwrite? }` | Save an editor's markdown (`serializeMarkdown(root)`), written only if the content or the frontmatter differs from the file. `ok {source, html}` after every successful save, also when nothing changed: `source` is the body now on disk, `html` its rendering. `ok {conflict: {id, changed}}` if the file changed outside the app since it was last read or written, nothing written: `changed` is its modified time now (ISO 8601), empty if it was deleted. `overwrite: true` (Use ours) writes over the changed file, or as the deleted file again. A failure in the host's words ("Could not save the document."). |
 
 ### Structural commands <a id="structure"></a>
 
@@ -111,7 +112,7 @@ Host module: `close.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `close_ready` | `{ id, ready }` | The page's answer to the `close` event `id` (`saving.md#closing-the-app`): `ready` closes the window; not ready keeps it. An answer to an earlier close changes nothing. `null`. |
+| `close_ready` | `{ id, ready }` | The page's answer to the `close` event `id`, sent once every save it sent is answered (`saving.md#closing-the-app`): `ready` closes the window; not ready keeps it. An answer to an earlier close changes nothing. `null`. |
 
 ## Events <a id="events"></a>
 

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>markdown.js selftest</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; color: #222; }
+    h1 { font-size: 18px; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #ddd; padding: 4px 8px; vertical-align: top; text-align: left; }
+    pre { margin: 0; white-space: pre-wrap; font-size: 12px; }
+    tr.pass td:first-child { color: #2a7; }
+    tr.fail td:first-child { color: #c33; font-weight: 600; }
+    tr.fail { background: #fff4f4; }
+    #summary.fail { color: #c33; }
+    #summary.pass { color: #2a7; }
+  </style>
+</head>
+
+<body>
+  <h1>markdown.js selftest <span id="summary"></span></h1>
+  <p>
+    Drives <code>serializeMarkdown()</code> from <code>./markdown.js</code> over the editor's HTML
+    vocabulary. Each case's HTML is set via <code>innerHTML</code> -- the same browser parser
+    <code>editor.setHTML()</code> uses -- and the result is compared with the expected markdown.
+    The HTML samples and expected markdown mirror <code>markdown::to_html</code>'s test table in
+    <code>crates/av-vault/src/markdown.rs</code>, so a case here plus its Rust counterpart together
+    assert the cross-language round trip <code>to_html(serializeMarkdown(html)) == html</code>.
+    The cases are in <code>markdown.selftest.js</code>; <code>build.rs</code> bundles them into a copy
+    of this page in its <code>OUT_DIR</code>, which opens from disk, no server needed.
+  </p>
+  <table>
+    <thead><tr><th>Result</th><th>Case</th><th>HTML</th><th>Expected</th><th>Actual</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <script type="module" src="./markdown.selftest.js"></script>
+</body>
+
+</html>

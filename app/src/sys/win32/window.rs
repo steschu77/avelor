@@ -280,11 +280,11 @@ impl WindowProc {
     }
 
     // ------------------------------------------------------------------------
-    /// The window's Close: the app asks the page first, and closes the
-    /// window once it is ready (`close`); before the WebView is up there is
-    /// no page to ask. Refused while a dialog or a handler is still
-    /// running: a modal loop dispatched this message (the taskbar's Close
-    /// while a picker is open).
+    /// The window's Close: the app asks the page to save its open edits
+    /// first, and closes the window once it is ready (`close`); before the
+    /// WebView is up there is no page to ask. Refused while a dialog or a
+    /// handler is still running: a modal loop dispatched this message (the
+    /// taskbar's Close while a picker is open).
     fn on_close(&self) -> LRESULT {
         if self.shell.is_busy() {
             log::info!("Close refused: a dialog or a handler is still running");

@@ -20,6 +20,46 @@
 
 <body>
 
+  <template id="editor-toolbar-template">
+    <div class="toolbar editor-toolbar" hidden>
+      <button type="button" class="tool" data-cmd="bold" title="Bold (Ctrl+B)"><svg class="icon"><use href="#i-text-bold" /></svg></button>
+      <button type="button" class="tool" data-cmd="italic" title="Italic (Ctrl+I)"><svg class="icon"><use href="#i-text-italic" /></svg></button>
+      <button type="button" class="tool" data-cmd="strike" title="Strikethrough (Ctrl+Shift+X)"><svg class="icon"><use href="#i-text-strikethrough" /></svg></button>
+      <button type="button" class="tool" data-cmd="code" title="Inline code (Ctrl+E)">&lt;/&gt;</button>
+      <span class="toolbar__sep"></span>
+      <button type="button" class="tool" data-block="H1" title="Heading 1">H1</button>
+      <button type="button" class="tool" data-block="H2" title="Heading 2">H2</button>
+      <button type="button" class="tool" data-block="H3" title="Heading 3">H3</button>
+      <span class="toolbar__sep"></span>
+      <button type="button" class="tool" data-cmd="ul" title="Bullet list (Ctrl+Shift+8)"><svg class="icon"><use href="#i-text-bullet-list-ltr" /></svg></button>
+      <button type="button" class="tool" data-cmd="ol" title="Numbered list (Ctrl+Shift+7)">1.</button>
+      <button type="button" class="tool" data-cmd="quote" title="Quote (Ctrl+Shift+9)">&ldquo;&rdquo;</button>
+      <button type="button" class="tool" data-cmd="codeblock" title="Code block">```</button>
+      <button type="button" class="tool" data-cmd="hr" title="Horizontal rule">&mdash;</button>
+      <span class="toolbar__sep"></span>
+      <button type="button" class="tool" data-cmd="link" title="Link (Ctrl+K)"><svg class="icon"><use href="#i-link" /></svg></button>
+      <button type="button" class="tool" data-cmd="image" title="Image"><svg class="icon"><use href="#i-image" /></svg></button>
+      <button type="button" class="tool" data-cmd="table" title="Insert table">Table</button>
+      <span class="toolbar__sep" data-table-only hidden></span>
+      <button type="button" class="tool" data-cmd="row-add" data-table-only hidden
+        title="Add row below (Tab in the last cell)">+ Row</button>
+      <button type="button" class="tool" data-cmd="row-del" data-table-only hidden title="Delete row">&minus;
+        Row</button>
+      <button type="button" class="tool" data-cmd="col-add" data-table-only hidden title="Add column right">+
+        Col</button>
+      <button type="button" class="tool" data-cmd="col-del" data-table-only hidden title="Delete column">&minus;
+        Col</button>
+      <button type="button" class="tool" data-cmd="table-del" data-table-only hidden title="Delete table">&times;
+        Table</button>
+    </div>
+  </template>
+
+  <template id="preview-toolbar-template">
+    <div class="pane-section pane-section--ruled toolbar">
+      <button type="button" class="tool" data-cmd="edit" title="Edit document"><svg class="icon"><use href="#i-edit" /></svg></button>
+    </div>
+  </template>
+
   <div class="shell">
     <header class="topbar"></header>
 
@@ -133,6 +173,7 @@
     </div>
     <div class="dialog__foot">
       <button type="button" class="btn push" id="conflict-theirs">Use theirs</button>
+      <button type="button" class="btn" id="conflict-ours">Use ours</button>
     </div>
   </dialog>
 

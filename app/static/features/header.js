@@ -1,7 +1,8 @@
 // The lens header (panel.md#projects): the selected project's name, the
 // active labels with the "+" that filters by another one
 // (ui.md#vault-panel), and the project's details -- a toolbar (rename,
-// archive).
+// archive). Also `leaveEditModes`, which takes every editor out of edit
+// mode, the cards' (closing the app, switching the vault).
 
 import { $, accEl, oncePerFrame } from '../core/dom.js';
 import { store } from '../model/state.js';
@@ -10,6 +11,7 @@ import { projectScope } from '../model/entities.js';
 import { structureCall } from '../model/structure.js';
 import { showMenu } from '../ui/menu.js';
 import { editTextInPlace } from '../ui/field.js';
+import { leaveCardEditMode } from './panel/panel.js';
 
 const projectNameEl = $('project-name');
 
@@ -74,6 +76,12 @@ function projectUnfolded() {
 function updateProjectDesc() {
   const shown = Boolean(descProjectId) && projectUnfolded();
   projectToolsEl.hidden = !shown;
+}
+
+// Every editor leaves edit mode -- the card being edited -- saving as it
+// does (closing the app, switching the vault).
+export function leaveEditModes() {
+  leaveCardEditMode();
 }
 
 // Rename the selected project in the header itself, like its sidebar pill

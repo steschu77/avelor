@@ -15,6 +15,7 @@ import { shortDate } from '../../core/format.js';
 import { plural } from '../../core/format.js';
 import { store } from '../../model/state.js';
 import { savePrefs } from '../../model/state.js';
+import { isDirty } from '../../model/documents.js';
 import { entities } from '../../model/entities.js';
 import { matchesFilter } from '../../model/entities.js';
 import { projects, projectsInOrder, projectsOf } from '../../model/entities.js';
@@ -164,6 +165,12 @@ const groupKey = key => `g\n${key}`;
 const threadKey = (group, thread_id) => `t\n${group}\n${thread_id}`;
 const docKey = (group, thread_id, doc_id) => `d\n${group}\n${thread_id ?? ''}\n${doc_id}`;
 
+// The rows of the entity `doc_id`, wherever it shows (app.js keeps their
+// dirty dots).
+export function getDocRows(doc_id) {
+  return [...rows.values()].filter(el => rowFor.get(el).doc_id === doc_id);
+}
+
 // Rows of what left the vault are dropped.
 function pruneRows() {
   for (const [key, el] of rows) {
@@ -275,7 +282,14 @@ function docRow(group, thread_id, doc, depth) {
     if (thread_id) row.dataset.thread = thread_id;
     const cell = nameCell(depth);
     const gap = accEl('span', 'docs__gap');
-    cell.append(gap, iconEl('', 'table__icon'), accEl('span', 'row-title'));
+    // the title text node comes first, so refilling it keeps the dot
+    const title = accEl('span', 'row-title');
+    title.appendChild(document.createTextNode(''));
+    const dirtyDot = accEl('span', 'dirty-dot');
+    dirtyDot.title = 'Unsaved changes';
+    dirtyDot.hidden = !isDirty(doc.doc_id);
+    title.appendChild(dirtyDot);
+    cell.append(gap, iconEl('', 'table__icon'), title);
     const date = accEl('span', 'row-title docs__date');
     row.append(cell, date);
     return row;
@@ -283,7 +297,7 @@ function docRow(group, thread_id, doc, depth) {
   if (rowDocs.get(el) !== doc) {
     const [, icon, title] = el.firstChild.children;
     icon.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.genre));
-    title.textContent = doc.title;
+    title.firstChild.data = doc.title;
     el.lastChild.textContent = doc.date ? DATE_FORMAT.format(doc.date) : '\u2014';
     rowDocs.set(el, doc);
   }

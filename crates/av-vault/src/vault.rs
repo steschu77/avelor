@@ -60,7 +60,7 @@ impl FileStamp {
 /// What a write did. A conflict is an expected outcome, not an error: the
 /// entity's file changed outside the app since it was last read or written,
 /// so nothing was written, and the user decides -- reload the file
-/// ([`Index::reload`]).
+/// ([`Index::reload`]) or overwrite it.
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SaveOutcome {
@@ -277,13 +277,14 @@ impl Index {
     /// preserved) through a temporary file, then record what the file holds
     /// now (`Document::written`), so `Document::is_dirty` reflects "clean"
     /// again afterward. A file changed outside the app since the
-    /// last read or write is a conflict and isn't touched.
-    fn save(&mut self, id: &Id, _overwrite: bool) -> Result<SaveOutcome> {
+    /// last read or write is a conflict and isn't touched, unless
+    /// `overwrite` (which also recreates a deleted file).
+    fn save(&mut self, id: &Id, overwrite: bool) -> Result<SaveOutcome> {
         let Some(&i) = self.by_id.get(id) else {
             return Err(Error::NotFound);
         };
         let entry = &self.documents[i];
-        if entry.changed_on_disk()? {
+        if !overwrite && entry.changed_on_disk()? {
             return Ok(SaveOutcome::Conflict(*id));
         }
         let text = renormalize(&entry.bom, entry.crlf, entry.doc.save());
@@ -295,6 +296,19 @@ impl Index {
         entry.written = true;
         entry.doc.written(stamp);
         Ok(SaveOutcome::Saved)
+    }
+
+    /// Set `id`'s body content and write it to disk -- but only if that
+    /// actually changed anything (`Document::is_dirty`); an unchanged
+    /// document is never rewritten. On a conflict (see [`Index::save`]) or
+    /// a failure, the in-memory content stays what the file holds.
+    pub fn save_content(
+        &mut self,
+        id: &Id,
+        content: String,
+        overwrite: bool,
+    ) -> Result<SaveOutcome> {
+        self.write_change(id, overwrite, |doc| doc.set_content(content))
     }
 
     /// Read `id`'s file again and take in whatever it holds now: the
@@ -402,7 +416,7 @@ impl Index {
         changes: &mut Changes,
         change: impl FnOnce(&mut Document),
     ) -> Result<SaveOutcome> {
-        let outcome = self.write_change(id, change)?;
+        let outcome = self.write_change(id, false, change)?;
         if outcome == SaveOutcome::Saved {
             changes.saved.push(*id);
         }
@@ -413,17 +427,24 @@ impl Index {
     /// anything. On a conflict or a failed save the document's envelope and
     /// body -- all it holds -- are put back as they were, so memory keeps
     /// matching the file.
-    fn write_change(&mut self, id: &Id, change: impl FnOnce(&mut Document)) -> Result<SaveOutcome> {
+    fn write_change(
+        &mut self,
+        id: &Id,
+        overwrite: bool,
+        change: impl FnOnce(&mut Document),
+    ) -> Result<SaveOutcome> {
         let Some(&i) = self.by_id.get(id) else {
             return Err(Error::NotFound);
         };
         let doc = &mut self.documents[i].doc;
         let before = doc.snapshot();
         change(doc);
-        if !doc.is_dirty() {
+        // An overwrite writes even an unchanged document: the file is what
+        // differs (Use ours after the app's own save was written over).
+        if !doc.is_dirty() && !overwrite {
             return Ok(SaveOutcome::Unchanged);
         }
-        let saved = self.save(id, false);
+        let saved = self.save(id, overwrite);
         if !matches!(saved, Ok(SaveOutcome::Saved)) {
             self.documents[i].doc.restore(before);
         }
@@ -1013,14 +1034,32 @@ mod tests {
         let path = edit_outside(&root, 0, &ids[0], "Theirs, longer\n");
         let theirs = fs::read_to_string(&path).unwrap();
 
+        let saved = index.save_content(&ids[0], "Mine\n".into(), false);
+        assert_eq!(saved.unwrap(), SaveOutcome::Conflict(ids[0]));
+        assert_eq!(fs::read_to_string(&path).unwrap(), theirs);
+        let doc = index.get(&ids[0]).unwrap();
+        assert_eq!(doc.content(), "Body 0\n", "memory still matches the file");
+        assert!(!doc.is_dirty());
+
         let mut changes = Changes::default();
         let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
         assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
         assert!(changes.saved.is_empty());
-        let doc = index.get(&ids[0]).unwrap();
-        assert_eq!(doc.title(), "Note 0", "memory still matches the file");
-        assert!(!doc.is_dirty());
+        assert_eq!(index.get(&ids[0]).unwrap().title(), "Note 0");
         assert_eq!(fs::read_to_string(&path).unwrap(), theirs);
+
+        // Overwriting writes; after that, our own saves don't conflict.
+        let saved = index.save_content(&ids[0], "Mine\n".into(), true);
+        assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("title: Note 0") && text.ends_with("Mine\n"),
+            "{text}"
+        );
+        let saved = index.save_content(&ids[0], "Mine again\n".into(), false);
+        assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+        let saved = index.save_content(&ids[0], "Mine again\n".into(), false);
+        assert_eq!(saved.unwrap(), SaveOutcome::Unchanged);
 
         fs::remove_dir_all(&root).ok();
     }
@@ -1052,9 +1091,8 @@ mod tests {
         let stamp = |index: &Index| index.entry(&ids[0]).unwrap().doc.stamp();
         assert_eq!(stamp(&index), FileStamp::read(&path).unwrap());
 
-        let mut changes = Changes::default();
-        let titled = index.set_title(&ids[0], "A longer title than before".into(), &mut changes);
-        assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+        let saved = index.save_content(&ids[0], "A longer body than before\n".into(), false);
+        assert_eq!(saved.unwrap(), SaveOutcome::Saved);
         assert_eq!(stamp(&index), FileStamp::read(&path).unwrap());
         assert!(!index.entry(&ids[0]).unwrap().changed_on_disk().unwrap());
 
@@ -1076,25 +1114,27 @@ mod tests {
             .unwrap();
         drop(file);
 
-        let mut changes = Changes::default();
-        let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
-        assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
+        let saved = index.save_content(&ids[0], "Mine\n".into(), false);
+        assert_eq!(saved.unwrap(), SaveOutcome::Conflict(ids[0]));
         assert_eq!(fs::read_to_string(&path).unwrap(), text);
 
         fs::remove_dir_all(&root).ok();
     }
 
     #[test]
-    fn a_deleted_file_is_a_conflict() {
+    fn a_deleted_file_is_a_conflict_until_overwritten() {
         let (root, ids) = thread_vault();
         let mut index = Index::scan(&root);
         let path = root.join("Notes/n0.md");
         fs::remove_file(&path).unwrap();
 
-        let mut changes = Changes::default();
-        let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
-        assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
+        let saved = index.save_content(&ids[0], "Mine\n".into(), false);
+        assert_eq!(saved.unwrap(), SaveOutcome::Conflict(ids[0]));
         assert!(!path.exists());
+
+        let saved = index.save_content(&ids[0], "Mine\n".into(), true);
+        assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+        assert!(fs::read_to_string(&path).unwrap().ends_with("Mine\n"));
 
         fs::remove_dir_all(&root).ok();
     }
@@ -1108,10 +1148,9 @@ mod tests {
         assert_eq!(index.reload(&ids[0]).unwrap(), Some(ids[0]));
         let doc = index.get(&ids[0]).unwrap();
         assert_eq!((doc.title(), doc.content()), ("Outside", "Theirs\n"));
-        let mut changes = Changes::default();
-        let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
+        let saved = index.save_content(&ids[0], "Mine\n".into(), false);
         assert_eq!(
-            titled.unwrap(),
+            saved.unwrap(),
             SaveOutcome::Saved,
             "no conflict once reloaded"
         );
@@ -1149,6 +1188,40 @@ mod tests {
         fs::remove_file(root.join("Notes/n1.md")).unwrap();
         assert_eq!(index.refresh(&ids[1]).unwrap(), Refresh::TakenIn(None));
         assert!(index.get(&ids[1]).is_none());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn refreshing_leaves_a_change_over_the_apps_own_save_alone() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let saved = index.save_content(&ids[0], "Mine\n".into(), false);
+        assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+        assert_eq!(index.refresh(&ids[0]).unwrap(), Refresh::Unchanged);
+
+        // Another program writes its older copy over the app's save.
+        edit_outside(&root, 0, &ids[0], "Theirs\n");
+        assert_eq!(index.refresh(&ids[0]).unwrap(), Refresh::Conflict);
+        assert_eq!(
+            index.get(&ids[0]).unwrap().content(),
+            "Mine\n",
+            "kept for Use ours"
+        );
+
+        // Use ours writes it back, although memory didn't change.
+        let saved = index.save_content(&ids[0], "Mine\n".into(), true);
+        assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+        let text = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+        assert!(text.ends_with("---\nMine\n"), "{text}");
+
+        // After a reload, the app has only read the file again.
+        index.reload(&ids[0]).unwrap();
+        edit_outside(&root, 0, &ids[0], "Theirs again\n");
+        assert_eq!(
+            index.refresh(&ids[0]).unwrap(),
+            Refresh::TakenIn(Some(ids[0]))
+        );
 
         fs::remove_dir_all(&root).ok();
     }
