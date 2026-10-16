@@ -73,7 +73,7 @@ impl Index {
     /// that is fewer than two and so dissolves it; `None` if it survives. A
     /// dissolve rewrites those members, so they must be writable. A thread
     /// not in the index (a dangling reference) is never dissolved.
-    fn dissolving(&self, thread: &Id, leaving: &Id) -> Result<Option<Vec<Id>>> {
+    pub(super) fn dissolving(&self, thread: &Id, leaving: &Id) -> Result<Option<Vec<Id>>> {
         if self.get(thread).is_none() {
             return Ok(None);
         }
@@ -94,7 +94,7 @@ impl Index {
 
     /// Dissolve `thread`: `remaining` leave it, then its file is trashed.
     /// Stops at the first conflict, leaving the thread in place.
-    fn dissolve(
+    pub(super) fn dissolve(
         &mut self,
         thread: &Id,
         remaining: &[Id],

@@ -52,7 +52,7 @@ A save is attempted:
   vault header, is toggled off, or Escape is pressed;
 - when a different document or project is selected while the current one
   is in edit mode — the outgoing one is saved first; also when a card is
-  closed;
+  closed and before a delete;
 - for a document in edit mode, once its typing has paused for a second,
   and at the latest 4 seconds after its first unsaved edit while the typing
   goes on. It is a flat poll every 250 ms over the documents edited since
@@ -291,5 +291,5 @@ Both messages are logged as they arrive. How to test it:
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | D2 | Load content | `createMessageController` → `bindDocContent` (`model/documents.js`) → `docContent` cache | `load_doc_content {id}` → the file looked at (`Index::refresh`) → `ok {source, html}`, `ok {gone}` or with `conflict` | `setHTML`; baseline = serialization of the loaded DOM |
-| D4 | Save | a pause of 1 s (at the latest 4 s), leaving edit mode, switching, closing a card → `trySave` | `save_doc_content {id, markdown}` → `Index::save_content` (writes only if changed, never over a file changed outside the app) → `ok {source, html}`, `ok {conflict}` (the dialog) or an error (the status bar) | baseline updated; HTML applied only if current and not editing |
+| D4 | Save | a pause of 1 s (at the latest 4 s), leaving edit mode, switching, closing a card, before a delete → `trySave` | `save_doc_content {id, markdown}` → `Index::save_content` (writes only if changed, never over a file changed outside the app) → `ok {source, html}`, `ok {conflict}` (the dialog) or an error (the status bar) | baseline updated; HTML applied only if current and not editing |
 | A6 | Close the app | the window's Close → `close::on_close` (`shell.rs`) | refused while a dialog or a handler runs; otherwise `close {id}`: every editor leaves edit mode, saving, and once the saves are answered the page answers `close_ready`; ready, the host closes the window (`WM_CLOSE_NOW`; on Linux an idle callback); a conflict keeps it; no answer in 4 s closes it anyway | nothing is synced before the window goes |

@@ -31,6 +31,8 @@
   /* the accent where it draws a line of 2px or less (a selection's ring,
      a drop target, the focus), 3:1 on the shade */
   --c-accent-line: light-dark(#4f8f95, #8fd0d6);
+  /* text or an icon on an accent or danger fill, dark in both themes */
+  --c-on-accent: #16161a;
   /* tags */
   --c-accent-soft: light-dark(rgba(143, 208, 214, 0.22), rgba(143, 208, 214, 0.18));
   --c-danger: #de9193;

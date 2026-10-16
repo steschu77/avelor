@@ -1,4 +1,5 @@
 {
+  "card.delete": "Delete document",
   "card.edit": "Edit document",
   "card.leave_thread": "Remove from thread",
   "config.unread": "config.yaml couldn't be read; the app started with the default settings.",
@@ -57,6 +58,8 @@
   "editor.ul": "Bullet list (Ctrl+Shift+8)",
   "error.code": "Something went wrong ({code}).",
   "header.archive": "Archive project",
+  "header.delete": "Delete project",
+  "header.delete_armed": "Click again to delete the project",
   "header.edit_description": "Edit description",
   "header.filter_label": "Filter by a label",
   "header.filter_labels": "Filter labels",
@@ -97,6 +100,7 @@
   "open.url_failed": "Could not open {url}.",
   "panel.add_project_label": "Add to a project or a label",
   "panel.close": "Close the details",
+  "panel.delete_armed": "Click again to delete",
   "panel.edit_message": "Edit message",
   "panel.expand": "Show at full width",
   "panel.filter_or_label": "Filter, or a new label",
