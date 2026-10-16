@@ -1,14 +1,36 @@
 # Avelor — Saving and closing
 
-> How the app closes without losing edits.
+> How a file changed outside the app is handled, and how the app closes
+> without losing edits.
+
+## Conflicts <a id="conflicts"></a>
+
+Another program may change a vault file while the app has it open. The app
+never writes over such a change.
+
+### The stamp <a id="the-stamp"></a>
+
+Every document keeps the `FileStamp` (modified time, size) of the file as
+it last read or wrote it, with what the file held then (`Document`'s
+`OnDisk`) — taken before reading, so a change during the read shows up as
+a conflict, never as a missed one. Before a write, the host compares it
+with the file; a mismatch, or a missing file, is `SaveOutcome::Conflict`,
+and nothing is written. A conflict is an expected outcome, not an error:
+saves return `SaveOutcome::{Saved, Unchanged, Conflict}`.
 
 ### Atomic writes <a id="atomic-writes"></a>
 
-Every overwriting write — the config folder — goes through
+Every overwriting write — vault files and the config folder — goes through
 `av_utils::fs::write_atomic`: a temporary `.{name}.tmp` beside the file,
-flushed, then renamed over it. A file another program holds open without
+flushed, then renamed over it; on Linux it takes the mode of the file it
+replaces. A file another program holds open without
 delete sharing can't be replaced; that save fails visibly (its error in
 the status bar).
+
+### Limits <a id="limits"></a>
+
+- A change that keeps both the size and the modified time (FAT's 2-second
+  resolution, tools that restore the time) isn't found.
 
 ## Closing the app <a id="closing-the-app"></a>
 

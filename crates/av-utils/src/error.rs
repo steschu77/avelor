@@ -22,6 +22,13 @@ pub enum Error {
     InvalidPath {
         path: PathBuf,
     },
+    /// No entity has the id: it never did, or it is gone.
+    NotFound,
+    /// The entity's file can't be written: read-only, or its frontmatter
+    /// didn't parse (rewriting it would lose the broken original).
+    NotWritable {
+        path: PathBuf,
+    },
     FileExists {
         path: PathBuf,
     },
@@ -67,6 +74,8 @@ impl Error {
             Error::InvalidDate => "invalid_date",
             Error::InvalidTime => "invalid_time",
             Error::InvalidPath { .. } => "invalid_path",
+            Error::NotFound => "not_found",
+            Error::NotWritable { .. } => "not_writable",
             Error::FileExists { .. } => "file_exists",
             Error::FileWrite { .. } => "file_write",
             Error::FileIo { .. } => "file_io",

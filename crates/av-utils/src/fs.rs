@@ -11,9 +11,13 @@ use crate::error::{Error, Result};
 /// file beside it (`.{name}.tmp`), flush it to disk, then rename it over
 /// `path`. A crash or a full disk leaves the old file whole instead of a
 /// truncated one. Creates the file if it doesn't exist; the folder must.
+/// A failure is `Error::FileWrite` with `path`. On Linux the new file keeps
+/// the old one's mode.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let temp = temp_path(path)?;
-    let written = write_synced(&temp, bytes, false).and_then(|()| fs::rename(&temp, path));
+    let written = write_synced(&temp, bytes, false)
+        .and_then(|()| keep_mode(path, &temp))
+        .and_then(|()| fs::rename(&temp, path));
     if let Err(err) = written {
         let _ = fs::remove_file(&temp); // best effort: it may not exist
         let path = path.to_path_buf();
@@ -38,6 +42,21 @@ fn write_synced(path: &Path, bytes: &[u8], _private: bool) -> std::io::Result<()
     let mut file = fs::File::create(path)?;
     file.write_all(bytes)?;
     file.sync_all()
+}
+
+// ----------------------------------------------------------------------------
+/// On Linux, `temp` takes the permissions of the file at `path` it
+/// replaces, if there is one; a new file has the user's defaults. On
+/// Windows the folder decides.
+fn keep_mode(path: &Path, temp: &Path) -> std::io::Result<()> {
+    if !cfg!(unix) {
+        return Ok(());
+    }
+    match fs::metadata(path) {
+        Ok(metadata) => fs::set_permissions(temp, metadata.permissions()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -71,6 +90,21 @@ mod tests {
             .map(|e| e.file_name())
             .collect();
         assert_eq!(names, ["note.md"], "no temporary file is left behind");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_keeps_the_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("write-atomic-mode");
+        let path = dir.join("note.md");
+        fs::write(&path, b"first").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+
+        write_atomic(&path, b"second").unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o640);
         fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -1,4 +1,4 @@
-//! Markdown + YAML frontmatter: splitting and parsing.
+//! Markdown + YAML frontmatter: splitting, parsing, and composing.
 //!
 //! The envelope models the common keys from
 //! vault.md#metadata. Unknown
@@ -6,6 +6,7 @@
 //! through the app never loses user data.
 
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
+use crate::vault::FileStamp;
 use av_utils::datetime::DateTime;
 use av_utils::error::Result;
 use av_utils::id::Id;
@@ -38,8 +39,8 @@ static NO_ROLES: Roles = Roles {
 
 // ----------------------------------------------------------------------------
 /// An entity: its frontmatter (the envelope) and its body. The envelope is
-/// the only copy of the metadata; it is read through the accessors
-/// (vault.md#files).
+/// the only copy of the metadata; it is read through the accessors and
+/// changed through the setters, which keep the file's shape (vault.md#files).
 #[derive(Debug)]
 pub struct Document {
     /// The entity's identity in the index: the envelope's `id`, or one made
@@ -50,13 +51,27 @@ pub struct Document {
     envelope: Option<Envelope>,
     content: String,
     format: FileFormat,
+    /// What the file held when the app last read or wrote it.
+    disk: OnDisk,
     err: Result<()>,
+}
+
+// ----------------------------------------------------------------------------
+/// The file as the app last read or wrote it.
+#[derive(Debug)]
+struct OnDisk {
+    envelope: Option<Envelope>,
+    content: String,
+    /// Its modified time and size then; `None` if it couldn't be read,
+    /// which makes the next write a conflict: the safe side.
+    stamp: Option<FileStamp>,
 }
 
 // ----------------------------------------------------------------------------
 impl Document {
     // ------------------------------------------------------------------------
-    /// The document `text` of a file in `format`.
+    /// The document `text` of a file in `format`. Its stamp is set by the
+    /// reader (`stamped`).
     pub fn load(text: String, format: FileFormat) -> Self {
         let (envelope, content, err) = parse_document(format, &text);
         let content = content.to_string();
@@ -64,13 +79,63 @@ impl Document {
             .as_ref()
             .and_then(|e| e.id)
             .unwrap_or_else(Id::generate);
+        let disk = OnDisk {
+            envelope: envelope.clone(),
+            content: content.clone(),
+            stamp: None,
+        };
         Self {
             id,
             envelope,
             content,
             format,
+            disk,
             err,
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The document as read from a file stamped `stamp`.
+    pub(crate) fn stamped(mut self, stamp: Option<FileStamp>) -> Self {
+        self.disk.stamp = stamp;
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    /// The document was written to its file, now stamped `stamp`: what it
+    /// holds is what is on disk.
+    pub(crate) fn written(&mut self, stamp: Option<FileStamp>) {
+        self.disk = OnDisk {
+            envelope: self.envelope.clone(),
+            content: self.content.clone(),
+            stamp,
+        };
+    }
+
+    // ------------------------------------------------------------------------
+    /// The file's stamp at the last read or write.
+    pub(crate) fn stamp(&self) -> Option<FileStamp> {
+        self.disk.stamp
+    }
+
+    // ------------------------------------------------------------------------
+    /// Give a document without `id` the identity `id` (a file read again
+    /// keeps its entity).
+    pub(crate) fn keep_id(&mut self, id: Id) {
+        self.id = id;
+    }
+
+    // ------------------------------------------------------------------------
+    /// The editable state -- envelope and body -- to put back with
+    /// `restore` if a write doesn't go through.
+    pub(crate) fn snapshot(&self) -> (Option<Envelope>, String) {
+        (self.envelope.clone(), self.content.clone())
+    }
+
+    // ------------------------------------------------------------------------
+    pub(crate) fn restore(&mut self, (envelope, content): (Option<Envelope>, String)) {
+        self.envelope = envelope;
+        self.content = content;
     }
 
     // ------------------------------------------------------------------------
@@ -161,6 +226,12 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// Whether the entity has its own `id`.
+    pub fn adopted(&self) -> bool {
+        self.envelope.as_ref().is_some_and(|e| e.id.is_some())
+    }
+
+    // ------------------------------------------------------------------------
     /// Why the frontmatter couldn't be read, if it couldn't.
     pub fn error(&self) -> Option<&av_utils::error::Error> {
         self.err.as_ref().err()
@@ -177,8 +248,34 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    pub fn save(&self) -> String {
+        write_content(&self.format, &self.envelope, &self.content)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether the document differs from what its file held at the last
+    /// read or write.
+    pub fn is_dirty(&self) -> bool {
+        self.disk.envelope != self.envelope || self.disk.content != self.content
+    }
+
+    // ------------------------------------------------------------------------
     pub fn is_broken(&self) -> bool {
         self.err.is_err()
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's title. An empty (or all-whitespace) title removes the
+    /// `title` key altogether; a missing title loads as `""` again.
+    pub fn set_title(&mut self, title: String) {
+        let title = title.trim().to_string();
+        self.envelope_mut().title = (!title.is_empty()).then_some(title);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The envelope to change; a file without frontmatter gets one.
+    fn envelope_mut(&mut self) -> &mut Envelope {
+        self.envelope.get_or_insert_default()
     }
 }
 
@@ -207,6 +304,14 @@ fn split_markdown(text: &str) -> (Option<&str>, &str) {
 }
 
 // ----------------------------------------------------------------------------
+fn combine_markdown(yaml: Option<String>, body: &str) -> String {
+    match yaml {
+        Some(yaml) => format!("---\n{yaml}---\n{body}"),
+        None => body.to_string(),
+    }
+}
+
+// ----------------------------------------------------------------------------
 fn parse_document(doc_type: FileFormat, text: &str) -> (Option<Envelope>, &str, Result<()>) {
     match doc_type {
         FileFormat::Markdown => {
@@ -224,6 +329,18 @@ fn parse_document(doc_type: FileFormat, text: &str) -> (Option<Envelope>, &str, 
             Ok(env) => (Some(env), "", Ok(())),
             Err(err) => (None, text, Err(err)),
         },
+    }
+}
+
+// ----------------------------------------------------------------------------
+fn write_content(doc_type: &FileFormat, envelope: &Option<Envelope>, content: &str) -> String {
+    let yaml = envelope.as_ref().and_then(|e| e.compose());
+    match doc_type {
+        FileFormat::Markdown => {
+            let body = content;
+            combine_markdown(yaml, body)
+        }
+        FileFormat::YAML => yaml.unwrap_or(content.to_string()),
     }
 }
 

@@ -33,8 +33,8 @@ Obsidian interop is a COULD: we stay close where it's free (frontmatter,
 
 Each file in the vault is either a markdown file with YAML frontmatter or a
 pure YAML file (`*.md`, `*.yaml`). The YAML frontmatter holds the file's
-metadata. The frontmatter keys the app doesn't know are kept as they are
-(`Envelope.extra`).
+metadata. The BOM, the line endings and frontmatter keys the app doesn't
+know are kept as they are (`av_utils::text::renormalize`, `Envelope.extra`).
 
 Read-only files can't be edited (`Entry::is_editable` / `is_writable` /
 `is_deletable`). A file whose frontmatter doesn't parse loads as a body
@@ -621,7 +621,7 @@ events or 50 ms have passed since the one before, the end with the last
 one. The UI thread puts each batch into the index and tells the page, so
 a file that is slow to read (a network share, an online-only file of a
 cloud folder) never blocks the window. The page gets one `entity` per
-file. When it ends, the log says how many files the
+file, as from any edit. When it ends, the log says how many files the
 scan read in how many milliseconds.
 
 A vault scan can't be stopped; a new one replaces it (a vault switch). A

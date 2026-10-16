@@ -36,3 +36,16 @@ pub fn normalize(text: String) -> (String, LineEnding, String) {
 
     (bom, ending, text)
 }
+
+// ----------------------------------------------------------------------------
+pub fn renormalize(bom: &str, ending: LineEnding, text: String) -> String {
+    let mut result = match ending {
+        LineEnding::CR => text.replace("\n", "\r"),
+        LineEnding::LF => text,
+        LineEnding::CRLF => text.replace("\n", "\r\n"),
+    };
+    if !bom.is_empty() {
+        result = format!("{bom}{result}");
+    }
+    result
+}
