@@ -1,6 +1,6 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
 // archived folded) after No project, with their counts, each a filter;
-// renaming, adding and starring projects; the vault's name and menu. It renders at most once per frame
+// renaming, adding, starring and dropping onto projects; the vault's name and menu. It renders at most once per frame
 // (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
@@ -10,9 +10,11 @@ import { store } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
 import { projects } from '../model/entities.js';
 import { structureCall } from '../model/structure.js';
+import { joinProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
 import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
+import { dropTarget } from '../ui/dropzone.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
 const projectsContainer = $('projects');
@@ -90,7 +92,8 @@ function editSidebarName(row, name, commit) {
 // The sidebar's rows by key (`project:<id>`), kept across renders:
 // `renderSidebar` patches counts and highlights in place and rebuilds a row
 // only when its name changed. A scan re-renders the sidebar every frame,
-// and a replaced row would lose its hover (flickering its action button).
+// and a replaced row would lose its hover (flickering its action button)
+// and its drop-target highlight.
 let sidebarRows = new Map();
 
 function renderSidebar() {
@@ -127,7 +130,7 @@ function renderSidebar() {
     const row = rowFor(`project:${id}`, name, () => {
       const row = sidebarNavItem('nav-item nav-item--project', name, 'nav-item__icon nav-item__icon--star', '#i-star', () => selectProject(id),
         { icon: '#i-edit', title: 'Rename project', onClick: row => editProject(id, row) });
-      row.dataset.id = id;
+      row.dataset.id = id; // the drop target of `joinProjectLocal`, see below
       row.querySelector('.nav-item__icon').addEventListener('click', e => {
         e.stopPropagation();
         toggleStar(id);
@@ -191,6 +194,22 @@ function addProject() {
 }
 
 $('add-project-btn').addEventListener('click', addProject);
+
+// Dropping an entity (a table row, which drags its doc_id as text/plain; see
+// features/lenses/documents.js) on a project pill adds it to that project. The
+// listeners sit on the container, since `renderSidebar` replaces a renamed
+// pill, possibly mid-drag. Only a pill is a valid drop target: over
+// the gaps between them `dragover` isn't cancelled, so a drop there is a no-op.
+dropTarget(projectsContainer, {
+  over: ev => {
+    const row = ev.target.closest('.nav-item--project');
+    return row && { el: row };
+  },
+  drop: ({ el: row }, ev) => {
+    const doc_id = ev.dataTransfer.getData('text/plain');
+    if (doc_id) joinProjectLocal(doc_id, row.dataset.id);
+  },
+});
 
 allProjectsEl.addEventListener('click', () => store.setState({ selected_project: null }));
 noProjectEl.addEventListener('click', () => selectProject(NO_PROJECT));

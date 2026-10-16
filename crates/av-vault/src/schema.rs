@@ -7,4 +7,7 @@
 pub mod layout {
     /// Projects, made with `Index::create_project`.
     pub const PROJECTS: &str = "Projects";
+    /// Deleted entities, kept at their vault-relative path; the scan skips
+    /// it like every dot-folder.
+    pub const TRASH: &str = ".trash";
 }

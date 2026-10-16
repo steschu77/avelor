@@ -2,9 +2,13 @@
 // a thread (all members of `selected_thread` as a flat, date-ordered card list
 // in #panel-thread-view, vault.md#thread), or a standalone entity (one card in
 // #doc-content) -- driven only by store state (`selected_entity`,
-// `selected_thread`, `threads_rev`). app.js reaches into `msgControllers` for
-// the cards' dirty dots, and features/header.js leaves edit mode; autosave
-// lives in model/documents.js and covers every editor in edit mode.
+// `selected_thread`, `threads_rev`). Structural edits (drops, the
+// remove-from-thread button) are host round trips (`structureCall`,
+// model/structure.js) that end in a published selection, never in a direct
+// render call; the requests (`joinThreadLocal`, ...) are model/structure.js's.
+// app.js reaches into `msgControllers` for the cards' dirty dots, and
+// features/header.js leaves edit mode; autosave lives in model/documents.js
+// and covers every editor in edit mode.
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
@@ -18,6 +22,7 @@ import { structureCall } from '../../model/structure.js';
 import {
   joinProjectLocal, leaveProjectLocal, setLinkLocal, setTagsLocal,
 } from '../../model/structure.js';
+import { createThreadLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
@@ -25,6 +30,9 @@ import {
   createDocPreviewToolbar, createEditorToolbar,
 } from '../../ui/toolbar.js';
 import { editTextInPlace } from '../../ui/field.js';
+import {
+  MEMBER_DRAG, attachDropZone, endDragPreview, startDragPreview,
+} from '../../ui/dropzone.js';
 import { openLink, panelMode, selectDocument } from '../selection.js';
 import { selectById } from '../selection.js';
 
@@ -46,6 +54,28 @@ const threadMessagesEl = $('thread-messages');
 const docContentEl = $('doc-content');
 const panelDocViewEl = $('panel-doc-view');
 const panelThreadViewEl = $('panel-thread-view');
+
+// ----------------------------------------------------------------------------
+// Drag-and-drop (ui/dropzone.js): a row dragged out of the table lens
+// (features/lenses/documents.js) can be
+// dropped on either card panel:
+// - on the thread panel (#thread-messages) it becomes a member of the open
+//   thread (`joinThreadLocal`, model/structure.js),
+// - on a standalone entity's card (#doc-content) it starts a new thread of
+//   the two (`createThreadLocal`).
+// Members are ordered by date, so there is no drop position to pick; the
+// panel's last card is highlighted as the drop target. Dropping anywhere
+// outside these two containers is a no-op via the usual HTML5 DnD rule (no
+// preventDefault means no valid drop target). A card dragged out of its
+// thread by its head (`MEMBER_DRAG`) is no drop for either: it goes to the
+// Documents lens, which takes it out of the thread.
+attachDropZone(threadMessagesEl, doc_id => {
+  if (renderedThreadId) joinThreadLocal(doc_id, renderedThreadId);
+});
+
+attachDropZone(docContentEl, doc_id => {
+  if (renderedDocId) createThreadLocal(renderedDocId, doc_id);
+});
 
 // The thread header's pen renames the thread shown (`renameEntity`).
 threadRenameBtn.addEventListener('click', () => {
@@ -164,7 +194,7 @@ function addChip(has, { onJoin, onAddTag }) {
 // icon; null if it isn't in the vault.
 function linkTarget(id) {
   const doc = entities.get(id);
-  if (doc) return { title: doc.title, icon: KIND_ICONS[doc.kind]?.icon };
+  if (doc) return { title: doc.title, icon: getDocIcon(doc.kind, doc.genre) };
   const thread = threads.get(id);
   if (thread) return { title: thread.title, icon: KIND_ICONS.thread.icon };
   const project = projects.get(id);
@@ -423,7 +453,7 @@ function renderMembers(thread_id, members) {
   renderedMembers = members;
 
   for (const doc of members) {
-    const controller = createMessageController(doc, { selectable: true });
+    const controller = createMessageController(doc, { selectable: true, thread: true });
     threadMessagesEl.appendChild(controller.card);
   }
 }
@@ -465,9 +495,10 @@ function renderDocument(doc) {
 }
 
 // ----------------------------------------------------------------------------
-// One card: header, toolbars, and its own editor. `selectable`: a click
-// selects its entity, which only makes sense with other cards on screen (a
-// thread).
+// One card: header, chips, toolbars, and its own editor. `thread`: a
+// member of the thread shown -- its head drags it out of the thread, and
+// remove-from-thread applies; `selectable`: a click selects its entity,
+// which only makes sense with other cards on screen (a thread).
 function createMessageController(msg, { selectable = false, thread = false } = {}) {
   const doc_id = msg.doc_id;
 
@@ -510,6 +541,19 @@ function createMessageController(msg, { selectable = false, thread = false } = {
   head.appendChild(threadsEl);
   card.appendChild(head);
 
+  // In a thread, the head drags the card: dropped on the Documents lens it
+  // leaves the thread (features/lenses/documents.js); like a row there, on
+  // a project pill or a project's or thread's row it joins that.
+  if (thread) {
+    head.draggable = true;
+    head.addEventListener('dragstart', ev => {
+      ev.dataTransfer.setData('text/plain', doc_id);
+      ev.dataTransfer.setData(MEMBER_DRAG, renderedThreadId);
+      startDragPreview(ev, kindIconEl.firstChild.getAttribute('href'), titleEl.textContent, 'copyMove');
+    });
+    head.addEventListener('dragend', endDragPreview);
+  }
+
   const chipsEl = renderCardChips(doc_id, msg);
   if (chipsEl) card.appendChild(chipsEl);
 
@@ -545,6 +589,16 @@ function createMessageController(msg, { selectable = false, thread = false } = {
   editBtn.addEventListener('click', () => {
     if (editBtn.getAttribute('aria-disabled') === 'true') return;
     setMessageEditMode(doc_id, !editor.isEditable());
+  });
+
+  // Remove-from-thread: only meaningful on a card shown as a member of the
+  // open thread, and always acts on that thread (an entity may be in
+  // several).
+  const threadBtn = previewToolbar.querySelector('button[data-cmd="thread"]');
+  threadBtn.setAttribute('aria-disabled', String(!thread));
+  threadBtn.addEventListener('click', () => {
+    if (threadBtn.getAttribute('aria-disabled') === 'true') return;
+    leaveThreadLocal(doc_id, renderedThreadId);
   });
 
   const controller = {

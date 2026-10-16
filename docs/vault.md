@@ -2,7 +2,7 @@
 
 > The vault's file format and its life cycle: what an entity file holds,
 > identity, roles, types and sources, file names, the layout; opening,
-> switching and scanning a vault.
+> switching and scanning a vault, the trash.
 
 ## Principles <a id="principles"></a>
 
@@ -115,7 +115,9 @@ Together, these roles express that the file is:
 * and part of a message thread.
 
 Roles are compositional: adding or removing a role adds or removes the
-fields associated with that role without affecting the others.
+fields associated with that role without affecting the others. For example,
+dragging a letter into a thread adds the `message` role (listing that
+thread) to it.
 
 Because the block itself acts as both the role marker and the container for
 its fields, adopted roles are always written explicitly — even when empty
@@ -370,8 +372,8 @@ linear grouping of separate entities — messages, emails, letters, other
 documents — that belong together, such as an exchange with an authority.
 
 * **Members**: the entities whose `message.threads` lists the thread's `id`.
-  The thread file itself holds no member list. An entity can be a member of
-  several threads.
+  The thread file itself holds no member list. The user adds and removes
+  members at any time; an entity can be a member of several threads.
 * **Order**: members are ordered by their `date`, ties broken by `id`
   (UUIDv7). There is exactly one path through a thread: no parent/child
   links, no siblings, no active branch.
@@ -379,7 +381,8 @@ documents — that belong together, such as an exchange with an authority.
   entities; the Documents lens folds them under the thread's row
   (`ui.md#documents`). The thread's `title` describes the thread itself.
 * **Projects**: a thread has none of its own; its projects are its
-  members' `projects`.
+  members' `projects`. The app writes none into a thread file, and a
+  `projects` key an older thread file has is kept but not read.
 
 ### Message <a id="message"></a>
 
@@ -391,6 +394,11 @@ carries the following additional fields:
 * `threads`: [Thread ID],
 * `sender`: ContactRef,
 * `recipient`: ContactRef.
+
+Adding an entity to a thread appends the thread's `id` to `threads`, adding
+the `message` role if it's missing. Removing an entity from a thread removes
+the `id` again; if the `message` block ends up empty, the role is dropped.
+The entity keeps all its other roles.
 
 If the entity also carries the `email` role, the email's `from` / `to`
 fields are authoritative and `sender` / `recipient` are omitted.

@@ -112,6 +112,13 @@
   border-bottom: 1px solid var(--c-line);
 }
 
+/* a project's or thread's row an entity is dragged over, which it would
+   join */
+.docs .list-row.is-drop-target {
+  background: var(--c-card);
+  box-shadow: inset 0 0 0 1px var(--c-accent);
+}
+
 .docs__head-date {
   justify-content: flex-end;
 }

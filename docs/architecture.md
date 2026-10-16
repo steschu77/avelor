@@ -51,7 +51,7 @@ read by OCR.
 |---|---|
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
-| `vault.md` | the file format: identity, roles, types, sources, metadata, file names, layout; opening and scanning a vault |
+| `vault.md` | the file format: identity, roles, types, sources, metadata, file names, layout; opening and scanning a vault, the trash |
 | `api.md` | the protocol: transport, rules, the page's side, every command and event |
 | `ui.md` | the main window: layout, vault panel and filters, lenses, status bar, jobs panel, keys, preferences |
 | `panel.md` | the side panel: cards, threads, links, labels, projects, structural edits and how they are saved |
@@ -180,7 +180,7 @@ SIGTERM and SIGHUP end it the same way. Both are
 ### Vault edits and the outbox <a id="vault-edits"></a>
 
 Every vault edit by the app goes through `App::edit`, which hands the
-edit av-vault's `Index` and pushes every entity it wrote —
+edit av-vault's `Index` and pushes every entity it wrote or trashed —
 also when it failed part-way:
 
 ```rust
@@ -190,8 +190,8 @@ pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
 }
 ```
 
-av-vault's `Changes` names what an edit wrote, so the same push sends
-`entity` (`post_entity` serves scanned entries and edits alike). The
+av-vault's `Changes` names what an edit wrote and trashed, so the same
+push sends `entity` and `entity_deleted` (`post_entity` serves scanned entries and edits alike). The
 editor's own save (`Vault::save_content`, answered by `save_doc_content`)
 and taking in a change made outside the app (`Vault::reload`,
 `Vault::refresh`) aren't edits by the app and stay apart. `Vault` (`app.rs`), the open
@@ -258,7 +258,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
-| `structure.rs` | the structural commands: projects, titles, stars, archiving, labels, links, `reload_entity`; their answers; their dispatch tests |
+| `structure.rs` | the structural commands: threads, projects, titles, stars, archiving, labels, links, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>
@@ -343,10 +343,10 @@ nothing imports `app.js`.
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/toolbar.js` | the editors' toolbars |
 | `ui/field.js` | editing in place (`editTextInPlace`) |
-| `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
+| `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
 | `features/selection.js` | the selection (`selectDocument`, `selectById`, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
 | `features/panel/panel.js` | the side panel renderer (thread, standalone card), its chips, the structural edits it starts, its subscriptions |
-| `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, and shows an entity on request (`revealInDocuments`) |
+| `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`) |
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
@@ -360,7 +360,7 @@ nothing imports `app.js`.
 A page is drawn by what it must keep while it changes:
 
 - **Reconciled by key** (`placeChildren`): the lenses and the sidebar,
-  long lists whose rows keep their hover.
+  long lists whose rows keep their hover, focus and drop state.
 
 ### Page state <a id="page-state"></a>
 

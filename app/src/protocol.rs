@@ -48,7 +48,10 @@ enum Command {
     SaveDocContent(Save),
     CheckFiles(Ids),
     // The structural commands (`structure`).
+    CreateThread(NewThread),
     CreateProject(Title),
+    JoinThread(InThread),
+    LeaveThread(InThread),
     JoinProject(InProject),
     LeaveProject(InProject),
     SetTitle(Retitle),
@@ -100,10 +103,24 @@ struct Ids {
     ids: Vec<Id>,
 }
 
+/// `{title, members}`
+#[derive(Deserialize)]
+struct NewThread {
+    title: String,
+    members: Vec<Id>,
+}
+
 /// `{title}`
 #[derive(Deserialize)]
 struct Title {
     title: String,
+}
+
+/// `{id, thread}`
+#[derive(Deserialize)]
+struct InThread {
+    id: Id,
+    thread: Id,
 }
 
 /// `{id, project}`
@@ -163,7 +180,10 @@ impl Command {
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "save_doc_content" => Command::SaveDocContent(from_value(args)?),
             "check_files" => Command::CheckFiles(from_value(args)?),
+            "create_thread" => Command::CreateThread(from_value(args)?),
             "create_project" => Command::CreateProject(from_value(args)?),
+            "join_thread" => Command::JoinThread(from_value(args)?),
+            "leave_thread" => Command::LeaveThread(from_value(args)?),
             "join_project" => Command::JoinProject(from_value(args)?),
             "leave_project" => Command::LeaveProject(from_value(args)?),
             "set_title" => Command::SetTitle(from_value(args)?),
@@ -210,7 +230,10 @@ fn route(app: &mut App, req: Req, command: Command) {
             documents::save_doc_content(app, req, a.id, a.markdown, a.overwrite)
         }
         Command::CheckFiles(a) => documents::check_files(app, req, a.ids),
+        Command::CreateThread(a) => structure::create_thread(app, req, a.title, a.members),
         Command::CreateProject(a) => structure::create_project(app, req, a.title),
+        Command::JoinThread(a) => structure::membership(app, req, a.id, a.thread, S::join_thread),
+        Command::LeaveThread(a) => structure::membership(app, req, a.id, a.thread, S::leave_thread),
         Command::JoinProject(a) => {
             structure::membership(app, req, a.id, a.project, S::join_project)
         }

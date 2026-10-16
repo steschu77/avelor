@@ -2,7 +2,7 @@
 
 > The side panel and what the user organizes in it: the card every entity
 > is shown as, a thread's members, links, labels, projects, and the
-> structural edits (projects, titles, labels, links) with how they are
+> structural edits (threads, projects, titles, labels, links) with how they are
 > saved. The lenses and the vault panel are
 > `ui.md`; the editor inside each card, `editor.md`; saving its content,
 > `saving.md`.
@@ -44,7 +44,8 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
 
 - a header: icon, title, dirty dot, a pen that renames it
   (`panel.md#titles`), date, path, and for an entity in
-  several threads a line of them (`panel.md#thread-switch`);
+  several threads a line of them (`panel.md#thread-switch`); in a thread,
+  the header is the card's drag handle (`panel.md#structural-edits`);
 - its project and label chips on one line, with the "+" menu that adds
   either (`panel.md#labels`, `panel.md#projects`), and its link chips
   (`panel.md#links`);
@@ -65,7 +66,8 @@ min-height: 0; overflow: auto; display: flex; flex-direction: column` —
 the single scrollable container; each card is a normal, non-scrolling flex
 child of it.
 
-Its option: `selectable` — a click selects
+Its options: `thread` — a member of the thread shown, whose head drags it
+out and whose remove-from-thread applies; `selectable` — a click selects
 its entity (`panel.md#selection`), in a thread,
 but not for a lone document, with nothing else on screen to select. A
 card's head (title, date) follows its entity in place on `entities_rev`,
@@ -80,7 +82,8 @@ template itself:
   editing toolbar, passed to `createEditor()`'s `toolbar` option.
 - **`#preview-toolbar-template`** — the action row:
   `data-cmd="edit"` (edit mode, if the entity is `editable`; one card in
-  edit mode at a time). The template's elements
+  edit mode at a time) and `data-cmd="thread"`
+  (remove from thread). The template's elements
   carry no ids, since it is cloned for every card.
 
 ## Panel state <a id="panel-state"></a>
@@ -121,7 +124,8 @@ after the teardown it shows a placeholder ("No document selected",
 `.empty`) in `#doc-content`; the panel itself stays open.
 
 Nothing else calls `renderThread`/`renderDocument`. Selection changes go
-through `selectDocument`.
+through `selectDocument`; membership changes go through
+`commitThreadChange` (`panel.md#structural-edits`).
 
 ## Selection, focus and scrolling <a id="selection"></a>
 
@@ -164,7 +168,10 @@ body, and exempting more than buttons would leave most of it unclickable.
 
 Threads are created by the user and are linear: their members are separate
 entities — letters, emails, tasks, events, … — ordered by date
-(`vault.md#thread`).
+(`vault.md#thread`). The user connects them in the panel: dragging a row
+from the Documents lens onto the thread panel adds it, onto a standalone
+card makes a thread of the two; dragging a card by its head from the
+thread to the lens removes it (`panel.md#structural-edits`).
 
 `threadMembers(thread_id)` filters `entities` for entries whose `threads`
 include the id and sorts them with `compareMembers`: by `date`, then by
@@ -247,7 +254,8 @@ an empty title removes the `title` key, and the file keeps its name
 - The pen is hidden for an entity or thread the host can't write
   (`renderCardHead`, `renderThread`).
 - While a title is edited, nothing overwrites it (`renderCardHead`,
-  `renderThread`, the project header).
+  `renderThread`, the project header), and a thread card's head doesn't
+  drag, so the mouse selects text.
 
 ## Projects <a id="projects"></a>
 
@@ -266,10 +274,15 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   cards).
 - **Star**: the star at the start of a sidebar project row (`toggleStar`)
   sends `set_starred`; starred projects are listed first.
-- **Members**: a project picked in a card's "+" menu (`panel.md#labels`)
-  joins the project (`joinProjectLocal` → `join_project`); the × on a
-  project chip of a card (`projectChips`) leaves it (`leaveProjectLocal` →
-  `leave_project`).
+- **Members**: an entity's row dropped on a project pill or on the
+  project's row in the Documents lens (`ui.md#documents`), or a project
+  picked in a card's "+" menu (`panel.md#labels`), joins the project
+  (`joinProjectLocal` → `join_project`); the × on a project chip of a
+  card (`projectChips`) leaves it (`leaveProjectLocal` →
+  `leave_project`). The drop listeners sit on `#projects`, not the rows,
+  since `renderSidebar` rebuilds those; only a pill is a valid target,
+  highlighted (`.is-drop-target`) while dragged over. A card's head dragged
+  out of a thread joins a project the same way.
 - **Description**: the project file's body, under the vault header behind
   a fold chevron and edited with its pen (`#project-desc` via
   `bindDocContent`), loaded and saved like a document (`saving.md`).
@@ -278,6 +291,61 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   the sidebar folds archived projects under an "Archived" row
   (`toggleArchived`, not kept across restarts).
 
+## Membership and structural edits <a id="structural-edits"></a>
+
+Membership is edited by the host, never on the page
+(`panel.md#saving-structure` explains why). Each edit is a typed command
+(`api.md#structure`) sent through `structureCall(cmd, args,
+select)`; once it is answered, `select(id)` (the answer's `id`) is applied
+through **`commitThreadChange({ selected_entity, selected_thread })`**,
+which publishes it with a bumped `threads_rev`; `renderPanel` takes it
+from there. By then the host's pushes have already updated `entities` and
+`threads` to what is on disk. After a failure the current selection is
+kept. Either way, an entity or thread that no longer exists is dropped
+from the selection. The edits:
+
+- **Drop on the thread panel** (`#thread-messages`):
+  `joinThreadLocal(doc_id, thread_id)` sends `join_thread` (nothing, if
+  the entity already is a member) and selects the entity in the thread, so
+  its new card appears, focused, in its date position.
+- **Drop on a standalone entity's card** (`#doc-content`):
+  `createThreadLocal(target_id, dropped_id)` sends `create_thread` with
+  the target's title and both entities as members; the thread's projects
+  are theirs. The host
+  (`Index::create_thread`) builds the thread with `Document::create`
+  (`thread: {}`, `created: {}`, a fresh UUIDv7, dated now), writes it as a
+  new file with its generated name (`filename::generated_name`) in the
+  target's folder, never over an existing file, and adds both members. The
+  target is then selected in the new thread. Dropping an entity on itself
+  does nothing; an entity already in other threads just gains one more.
+- **Remove-from-thread button** (`data-cmd="thread"`, enabled only on cards
+  shown as members of the open thread): `leaveThreadLocal(doc_id,
+  renderedThreadId)` sends `leave_thread`. The host (`Index::leave_thread`)
+  removes the thread from the entity's `message.threads` (dropping an empty
+  `message` role); if fewer than two members are left, the remaining one
+  leaves as well and the thread's file moves to `.trash/` (`Index::trash`).
+  The selection that follows, computed by `selectionWithout(doc_id,
+  thread_id)` from the thread as it is before the request:
+  - **thread dissolved** → `selected_thread = null`, and the remaining
+    entity is selected, so it's shown standalone;
+  - **thread still there** → it stays selected; if the removed entity was
+    the selected one, its neighbor in thread order (the next member, else
+    the previous one) is selected instead, otherwise the selection stays.
+- **Dragging a card out**: in the thread panel, a card's head is
+  draggable. Its drag carries the entity's id as `text/plain`, like an
+  entity's row (so a drop on a project pill, or on a project's or thread's
+  row in the Documents lens, joins that), and the thread it is shown in as
+  `application/x-avelor-thread` (`MEMBER_DRAG`). The rest of the Documents
+  lens (`#lens-documents`) accepts
+  only such drags (`takeMemberDrops`, `ui/dropzone.js`), highlighted
+  (`.is-drop-target`) while dragged over; a drop there calls
+  `leaveThreadLocal`, exactly as the remove button does. Both card panels
+  ignore them, so a card can't be dropped back into its own thread.
+
+Both drop targets of the card panels are wired through the same
+`attachDropZone(containerEl, onDrop)`; while dragging, the panel's last
+card is highlighted (`.is-drop-after`) as the drop target.
+
 ## Saving structural edits <a id="saving-structure"></a>
 
 The vault file is the source of truth, a file is written only when
@@ -285,14 +353,15 @@ something in it changed, and the host answers with what is now on disk.
 
 | | Structure |
 |---|---|
-| The page sends | an intent: `set_title`, … |
+| The page sends | an intent: `create_thread`, `join_thread`, `leave_thread`, `join_project`, `leave_project`, `set_title`, … |
 | The host writes | the matching `Index` op → `Index::save` |
 | The host answers | `entity` / `entity_deleted` per changed entity, then the command's answer |
 | Stale-reply guard | none needed: nothing is applied optimistically |
 | On failure | an error answer, shown in the status bar; the page shows whatever the host pushed, so it never shows unsaved structure |
 | File changed outside the app | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs, after which the user makes the edit again |
 
-- **The host owns the rules.** The rules live in av-vault where
+- **The host owns the rules.** Edits span files (a dissolve rewrites another
+  member and removes the thread's file), so the rules live in av-vault where
   they are unit-tested, not in the page. Each op works on any entity,
   built on a property every entity has (`architecture.md#conventions`).
 - **Validate, then write.** Every entity an edit will rewrite must be
@@ -301,9 +370,11 @@ something in it changed, and the host answers with what is now on disk.
   error is `NotWritable`. Each file to rewrite must also be as the app
   last read or wrote it (its `FileStamp`, `saving.md#the-stamp`); a
   changed or deleted one makes the edit a `SaveOutcome::Conflict` that
-  writes nothing. A save that still fails (I/O) restores that entity's
-  in-memory roles and envelope, so the index keeps matching the disk.
-  What was written is recorded (`vault::Changes`) and pushed
+  writes nothing. A trashed file isn't checked: it moves unchanged, so
+  nothing is lost. A save that still fails (I/O) restores that entity's
+  in-memory roles and envelope, so the index keeps matching the disk. A
+  multi-file edit that fails part-way stays part-way: what was written is
+  recorded (`vault::Changes`) and pushed
   (`architecture.md#vault-edits`).
 - **Content and structure share the file.** `Index::save` writes the
   frontmatter together with the host's last saved body, so a pending
@@ -342,11 +413,14 @@ and save their bodies at once.
 | D11 | Follow a link | a link chip, or an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |
 | D12 | Rename | the pen in a card's head or the thread header → `renameEntity` → `editTextInPlace`; Enter or blur | `set_title` → `entity` | the card's head, the thread header, chips and links follow; the file keeps its name |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
+| E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |
+| E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |
+| E4 | Leave | card thread button, or the card's head dropped on the Documents lens → `leaveThreadLocal` | `leave_thread`; below two members the thread file goes to `.trash/` | selection per `selectionWithout` |
 | E5 | Switch thread | a chip in the threads line of a card in several threads → `switchThread` | — | that thread shown, the entity still selected and focused |
 | C1 | Create a project | "+" → `addProject` → `structureCall('create_project', {title: 'New project'})` | `Index::create_project` in `Projects/` → `entity`, `ok {id}` | new pill in rename mode |
 | C2 | Rename a project | pill pen or header rename → inline input, Enter/blur | `set_title` → `entity` | header and chips follow (`projects_rev`) |
 | C3 | Star | star icon → `toggleStar` | `set_starred {starred}` → `entity` | starred first |
-| C4 | Add to a project | a project in a card's "+" menu → `joinProjectLocal` | `join_project` → `entity` | the card's chips and the counts update |
+| C4 | Add to a project | drag an entity's row onto a pill or a project's row in Documents, or a project in a card's "+" menu → `joinProjectLocal` | `join_project` → `entity` | the card's chips and the counts update |
 | C5 | Remove from a project | × on a project chip → `leaveProjectLocal` | `leave_project` → `entity` | chip gone, counts update |
 | C6 | Description | fold chevron → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
 | C7 | Archive | header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |

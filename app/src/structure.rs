@@ -1,9 +1,9 @@
-//! The structural commands (`panel.md#saving-structure`): projects,
-//! titles, stars, archiving, labels, links -- and
+//! The structural commands (`panel.md#saving-structure`): threads,
+//! projects, titles, stars, archiving, labels, links -- and
 //! `reload_entity`, the conflict dialog's Use theirs, which ends like
 //! them. Typed commands (`api.md#structure`): each edit goes through
-//! `App::edit`, which pushes every entity it wrote (`entity`) before the
-//! answer: `ok {id}`, `ok {conflict: {id, changed}}` if a file changed
+//! `App::edit`, which pushes every entity it wrote (`entity`,
+//! `entity_deleted`) before the answer: `ok {id}`, `ok {conflict: {id, changed}}` if a file changed
 //! outside the app (nothing is written), or an error.
 
 use av_utils::error::{Error, Result};
@@ -20,8 +20,8 @@ use crate::protocol::Req;
 /// The answer of a structural command.
 #[derive(Serialize)]
 pub struct Done {
-    /// The entity the command is about: the new project, the project of a
-    /// membership edit, the entity itself.
+    /// The entity the command is about: the new thread or project, the
+    /// thread or project of a membership edit, the entity itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<Id>,
     /// Nothing was written: a file changed outside the app.
@@ -83,6 +83,19 @@ fn answer(app: &App, req: Req, result: Result<SaveOutcome>, id: Option<Id>) {
 }
 
 // ----------------------------------------------------------------------------
+/// `create_thread`: a thread of `members`, titled `title`; it is written
+/// beside its first member (`panel.md#structural-edits`).
+pub fn create_thread(app: &mut App, req: Req, title: String, members: Vec<Id>) {
+    let mut created = None;
+    let result = app.edit(|index, changes| {
+        let outcome = index.create_thread(title, &members, changes);
+        created = changes.created;
+        outcome
+    });
+    answer(app, req, result, created);
+}
+
+// ----------------------------------------------------------------------------
 /// `create_project`: a project titled `title`, in `Projects/`.
 pub fn create_project(app: &mut App, req: Req, title: String) {
     let created = app.edit(|index, changes| index.create_project(title, changes));
@@ -91,8 +104,8 @@ pub fn create_project(app: &mut App, req: Req, title: String) {
 }
 
 // ----------------------------------------------------------------------------
-/// An entity joining or leaving a group -- a project; the answer names the
-/// group.
+/// An entity joining or leaving a group -- a thread or a project; the
+/// answer names the group. Leaving a thread dissolves it below two members.
 pub fn membership(
     app: &mut App,
     req: Req,
@@ -197,6 +210,16 @@ mod tests {
         assert_eq!(sent[1], json!({ "re": 1, "ok": { "id": ids[0] } }));
         let text = fs::read_to_string(h.vault().join("Notes/n0.md")).unwrap();
         assert!(text.contains("title: Renamed"), "{text}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_new_thread_and_its_members_are_pushed_before_the_answer() {
+        let (mut h, ids) = notes("create-thread", 2);
+        let sent = h.call("create_thread", json!({ "title": "Trip", "members": ids }));
+        assert_eq!(shape(&sent), ["entity", "entity", "entity", "reply"]);
+        assert_eq!(sent[0]["data"]["kind"], "thread");
+        assert_eq!(sent[3]["ok"]["id"], sent[0]["data"]["id"]);
     }
 
     // ------------------------------------------------------------------------

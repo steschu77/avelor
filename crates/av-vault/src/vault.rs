@@ -18,9 +18,11 @@ use std::time::SystemTime;
 
 use crate::document::{Document, FileFormat};
 use crate::envelope::DocumentType;
+use crate::envelope::Thread;
 use crate::envelope::{Empty, Project, Roles, Source};
 use crate::filename;
 use crate::schema::layout;
+use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::fs::write_atomic;
@@ -75,6 +77,20 @@ pub enum SaveOutcome {
     Unchanged,
     /// This entity's file changed outside the app; nothing was written.
     Conflict(Id),
+}
+
+impl SaveOutcome {
+    /// The outcome of this write followed by `next`: a conflict wins, then
+    /// a write.
+    fn and(self, next: SaveOutcome) -> SaveOutcome {
+        match (self, next) {
+            (conflict @ SaveOutcome::Conflict(_), _) | (_, conflict @ SaveOutcome::Conflict(_)) => {
+                conflict
+            }
+            (SaveOutcome::Saved, _) | (_, SaveOutcome::Saved) => SaveOutcome::Saved,
+            _ => SaveOutcome::Unchanged,
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -155,9 +171,9 @@ impl Entry {
 }
 
 // ----------------------------------------------------------------------------
-/// What a structural operation did, so the caller can push exactly the
-/// changed entities. Filled in as the operation goes, so it is accurate even
-/// when the operation fails part-way.
+/// What a structural operation (thread create/join/leave) did, so the
+/// caller can push exactly the changed entities. Filled in as the operation
+/// goes, so it is accurate even when the operation fails part-way.
 #[derive(Debug, Default)]
 pub struct Changes {
     /// An entity new in the index: made in the app, written to its own new
@@ -165,6 +181,8 @@ pub struct Changes {
     pub created: Option<Id>,
     /// Entities whose file was rewritten.
     pub saved: Vec<Id>,
+    /// Entities whose file was moved to `.trash` and which left the index.
+    pub trashed: Vec<Id>,
 }
 
 // ----------------------------------------------------------------------------
@@ -385,6 +403,54 @@ impl Index {
     // recording each file it wrote in `changes`. A failed save restores that
     // entity's in-memory state, so the index always matches the disk.
 
+    /// Create a new thread titled `title` with `members` as its members;
+    /// its id is `changes.created`. It has no projects of its own: its
+    /// projects are its members' (vault.md#thread). The thread's file gets
+    /// its generated name (`filename::generated_name`) in the first
+    /// member's folder, and is never written over an existing file.
+    pub fn create_thread(
+        &mut self,
+        title: String,
+        members: &[Id],
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        let Some(first) = members.first() else {
+            return Err(Error::InvalidArgument {
+                arg: "members".into(),
+            });
+        };
+        for id in members {
+            self.check_writable(id)?;
+        }
+        if let Some(changed) = self.first_changed(members)? {
+            return Ok(SaveOutcome::Conflict(changed));
+        }
+        let folder = self.entry(first).and_then(|e| e.local.parent());
+        let folder = folder.map(Path::to_path_buf).unwrap_or_default();
+
+        let roles = Roles {
+            thread: Some(Thread {}),
+            ..Default::default()
+        };
+        let doc = Document::create(
+            roles,
+            Source::Created(Empty {}),
+            title,
+            Vec::new(),
+            FileFormat::YAML,
+        );
+        let id = self.create(doc, &folder, changes)?;
+
+        for member in members {
+            if let conflict @ SaveOutcome::Conflict(_) =
+                self.update(member, changes, |doc| doc.join_thread(id))?
+            {
+                return Ok(conflict);
+            }
+        }
+        Ok(SaveOutcome::Saved)
+    }
+
     /// Create a new project titled `title`. Its file gets its generated
     /// name (`filename::generated_name`) in `Projects/`, the conventional
     /// folder (vault.md#vault-layout), and is markdown, so its body
@@ -434,6 +500,46 @@ impl Index {
 
         changes.created = Some(id);
         Ok(id)
+    }
+
+    pub fn join_thread(
+        &mut self,
+        doc: &Id,
+        thread: &Id,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_thread(thread)?;
+        self.check_writable(doc)?;
+        self.update(doc, changes, |d| d.join_thread(*thread))
+    }
+
+    /// Remove `doc` from the thread `thread`. A thread left with fewer than
+    /// two members is dissolved: the remaining member leaves as well, and
+    /// the thread's file is moved to `.trash` ([`Index::trash`]).
+    pub fn leave_thread(
+        &mut self,
+        doc: &Id,
+        thread: &Id,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_thread(thread)?;
+        self.check_writable(doc)?;
+        let dissolve = self.dissolving(thread, doc)?;
+        let rewritten = [
+            std::slice::from_ref(doc),
+            dissolve.as_deref().unwrap_or_default(),
+        ];
+        if let Some(changed) = self.first_changed(&rewritten.concat())? {
+            return Ok(SaveOutcome::Conflict(changed));
+        }
+
+        let outcome = self.update(doc, changes, |d| d.leave_thread(thread))?;
+        match dissolve {
+            Some(remaining) if !matches!(outcome, SaveOutcome::Conflict(_)) => {
+                Ok(outcome.and(self.dissolve(thread, &remaining, changes)?))
+            }
+            _ => Ok(outcome),
+        }
     }
 
     pub fn join_project(
@@ -533,6 +639,78 @@ impl Index {
         self.update(id, changes, |d| d.set_archived(archived))
     }
 
+    /// The members `thread` would be left with once `leaving` is gone, if
+    /// that is fewer than two and so dissolves it; `None` if it survives. A
+    /// dissolve rewrites those members, so they must be writable. A thread
+    /// not in the index (a dangling reference) is never dissolved.
+    fn dissolving(&self, thread: &Id, leaving: &Id) -> Result<Option<Vec<Id>>> {
+        if self.get(thread).is_none() {
+            return Ok(None);
+        }
+        let remaining: Vec<Id> = self
+            .thread_members(thread)
+            .iter()
+            .map(|e| e.doc.id())
+            .filter(|id| id != leaving)
+            .collect();
+        if remaining.len() >= 2 {
+            return Ok(None);
+        }
+        for id in &remaining {
+            self.check_writable(id)?;
+        }
+        Ok(Some(remaining))
+    }
+
+    /// Dissolve `thread`: `remaining` leave it, then its file is trashed.
+    /// Stops at the first conflict, leaving the thread in place.
+    fn dissolve(
+        &mut self,
+        thread: &Id,
+        remaining: &[Id],
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        for id in remaining {
+            if let conflict @ SaveOutcome::Conflict(_) =
+                self.update(id, changes, |d| d.leave_thread(thread))?
+            {
+                return Ok(conflict);
+            }
+        }
+        self.trash(thread, changes)?;
+        Ok(SaveOutcome::Saved)
+    }
+
+    /// Move `id`'s file to `<root>/.trash/<its vault-relative path>` and drop
+    /// it from the index. The scan skips dot-folders, so it stays gone until
+    /// it is restored ([`Index::restore`]). An already trashed file of the
+    /// same name is kept: the new one gets a timestamp prefix.
+    pub fn trash(&mut self, id: &Id, changes: &mut Changes) -> Result<()> {
+        let Some(entry) = self.entry(id) else {
+            return Err(Error::NotFound);
+        };
+        if entry.is_unsaved() {
+            return Err(Error::Unsaved);
+        }
+        let mut target = self.root.join(layout::TRASH).join(&entry.local);
+        if target.exists() {
+            let name = entry
+                .local
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            let stamp = DateTime::now().as_timestamp();
+            target.set_file_name(format!("{stamp}.{name}"));
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::rename(&entry.path, &target)?;
+        self.remove(id);
+        changes.trashed.push(*id);
+        Ok(())
+    }
+
     /// Apply `change` to `id`'s document and save it, recording a write in
     /// `changes`.
     fn update(
@@ -586,6 +764,20 @@ impl Index {
         }
     }
 
+    /// The first of `ids` whose file changed outside the app since it was
+    /// last read or written, so rewriting it would be a conflict.
+    fn first_changed(&self, ids: &[Id]) -> Result<Option<Id>> {
+        for id in ids {
+            let Some(entry) = self.entry(id) else {
+                return Err(Error::NotFound);
+            };
+            if entry.changed_on_disk()? {
+                return Ok(Some(*id));
+            }
+        }
+        Ok(None)
+    }
+
     /// `id` may link to `to`: another entity in the vault.
     fn check_link(&self, id: &Id, to: Option<&Id>) -> Result<()> {
         match to {
@@ -593,6 +785,14 @@ impl Index {
                 Err(Error::InvalidArgument { arg: "to".into() })
             }
             _ => Ok(()),
+        }
+    }
+
+    fn check_thread(&self, id: &Id) -> Result<()> {
+        match self.get(id) {
+            Some(doc) if doc.kind() == DocumentType::Thread => Ok(()),
+            Some(_) => Err(Error::WrongKind),
+            None => Err(Error::NotFound),
         }
     }
 
@@ -1053,6 +1253,65 @@ mod tests {
         (root, ids)
     }
 
+    /// Create a thread of `members`, which must succeed; its id.
+    fn new_thread(index: &mut Index, title: &str, members: &[Id], changes: &mut Changes) -> Id {
+        let created = index.create_thread(title.into(), members, changes);
+        assert_eq!(created.unwrap(), SaveOutcome::Saved);
+        changes.created.expect("created thread")
+    }
+
+    fn threads_of(index: &Index, id: &Id) -> Vec<Id> {
+        let doc = index.get(id).unwrap();
+        doc.roles()
+            .message
+            .as_ref()
+            .map(|m| m.threads.clone())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn created_thread_and_membership_survive_a_rescan() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+
+        let mut changes = Changes::default();
+        let thread = new_thread(&mut index, "Note 0", &ids[0..2], &mut changes);
+        assert_eq!(changes.saved, ids[0..2]);
+
+        let entry = index.entry(&thread).unwrap();
+        assert!(entry.local.starts_with("Notes"), "next to the first member");
+        let name = entry
+            .local
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert!(
+            name.contains(".note-0.") && name.ends_with(".thd.yaml"),
+            "{name}"
+        );
+
+        let mut changes = Changes::default();
+        let joined = index.join_thread(&ids[2], &thread, &mut changes);
+        assert_eq!(joined.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [ids[2]]);
+        let mut changes = Changes::default();
+        let joined = index.join_thread(&ids[2], &thread, &mut changes);
+        assert_eq!(joined.unwrap(), SaveOutcome::Unchanged);
+        assert!(changes.saved.is_empty(), "joining twice writes nothing");
+
+        let rescanned = Index::scan(&root);
+        assert_eq!(rescanned.get(&thread).unwrap().kind(), DocumentType::Thread);
+        assert_eq!(rescanned.thread_members(&thread).len(), 3);
+        assert_eq!(
+            rescanned.get(&ids[0]).unwrap().content(),
+            "Body 0\n",
+            "body kept"
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
     #[test]
     fn created_project_survives_a_rescan() {
         let (root, _) = thread_vault();
@@ -1083,6 +1342,90 @@ mod tests {
         let doc = rescanned.get(&project).unwrap();
         assert_eq!(doc.kind(), DocumentType::Project);
         assert_eq!(doc.title(), "New project");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn leaving_dissolves_a_thread_below_two_members() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        let thread = new_thread(&mut index, "T", &ids, &mut changes);
+        let thread_file = index.entry(&thread).unwrap().local.clone();
+
+        let mut changes = Changes::default();
+        let left = index.leave_thread(&ids[2], &thread, &mut changes);
+        assert_eq!(left.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [ids[2]]);
+        assert!(changes.trashed.is_empty(), "two members left");
+
+        let mut changes = Changes::default();
+        let left = index.leave_thread(&ids[0], &thread, &mut changes);
+        assert_eq!(left.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [ids[0], ids[1]]);
+        assert_eq!(changes.trashed, [thread]);
+        assert!(index.get(&thread).is_none());
+        assert!(root.join(".trash").join(&thread_file).exists());
+
+        let rescanned = Index::scan(&root);
+        assert!(rescanned.get(&thread).is_none());
+        for id in &ids {
+            assert!(threads_of(&rescanned, id).is_empty());
+            let doc = rescanned.get(id).unwrap();
+            assert!(doc.roles().message.is_none(), "empty message role dropped");
+        }
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_read_only_member_refuses_the_whole_operation() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        let thread = new_thread(&mut index, "T", &ids[0..2], &mut changes);
+
+        // Leaving would dissolve the thread and rewrite ids[1] -- read-only.
+        let path = index.entry(&ids[1]).unwrap().path.clone();
+        index.documents[index.by_id[&ids[1]]].readonly = true;
+        let before = fs::read_to_string(&index.entry(&ids[0]).unwrap().path).unwrap();
+
+        let mut changes = Changes::default();
+        let err = index.leave_thread(&ids[0], &thread, &mut changes);
+        assert!(matches!(err, Err(Error::NotWritable { .. })));
+        assert!(changes.saved.is_empty() && changes.trashed.is_empty());
+        assert_eq!(
+            fs::read_to_string(&index.entry(&ids[0]).unwrap().path).unwrap(),
+            before
+        );
+        assert_eq!(threads_of(&index, &ids[0]), [thread]);
+        assert!(path.exists() && index.get(&thread).is_some());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn thread_ops_refuse_non_threads_and_unknown_ids() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+
+        let err = index.join_thread(&ids[0], &ids[1], &mut changes);
+        assert!(
+            matches!(err, Err(Error::WrongKind)),
+            "a document is not a thread"
+        );
+        let err = index.leave_thread(&ids[0], &Id::generate(), &mut changes);
+        assert!(matches!(err, Err(Error::NotFound)));
+        let err = index.create_thread("T".into(), &[ids[0], Id::generate()], &mut changes);
+        assert!(matches!(err, Err(Error::NotFound)));
+        assert!(changes.created.is_none() && changes.saved.is_empty());
+        assert_eq!(
+            fs::read_dir(root.join("Notes")).unwrap().count(),
+            3,
+            "no file written"
+        );
 
         fs::remove_dir_all(&root).ok();
     }
@@ -1492,6 +1835,35 @@ mod tests {
         let saved = index.save_content(&ids[0], "Mine\n".into(), true);
         assert_eq!(saved.unwrap(), SaveOutcome::Saved);
         assert!(fs::read_to_string(&path).unwrap().ends_with("Mine\n"));
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_changed_member_stops_the_whole_operation() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        let thread = new_thread(&mut index, "T", &ids[0..2], &mut changes);
+        let first = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+        edit_outside(&root, 1, &ids[1], "Theirs\n");
+
+        // Leaving would dissolve the thread and rewrite ids[1].
+        let mut changes = Changes::default();
+        let left = index.leave_thread(&ids[0], &thread, &mut changes);
+        assert_eq!(left.unwrap(), SaveOutcome::Conflict(ids[1]));
+        assert!(changes.saved.is_empty() && changes.trashed.is_empty());
+        assert_eq!(fs::read_to_string(root.join("Notes/n0.md")).unwrap(), first);
+        assert_eq!(threads_of(&index, &ids[0]), [thread]);
+        assert!(index.get(&thread).is_some());
+
+        // Nor is a thread created around it.
+        let files = fs::read_dir(root.join("Notes")).unwrap().count();
+        let mut changes = Changes::default();
+        let created = index.create_thread("U".into(), &ids[1..3], &mut changes);
+        assert_eq!(created.unwrap(), SaveOutcome::Conflict(ids[1]));
+        assert!(changes.created.is_none() && changes.saved.is_empty());
+        assert_eq!(fs::read_dir(root.join("Notes")).unwrap().count(), files);
 
         fs::remove_dir_all(&root).ok();
     }

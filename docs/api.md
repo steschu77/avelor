@@ -66,7 +66,8 @@ which answers through a `Req`.
   stays until dismissed, unless it is `cancelled`, so no
   failure is only a console line.
 
-The structural commands go through `structureCall`.
+The structural commands go through `structureCall`
+(`panel.md#structural-edits`).
 
 ## Commands
 
@@ -104,6 +105,9 @@ has no file, is read-only or has broken frontmatter, `not_found`,
 
 | Command | Args | Does | Answer `id` |
 |---|---|---|---|
+| `create_thread` | `{ title, members }` | A thread with these members, without projects of its own (`vault.md#thread`); its file goes beside its first member. | the new thread |
+| `join_thread` | `{ id, thread }` | Make `id` a member of `thread`. | the thread |
+| `leave_thread` | `{ id, thread }` | Remove `id` from `thread`; a thread left with fewer than two members dissolves: the other member leaves too, and the thread's file goes to `.trash`. | the thread |
 | `create_project` | `{ title }` | A project titled `title`, as a markdown file in `Projects/`. | the new project |
 | `join_project` | `{ id, project }` | Make `id` a member of the project; nothing if it already is. | the project |
 | `leave_project` | `{ id, project }` | Remove `id` from the project. | the project |

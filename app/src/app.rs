@@ -394,8 +394,8 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// Tell the page that `id` left the vault (its file gone): the
-    /// `entity_deleted` event.
+    /// Tell the page that `id` left the vault (trashed, or its file gone):
+    /// the `entity_deleted` event.
     pub fn post_entity_deleted(&self, id: &Id) {
         self.post_event("entity_deleted", serde_json::json!({ "id": id }));
     }
@@ -433,12 +433,15 @@ impl App {
 
     // ------------------------------------------------------------------------
     /// Send what an edit wrote: every created or rewritten entity
-    /// (`entity`).
+    /// (`entity`), every trashed entity (`entity_deleted`).
     fn post_changes(&self, changes: &Changes) {
         for id in changes.created.iter().chain(&changes.saved) {
             if let Some(entry) = self.vault.index().entry(id) {
                 self.post_entity(entry);
             }
+        }
+        for id in &changes.trashed {
+            self.post_entity_deleted(id);
         }
     }
 }

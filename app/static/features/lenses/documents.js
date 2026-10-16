@@ -2,7 +2,7 @@
 // filter as rows -- under All Projects in a group per project, then those
 // in no project; a thread's members under the thread's row -- each group
 // and thread folding (the projects folded kept in the `doc_folded`
-// preference); its own type selection (features/lenses/types.js; the
+// preference), an entity dropped on either joining it; its own type selection (features/lenses/types.js; the
 // `doc_types` and `doc_types_bar` preferences); and one entity shown on
 // request (`revealInDocuments`, the selection restored on start). This
 // file owns the rows, the folds and the sort-state UI, model/entities.js
@@ -20,8 +20,12 @@ import { entities } from '../../model/entities.js';
 import { matchesFilter } from '../../model/entities.js';
 import { projects, projectsInOrder, projectsOf } from '../../model/entities.js';
 import { knownThreads, threads } from '../../model/entities.js';
+import { joinProjectLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
+import {
+  dropTarget, endDragPreview, startDragPreview, takeMemberDrops,
+} from '../../ui/dropzone.js';
 import { markSelection, selectById, selectDocument } from '../selection.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
 
@@ -274,12 +278,14 @@ function memberDays(members) {
 
 // An entity's row, in the thread `thread_id` (or none): created on first
 // use, refilled when `entities` holds a new object for it (`onDocMeta`
-// always stores a fresh one).
+// always stores a fresh one). Any entity can be dragged into a thread or a
+// project.
 function docRow(group, thread_id, doc, depth) {
   const el = cachedRow(docKey(group, thread_id, doc.doc_id), { group, thread_id, doc_id: doc.doc_id }, () => {
     const row = accEl('div', 'list-row table__row');
     row.dataset.id = doc.doc_id;
     if (thread_id) row.dataset.thread = thread_id;
+    row.draggable = true;
     const cell = nameCell(depth);
     const gap = accEl('span', 'docs__gap');
     // the title text node comes first, so refilling it keeps the dot
@@ -417,6 +423,47 @@ rowsEl.addEventListener('click', ev => {
     selectById(row.dataset.thread);
   }
 });
+
+rowsEl.addEventListener('dragstart', ev => {
+  const row = ev.target.closest('.table__row[data-id]');
+  if (!row) return;
+  const doc = rowDocs.get(row);
+  ev.dataTransfer.setData('text/plain', row.dataset.id);
+  startDragPreview(ev, getDocIcon(doc.kind, doc.genre), doc.title);
+});
+
+rowsEl.addEventListener('dragend', endDragPreview);
+
+// ----------------------------------------------------------------------------
+// An entity dragged (its id as `text/plain`: a row here, or a card's head
+// in the panel) and dropped on a project's row joins the project
+// (`joinProjectLocal`), on a thread's row the thread (`joinThreadLocal`,
+// which shows it there), as on a project pill or in the thread panel. The
+// row is highlighted while one is over it; other rows aren't targets.
+function dropRowOf(ev) {
+  if (!ev.dataTransfer.types.includes('text/plain')) return null;
+  const row = ev.target.closest('.list-row');
+  return row && (row.dataset.group || (row.dataset.thread && !row.dataset.id)) ? row : null;
+}
+
+dropTarget(rowsEl, {
+  over: ev => {
+    const row = dropRowOf(ev);
+    return row && { el: row };
+  },
+  drop: ({ el: row }, ev) => {
+    const doc_id = ev.dataTransfer.getData('text/plain');
+    if (row.dataset.group) joinProjectLocal(doc_id, row.dataset.group);
+    else joinThreadLocal(doc_id, row.dataset.thread);
+  },
+});
+
+// A card dragged out of its thread by its head (features/panel/panel.js)
+// and dropped anywhere else in the lens than on a project's or a thread's
+// row (which take it, see above: their listeners run first and cancel the
+// event) leaves the thread (`leaveThreadLocal`), as with its remove
+// button; a row dragged within the lens isn't such a drag.
+takeMemberDrops(lensEl, leaveThreadLocal);
 
 // ----------------------------------------------------------------------------
 function renderSortHead() {

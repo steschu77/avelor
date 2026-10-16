@@ -5,6 +5,7 @@
 //! keys are preserved verbatim in `extra` so round-tripping a document
 //! through the app never loses user data.
 
+use crate::envelope::Message;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
 use crate::vault::FileStamp;
 use av_utils::datetime::DateTime;
@@ -307,6 +308,33 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// Make the entity a member of `thread`, adding the `message` role if
+    /// needed (vault.md#message).
+    pub fn join_thread(&mut self, thread: Id) {
+        let roles = &mut self.envelope_mut().roles;
+        let message = roles.message.get_or_insert_with(Message::default);
+        if !message.threads.contains(&thread) {
+            message.threads.push(thread);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Remove the entity from `thread`; drops the `message` role once its
+    /// block is empty.
+    pub fn leave_thread(&mut self, thread: &Id) {
+        let Some(roles) = self.envelope.as_mut().map(|e| &mut e.roles) else {
+            return;
+        };
+        let Some(message) = roles.message.as_mut() else {
+            return;
+        };
+        message.threads.retain(|t| t != thread);
+        if message.is_empty() {
+            roles.message = None;
+        }
+    }
+
+    // ------------------------------------------------------------------------
     pub fn set_tags(&mut self, tags: Vec<String>) {
         self.envelope_mut().tags = tags;
     }
@@ -532,6 +560,39 @@ mod tests {
         assert_eq!(md.kind(), DocumentType::Document);
         let yaml = Document::load("title: x\n".into(), FileFormat::YAML);
         assert_eq!(yaml.kind(), DocumentType::Record);
+    }
+
+    #[test]
+    fn joining_and_leaving_threads_manages_message_role() {
+        let t1 = Id::generate();
+        let t2 = Id::generate();
+        let mut doc = Document::load("---\ndocument: {}\n---\n".into(), FileFormat::Markdown);
+
+        doc.join_thread(t1);
+        doc.join_thread(t2);
+        doc.join_thread(t1);
+        assert_eq!(doc.roles().message.as_ref().unwrap().threads, [t1, t2]);
+        assert_eq!(doc.kind(), DocumentType::Document);
+
+        doc.leave_thread(&t1);
+        assert_eq!(doc.roles().message.as_ref().unwrap().threads, [t2]);
+        doc.leave_thread(&t2);
+        assert!(
+            doc.roles().message.is_none(),
+            "empty message role is dropped"
+        );
+        assert!(!doc.save().contains("message"));
+    }
+
+    #[test]
+    fn leaving_last_thread_keeps_message_with_sender() {
+        let t = Id::generate();
+        let text = format!("---\nmessage:\n  sender: Jane\n  threads: [{t}]\n---\n");
+        let mut doc = Document::load(text, FileFormat::Markdown);
+        doc.leave_thread(&t);
+        let message = doc.roles().message.as_ref().unwrap();
+        assert!(message.threads.is_empty());
+        assert!(message.sender.is_some());
     }
 
     #[test]
