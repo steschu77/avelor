@@ -103,9 +103,16 @@
   border-color: var(--c-ink);
 }
 
-/* buttons drawn as text: a chip's name, which shows what it names (a
-   card's thread, features/panel/panel.js), and a chip's x that removes a
-   label */
+/* a link (features/panel/panel.js): an arrow for its direction, the icon and the
+   title of what it links, which truncates */
+.chip--link {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* buttons drawn as text: a link's title, which selects what it names, and
+   a chip's x that removes a label, a project or a link
+   (features/panel/panel.js) */
 .chip__name,
 .chip__remove {
   padding: 0;
@@ -374,8 +381,8 @@
   padding: 12px var(--p-gutter) 20px;
 }
 
-/* One part of the panel's stack; doc heads and the editor all share this
-   inset. --ruled draws a rule above it. */
+/* One part of the panel's stack; doc heads, tags, toolbars, properties and
+   the editor all share this inset. --ruled draws a rule above it. */
 .pane-section {
   padding: var(--p-section) var(--p-pane);
 }

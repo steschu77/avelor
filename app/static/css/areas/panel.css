@@ -1,5 +1,5 @@
-/* The panel (features/panel/): its views, heads and cards, and the dirty
-   dots. */
+/* The panel (features/panel/): its views, heads, cards and chips, and the
+   dirty dots. */
 
 .panel {
   position: absolute;
@@ -122,6 +122,25 @@
   background: var(--c-paper);
 }
 
+.props {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+}
+
+.props>dt {
+  margin: 0;
+  padding-top: 2px;
+}
+
+.props>dd {
+  margin: 0;
+  font: 400 var(--fs-body)/1.4 var(--f-serif);
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 /* Messages (#doc-content, #thread-messages): one card per message on the
  * root-to-active path, each with its own head/editor. A lone
  * document is a borderless white sheet. */
@@ -154,6 +173,13 @@
 
 .msg-list--thread .msg[aria-selected="true"] {
   border-color: var(--c-accent);
+}
+
+/* a card's row of chips: its projects, its labels, its links */
+.msg__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 /* Unsaved-changes indicator, shown next to a row's title and next to the

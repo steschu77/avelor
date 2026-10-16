@@ -68,7 +68,7 @@
   --p-gutter: 12px;
   /* x inset of content panes: the right panel */
   --p-pane: 20px;
-  /* y padding of the panel's stacked parts: doc heads, text */
+  /* y padding of the panel's stacked parts: doc heads, tags, toolbars, text */
   --p-section: 8px;
 
   --w-sidebar: 232px;
