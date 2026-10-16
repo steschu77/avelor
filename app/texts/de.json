@@ -56,6 +56,7 @@
   "editor.ul": "Aufzählung (Strg+Umschalt+8)",
   "error.code": "Etwas ist schiefgegangen ({code}).",
   "header.archive": "Projekt archivieren",
+  "header.edit_description": "Beschreibung bearbeiten",
   "header.filter_label": "Nach einem Label filtern",
   "header.filter_labels": "Labels filtern",
   "header.hide_details": "Projektdetails ausblenden",

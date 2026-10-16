@@ -1,10 +1,11 @@
 // The editors' toolbars, cloned from index.html's templates for a card's
-// editor and preview (features/panel/panel.js).
+// editor and preview (features/panel/panel.js) and the project
+// description (features/header.js).
 
 import { $ } from '../core/dom.js';
 
 // Clones the shared toolbar markup (index.html #editor-toolbar-template),
-// so each editor (a card's) gets its own live
+// so each editor (a card's, the project description's) gets its own live
 // set of buttons rather than sharing one DOM node across instances. Returns
 // a detached element -- the caller appends it wherever the editor needs it.
 export function createEditorToolbar() {

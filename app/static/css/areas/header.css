@@ -1,5 +1,12 @@
-/* The lens header (features/header.js): the project's tools and the
-   active labels; and the titles edited in place (the project's name). */
+/* The lens header (features/header.js): the project's description, its
+   tools and the active labels; and the titles edited in place (the
+   project's name, a card's or a thread's title). */
+
+.project-desc {
+  flex: none;
+  max-width: 100%;
+  padding: 0 var(--p-gutter) 10px;
+}
 
 .project-tools {
   flex: none;
@@ -19,11 +26,26 @@
   flex: none;
 }
 
-/* the project's name while edited in place */
-.project-name[contenteditable] {
+/* the project's name and description, a card's or the thread's title,
+   while edited in place; an empty title still has room for the caret */
+.project-name[contenteditable],
+.doc-title[contenteditable],
+.project-desc[contenteditable="true"] {
   background: var(--c-card);
 }
 
-.project-name:focus {
+/* underlined without a border, so the head keeps its height */
+.doc-title[contenteditable] {
+  min-width: 8em;
+  box-shadow: 0 1px 0 var(--c-ink);
+}
+
+/* on a white card, the title sits on paper instead */
+.msg .doc-title[contenteditable] {
+  background: var(--c-paper);
+}
+
+.project-name:focus,
+.doc-title:focus {
   outline: none;
 }

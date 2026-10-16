@@ -1,8 +1,8 @@
 // The documents' content in the editors (saving.md): the content cache,
 // the dirty state, the saves and autosave, and the conflicts the conflict
 // dialog asks about (features/conflict.js). The editors are the panel's
-// cards (features/panel/panel.js); they register their roots in
-// `editorRoots`.
+// cards (features/panel/panel.js) and the project description
+// (features/header.js); they register their roots in `editorRoots`.
 
 import { oncePerFrame } from '../core/dom.js';
 import { rpcCall } from '../core/rpc.js';
@@ -53,7 +53,9 @@ function setDirty(doc_id, dirty) {
 
 // A registry of "editor root elements currently loaded", keyed by doc_id,
 // so refreshDirty/onEdited/trySave can find the right DOM to serialize
-// (the panel registers/unregisters its own controllers' roots here).
+// whether the doc_id belongs to one of the panel's cards (the panel
+// registers/unregisters its own controllers' roots here) or to the
+// selected project's description under the vault header.
 export const editorRoots = new Map(); // doc_id -> root element
 
 // Whether `doc_id` is loaded into an editor that is in edit mode.
@@ -62,13 +64,14 @@ function isEditing(doc_id) {
 }
 
 // Show `doc_id`'s content in `editor` (on `root`) whenever it arrives, and
-// load it. The baseline is the DOM as loaded (saving.md#dirty-state).
-// Returns the unsubscribe function.
-export function bindDocContent(doc_id, editor, root) {
+// load it. The baseline is the DOM as loaded (saving.md#dirty-state); `onShown`
+// runs after each load. Returns the unsubscribe function.
+export function bindDocContent(doc_id, editor, root, onShown = null) {
   const unsubscribe = docContent.subscribe(doc_id, ({ html }) => {
     editor.setHTML(html);
     baseline.set(doc_id, serializeMarkdown(root));
     refreshDirty(doc_id);
+    onShown?.();
   });
   docContent.request(doc_id, () => loadDocContent(doc_id));
   return unsubscribe;
@@ -317,7 +320,7 @@ export function forgetDocument(id) {
 // Another vault opens (`forgetVault`, model/events.js). No editor of the
 // old vault saves any more: its edits were saved before the switch
 // (`switchVault`, features/workspace/vault.js), and the open vault is another one now. The
-// cards torn down after this find no root to
+// cards and the project description torn down after this find no root to
 // save (`trySave`). An unanswered conflict was about the old vault's files.
 export function forgetDocuments() {
   editorRoots.clear();
