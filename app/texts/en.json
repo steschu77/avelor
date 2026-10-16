@@ -1,5 +1,6 @@
 {
   "config.unread": "config.yaml couldn't be read; the app started with the default settings.",
+  "context.open": "Open",
   "docs.date": "Date",
   "docs.name": "Name",
   "error.code": "Something went wrong ({code}).",
@@ -28,6 +29,7 @@
   "layout.resize_panel": "Width of the details",
   "layout.resize_sidebar": "Width of the vault panel",
   "menu.close": "Close the menu",
+  "open.named": "Open {name}",
   "panel.close": "Close the details",
   "panel.expand": "Show at full width",
   "save.settings": "Could not save the settings.",
