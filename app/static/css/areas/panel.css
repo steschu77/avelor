@@ -1,4 +1,5 @@
-/* The panel (features/panel/): its views, heads and cards. */
+/* The panel (features/panel/): its views, heads and cards, and the dirty
+   dots. */
 
 .panel {
   position: absolute;
@@ -153,4 +154,16 @@
 
 .msg-list--thread .msg[aria-selected="true"] {
   border-color: var(--c-accent);
+}
+
+/* Unsaved-changes indicator, shown next to a row's title and next to the
+ * open document's title while it (or its last edit) hasn't been saved yet. */
+.dirty-dot {
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  display: inline-block;
+  flex: none;
 }

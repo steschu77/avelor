@@ -55,7 +55,9 @@ read by OCR.
 | `api.md` | the protocol: transport, rules, the page's side, every command and event |
 | `ui.md` | the main window: layout, vault panel and filters, lenses, status bar, jobs panel, keys, preferences |
 | `panel.md` | the side panel: cards, threads, projects, structural edits and how they are saved |
-| `saving.md` | conflicts, closing |
+| `editor.md` | the WYSIWYG editor |
+| `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
+| `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
 | `localization.md` | the app's texts: the catalogs, the page's and the host's, the run's language, the build's check, a new language |
 
 ## Doc conventions
@@ -168,7 +170,8 @@ this helper, not a slot with callbacks of its own.
 
 ### Closing
 
-The window's Close asks the page first; Windows ending the session waits
+The window's Close asks the page to save first and goes on once the saves
+are answered; Windows ending the session waits
 for nothing (principle 8); on Linux the session manager's `query-end`,
 SIGTERM and SIGHUP end it the same way. Both are
 `saving.md#closing-the-app`.
@@ -187,9 +190,10 @@ pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
 ```
 
 av-vault's `Changes` names what an edit wrote, so the same push sends
-`entity` (`post_entity` serves indexed entries and edits alike). Taking
-in a change made outside the app (`Vault::reload`, `Vault::refresh`)
-isn't an edit by the app and stays apart. `Vault` (`app.rs`), the open
+`entity` (`post_entity` serves indexed entries and edits alike). The
+editor's own save (`Vault::save_content`, answered by `save_doc_content`)
+and taking in a change made outside the app (`Vault::reload`,
+`Vault::refresh`) aren't edits by the app and stay apart. `Vault` (`app.rs`), the open
 vault's folder and index, keeps both private: the index is read through
 `Vault::index` and changed only by `App::edit`, the indexing and these
 methods.
@@ -246,14 +250,14 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `reload`, `refresh`, `changed_at`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
 | `indexing.rs` | the indexing (`vault.md#opening`): `run_indexing` with av-vault's `index_vault` on a worker, its batches into the index (`Vault::apply_indexed`) and to the page (`vault`, `entity`, `vault_error`, the indexing's `job`), a replaced scan's batches dropped, `indexing`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
-| `documents.rs` | a document's content in the editors: `load_doc_content`, taking in files changed outside the app (`post_taken_in`); their dispatch tests |
+| `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, taking in files changed outside the app (`post_taken_in`); their dispatch tests |
 | `structure.rs` | the structural commands: titles, stars, archiving, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
@@ -271,6 +275,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `gtk::UriLauncher` and `FileLauncher` (they use the XDG desktop portal where there is one) |
 | Random | BCrypt | `av-utils/random.rs` | `getrandom` |
 | File permissions | `readonly()` | av-vault `vault.rs` | `readonly()` is true only when no one may write |
+| Editor | developed against WebView2 (Chromium): `contenteditable`, the selection | `editor/editor.js` | WebKitGTK's `contenteditable` and selection differ; `markdown.selftest.html` runs in both (`markdown.md#testing`) |
 | Icons and fonts | inline SVGs from Fluent UI System Icons (MIT), one sprite (`app/static/icons`, `build.rs`); Segoe UI | `css/tokens.css` (`--f-chrome`) | the same SVGs, since the Segoe font can't be shipped; `--f-chrome` already ends in `system-ui` |
 
 **The platform layer.** `app/src/sys/` holds a module per platform;
@@ -320,7 +325,7 @@ ES modules
 make the page, each with its own scope: a file's dependencies are its
 `import` lines, and the order the modules run in follows from them
 (`development.md#the-bundled-page`). Every module but `app.js`, the entry,
-is in a layer folder (`core/`, `model/`, `ui/`, `features/`) and
+is in a layer folder (`core/`, `editor/`, `model/`, `ui/`, `features/`) and
 imports only from its own layer or a lower one, which the build checks;
 nothing imports `app.js`.
 
@@ -330,18 +335,20 @@ nothing imports `app.js`.
 | `core/text.js` | the page's texts: `t`, a text of the run's catalog, `textOf`, one the host sent, and the run's `locale` (`localization.md`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
-| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
+| `editor/editor.js`, `editor/markdown.js` | `createEditor`, which makes its parts for each editor (`editor/selection.js`, `editor/blocks.js`, `editor/tables.js`, `editor/shortcuts.js`, `editor/paste.js`); `isLink` (`editor/links.js`); the tags both read (`editor/tags.js`); `serializeMarkdown` |
+| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`, `threadMembers`); the selection published minus what is gone (`commitExistingSelection`) |
-| `model/documents.js` | the content cache, the conflicts |
+| `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts (`editorRoots`) |
 | `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
+| `ui/toolbar.js` | the editors' toolbars |
 | `ui/field.js` | editing in place (`editTextInPlace`) |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
 | `features/selection.js` | the selection (`selectDocument`, `selectById`, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
 | `features/panel/panel.js` | the side panel renderer (thread, standalone card), its subscriptions |
 | `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, and shows an entity on request (`revealInDocuments`) |
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
-| `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event answered `close_ready` |
+| `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details; the vault panel: projects, No project with their counts, the filter, the vault menu |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
@@ -357,15 +364,16 @@ A page is drawn by what it must keep while it changes:
 
 ### Page state <a id="page-state"></a>
 
-The store (`model/state.js`) holds selection and UI state, the conflicts and the notices, plus revision counters
+The store (`model/state.js`) holds selection and UI state, the documents
+with unsaved edits, the conflicts and the notices, plus revision counters
 (`projects_rev`, `entities_rev`). The domain data lives
 in Maps outside it (`entities`, `projects`, `threads`, in `model/entities.js`), changed in place. Only the host's
 events write them, in `model/events.js`, each followed by a counter's
 bump; a vault being opened clears them (`forgetVault`).
 
 The model calls no render. The renders subscribe to the store (`app.js`,
-the features): the lenses and the sidebar to the counters, the conflict
-dialog to `conflicts`, the status bar to
+the features): the lenses and the sidebar to the counters, the dirty dots
+to `dirty_docs`, the conflict dialog to `conflicts`, the status bar to
 `notices`. A render that follows several values subscribes with an array
 of selectors (`store.subscribe([s => s.selected_project, s =>
 s.projects_rev], …)`), called when any of them changed.
@@ -461,9 +469,10 @@ version), on Windows; a manifest whose version isn't the workspace's fails
 the build. On Linux the desktop entry and the icon are files (`app/res`),
 installed as `README.md` says. A page source with a non-ASCII character
 fails the build, named by its line and column. A new module is in the page
-once a module there imports it. The host fills the preferences into the
-page (`page::html`) and loads it with `NavigateToString`, on Linux with
-`load_html`.
+once a module there imports it. The markdown selftest gets a bundle of its
+own beside it (`markdown.md#testing`). The host fills the preferences into
+the page (`page::html`) and loads it with `NavigateToString`, on Linux
+with `load_html`.
 
 The release profile is built for size: `opt-level = "z"`, LTO, one codegen
 unit, `strip`, `panic = "abort"` (`Cargo.toml`); the panic hook
@@ -473,6 +482,7 @@ abort. Where the bundle lands and how to measure the size:
 
 ## Conventions <a id="conventions"></a>
 
+- **Naming**: a feature's commands, sub-state and module share its name. A module of several parts keeps its file and puts its parts in a folder of its name beside it (`sys.rs` and `sys/win32.rs`), a split module its tests in a file of their own there; modules that belong to another go into its folder.
 - **Errors**: one `av_utils::Error` for every layer (`av-utils/error.rs`:
   logging, the operating system), extended when needed; a separate error type only for functions
   local to one module; expected outcomes are success variants, not errors;

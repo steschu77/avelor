@@ -45,6 +45,7 @@ enum Command {
     CloseReady(close::Answer),
     // A document's content in the editors (`documents`).
     LoadDocContent(Target),
+    SaveDocContent(Save),
     // The structural commands (`structure`).
     SetTitle(Retitle),
     SetStarred(Star),
@@ -75,6 +76,16 @@ struct Url {
 #[derive(Deserialize)]
 struct Target {
     id: Id,
+}
+
+/// `{id, markdown, overwrite?}`: `overwrite` writes over a file changed
+/// outside the app (the conflict dialog's Use ours).
+#[derive(Deserialize)]
+struct Save {
+    id: Id,
+    markdown: String,
+    #[serde(default)]
+    overwrite: bool,
 }
 
 /// `{id, title}`
@@ -111,6 +122,7 @@ impl Command {
             "open_url" => Command::OpenUrl(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
+            "save_doc_content" => Command::SaveDocContent(from_value(args)?),
             "set_title" => Command::SetTitle(from_value(args)?),
             "set_starred" => Command::SetStarred(from_value(args)?),
             "set_archived" => Command::SetArchived(from_value(args)?),
@@ -148,6 +160,9 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::CloseReady(a) => close::close_ready(app, req, a),
         Command::LoadDocContent(a) => documents::load_doc_content(app, req, a.id),
+        Command::SaveDocContent(a) => {
+            documents::save_doc_content(app, req, a.id, a.markdown, a.overwrite)
+        }
         Command::SetTitle(a) => structure::set_title(app, req, a.id, a.title),
         Command::SetStarred(a) => structure::set_starred(app, req, a.id, a.starred),
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),

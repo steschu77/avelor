@@ -11,8 +11,11 @@ export const store = createStore({
   // level: 'error' }; always replaced
   notices: [],
   // files changed outside the app, oldest first, each asked about in the
-  // conflict dialog (features/conflict.js): { id, changed }; always replaced
+  // conflict dialog (features/conflict.js): { id, content, changed }; always replaced
   conflicts: [],
+  // the ids of the documents with unsaved edits (`setDirty`,
+  // model/documents.js): a Set, always replaced, never mutated
+  dirty_docs: new Set(),
   // the page's preferences, strings by key: the host fills them into the
   // page (#prefs, page.rs); `savePrefs` changes them; always replaced
   prefs: JSON.parse($('prefs')?.textContent || '{}'),
@@ -52,8 +55,8 @@ function setNotice(notice) {
   store.setState({ notices: [...notices, notice] });
 }
 
-// An error the user should see: a failed save. It stays until it is
-// dismissed.
+// An error the user should see: a failed save, a link to an entity not in
+// the vault. It stays until it is dismissed.
 export function showError(text) {
   setNotice({ key: text, text, level: 'error' });
 }
