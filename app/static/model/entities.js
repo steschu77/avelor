@@ -9,6 +9,13 @@ export const threads = new Map(); // thread_id -> thread data
 export const entities = new Map(); // doc_id -> document data (every non-{project, thread} entity)
 
 // ----------------------------------------------------------------------------
+// The thread shown for `doc_id`: the first of the threads it's a member of
+// (`message.threads`) that is in the vault, or undefined for an entity
+// outside any thread.
+export function threadOf(doc_id) {
+  return knownThreads(entities.get(doc_id))[0];
+}
+
 // The threads `doc` is a member of that are in the vault, in the order of
 // its `threads`.
 export function knownThreads(doc) {
