@@ -16,7 +16,21 @@ it last read or wrote it, with what the file held then (`Document`'s
 a conflict, never as a missed one. Before a write, the host compares it
 with the file; a mismatch, or a missing file, is `SaveOutcome::Conflict`,
 and nothing is written. A conflict is an expected outcome, not an error:
-saves return `SaveOutcome::{Saved, Unchanged, Conflict}`.
+saves return `SaveOutcome::{Saved, Unchanged, Conflict}`, and the reply is
+`{"ok": {"conflict": …}}`.
+
+### The dialog <a id="the-dialog"></a>
+
+A `conflict` in the answer of a structural edit opens the conflict dialog
+(`features/conflict.js`): modal, over the shaded app,
+and it has to be answered (Escape doesn't close it). It names the entity,
+its file and when the file changed, or that it was deleted.
+
+- **Use theirs** sends `reload_entity`: the file is taken in (or the
+  entity leaves, if the file is gone).
+- A refused structural edit only offers Use theirs; the user makes the edit
+  again afterwards.
+- Several conflicts wait in a queue and are shown one at a time.
 
 ### Atomic writes <a id="atomic-writes"></a>
 

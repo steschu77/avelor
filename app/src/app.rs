@@ -17,9 +17,11 @@ use crate::texts::Text;
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::Result;
+use av_utils::fs::FileStamp;
 use av_utils::id::Id;
 use av_vault::envelope::{DocumentType, Roles, Source};
 use av_vault::shared::Genre;
+use av_vault::vault::Changes;
 use av_vault::vault::{Entry, Index, IndexEvent};
 use serde::Serialize;
 
@@ -92,9 +94,24 @@ impl Vault {
     }
 
     // ------------------------------------------------------------------------
-    /// The index, for reading.
+    /// The index, for reading; edits go through `App::edit`.
     pub fn index(&self) -> &Index {
         &self.index
+    }
+
+    // ------------------------------------------------------------------------
+    /// Read `id`'s file again (`Index::reload`): the id it has now, `None`
+    /// if it is gone.
+    pub fn reload(&mut self, id: &Id) -> Result<Option<Id>> {
+        self.index.reload(id)
+    }
+
+    // ------------------------------------------------------------------------
+    /// When `id`'s file was last modified, as it is now: for a conflict, the
+    /// time of the change made outside the app. `None` if the file is gone.
+    pub fn changed_at(&self, id: &Id) -> Option<DateTime> {
+        let stamp = FileStamp::read(&self.index.entry(id)?.path).ok()??;
+        Some(DateTime::from_system_time(stamp.modified()))
     }
 }
 
@@ -104,7 +121,8 @@ impl Vault {
 pub struct App {
     outbox: Outbox,
     pub config: ConfigStore,
-    /// The open vault: read through `Vault::index`.
+    /// The open vault: read through `Vault::index`, edited through
+    /// `App::edit`.
     pub vault: Vault,
     ui: Arc<UiQueue>,
 
@@ -299,7 +317,8 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// Send one entity to the page: the `entity` event, for indexed entries.
+    /// Send one entity to the page: the `entity` event, for indexed entries
+    /// and for entities written in the app alike.
     pub fn post_entity(&self, entry: &Entry) {
         let doc = &entry.doc;
         let meta = EntityMeta {
@@ -327,6 +346,36 @@ impl App {
             roles: doc.roles().clone(),
         };
         self.post_event("entity", meta);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Tell the page that `id` left the vault (its file gone): the
+    /// `entity_deleted` event.
+    pub fn post_entity_deleted(&self, id: &Id) {
+        self.post_event("entity_deleted", serde_json::json!({ "id": id }));
+    }
+
+    // ------------------------------------------------------------------------
+    /// Run the vault edit `f` and send the page everything it wrote -- also
+    /// when it failed part-way, since a multi-file edit stays part-way
+    /// (`panel.md#saving-structure`). The one way the app edits the vault:
+    /// taking in a change made outside the app (`Vault::reload`) is not an
+    /// edit by the app.
+    pub fn edit<R>(&mut self, f: impl FnOnce(&mut Index, &mut Changes) -> Result<R>) -> Result<R> {
+        let mut changes = Changes::default();
+        let result = f(&mut self.vault.index, &mut changes);
+        self.post_changes(&changes);
+        result
+    }
+
+    // ------------------------------------------------------------------------
+    /// Send what an edit wrote: every rewritten entity (`entity`).
+    fn post_changes(&self, changes: &Changes) {
+        for id in &changes.saved {
+            if let Some(entry) = self.vault.index().entry(id) {
+                self.post_entity(entry);
+            }
+        }
     }
 }
 

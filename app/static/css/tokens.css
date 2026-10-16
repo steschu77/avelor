@@ -7,7 +7,8 @@
      z = z-index */
   /* Recede: chrome steps back, brightness rises toward the task. Darkest
      to brightest: chrome (sidebar, topbar, status bar) on shade, lists on
-     paper, the active content on card, raised with --shadow-raise. */
+     paper, the active content on card, raised with --shadow-raise, and
+     dialogs on top with --shadow-dialog. */
   /* Each color is light-dark(light, dark), the system's theme picking one
      (color-scheme). Dark keeps Recede's order with warm greys; a shadow
      can't lighten what it lifts there, so the surface's own lightness
@@ -37,10 +38,16 @@
   --c-danger-ink: light-dark(#a64b4e, #de9193);
   /* hover tint */
   --c-hover: light-dark(rgba(10, 10, 11, 0.04), oklch(0.935 0.008 80 / 0.05));
+  /* the shade over the app behind a dialog */
+  --c-scrim: light-dark(rgba(22, 22, 26, 0.22), rgba(0, 0, 0, 0.5));
   --shadow-pop: inset 0 1px 0 light-dark(transparent, oklch(1 0 0 / 0.05)),
     0 10px 28px light-dark(rgba(0, 0, 0, .14), rgba(0, 0, 0, 0.5));
   /* a pane lifted above the one to its left: the panel */
   --shadow-raise: -12px 0 24px -14px light-dark(rgba(22, 22, 26, 0.28), rgba(0, 0, 0, 0.7));
+  /* the top layer: dialogs */
+  --shadow-dialog: inset 0 1px 0 light-dark(transparent, oklch(1 0 0 / 0.07)),
+    0 2px 6px light-dark(rgba(22, 22, 26, 0.08), rgba(0, 0, 0, 0.4)),
+    0 28px 56px -16px light-dark(rgba(22, 22, 26, 0.38), rgba(0, 0, 0, 0.75));
 
   --f-serif: Georgia, serif;
   --f-chrome: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
@@ -51,6 +58,8 @@
   --fs-small: 12px;
   --fs-body: 13px;
   --fs-sub: 15px;
+  --fs-doc-title: 18px;
+  --lh-body: 1.55;
   --track-label: 0.13em;
 
   --h-topbar: 36px;
@@ -75,6 +84,8 @@
   --w-panel: 400px;
   --w-expanded-context: 400px;
   --o-panel: 0px;
+  /* a dialog */
+  --w-dialog: 500px;
 
   /* the only radius */
   --r-pill: 99px;
