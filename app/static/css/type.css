@@ -4,7 +4,9 @@
 
 /* Uppercase labels, and every control set like one. */
 .label,
+.tabs,
 .btn,
+.section-head,
 .menu__hint,
 .type-toggle {
   font: 400 var(--fs-label)/1 var(--f-chrome);

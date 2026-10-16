@@ -124,6 +124,11 @@ function openPanel() {
   if (store.getState().panel_size === 'closed') store.setState({ panel_size: 'normal' });
 }
 
+// Show the panel at full width, with its context column.
+export function expandPanel() {
+  store.setState({ panel_size: 'expanded' });
+}
+
 // ----------------------------------------------------------------------------
 // Which panel shows what, derived from store state alone:
 // - 'thread': `selected_thread` exists and `selected_entity` (if any) is one

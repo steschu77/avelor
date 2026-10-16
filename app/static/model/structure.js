@@ -5,7 +5,7 @@
 // links as requests of their own (`joinThreadLocal`, ..., `setLinkLocal`).
 // The panel's drops and buttons (features/panel/panel.js), the table, the
 // sidebar and the project header (features/sidebar.js, features/header.js)
-// send them.
+// and the Linked tab send them.
 
 import { rpcCall } from '../core/rpc.js';
 import { store } from './state.js';

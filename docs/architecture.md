@@ -54,7 +54,7 @@ read by OCR.
 | `vault.md` | the file format: identity, roles, types, sources, metadata, file names, layout; opening and scanning a vault, the trash |
 | `api.md` | the protocol: transport, rules, the page's side, every command and event |
 | `ui.md` | the main window: layout, vault panel and filters, lenses, status bar, jobs panel, keys, preferences |
-| `panel.md` | the side panel: cards, threads, links, labels, projects, structural edits and how they are saved |
+| `panel.md` | the side panel: cards, threads, the context column, links, labels, projects, structural edits and how they are saved |
 | `editor.md` | the WYSIWYG editor |
 | `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
@@ -345,7 +345,7 @@ nothing imports `app.js`.
 | `ui/field.js` | editing in place (`editTextInPlace`) |
 | `ui/page.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages (`replaceVaultPage`) |
 | `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
-| `features/selection.js` | the selection (`selectDocument`, `selectById`, the filter, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
+| `features/selection.js`, `features/context.js` | the selection (`selectDocument`, `selectById`, the filter, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`); the context column's tabs and the card's buttons that open them |
 | `features/panel/panel.js` | the side panel renderer (thread, standalone card), its chips, the structural edits it starts, its subscriptions |
 | `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`) |
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
@@ -353,6 +353,7 @@ nothing imports `app.js`.
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
+| `features/linked.js` | the Linked tab: links to, linked from, a search to link to |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the vault area's and the panel's layout, the page items, the sidebar's sections, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, `ready` |
@@ -407,7 +408,7 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
 | `css/components.css` | what several areas share: `btn`, `tool`, `chip`, `input`, `menu`, `list-row`, `pane-head`, the dialogs, the vault area's `page`, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, editor, workspace (the vault area's pages), header (the lens header, the titles edited in place) |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, editor, assistant (with the context column), workspace (the vault area's pages), header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 

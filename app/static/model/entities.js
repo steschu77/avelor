@@ -63,6 +63,11 @@ export function matchesFilter(doc, { selected_project, selected_labels } = store
   return selected_labels.every(tag => doc.tags?.includes(tag));
 }
 
+// A thread is in the filter while one of its members is.
+export function threadMatchesFilter(thread_id, state = store.getState()) {
+  return threadMembers(thread_id).some(doc => matchesFilter(doc, state));
+}
+
 // ----------------------------------------------------------------------------
 // The one exit of every thread-membership change: publishes the new
 // selection and bumps `threads_rev`, so `renderPanel` rebuilds the cards

@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/panel.css">
   <link rel="stylesheet" href="css/areas/editor.css">
+  <link rel="stylesheet" href="css/areas/assistant.css">
   <link rel="stylesheet" href="css/areas/workspace.css">
   <link rel="stylesheet" href="css/areas/header.css">
 </head>
@@ -58,6 +59,7 @@
   <template id="preview-toolbar-template">
     <div class="pane-section pane-section--ruled toolbar">
       <button type="button" class="tool" data-cmd="edit" title="Edit document"><svg class="icon"><use href="#i-edit" /></svg></button>
+      <button type="button" class="tool" data-cmd="link" title="Link to another entity"><svg class="icon"><use href="#i-link" /></svg></button>
       <button type="button" class="tool tool--danger push" data-cmd="thread"
         title="Remove from thread"><svg class="icon"><use href="#i-arrow-step-in-left" /></svg></button>
       <button type="button" class="tool tool--danger" data-cmd="delete" title="Delete document"><svg class="icon"><use href="#i-delete" /></svg></button>
@@ -176,6 +178,12 @@
       </div>
       <div class="panel__context">
         <div class="grip" id="context-divider"></div>
+        <!-- Tabs about what the panel shows (context.js) -->
+        <div class="context">
+          <nav class="tabs context__tabs" id="context-tabs" role="tablist"></nav>
+          <!-- The links of what is shown (features/linked.js) -->
+          <div id="context-linked" class="context__pane" hidden></div>
+        </div>
       </div>
     </aside>
 

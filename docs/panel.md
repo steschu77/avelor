@@ -1,11 +1,11 @@
 # Avelor — Side panel and structural edits
 
 > The side panel and what the user organizes in it: the card every entity
-> is shown as, a thread's members, links, labels, projects, and the
-> structural edits (threads, projects, titles, labels, links, deletes) with how they are
-> saved. The lenses and the vault panel are
-> `ui.md`; the editor inside each card, `editor.md`; saving its content,
-> `saving.md`.
+> is shown as, a thread's members, the context column, links, labels,
+> projects, and the structural edits (threads, projects, titles, labels,
+> links, deletes) with how they are saved. The lenses and the vault panel
+> are `ui.md`; the editor inside each card, `editor.md`; saving its
+> content, `saving.md`.
 
 ## Overview
 
@@ -13,7 +13,8 @@ The panel on the right shows what is selected: one card for an entity
 outside any thread, or all members of a thread as a stack of individually
 editable cards. It can
 be closed, expanded to full width and resized (`panel_size` in the store;
-the widths are preferences, `ui.md#preferences`).
+the widths are preferences, `ui.md#preferences`); expanded, it has the
+context column (`panel.md#context-column`).
 
 ```mermaid
 sequenceDiagram
@@ -82,7 +83,8 @@ template itself:
   editing toolbar, passed to `createEditor()`'s `toolbar` option.
 - **`#preview-toolbar-template`** — the action row:
   `data-cmd="edit"` (edit mode, if the entity is `editable`; one card in
-  edit mode at a time), `data-cmd="thread"`
+  edit mode at a time), `data-cmd="link"` (the context column's Linked
+  tab), `data-cmd="thread"`
   (remove from thread) and `data-cmd="delete"`. The template's elements
   carry no ids, since it is cloned for every card.
 
@@ -209,6 +211,15 @@ it is refreshed in place on `entities_rev` (`refreshCardChips`): a thread
 that comes back from the trash, or is renamed, shows without rebuilding
 the cards.
 
+## Context column <a id="context-column"></a>
+
+The context column of the expanded panel has tabs about what
+the panel shows (`features/context.js`: `registerContextTab`,
+`selectContextTab`).
+A tab picked by its button focuses its first field.
+
+- **Linked** — `panel.md#links`.
+
 ## Links <a id="links"></a>
 
 An entity can be linked to one other entity: a task to the letter it comes
@@ -222,6 +233,15 @@ other side is derived.
   click selects the other entity, × removes the link (on an entity the app
   can't write, there is none). The chips are refreshed on `entities_rev`
   without rebuilding the card.
+- The card's Link button (`openLinkedTab`, `features/context.js`) selects
+  the card, expands the panel and opens the Linked tab with its search
+  focused:
+  "Links to", "Linked from" (chats and transactions included), and a
+  search over the titles of the entities and threads in the vault panel's
+  filter (project, labels; `matchesFilter`), so narrowing the
+  filter narrows what is offered. Picking a result (a click or Enter)
+  links the card to it, replacing an older link. With only a thread shown,
+  the tab is about the thread.
 - A link in a document's body to `id:<uuid>` (`vault.md#links-in-content`)
   selects that entity, thread or project when clicked in the preview
   (`editor.md#links`).
@@ -439,8 +459,9 @@ and save their bodies at once.
 | D3 | Edit | card Edit (if `editable`) → `setMessageEditMode` | — | one card in edit mode at a time; Esc leaves |
 | D5 | Delete | card delete, two clicks within 3 s → save first → `deleteEntityLocal` | `delete_entity` → `Index::delete` (dissolve threads, move to `.trash/`) → `entity_deleted`, changed members as `entity`, the answer | neighbour selected (`selectionWithout`) |
 | D6 | Labels | card "+" → `addChip`'s menu: a label in use or "New label", Enter or a click; a chip's × → `setTagsLocal` | `set_tags` → `entity` | the card's chips follow |
-| D10 | Unlink | × on a link chip → `setLinkLocal(id, null)` on the entity holding the link | `set_link {id, to: null}` → `entity` | the key removed |
-| D11 | Follow a link | a link chip, or an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |
+| D9 | Link | the card's Link button → `openLinkedTab`; a result's click or Enter → `setLinkLocal` | `set_link {id, to}` → `Index::set_link` → `entity` | the card's chips and the tab follow; an older link is replaced |
+| D10 | Unlink | × on a link chip or a Linked tab row → `setLinkLocal(id, null)` on the entity holding the link | `set_link {id, to: null}` → `entity` | the key removed |
+| D11 | Follow a link | a link chip, a Linked tab row, or an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |
 | D12 | Rename | the pen in a card's head or the thread header → `renameEntity` → `editTextInPlace`; Enter or blur | `set_title` → `entity` | the card's head, the thread header, chips and links follow; the file keeps its name |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |

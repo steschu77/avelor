@@ -12,6 +12,7 @@
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
+import { parseDate } from '../../core/format.js';
 import { createEditor } from '../../editor/editor.js';
 import { store } from '../../model/state.js';
 import { entities, knownThreads, threadMembers, threads } from '../../model/entities.js';
@@ -37,6 +38,7 @@ import {
 } from '../../ui/dropzone.js';
 import { openLink, panelMode, selectDocument } from '../selection.js';
 import { selectById } from '../selection.js';
+import { openLinkedTab } from '../context.js';
 
 export const msgControllers = new Map(); // doc_id -> controller
 let activeEditId = null; // the one card currently in edit mode, or null
@@ -203,17 +205,17 @@ function addChip(has, { onJoin, onAddTag }) {
 // Links (vault.md#metadata): an entity's one
 // `linked-to`, and the other side, derived -- the entities and threads
 // whose `linked-to` names it, and the transaction items that do. Shown on
-// the card (`renderCardLinks`).
+// the card (`renderCardLinks`) and in the Linked tab (features/linked.js).
 
 // The entity, thread or project `id` as a link shows it: its title and
 // icon; null if it isn't in the vault.
-function linkTarget(id) {
+export function linkTarget(id) {
   const doc = entities.get(id);
-  if (doc) return { title: doc.title, icon: getDocIcon(doc.kind, doc.genre) };
+  if (doc) return { title: doc.title, icon: getDocIcon(doc.kind, doc.genre), date: doc.date };
   const thread = threads.get(id);
-  if (thread) return { title: thread.title, icon: KIND_ICONS.thread.icon };
+  if (thread) return { title: thread.title, icon: KIND_ICONS.thread.icon, date: parseDate(thread.date) };
   const project = projects.get(id);
-  if (project) return { title: project.name, icon: KIND_ICONS.project.icon };
+  if (project) return { title: project.name, icon: KIND_ICONS.project.icon, date: undefined };
   return null;
 }
 
@@ -221,7 +223,7 @@ function linkTarget(id) {
 // vault); `from`, the ids of the entities and threads that link to it,
 // newest first; `items`, the transaction items that do, as `{ doc_id,
 // title }` of their transactions entity and the item.
-function linksOf(id) {
+export function linksOf(id) {
   const holder = entities.get(id) ?? threads.get(id);
   const to = holder?.linked_to && linkTarget(holder.linked_to) ? holder.linked_to : null;
   const from = [];
@@ -615,6 +617,9 @@ function createMessageController(msg, { selectable = false, thread = false } = {
     if (threadBtn.getAttribute('aria-disabled') === 'true') return;
     leaveThreadLocal(doc_id, renderedThreadId);
   });
+
+  // Its links: the Linked tab (features/linked.js).
+  previewToolbar.querySelector('button[data-cmd="link"]').addEventListener('click', () => openLinkedTab(doc_id));
 
   // Delete: two clicks, no dialog (`armedButton`).
   const deleteBtn = previewToolbar.querySelector('button[data-cmd="delete"]');

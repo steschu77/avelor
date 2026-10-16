@@ -230,7 +230,8 @@ The `date` field always carries a UTC timestamp.
 `linked-to` links the entity to one other entity it belongs with: a task
 to the letter it originates from, an event to its booking confirmation, a
 reply to the letter it answers, a chat to the document it discusses, an
-attachment to its mail. Any entity can carry one. The other side is
+attachment to its mail. Any entity can carry one; setting another link
+replaces it, and removing it removes the key. The other side is
 derived, never stored: an entity is *linked from* every entity whose
 `linked-to` names it. Deleting an entity leaves the links to it in place,
 so restoring it from `.trash` brings them back; a link to an id that isn't
