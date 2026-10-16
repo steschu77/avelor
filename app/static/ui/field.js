@@ -28,7 +28,8 @@ export function onEditEnd(el, finish) {
 // all selected; Enter or leaving it calls `commit(title)` with the text
 // trimmed (whitespace runs, e.g. pasted line breaks, as one space) if it
 // changed, Esc cancels. Either way `el` shows `current()` again, until the
-// host's push renames it. The project header's title.
+// host's push renames it. The project header's, a card's and the thread
+// header's title.
 export function editTextInPlace(el, current, commit) {
   const text = current();
   el.textContent = text;
