@@ -42,6 +42,7 @@ import {
 import { openLink, panelMode, selectDocument } from '../selection.js';
 import { selectById } from '../selection.js';
 import { openLinkedTab } from '../context.js';
+import { openTaskTab } from '../context.js';
 
 export const msgControllers = new Map(); // doc_id -> controller
 let activeEditId = null; // the one card currently in edit mode, or null
@@ -129,8 +130,9 @@ function renderCardChips(doc_id, msg) {
 // The projects `project_ids` as chips, each with an x that calls
 // `onRemove(project_id)` -- no x without it (an entity the host can't
 // write). Projects not in the vault are left out. `renameProjectChips`
-// keeps the names in the panel current. The card's and the thread's.
-function projectChips(project_ids, onRemove) {
+// keeps the names in the panel current. The card's, the thread's and the
+// New page's (features/new.js).
+export function projectChips(project_ids, onRemove) {
   return project_ids.filter(project_id => projects.has(project_id)).map(project_id => {
     const chip = accEl('span', 'chip');
     chip.dataset.project = project_id;
@@ -159,8 +161,8 @@ function renameProjectChips() {
 // ----------------------------------------------------------------------------
 // Labels as chips, each with an x that calls `onChange(labels)` with
 // the label removed -- no x without it; `removeTitle(label)` titles the x.
-// The card's and the lens header's (the active label filter,
-// features/header.js).
+// The card's, the New page's and the lens header's (the active label
+// filter, features/header.js).
 export function labelChips(labels, onChange, removeTitle = label => t('panel.remove_label', { label })) {
   return labels.map(label => {
     const chip = accEl('span', 'chip chip--label', label);
@@ -181,8 +183,8 @@ const STAR_ICON = '#i-star-filled';
 // a filter: the active projects, starred first, and the labels in use --
 // but those in `has` ({ projects, labels }) -- and "New label" for a text
 // that names none. A pick calls `onJoin(project_id)` or `onAddTag(label)`.
-// The card's.
-function addChip(has, { onJoin, onAddLabel }) {
+// The card's and the New page's.
+export function addChip(has, { onJoin, onAddLabel }) {
   const add = accEl('button', 'chip chip--action', '+');
   add.type = 'button';
   titled(add, t('panel.add_project_label'));
@@ -245,8 +247,8 @@ export function linksOf(id) {
 // A link to `id` as a chip: an arrow for its direction (`incoming`: `id`
 // links here), its icon and title -- `label` instead of the title, for a
 // transaction item -- which select it, and an x that calls `onRemove` (none
-// without it). The card's.
-function linkChip(id, { incoming = false, label = null, onRemove = null } = {}) {
+// without it). The card's and the New form's (features/new.js).
+export function linkChip(id, { incoming = false, label = null, onRemove = null } = {}) {
   const target = linkTarget(id);
   const title = label ?? (target?.title || t('untitled'));
   const chip = accEl('span', 'chip chip--link');
@@ -288,8 +290,8 @@ function renderCardLinks(doc_id, row) {
 }
 
 // The cards' heads, links and threads lines follow every entity change --
-// a title changed, a thread restored -- without rebuilding the cards (and
-// their editors); subscribed below.
+// a task made for the card, a title changed, a thread restored -- without
+// rebuilding the cards (and their editors); subscribed below.
 const refreshCardChips = oncePerFrame(() => {
   renderThreadProjects();
   for (const controller of msgControllers.values()) {
@@ -625,7 +627,9 @@ function createMessageController(msg, { selectable = false, thread = false } = {
     leaveThreadLocal(doc_id, renderedThreadId);
   });
 
-  // Its links: the Linked tab (features/linked.js).
+  // New task for this: the context column's Task tab, for this card
+  // (features/new.js); its links: the Linked tab (features/linked.js).
+  previewToolbar.querySelector('button[data-cmd="task"]').addEventListener('click', () => openTaskTab(doc_id));
   previewToolbar.querySelector('button[data-cmd="link"]').addEventListener('click', () => openLinkedTab(doc_id));
 
   // Delete: two clicks, no dialog (`armedButton`).

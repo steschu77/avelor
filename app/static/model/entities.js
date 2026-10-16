@@ -26,6 +26,11 @@ export function knownThreads(doc) {
 }
 
 // ----------------------------------------------------------------------------
+export function getMeta(doc_id) {
+  return entities.get(doc_id);
+}
+
+// ----------------------------------------------------------------------------
 // The projects as the vault panel lists them: the starred first, otherwise
 // in the order they arrived, the archived ones after the others.
 export function projectsInOrder() {
@@ -43,8 +48,8 @@ export function projectsOf(doc) {
   return (doc.projects ?? []).filter(id => projects.has(id));
 }
 
-// The project the header shows: the selected one, null for All Projects
-// and No project.
+// The project something new starts in, and the header shows: the selected
+// one, null for All Projects and No project.
 export function projectScope({ selected_project } = store.getState()) {
   return selected_project === NO_PROJECT ? null : selected_project;
 }
@@ -109,4 +114,17 @@ export function threadMembers(threadId) {
 // vault, each once, in thread order.
 export function threadProjects(threadId) {
   return [...new Set(threadMembers(threadId).flatMap(projectsOf))];
+}
+
+// ----------------------------------------------------------------------------
+// The projects something new for `target` (an entity or thread id, or
+// none) starts in: its own (a thread's, its members'), else the one
+// selected in the sidebar (`projectScope`), which is then its `scope`. A
+// task's in the Task tab.
+export function projectsFor(target) {
+  const doc = target ? getMeta(target) : null;
+  const own = doc ? doc.projects ?? [] : threads.has(target) ? threadProjects(target) : [];
+  if (own.length) return { projects: own, scope: null };
+  const scope = projectScope();
+  return { projects: scope ? [scope] : [], scope };
 }

@@ -2,10 +2,13 @@
 // vault panel, the panel and its context column, with the widths kept in
 // the preferences; the vault area's and the panel's layout, which follow
 // `vault_expanded` and `panel_size`; the page items and the sidebar's
-// sections; the panel's close and expand buttons.
+// sections; the panel's close and expand buttons; F6 between the areas.
 
 import { $ } from '../core/dom.js';
 import { setAria } from '../core/dom.js';
+import { titled } from '../core/dom.js';
+import { registerAction, runAction } from '../core/actions.js';
+import { t } from '../core/text.js';
 import { savePrefs, store } from '../model/state.js';
 import { openVaultOp } from '../ui/page.js';
 
@@ -201,10 +204,15 @@ store.subscribe(state => state.vault_expanded, vault_expanded => {
   applyVaultLayout();
 });
 
-// A page item is highlighted only while its page is shown.
+// A page item is highlighted only while its page is shown. An item with
+// an action (New: its menu of types) runs it, at the item; the others
+// open their page.
 const vaultOpNavs = sidebar.querySelectorAll("[data-vault-op]");
 for (const nav of vaultOpNavs) {
-  nav.addEventListener('click', () => openVaultOp(nav.dataset.vaultOp));
+  nav.addEventListener('click', () => {
+    if (nav.dataset.action) runAction(nav.dataset.action, nav);
+    else openVaultOp(nav.dataset.vaultOp);
+  });
 }
 store.subscribe([state => state.vault_op, state => state.vault_expanded], ([vault_op, vault_expanded]) => {
   for (const nav of vaultOpNavs) setAria(nav, "aria-current", vault_expanded && nav.dataset.vaultOp === vault_op);
@@ -232,9 +240,29 @@ btnExpand.addEventListener('click', () => {
   store.setState({ panel_size: store.getState().panel_size === "expanded" ? "normal" : "expanded" });
 });
 
-// The layout follows `panel_size`; the expand button shows what it does.
+// The layout follows `panel_size`; the expand button shows and says what it
+// does.
 store.subscribe(state => state.panel_size, panel_size => {
   const icon = panel_size === "expanded" ? "#i-panel-right-contract" : "#i-panel-right-expand";
   btnExpand.querySelector("use").setAttribute("href", icon);
+  titled(btnExpand, panel_size === "expanded" ? t('panel.restore') : t('panel.expand'));
   applyPanelLayout();
 });
+
+// F6 and Shift+F6 move the focus between the areas, the lens tabs, the
+// vault panel, the main view and the panel, as many desktop apps do: onto
+// what is current or selected there, else its first control.
+const AREA_STOPS = 'button:not(:disabled), input:not(:disabled), select, textarea, [tabindex="0"]';
+function focusArea(step) {
+  const areas = [document.querySelector('.topbar'), sidebar, main, panel]
+    .filter(el => el !== panel || store.getState().panel_size !== 'closed');
+  const at = areas.findIndex(el => el.contains(document.activeElement));
+  const n = areas.length;
+  const area = areas[at < 0 ? (step > 0 ? 0 : n - 1) : (at + step + n) % n];
+  const stops = [...area.querySelectorAll(AREA_STOPS)].filter(el => el.getClientRects().length);
+  const stop = stops.find(el => el.matches('[aria-current="true"]'))
+    ?? stops.find(el => el.matches('[aria-selected="true"]')) ?? stops[0];
+  stop?.focus();
+}
+registerAction({ id: 'layout.next_area', title: t('layout.next_area'), shortcut: 'F6', run: () => focusArea(1) });
+registerAction({ id: 'layout.previous_area', title: t('layout.previous_area'), shortcut: 'Shift+F6', run: () => focusArea(-1) });

@@ -1,5 +1,6 @@
 // Dates and counts as the page shows them.
 
+import { locale } from './text.js';
 
 // ----------------------------------------------------------------------------
 // A host date: `YYYY-MM-DD` as that local day's start (not UTC midnight,
@@ -9,6 +10,31 @@ export function parseDate(text) {
   if (text.length !== 10) return new Date(text);
   const [y, m, d] = text.split('-').map(Number);
   return new Date(y, m - 1, d);
+}
+
+// ----------------------------------------------------------------------------
+// The start of `d`'s local day.
+export const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+// ----------------------------------------------------------------------------
+// `date`'s local day as `YYYY-MM-DD`, the value of an <input type="date">.
+export function localDay(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// `date` as the host writes an instant: UTC in ISO 8601, to the second.
+export function isoInstant(date) {
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+// ----------------------------------------------------------------------------
+// `date`'s day as seen from today: "today", "tomorrow", "in 3 days",
+// "yesterday", "3 days ago"; empty without a date.
+const RELATIVE_DAY = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+export function relativeDay(date) {
+  if (!date || isNaN(date)) return '';
+  return RELATIVE_DAY.format(Math.round((dayStart(date) - dayStart(new Date())) / 864e5), 'day');
 }
 
 // ----------------------------------------------------------------------------
