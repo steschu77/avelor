@@ -112,8 +112,9 @@ pub fn create(
     let saving = Rc::clone(shell);
     window.connect_maximized_notify(move |window| save_window_state(window, &saving));
     // Back from another program, the page looks at the files it shows: one
-    // may have been changed there (`App::on_activated`). Not while the page
-    // loads, as the window first becomes active: it doesn't listen yet.
+    // may have been changed there (`saving.md#held-saves`,
+    // `App::on_activated`). Not while the page loads, as the window first
+    // becomes active: it doesn't listen yet.
     let activating = Rc::clone(shell);
     let loading = webview.clone();
     window.connect_is_active_notify(move |window| {

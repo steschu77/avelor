@@ -310,8 +310,9 @@ impl WindowProc {
     }
 
     /// Windows asks whether the session may end: yes, at once -- the app
-    /// never blocks it (`architecture.md#principles`, principle 8). Logged,
-    /// as is what follows, to see in the log how a session ended.
+    /// never blocks it, and the page isn't asked (`architecture.md#principles`,
+    /// principle 8). Logged, as is what follows, to see in the log how a session
+    /// ended.
     fn on_query_end_session(&self, lparam: LPARAM) -> LRESULT {
         log::info!(
             "Windows asks to end the session (flags {:#x}): yes",
@@ -320,12 +321,15 @@ impl WindowProc {
         LRESULT(1)
     }
 
-    /// Windows ends the session (`WM_ENDSESSION`), or doesn't after all.
-    /// The window's state is saved as it changes, so nothing is left to
-    /// keep.
+    /// Windows ends the session (`WM_ENDSESSION`), or doesn't after all:
+    /// `App` keeps what only it has (`close::on_session_end`), without
+    /// asking the page -- the UI thread never waits for it. A handler holding
+    /// `App` in a modal loop can't end before Windows ends the app;
+    /// then nothing is kept. The window's state is saved as it changes.
     fn on_end_session(&self, ending: bool) -> LRESULT {
         if ending {
             log::info!("Windows is ending the session");
+            self.shell.on_session_end();
         } else {
             log::info!("Windows doesn't end the session after all");
         }
@@ -366,7 +370,7 @@ impl WindowProc {
 
     /// The window became active (or inactive). Back from another program,
     /// the page looks at the files it shows: one may have been changed
-    /// there (`App::on_activated`).
+    /// there (`saving.md#held-saves`, `App::on_activated`).
     fn on_activate(&self, active: bool) -> LRESULT {
         if active {
             self.shell.on_activated();
