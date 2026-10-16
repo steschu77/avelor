@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::app::App;
 use crate::app::Prefs;
+use crate::documents;
 use crate::protocol::Req;
 use crate::sys;
 use crate::texts::{self, Text};
@@ -60,8 +61,11 @@ pub(crate) fn switch_to(app: &mut App, root: PathBuf) {
 
 // ----------------------------------------------------------------------------
 /// Make `root` the open vault, then kick off an indexing that streams progress
-/// and results back via `on_index_event`.
+/// and results back via `on_index_event`. A save of the old vault still held
+/// for the conflict dialog is kept as a conflict copy there first
+/// (`documents::keep_held`).
 pub(crate) fn open_vault(app: &mut App, root: &Path) {
+    documents::keep_held(app);
     app.vault.begin_open(root);
     app.run_indexing(root.to_path_buf());
 }

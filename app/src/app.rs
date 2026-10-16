@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
+use crate::documents::DocumentState;
 use crate::indexing::Indexing;
 use crate::jobs::Jobs;
 use crate::protocol::{self, Req};
@@ -177,6 +178,10 @@ pub struct App {
     /// The long operations running (`jobs`).
     pub jobs: Jobs,
 
+    /// The documents in the page's editors (`documents`): the app's
+    /// version of each one in conflict.
+    pub documents: DocumentState,
+
     /// The close asked of the page (`close`).
     pub close: CloseState,
 }
@@ -193,6 +198,7 @@ impl App {
             ui,
             indexing: Indexing::default(),
             jobs: Jobs::default(),
+            documents: DocumentState::default(),
             close: CloseState::default(),
         }
     }
