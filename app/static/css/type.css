@@ -1,8 +1,9 @@
 /* Type roles: the text styles components and areas take (label, meta,
    row-title), and the utilities icon, push and stack. */
 
-/* Uppercase labels. */
-.label {
+/* Uppercase labels, and every control set like one. */
+.label,
+.type-toggle {
   font: 400 var(--fs-label)/1 var(--f-chrome);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
@@ -18,6 +19,12 @@
   font: 400 var(--fs-meta)/1.3 var(--f-chrome);
   color: var(--c-label);
   font-variant-numeric: tabular-nums;
+}
+
+/* a short serif hint */
+.note {
+  font: 400 var(--fs-ui)/1.4 var(--f-serif);
+  color: var(--c-label);
 }
 
 /* one line of a list: table titles */

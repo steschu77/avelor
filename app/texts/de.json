@@ -4,9 +4,12 @@
   "count.of_total": "{at} von {n}",
   "docs.date": "Datum",
   "docs.fold_thread": "Verlauf zuklappen",
+  "docs.hidden_count": "{n} ausgeblendet",
   "docs.name": "Name",
   "docs.unfold_thread": "Verlauf aufklappen",
   "error.code": "Etwas ist schiefgegangen ({code}).",
+  "header.types": "Typen",
+  "header.types_title": "Typen ein- oder ausblenden",
   "indexing.label": "Indizierung von {path}",
   "indexing.replaced": "durch eine andere Indizierung ersetzt",
   "indexing.unread": {
@@ -42,6 +45,78 @@
   "start.failed": "Ein Fehler ist aufgetreten.\n\nNäheres steht in der Protokolldatei.",
   "status.dismiss": "Ausblenden",
   "status.more": "+{n} weitere",
+  "types.bank": "Bank",
+  "types.contacts": "Kontakte",
+  "types.conversations": "Unterhaltungen",
+  "types.count_bank": {
+    "one": "{n} Bankeintrag",
+    "other": "{n} Bankeinträge"
+  },
+  "types.count_contacts": {
+    "one": "{n} Kontakt",
+    "other": "{n} Kontakte"
+  },
+  "types.count_conversations": {
+    "one": "{n} Unterhaltung",
+    "other": "{n} Unterhaltungen"
+  },
+  "types.count_documents": {
+    "one": "{n} Dokument",
+    "other": "{n} Dokumente"
+  },
+  "types.count_email": {
+    "one": "{n} E-Mail",
+    "other": "{n} E-Mails"
+  },
+  "types.count_events": {
+    "one": "{n} Termin",
+    "other": "{n} Termine"
+  },
+  "types.count_lists": {
+    "one": "{n} Liste",
+    "other": "{n} Listen"
+  },
+  "types.count_notes": {
+    "one": "{n} Notiz",
+    "other": "{n} Notizen"
+  },
+  "types.count_records": {
+    "one": "{n} Datensatz",
+    "other": "{n} Datensätze"
+  },
+  "types.count_tasks": {
+    "one": "{n} Aufgabe",
+    "other": "{n} Aufgaben"
+  },
+  "types.documents": "Dokumente",
+  "types.email": "E-Mail",
+  "types.events": "Termine",
+  "types.hidden": "{list} ausgeblendet",
+  "types.hide_bank": "Bankeinträge ausblenden",
+  "types.hide_contacts": "Kontakte ausblenden",
+  "types.hide_conversations": "Unterhaltungen ausblenden",
+  "types.hide_documents": "Dokumente ausblenden",
+  "types.hide_email": "E-Mails ausblenden",
+  "types.hide_events": "Termine ausblenden",
+  "types.hide_lists": "Listen ausblenden",
+  "types.hide_notes": "Notizen ausblenden",
+  "types.hide_records": "Datensätze ausblenden",
+  "types.hide_tasks": "Aufgaben ausblenden",
+  "types.lists": "Listen",
+  "types.notes": "Notizen",
+  "types.records": "Datensätze",
+  "types.show_all": "Alle Typen zeigen",
+  "types.show_bank": "Bankeinträge zeigen",
+  "types.show_contacts": "Kontakte zeigen",
+  "types.show_conversations": "Unterhaltungen zeigen",
+  "types.show_documents": "Dokumente zeigen",
+  "types.show_email": "E-Mails zeigen",
+  "types.show_events": "Termine zeigen",
+  "types.show_lists": "Listen zeigen",
+  "types.show_notes": "Notizen zeigen",
+  "types.show_records": "Datensätze zeigen",
+  "types.show_tasks": "Aufgaben zeigen",
+  "types.tasks": "Aufgaben",
   "vault.none_open": "Es ist kein Tresor geöffnet.",
   "vault.pick": "Tresor auswählen",
   "vault.show_failed": "Der Ordner des Tresors konnte nicht angezeigt werden."
