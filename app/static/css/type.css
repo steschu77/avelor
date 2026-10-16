@@ -3,6 +3,7 @@
 
 /* Uppercase labels, and every control set like one. */
 .label,
+.menu__hint,
 .type-toggle {
   font: 400 var(--fs-label)/1 var(--f-chrome);
   letter-spacing: var(--track-label);

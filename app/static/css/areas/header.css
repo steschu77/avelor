@@ -1,0 +1,14 @@
+/* The lens header (features/header.js): the active labels. */
+
+/* the active labels after the project's name in the lens header, on one
+   line: what doesn't fit is cut off at the right */
+.label-filter {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.label-filter .chip {
+  flex: none;
+}

@@ -2,6 +2,7 @@
 // archived folded) after No project, with their counts, each a filter;
 // the vault's name and menu. It renders at most once per frame
 // (`scheduleRenderSidebar`), following the model (app.js).
+// The labels filter from the lens head (features/header.js).
 
 import { $ } from '../core/dom.js';
 import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
