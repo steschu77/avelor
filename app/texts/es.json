@@ -1,8 +1,11 @@
 {
   "config.unread": "No se pudo leer config.yaml; la aplicación se inició con la configuración predeterminada.",
   "context.open": "Abrir",
+  "count.of_total": "{at} de {n}",
   "docs.date": "Fecha",
+  "docs.fold_thread": "Plegar el hilo",
   "docs.name": "Nombre",
+  "docs.unfold_thread": "Desplegar el hilo",
   "error.code": "Algo ha fallado ({code}).",
   "indexing.label": "Indexando {path}",
   "indexing.replaced": "sustituida por otra indexación",

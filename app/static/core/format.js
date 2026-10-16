@@ -17,3 +17,10 @@ export function parseDate(text) {
 const format = options => new Intl.DateTimeFormat(undefined, options);
 
 export const DATE_FORMAT = format();                                    // 10/14/2026
+const DAY_MONTH = format({ day: '2-digit', month: '2-digit' });         // 10/14
+
+// A date in a list: day and month, with the year if it isn't this one (a
+// thread's days in the Documents lens).
+export function shortDate(date) {
+  return date.getFullYear() === new Date().getFullYear() ? DAY_MONTH.format(date) : DATE_FORMAT.format(date);
+}

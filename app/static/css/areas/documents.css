@@ -1,7 +1,7 @@
 /* The Documents lens (features/lenses/documents.js). */
 
 /* features/lenses/documents.js: the table of the rows under their
-   projects. */
+   projects and threads. */
 .table {
   display: flex;
   flex-direction: column;
@@ -90,8 +90,8 @@
   justify-content: flex-end;
 }
 
-/* a row's name: its fold, icon and title; one level deeper under a
-   project's group */
+/* a row's name: its fold (or the gap of one), icon and title; one level
+   deeper under a project's group, two under a thread in it */
 .docs__cell {
   min-width: 0;
   display: flex;
@@ -114,6 +114,10 @@
   padding-left: 22px;
 }
 
+.docs__cell--l2 {
+  padding-left: 44px;
+}
+
 .docs__fold {
   flex: none;
   width: 14px;
@@ -124,6 +128,20 @@
   justify-content: center;
   color: var(--c-ink-mute);
   cursor: pointer;
+}
+
+.docs__gap {
+  flex: none;
+  width: 14px;
+}
+
+/* a thread row's "5 of 6, 14/08 - 23/09" */
+.docs__members {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .docs__date {
