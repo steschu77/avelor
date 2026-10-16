@@ -1,6 +1,6 @@
 // The host's events into the model (api.md#events): the entities as they
-// are on disk, those that left the vault, their content sent unasked, and
-// the vault being opened. Each
+// are on disk, those that left the vault, their content sent unasked, the
+// vault being opened, and the window active again. Each
 // handler writes the Maps (model/entities.js) and the documents' state
 // (model/documents.js) and bumps the store's counters; the renders follow
 // the counters (app.js), the model calls none of them. Only this module
@@ -14,6 +14,7 @@ import { projects } from './entities.js';
 import { threads } from './entities.js';
 import { forgetDocument, forgetDocuments } from './documents.js';
 import { onDocContent } from './documents.js';
+import { onActivated } from './documents.js';
 
 // ----------------------------------------------------------------------------
 function onProject(id, meta) {
@@ -100,3 +101,4 @@ rpcOn('vault', ({ state, name, total }) => {
   forgetVault();
   store.setState({ vault_name: name, files_total: total, vault_state: 'scanning' });
 });
+rpcOn('activated', onActivated);

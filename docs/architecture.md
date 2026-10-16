@@ -252,7 +252,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
-| `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, taking in files changed outside the app (`post_taken_in`); their dispatch tests |
+| `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); their dispatch tests |
 | `structure.rs` | the structural commands: titles, stars, archiving, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
@@ -294,6 +294,7 @@ the only `cfg(target_os)` in `app/src`:
   `RefCell<Option<_>>`, the deferred flag, the modal count;
   `architecture.md#one-way-in`);
 - close, the app's own close;
+- the window active again (`App::on_activated`);
 - the window state.
 
 Each platform's window only turns its native events into calls on it,
@@ -302,6 +303,7 @@ so the subtle part is written once:
 | Event | Windows | GTK4 |
 |---|---|---|
 | Close | `WM_CLOSE` | `close-request` |
+| Activation | `WM_ACTIVATE` | `notify::is-active` |
 | Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
 
 **The page's bridge.** `page.rs` builds the page for both platforms:
@@ -332,7 +334,7 @@ nothing imports `app.js`.
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`, `threadMembers`); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts (`editorRoots`) |
-| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`; `forgetVault`), the only writer of the Maps |
+| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/toolbar.js` | the editors' toolbars |
 | `ui/field.js` | editing in place (`editTextInPlace`) |

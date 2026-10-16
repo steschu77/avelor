@@ -1,6 +1,6 @@
 //! A document's content in the page's editors (`saving.md`): loading
-//! it, and saving the editor's markdown. Typed commands
-//! (`api.md#documents`). A file changed
+//! it, saving the editor's markdown, and looking at the files again when the
+//! window is active. Typed commands (`api.md#documents`). A file changed
 //! outside the app is taken in if the app had only read it -- `entity` and
 //! `content` pushed before the answer -- and otherwise answered as a
 //! conflict for the dialog, nothing written (`saving.md#conflicts`).
@@ -49,6 +49,16 @@ impl Content {
 }
 
 // ----------------------------------------------------------------------------
+/// The answer of `check_files`.
+#[derive(Serialize)]
+struct Checked {
+    /// The entities taken in or gone; the page rebuilds its panel if any.
+    taken_in: usize,
+    /// The files changed outside the app after it saved its own edits.
+    conflicts: Vec<Conflict>,
+}
+
+// ----------------------------------------------------------------------------
 /// `load_doc_content`: `id`'s content, once its file was looked at -- the
 /// content as it is then, `gone`, or with the `conflict` over it (the app's
 /// version is shown, so Use ours can write it back).
@@ -93,6 +103,26 @@ pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overw
             req.fail(err, message);
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+/// `check_files`: look at the files of `ids` -- the documents the page shows
+/// without unsaved edits, once the window is active again -- and take in
+/// what was changed outside the app, unless it replaced the app's own
+/// edits: those are answered as conflicts (`saving.md#conflicts`).
+pub fn check_files(app: &mut App, req: Req, ids: Vec<Id>) {
+    let mut checked = Checked {
+        taken_in: 0,
+        conflicts: Vec::new(),
+    };
+    for id in ids {
+        match refresh(app, &id) {
+            Some(Refresh::TakenIn(_)) => checked.taken_in += 1,
+            Some(Refresh::Conflict) => checked.conflicts.push(Conflict::of(app, id)),
+            Some(Refresh::Unchanged) | None => {}
+        }
+    }
+    req.ok(checked);
 }
 
 // ----------------------------------------------------------------------------
@@ -217,5 +247,26 @@ mod tests {
         let sent = h.call("save_doc_content", args);
         assert_eq!(sent[0]["ok"]["source"], "Ours\n");
         assert!(fs::read_to_string(&path).unwrap().ends_with("---\nOurs\n"));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn checking_takes_in_read_files_and_asks_about_saved_ones() {
+        let (mut h, ids) = notes("check", 2);
+        // n1 is saved by the app first, so a change over it is a conflict.
+        let args = json!({ "id": ids[1], "markdown": "Ours\n" });
+        h.call("save_doc_content", args);
+        for (i, id) in ids.iter().enumerate() {
+            let text =
+                format!("---\nid: {id}\ntitle: Note {i}\ndocument: {{}}\n---\nTheirs, longer\n");
+            fs::write(h.vault().join(format!("Notes/n{i}.md")), text).unwrap();
+        }
+
+        let sent = h.call("check_files", json!({ "ids": ids }));
+        assert_eq!(shape(&sent), ["entity", "content", "reply"]);
+        assert_eq!(sent[1]["data"]["id"], ids[0].to_string());
+        let ok = &sent[2]["ok"];
+        assert_eq!(ok["taken_in"], 1);
+        assert_eq!(ok["conflicts"][0]["id"], ids[1].to_string());
     }
 }

@@ -395,6 +395,13 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
+    /// The window is active again: the page looks at the files it shows
+    /// (the `activated` event, `saving.md#file-checks`).
+    pub fn on_activated(&mut self) {
+        self.post_event("activated", ());
+    }
+
+    // ------------------------------------------------------------------------
     /// Send `id`'s body as it is now, unasked -- a view showing an older one
     /// loads it: the `content` event, the markdown source and its editor
     /// HTML.

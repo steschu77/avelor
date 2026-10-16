@@ -255,6 +255,7 @@ impl WindowProc {
                 }
             }
             WM_SETFOCUS => self.on_set_focus(),
+            WM_ACTIVATE => self.on_activate(loword(wparam.0 as u32) != WA_INACTIVE as i32),
             WM_EXITSIZEMOVE => self.on_exit_size_move(),
             WM_TASK => self.on_task(),
             _ => unsafe { DefWindowProcW(self.hwnd(), msg, wparam, lparam) },
@@ -359,6 +360,16 @@ impl WindowProc {
         let controller = self.controller.borrow().clone();
         if let Some(controller) = controller {
             let _ = unsafe { controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC) };
+        }
+        LRESULT(0)
+    }
+
+    /// The window became active (or inactive). Back from another program,
+    /// the page looks at the files it shows: one may have been changed
+    /// there (`App::on_activated`).
+    fn on_activate(&self, active: bool) -> LRESULT {
+        if active {
+            self.shell.on_activated();
         }
         LRESULT(0)
     }

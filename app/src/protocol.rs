@@ -45,6 +45,7 @@ enum Command {
     // A document's content in the editors (`documents`).
     LoadDocContent(Target),
     SaveDocContent(Save),
+    CheckFiles(Ids),
     // The structural commands (`structure`).
     SetTitle(Retitle),
     SetStarred(Star),
@@ -87,6 +88,12 @@ struct Save {
     overwrite: bool,
 }
 
+/// `{ids}`
+#[derive(Deserialize)]
+struct Ids {
+    ids: Vec<Id>,
+}
+
 /// `{id, title}`
 #[derive(Deserialize)]
 struct Retitle {
@@ -122,6 +129,7 @@ impl Command {
             "close_ready" => Command::CloseReady(from_value(args)?),
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "save_doc_content" => Command::SaveDocContent(from_value(args)?),
+            "check_files" => Command::CheckFiles(from_value(args)?),
             "set_title" => Command::SetTitle(from_value(args)?),
             "set_starred" => Command::SetStarred(from_value(args)?),
             "set_archived" => Command::SetArchived(from_value(args)?),
@@ -162,6 +170,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SaveDocContent(a) => {
             documents::save_doc_content(app, req, a.id, a.markdown, a.overwrite)
         }
+        Command::CheckFiles(a) => documents::check_files(app, req, a.ids),
         Command::SetTitle(a) => structure::set_title(app, req, a.id, a.title),
         Command::SetStarred(a) => structure::set_starred(app, req, a.id, a.starred),
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),

@@ -244,4 +244,14 @@ mod tests {
         let sent = h.call("set_prefs", json!({ "prefs": { "panel_width": 420 } }));
         assert_eq!(sent[0]["err"]["code"], "bad_request", "strings only");
     }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_window_active_again_is_an_event() {
+        let mut h = Harness::new("activated");
+        h.app.on_activated();
+        h.run_queue();
+        let sent = parse(&h.take());
+        assert_eq!(sent, [json!({ "ev": "activated", "data": null })]);
+    }
 }
