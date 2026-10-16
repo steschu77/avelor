@@ -296,7 +296,7 @@ nothing imports `app.js`.
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/close.js` | closing the app: the `close` event answered `close_ready` |
 | `features/jobs.js` | job cards from the `job` event |
-| `features/sidebar.js` | the vault panel: projects, No project with their counts, the filter, the vault menu |
+| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu; the vault panel: projects, No project with their counts, the filter, the vault menu |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the sidebar's sections, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, `ready` |
@@ -345,8 +345,8 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/tokens.css` | the colors, fonts, sizes, insets, heights, radii, shadows and layers |
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, …) and the utilities (`icon`, `push`, `stack`) |
-| `css/components.css` | what several areas share: `tool`, `menu`, `list-row`, `pane-head`, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel |
+| `css/components.css` | what several areas share: `tool`, `chip`, `input`, `menu`, `list-row`, `pane-head`, … |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, header (the lens header) |
 
 Conventions the page keeps:
 

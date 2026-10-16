@@ -13,6 +13,7 @@ import './ui/menu.js';
 import './ui/statusbar.js';
 import './features/close.js';
 import './features/jobs.js';
+import './features/header.js';
 import './features/layout.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
 import { initDocumentsLens, scheduleRenderDocuments } from './features/lenses/documents.js';
@@ -35,10 +36,12 @@ store.subscribe(state => state.projects_rev, () => {
 
 // The filter changed: re-render the filtered lenses and the sidebar's
 // highlights.
-store.subscribe(state => state.selected_project, () => {
-  scheduleRenderDocuments();
-  scheduleRenderSidebar();
-});
+store.subscribe(
+  [state => state.selected_project, state => state.selected_labels],
+  () => {
+    scheduleRenderDocuments();
+    scheduleRenderSidebar();
+  });
 
 // The lens's type selection (features/lenses/types.js): a change renders
 // the lens again.

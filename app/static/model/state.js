@@ -19,6 +19,7 @@ export const store = createStore({
   selected_project: null, // project filter: one, NO_PROJECT (in none) or null (all), see matchesFilter
   // the panel's width: 'closed', 'normal' or 'expanded' (full width)
   panel_size: 'normal',
+  selected_labels: [], // label (tag) filter: a doc must carry all of them; always replaced, never mutated
   selected_entity: null,
   selected_thread: null, // the thread shown in the panel
   files_total: 0,

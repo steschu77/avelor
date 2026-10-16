@@ -41,12 +41,14 @@ export function projectsOf(doc) {
 
 // ----------------------------------------------------------------------------
 // The vault panel's filter: `doc` is in `selected_project` (if one is set;
-// in none for `NO_PROJECT`). The lenses show only matching entities.
-export function matchesFilter(doc, { selected_project } = store.getState()) {
+// in none for `NO_PROJECT`), and carries every one of `selected_labels`.
+// The lenses show only matching entities; thread membership is never
+// filtered.
+export function matchesFilter(doc, { selected_project, selected_labels } = store.getState()) {
   if (selected_project === NO_PROJECT) {
     if (projectsOf(doc).length) return false;
   } else if (selected_project && !doc.projects?.includes(selected_project)) {
     return false;
   }
-  return true;
+  return selected_labels.every(tag => doc.tags?.includes(tag));
 }

@@ -39,7 +39,8 @@ a:hover {
 }
 
 /* Controls take the text style of where they are; components set their own. */
-button {
+button,
+input {
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;

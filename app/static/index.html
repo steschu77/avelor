@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/areas/sidebar.css">
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/panel.css">
+  <link rel="stylesheet" href="css/areas/header.css">
 </head>
 
 <body>
@@ -49,6 +50,10 @@
 
     <main class="main" id="main">
       <div class="pane-head">
+        <span class="project-name" id="project-name">All Projects</span>
+        <span class="label-filter" id="label-filter"></span>
+        <button type="button" class="chip chip--action" id="label-add-btn" title="Filter by a label"
+          aria-haspopup="menu" hidden>+</button>
         <span class="meta docs-count" id="doc-count"></span>
         <button type="button" class="tool lens-types" id="types-btn" title="Show or hide the types"><span>Types</span><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
       </div>

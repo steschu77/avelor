@@ -10,7 +10,8 @@ Three panels:
 - the **vault panel** on the left, for filtering
   (`ui.md#vault-panel`); its lower area holds the jobs panel
   (`ui.md#jobs-panel`);
-- the **main view** with the lenses (`ui.md#lenses`);
+- the **main view** with the lenses (`ui.md#lenses`), and above them the vault
+  header (the selected project's name);
 - the **side panel** on the right.
 
 Both side panels have grips to resize them; the widths are remembered
@@ -20,7 +21,8 @@ across restarts (`ui.md#preferences`). Menus are popups (`showMenu`,
 ## Vault panel <a id="vault-panel"></a>
 
 The vault panel defines the view on the vault: a project filters
-what the lens shows. Filtering is entirely on the page: all metadata
+what the lens shows, and so do the labels picked in the lens head.
+Filtering is entirely on the page: all metadata
 arrives with the scan (`renderSidebar`, `features/sidebar.js`;
 `matchesFilter`, `model/entities.js`). The counts per project are derived on
 the page, once per frame.
@@ -30,6 +32,14 @@ the page, once per frame.
   `selected_project`); starred projects come first; archived projects are
   folded under an "Archived" row at the end, still selectable
   (`projectsInOrder`).
+
+**Labels** filter from the lens head, for every lens: after the project's
+name the active labels, each a label chip whose × takes it out of the
+filter (`tagChips`), then a "+" while any label
+is in use (`#label-add-btn`, `features/header.js`). Its menu lists the
+labels in use but the active ones, with a filter box, each with the
+entities in the filter carrying it; one with none is dim. Selecting
+several shows the entities carrying all of them.
 
 ## Lenses <a id="lenses"></a>
 
@@ -127,7 +137,8 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 |---|---|---|---|---|
 | A5 | Panel widths | drag a grip → `saveWidth` → `savePrefs` | `set_prefs {prefs}` → `config.yaml` `prefs` | the width comes back on the next start, inside the page (`#prefs`), without easing |
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
-| B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, counts re-render |
+| B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
+| B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selected_labels` | — | entities carrying all selected labels; the head names them |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | F1 | Sort in Documents | header click (`onSortClick`, `features/lenses/documents.js`) | — | multi-key sort in `sort_state` |
 | F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selected_project`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |

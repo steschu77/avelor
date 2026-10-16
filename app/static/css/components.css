@@ -19,6 +19,65 @@
   background: var(--c-hover);
 }
 
+/* Pills: --tag fills with the accent, --action can be clicked. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-pill);
+  background: var(--c-card);
+  color: var(--c-ink);
+  font: 400 var(--fs-ui)/1.3 var(--f-chrome);
+}
+
+.chip--tag {
+  border-color: transparent;
+  background: var(--c-accent-soft);
+  color: var(--c-ink-soft);
+}
+
+.chip--action {
+  cursor: pointer;
+}
+
+.chip--action:hover {
+  border-color: var(--c-ink);
+}
+
+/* buttons drawn as text: a chip's x that removes a label */
+.chip__remove {
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip__remove {
+  color: var(--c-ink-mute);
+  line-height: 1;
+}
+
+.chip__remove:hover {
+  color: var(--c-ink);
+}
+
+.input {
+  height: var(--h-control);
+  padding: 0 6px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-ink);
+  font: 400 var(--fs-small) var(--f-chrome);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--c-ink);
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -53,14 +112,49 @@
   cursor: pointer;
 }
 
-.menu__item:hover {
+.menu__item:hover,
+.menu__item.is-active {
   background: var(--c-card);
+}
+
+/* a menu with a filter (showMenu's `filter`): the text box stays on top,
+   the items scroll below it */
+.menu--filter {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.menu__filter {
+  flex: none;
+  margin: 4px 8px 6px;
+}
+
+.menu__list {
+  min-height: 0;
+  overflow: auto;
+}
+
+.menu__item[aria-disabled="true"] {
+  background: none;
+  color: var(--c-label);
+  cursor: default;
+}
+
+.menu__head {
+  padding: 8px 12px 6px;
 }
 
 .menu__label {
   max-width: 340px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.menu__hint {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--c-label);
 }
 
 /* Resize grip on a pane's left edge; --end puts it on the right edge. */
