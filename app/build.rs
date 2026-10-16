@@ -15,7 +15,7 @@ use std::{
 /// The page's layers, lowest first: a module in one of these folders imports
 /// only from its own layer or a lower one, and every module but an entry is
 /// in one (`av_bundle::bundle`, `architecture.md#page`).
-const LAYERS: &[&str] = &["core/", "model/", "ui/", "features/"];
+const LAYERS: &[&str] = &["core/", "editor/", "model/", "ui/", "features/"];
 
 // ----------------------------------------------------------------------------
 /// The app's own catalogs, each with every key English has
@@ -387,9 +387,10 @@ fn icon_refs(text: &str) -> impl Iterator<Item = String> + '_ {
 // ----------------------------------------------------------------------------
 /// The page, `index.html` with its CSS, its icons and the bundle of `app.js`
 /// inlined, and what the bundle's modules import (`page-deps.txt`); the catalogs the bundle's
-/// texts come from (`build_texts`), written
-/// to `out_dir`.
-/// An export no module of the bundle imports fails the build.
+/// texts come from (`build_texts`); and the
+/// markdown selftest with its own bundle (`markdown.md#testing`), which
+/// opens from disk. All are written to `out_dir`. An export no module of the
+/// two bundles imports fails the build.
 fn build_pages(root: &Path, out_dir: &Path) {
     let static_dir = root.join("static");
 
@@ -409,7 +410,16 @@ fn build_pages(root: &Path, out_dir: &Path) {
     );
     fs::write(out_dir.join("index.html"), html).unwrap();
 
-    let unused = av_bundle::unused_exports(&[&page.graph]);
+    let selftest = bundle(&static_dir, "editor/markdown.selftest.js");
+    let html = source(&static_dir, "editor/markdown.selftest.html");
+    let html = inline_script(
+        &html,
+        "<script type=\"module\" src=\"./markdown.selftest.js\"></script>",
+        &process_javascript(&selftest.js),
+    );
+    fs::write(out_dir.join("markdown.selftest.html"), html).unwrap();
+
+    let unused = av_bundle::unused_exports(&[&page.graph, &selftest.graph]);
     if !unused.is_empty() {
         bundle_failed(&unused);
     }

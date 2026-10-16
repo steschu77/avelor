@@ -4,6 +4,7 @@
 import { setAria } from '../core/dom.js';
 import { rpcCall } from '../core/rpc.js';
 import { t } from '../core/text.js';
+import { isLink } from '../editor/links.js';
 import { savePrefs, store } from '../model/state.js';
 import { showError } from '../model/state.js';
 import { entities, threadOf, threads } from '../model/entities.js';
@@ -44,16 +45,17 @@ export function markSelection(containerEl) {
   return mark;
 }
 
-// Open a link clicked in a preview: a link into the vault, `id:<uuid>`
-// (vault.md#links-in-content), selects its target; a web, email or phone
-// link opens in its default app, through the host (`open_url`).
+// Open a link clicked in a preview (an editor's `onLinkClick`): a link
+// into the vault, `id:<uuid>` (vault.md#links-in-content), selects its
+// target; a web, email or phone link opens in its default app, through the
+// host (`open_url`).
 export function openLink(href) {
   const vault = /^id:(.+)$/i.exec(href?.trim() ?? '');
   if (vault) {
     selectById(vault[1]);
     return;
   }
-  if (!/^(https?:[/][/]|mailto:|tel:)/i.test(href ?? '')) return;
+  if (!isLink(href ?? '')) return;
   rpcCall('open_url', { url: href }).catch(e => {
     if (e.code !== 'cancelled') showError(e.message);
   });

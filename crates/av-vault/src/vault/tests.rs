@@ -377,14 +377,42 @@ fn a_file_changed_outside_is_not_overwritten() {
     let path = edit_outside(&root, 0, &ids[0], "Theirs, longer\n");
     let theirs = fs::read_to_string(&path).unwrap();
 
+    let saved = index.save_content(&ids[0], "Mine\n".into(), false, &mut Changes::default());
+    assert_eq!(saved.unwrap(), SaveOutcome::Conflict(ids[0]));
+    assert_eq!(fs::read_to_string(&path).unwrap(), theirs);
+    let doc = index.get(&ids[0]).unwrap();
+    assert_eq!(doc.content(), "Body 0\n", "memory still matches the file");
+    assert!(!doc.is_dirty());
+
     let mut changes = Changes::default();
     let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
     assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
     assert!(changes.saved.is_empty());
-    let doc = index.get(&ids[0]).unwrap();
-    assert_eq!(doc.title(), "Note 0", "memory still matches the file");
-    assert!(!doc.is_dirty());
+    assert_eq!(index.get(&ids[0]).unwrap().title(), "Note 0");
     assert_eq!(fs::read_to_string(&path).unwrap(), theirs);
+
+    // Overwriting writes; after that, our own saves don't conflict.
+    let saved = index.save_content(&ids[0], "Mine\n".into(), true, &mut Changes::default());
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("title: Note 0") && text.ends_with("Mine\n"),
+        "{text}"
+    );
+    let saved = index.save_content(
+        &ids[0],
+        "Mine again\n".into(),
+        false,
+        &mut Changes::default(),
+    );
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+    let saved = index.save_content(
+        &ids[0],
+        "Mine again\n".into(),
+        false,
+        &mut Changes::default(),
+    );
+    assert_eq!(saved.unwrap(), SaveOutcome::Unchanged);
 
     fs::remove_dir_all(&root).ok();
 }
@@ -459,6 +487,66 @@ fn a_step_is_undone_and_redone() {
 }
 
 #[test]
+fn a_body_is_a_step_and_steps_join_into_one() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let path = root.join("Notes/n0.md");
+    let mut first = Changes::default();
+    let saved = index.save_content(&ids[0], "One\n".into(), false, &mut first);
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+    let mut title = Changes::default();
+    let titled = index.set_title(&ids[0], "Renamed".into(), &mut title);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    let mut second = Changes::default();
+    let saved = index.save_content(&ids[0], "Two\n".into(), false, &mut second);
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+    assert!(first.files[0].writes_body() && !title.files[0].writes_body());
+    let after = fs::read_to_string(&path).unwrap();
+
+    let files = FileStep::joined(first.files, title.files);
+    let files = FileStep::joined(files, second.files);
+    assert_eq!(files.len(), 1, "one file, one part");
+    let mut changes = Changes::default();
+    assert_eq!(
+        index.replay(&files, Op::Undo, &mut changes).unwrap(),
+        SaveOutcome::Saved
+    );
+    let undone = format!(
+        "---\nid: {}\ntitle: Note 0\ndocument: {{}}\n---\nBody 0\n",
+        ids[0]
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), undone);
+    assert_eq!(
+        index.replay(&files, Op::Redo, &mut changes).unwrap(),
+        SaveOutcome::Saved
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), after);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn undoing_a_title_keeps_the_text_written_since() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut step = Changes::default();
+    let titled = index.set_title(&ids[0], "Renamed".into(), &mut step);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    let saved = index.save_content(&ids[0], "Typed\n".into(), false, &mut Changes::default());
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+
+    let mut changes = Changes::default();
+    assert_eq!(
+        index.replay(&step.files, Op::Undo, &mut changes).unwrap(),
+        SaveOutcome::Saved
+    );
+    let doc = index.get(&ids[0]).unwrap();
+    assert_eq!((doc.title(), doc.content()), ("Note 0", "Typed\n"));
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_step_whose_file_changed_since_is_not_undone() {
     let (root, ids) = thread_vault();
     let mut index = Index::build(&root);
@@ -499,9 +587,13 @@ fn the_stamp_comes_from_the_read_and_follows_each_write() {
     let stamp = |index: &Index| index.entry(&ids[0]).unwrap().doc.stamp();
     assert_eq!(stamp(&index), FileStamp::read(&path).unwrap());
 
-    let mut changes = Changes::default();
-    let titled = index.set_title(&ids[0], "A longer title than before".into(), &mut changes);
-    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    let saved = index.save_content(
+        &ids[0],
+        "A longer body than before\n".into(),
+        false,
+        &mut Changes::default(),
+    );
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
     assert_eq!(stamp(&index), FileStamp::read(&path).unwrap());
     assert!(!index.entry(&ids[0]).unwrap().changed_on_disk().unwrap());
 
@@ -523,25 +615,27 @@ fn a_same_size_change_is_found_by_its_time() {
         .unwrap();
     drop(file);
 
-    let mut changes = Changes::default();
-    let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
-    assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
+    let saved = index.save_content(&ids[0], "Mine\n".into(), false, &mut Changes::default());
+    assert_eq!(saved.unwrap(), SaveOutcome::Conflict(ids[0]));
     assert_eq!(fs::read_to_string(&path).unwrap(), text);
 
     fs::remove_dir_all(&root).ok();
 }
 
 #[test]
-fn a_deleted_file_is_a_conflict() {
+fn a_deleted_file_is_a_conflict_until_overwritten() {
     let (root, ids) = thread_vault();
     let mut index = Index::build(&root);
     let path = root.join("Notes/n0.md");
     fs::remove_file(&path).unwrap();
 
-    let mut changes = Changes::default();
-    let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
-    assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
+    let saved = index.save_content(&ids[0], "Mine\n".into(), false, &mut Changes::default());
+    assert_eq!(saved.unwrap(), SaveOutcome::Conflict(ids[0]));
     assert!(!path.exists());
+
+    let saved = index.save_content(&ids[0], "Mine\n".into(), true, &mut Changes::default());
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+    assert!(fs::read_to_string(&path).unwrap().ends_with("Mine\n"));
 
     fs::remove_dir_all(&root).ok();
 }
@@ -555,10 +649,9 @@ fn reloading_takes_in_what_the_file_holds() {
     assert_eq!(index.reload(&ids[0]).unwrap(), Some(ids[0]));
     let doc = index.get(&ids[0]).unwrap();
     assert_eq!((doc.title(), doc.content()), ("Outside", "Theirs\n"));
-    let mut changes = Changes::default();
-    let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
+    let saved = index.save_content(&ids[0], "Mine\n".into(), false, &mut Changes::default());
     assert_eq!(
-        titled.unwrap(),
+        saved.unwrap(),
         SaveOutcome::Saved,
         "no conflict once reloaded"
     );
@@ -596,6 +689,40 @@ fn refreshing_takes_in_a_change_to_a_file_only_read() {
     fs::remove_file(root.join("Notes/n1.md")).unwrap();
     assert_eq!(index.refresh(&ids[1]).unwrap(), Refresh::TakenIn(None));
     assert!(index.get(&ids[1]).is_none());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn refreshing_leaves_a_change_over_the_apps_own_save_alone() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let saved = index.save_content(&ids[0], "Mine\n".into(), false, &mut Changes::default());
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+    assert_eq!(index.refresh(&ids[0]).unwrap(), Refresh::Unchanged);
+
+    // Another program writes its older copy over the app's save.
+    edit_outside(&root, 0, &ids[0], "Theirs\n");
+    assert_eq!(index.refresh(&ids[0]).unwrap(), Refresh::Conflict);
+    assert_eq!(
+        index.get(&ids[0]).unwrap().content(),
+        "Mine\n",
+        "kept for Use ours"
+    );
+
+    // Use ours writes it back, although memory didn't change.
+    let saved = index.save_content(&ids[0], "Mine\n".into(), true, &mut Changes::default());
+    assert_eq!(saved.unwrap(), SaveOutcome::Saved);
+    let text = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+    assert!(text.ends_with("---\nMine\n"), "{text}");
+
+    // After a reload, the app has only read the file again.
+    index.reload(&ids[0]).unwrap();
+    edit_outside(&root, 0, &ids[0], "Theirs again\n");
+    assert_eq!(
+        index.refresh(&ids[0]).unwrap(),
+        Refresh::TakenIn(Some(ids[0]))
+    );
 
     fs::remove_dir_all(&root).ok();
 }

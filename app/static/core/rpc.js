@@ -19,13 +19,14 @@ let rpcNextId = 1;
 const rpcPending = new Map(); // id -> { cmd, resolve, reject }
 const rpcListeners = new Map(); // event -> Set of listeners
 
-// Send `cmd` with `args`. The promise resolves with the reply's value and
-// rejects with an RpcError. Without a host (a test page) a call is
+// Send `cmd` with `args`; `step` names the group of edits its edit is one
+// step with (saving.md#undo). The promise resolves with the reply's value
+// and rejects with an RpcError. Without a host (a test page) a call is
 // `cancelled`.
-export function rpcCall(cmd, args = {}, { channel } = {}) {
+export function rpcCall(cmd, args = {}, { channel, step } = {}) {
   const id = rpcNextId++;
   const reply = new Promise((resolve, reject) => rpcPending.set(id, { cmd, resolve, reject }));
-  if (rpcBridge) rpcBridge.post(JSON.stringify({ id, cmd, args }));
+  if (rpcBridge) rpcBridge.post(JSON.stringify({ id, cmd, args, step }));
   else rpcSettle(id, { err: { code: 'cancelled' } });
   return reply;
 }

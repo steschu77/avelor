@@ -1,17 +1,20 @@
 // Undo and redo (saving.md#undo): Ctrl+Z takes the last edit back,
 // Ctrl+Y or Ctrl+Shift+Z does it again -- outside a field or an editor,
-// which keep the keys for their own undo (`typing`). The host does it and
-// says so in the status bar (the `notice` event). Each is sent as a
-// structural edit (`structureCall`) and ends as one does, the selection
-// kept.
+// which keep the keys for their own undo (`typing`). A card still in edit
+// mode leaves it first, saving, so its editing session is the last step.
+// The host does it and says so in the status bar (the `notice` event).
+// Each is sent as a structural edit (`structureCall`) and ends as one
+// does, the selection kept.
 
 import { registerAction } from '../core/actions.js';
 import { typing } from '../core/dom.js';
 import { t } from '../core/text.js';
 import { store } from '../model/state.js';
 import { structureCall } from '../model/structure.js';
+import { leaveEditModes } from './header.js';
 
 function replay(cmd) {
+  leaveEditModes();
   structureCall(cmd, {}, () => store.getState());
 }
 

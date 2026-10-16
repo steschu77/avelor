@@ -9,6 +9,7 @@ use std::process::Command;
 // The page's layers (build.rs), the tests above them.
 const LAYERS: &[&str] = &[
     "static/core/",
+    "static/editor/",
     "static/model/",
     "static/ui/",
     "static/features/",

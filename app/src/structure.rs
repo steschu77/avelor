@@ -83,7 +83,7 @@ fn answer(app: &App, req: Req, result: Result<SaveOutcome>, id: Option<Id>) {
 // ----------------------------------------------------------------------------
 /// What a step names `id` by (`saving.md#undo`): its title, or `instead`
 /// while it has none.
-fn named(app: &App, id: &Id, instead: &str) -> String {
+pub(crate) fn named(app: &App, id: &Id, instead: &str) -> String {
     let title = app
         .vault
         .index()
@@ -97,7 +97,9 @@ fn named(app: &App, id: &Id, instead: &str) -> String {
 /// `set_title`: the title of `id`, any entity; an empty title removes it.
 pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
     let step = Text::new("undo.set_title").arg("title", named(app, &id, &title));
-    let result = app.step(step, |index, changes| index.set_title(&id, title, changes));
+    let result = app.step(&req, step, |index, changes| {
+        index.set_title(&id, title, changes)
+    });
     answer(app, req, result, Some(id));
 }
 
@@ -110,7 +112,7 @@ pub fn set_starred(app: &mut App, req: Req, id: Id, starred: bool) {
         false => Text::new("undo.set_unstarred"),
     };
     let step = step.arg("title", named(app, &id, ""));
-    let result = app.step(step, |index, changes| {
+    let result = app.step(&req, step, |index, changes| {
         index.set_starred(&id, starred, changes)
     });
     answer(app, req, result, Some(id));
@@ -125,7 +127,7 @@ pub fn set_archived(app: &mut App, req: Req, id: Id, archived: bool) {
         false => Text::new("undo.set_unarchived"),
     };
     let step = step.arg("title", named(app, &id, ""));
-    let result = app.step(step, |index, changes| {
+    let result = app.step(&req, step, |index, changes| {
         index.set_archived(&id, archived, changes)
     });
     answer(app, req, result, Some(id));

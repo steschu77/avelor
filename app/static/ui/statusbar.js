@@ -3,11 +3,13 @@
 // one to show -- the newest -- and out when it has none. A notice is
 // something the host reported:
 // - an error (`showError`, model/state.js; the `notice` event at level
-//   error, or a failed call nobody handled, below), like settings it
-//   couldn't write. It stays until its x dismisses it; the same text again
-//   doesn't stack up.
+//   error, or a failed call nobody handled, below): a failed save,
+//   settings it couldn't write. It stays until its x dismisses it; the same
+//   text again doesn't stack up (autosave retries a failed save every 4 s).
 // - what an undo or a redo did (the `notice` event at level info). It goes
 //   on its own after `NOTICE_INFO_MS`, not while the mouse is over the bar.
+// A file changed outside the app is asked about in a dialog instead
+// (features/conflict.js).
 
 import { accEl } from '../core/dom.js';
 import { titled } from '../core/dom.js';
@@ -94,5 +96,5 @@ window.addEventListener('unhandledrejection', e => {
   if (!(error instanceof RpcError)) return;
   e.preventDefault();
   if (error.code === 'cancelled') return;
-  showError(`${error.cmd}: ${error.message}`);
+  showError(error.message);
 });

@@ -21,6 +21,42 @@
 
 <body>
 
+  <template id="editor-toolbar-template">
+    <div class="toolbar editor-toolbar" hidden>
+      <button type="button" class="tool" data-cmd="bold" data-t-title="editor.bold"><svg class="icon"><use href="#i-text-bold" /></svg></button>
+      <button type="button" class="tool" data-cmd="italic" data-t-title="editor.italic"><svg class="icon"><use href="#i-text-italic" /></svg></button>
+      <button type="button" class="tool" data-cmd="strike" data-t-title="editor.strike"><svg class="icon"><use href="#i-text-strikethrough" /></svg></button>
+      <button type="button" class="tool" data-cmd="code" data-t-title="editor.code" data-t-aria-label="editor.code">&lt;/&gt;</button>
+      <span class="toolbar__sep"></span>
+      <button type="button" class="tool" data-block="H1" data-t-title="editor.h1">H1</button>
+      <button type="button" class="tool" data-block="H2" data-t-title="editor.h2">H2</button>
+      <button type="button" class="tool" data-block="H3" data-t-title="editor.h3">H3</button>
+      <span class="toolbar__sep"></span>
+      <button type="button" class="tool" data-cmd="ul" data-t-title="editor.ul"><svg class="icon"><use href="#i-text-bullet-list-ltr" /></svg></button>
+      <button type="button" class="tool" data-cmd="ol" data-t-title="editor.ol" data-t-aria-label="editor.ol">1.</button>
+      <button type="button" class="tool" data-cmd="quote" data-t-title="editor.quote" data-t-aria-label="editor.quote">&ldquo;&rdquo;</button>
+      <button type="button" class="tool" data-cmd="codeblock" data-t-title="editor.codeblock" data-t-aria-label="editor.codeblock">```</button>
+      <button type="button" class="tool" data-cmd="hr" data-t-title="editor.hr" data-t-aria-label="editor.hr">&mdash;</button>
+      <span class="toolbar__sep"></span>
+      <button type="button" class="tool" data-cmd="link" data-t-title="editor.link"><svg class="icon"><use href="#i-link" /></svg></button>
+      <button type="button" class="tool" data-cmd="image" data-t-title="editor.image"><svg class="icon"><use href="#i-image" /></svg></button>
+      <button type="button" class="tool" data-cmd="table" data-t-title="editor.table" data-t="editor.table_label"></button>
+      <span class="toolbar__sep" data-table-only hidden></span>
+      <button type="button" class="tool" data-cmd="row-add" data-table-only hidden
+        data-t-title="editor.row_add" data-t="editor.row_add_label"></button>
+      <button type="button" class="tool" data-cmd="row-del" data-table-only hidden data-t-title="editor.row_del" data-t="editor.row_del_label"></button>
+      <button type="button" class="tool" data-cmd="col-add" data-table-only hidden data-t-title="editor.col_add" data-t="editor.col_add_label"></button>
+      <button type="button" class="tool" data-cmd="col-del" data-table-only hidden data-t-title="editor.col_del" data-t="editor.col_del_label"></button>
+      <button type="button" class="tool" data-cmd="table-del" data-table-only hidden data-t-title="editor.table_del" data-t="editor.table_del_label"></button>
+    </div>
+  </template>
+
+  <template id="preview-toolbar-template">
+    <div class="pane-section pane-section--ruled toolbar">
+      <button type="button" class="tool" data-cmd="edit" data-t-title="card.edit"><svg class="icon"><use href="#i-edit" /></svg></button>
+    </div>
+  </template>
+
   <div class="shell">
     <header class="topbar"></header>
 
@@ -135,6 +171,7 @@
     </div>
     <div class="dialog__foot">
       <button type="button" class="btn push" id="conflict-theirs" data-t="conflict.theirs"></button>
+      <button type="button" class="btn" id="conflict-ours" data-t="conflict.ours"></button>
     </div>
   </dialog>
 

@@ -1,9 +1,15 @@
 //! Markdown -> HTML rendering for the WYSIWYG editor.
 //!
-//! [`to_html`] renders a markdown body into the exact DOM shape — no
-//! whitespace between blocks, bare `<pre>` with `<br>` line breaks,
-//! `<strong>`/`<em>`, attributes only where the round trip needs them; raw
-//! HTML escaped to visible text.
+//! [`to_html`] renders a markdown body into the exact DOM shape that
+//! `app/static/editor/editor.js` edits — no whitespace between blocks, bare
+//! `<pre>` with `<br>` line breaks, `<strong>`/`<em>`, attributes only
+//! where the round trip needs them; raw HTML escaped to visible text. The
+//! contract, the mapping table, and the rules of the reverse direction
+//! (the webview's `app/static/editor/markdown.js`, `serializeMarkdown`)
+//! are in `markdown.md`; the two test tables — this module's and
+//! `app/static/editor/markdown.selftest.js` — mirror each other
+//! (`markdown.md#testing`), so anything added to the writer below needs its
+//! counterpart in both.
 
 use std::fmt::Write as _;
 
@@ -296,7 +302,7 @@ fn escape_into(out: &mut String, text: &str) {
 mod tests {
     use super::*;
 
-    // --- the editor's mapping table ---
+    // --- the editor's mapping table (mirrored in markdown.selftest.html) ---
 
     #[test]
     fn paragraphs() {

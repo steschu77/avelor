@@ -29,6 +29,9 @@ struct Envelope {
     cmd: String,
     #[serde(default)]
     args: Value,
+    /// The group of edits the page makes one step of (`saving.md#undo`).
+    #[serde(default)]
+    step: Option<String>,
 }
 
 // ----------------------------------------------------------------------------
@@ -47,6 +50,7 @@ enum Command {
     CloseReady(close::Answer),
     // A document's content in the editors (`documents`).
     LoadDocContent(Target),
+    SaveDocContent(Save),
     // The structural commands (`structure`).
     SetTitle(Retitle),
     SetStarred(Star),
@@ -80,6 +84,16 @@ struct Url {
 #[derive(Deserialize)]
 struct Target {
     id: Id,
+}
+
+/// `{id, markdown, overwrite?}`: `overwrite` writes over a file changed
+/// outside the app (the conflict dialog's Use ours).
+#[derive(Deserialize)]
+struct Save {
+    id: Id,
+    markdown: String,
+    #[serde(default)]
+    overwrite: bool,
 }
 
 /// `{id, title}`
@@ -116,6 +130,7 @@ impl Command {
             "open_url" => Command::OpenUrl(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
+            "save_doc_content" => Command::SaveDocContent(from_value(args)?),
             "set_title" => Command::SetTitle(from_value(args)?),
             "set_starred" => Command::SetStarred(from_value(args)?),
             "set_archived" => Command::SetArchived(from_value(args)?),
@@ -138,7 +153,10 @@ pub fn on_message(app: &mut App, text: &str) {
         Ok(envelope) => envelope,
         Err(e) => return log::warn!("A message from the page isn't a request: {e}"),
     };
-    let req = app.req(envelope.id);
+    let req = app
+        .req(envelope.id)
+        .in_group(envelope.step)
+        .for_command(&envelope.cmd);
     match Command::decode(&envelope.cmd, envelope.args) {
         Ok(command) => route(app, req, command),
         Err(e) => req.err(Error::BadRequest { msg: e.to_string() }),
@@ -155,6 +173,9 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::CloseReady(a) => close::close_ready(app, req, a),
         Command::LoadDocContent(a) => documents::load_doc_content(app, req, a.id),
+        Command::SaveDocContent(a) => {
+            documents::save_doc_content(app, req, a.id, a.markdown, a.overwrite)
+        }
         Command::SetTitle(a) => structure::set_title(app, req, a.id, a.title),
         Command::SetStarred(a) => structure::set_starred(app, req, a.id, a.starred),
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),
@@ -172,8 +193,10 @@ fn route(app: &mut App, req: Req, command: Command) {
 /// UI thread, after the events its handler posted.
 pub struct Req {
     id: u64,
+    cmd: String,
     ui: Arc<UiQueue>,
     answered: bool,
+    group: Option<String>,
 }
 
 impl Req {
@@ -181,27 +204,49 @@ impl Req {
     pub fn new(id: u64, ui: Arc<UiQueue>) -> Self {
         Self {
             id,
+            cmd: String::new(),
             ui,
             answered: false,
+            group: None,
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The request, `cmd` its command, which the log names where it fails.
+    pub fn for_command(mut self, cmd: &str) -> Self {
+        self.cmd = cmd.to_string();
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    /// The request, its edit one step with the others of `group`
+    /// (`saving.md#undo`).
+    pub fn in_group(mut self, group: Option<String>) -> Self {
+        self.group = group;
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    /// The group of edits the request's is one step with, if the page named
+    /// one.
+    pub fn group(&self) -> Option<&str> {
+        self.group.as_deref()
     }
 
     // ------------------------------------------------------------------------
     /// Answer with `data`: `{"re": id, "ok": data}`.
     pub fn ok(mut self, data: impl Serialize) {
-        let reply = match serde_json::to_value(data) {
-            Ok(data) => json!({ "re": self.id, "ok": data }),
-            Err(e) => error_reply(self.id, &Error::from(e)),
-        };
-        self.send(reply);
+        match serde_json::to_value(data) {
+            Ok(data) => self.send(json!({ "re": self.id, "ok": data })),
+            Err(e) => self.send_error(&Error::from(e)),
+        }
     }
 
     // ------------------------------------------------------------------------
     /// Answer with `error`: `{"re": id, "err": {"code", "text"}}`, the text
     /// naming the code; the error goes to the log.
     pub fn err(mut self, error: Error) {
-        let reply = error_reply(self.id, &error);
-        self.send(reply);
+        self.send_error(&error);
     }
 
     // ------------------------------------------------------------------------
@@ -217,8 +262,15 @@ impl Req {
     /// Answer a save that failed with `text`, a sentence for the page
     /// ("Could not save the account."); the error is logged.
     pub fn save_failed(self, error: Error, text: Text) {
-        log::warn!("{}: {error}", text.key);
+        log::warn!("{} ({}): {error}", text.key, self.cmd);
         self.fail(error, text);
+    }
+
+    // ------------------------------------------------------------------------
+    fn send_error(&mut self, error: &Error) {
+        log::info!("Request {} ({}) failed: {error}", self.id, self.cmd);
+        let reply = error_reply(self.id, error);
+        self.send(reply);
     }
 
     // ------------------------------------------------------------------------
@@ -232,15 +284,13 @@ impl Req {
 impl Drop for Req {
     fn drop(&mut self) {
         if !self.answered {
-            let reply = error_reply(self.id, &Error::Cancelled);
-            self.send(reply);
+            self.send_error(&Error::Cancelled);
         }
     }
 }
 
 // ----------------------------------------------------------------------------
 fn error_reply(id: u64, error: &Error) -> Value {
-    log::info!("Request {id} failed: {error}");
     let mut text = Text::new("error.code").arg("code", error.code());
     // The argument named, for the page that sent it (not shown).
     if let Error::InvalidArgument { arg } = error {

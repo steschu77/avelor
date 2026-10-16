@@ -1,20 +1,24 @@
 //! A document's content in the page's editors (`saving.md`): loading
-//! it. Typed commands (`api.md#documents`). A file changed
+//! it, and saving the editor's markdown. Typed commands
+//! (`api.md#documents`). A file changed
 //! outside the app is taken in if the app had only read it -- `entity` and
 //! `content` pushed before the answer -- and otherwise answered as a
 //! conflict for the dialog, nothing written (`saving.md#conflicts`).
 
+use av_utils::error::Error;
 use av_utils::id::Id;
 use av_vault::vault::Refresh;
+use av_vault::vault::{Changes, SaveOutcome};
 use serde::Serialize;
 
 use crate::app::App;
 use crate::protocol::Req;
-use crate::structure::Conflict;
+use crate::structure::{self, Conflict};
+use crate::texts::Text;
 use av_utils::is_false;
 
 // ----------------------------------------------------------------------------
-/// The answer of `load_doc_content`: the content as
+/// The answer of `load_doc_content` and `save_doc_content`: the content as
 /// the file holds it now -- its markdown `source` and the editor `html`
 /// rendered from it, as in the `content` event -- or that the file is gone,
 /// or the conflict to ask about.
@@ -47,7 +51,8 @@ impl Content {
 
 // ----------------------------------------------------------------------------
 /// `load_doc_content`: `id`'s content, once its file was looked at -- the
-/// content as it is then, `gone`, or with the `conflict` over it.
+/// content as it is then, `gone`, or with the `conflict` over it (the app's
+/// version is shown, so Use ours can write it back).
 pub fn load_doc_content(app: &mut App, req: Req, id: Id) {
     let refreshed = refresh(app, &id);
     if app.vault.index().entry(&id).is_none() {
@@ -61,6 +66,41 @@ pub fn load_doc_content(app: &mut App, req: Req, id: Id) {
         content.conflict = Some(Conflict::of(app, id));
     }
     req.ok(content);
+}
+
+// ----------------------------------------------------------------------------
+/// `save_doc_content`: save `markdown` (the page's serialization of the
+/// editor's DOM, `saving.md#messages`) as `id`'s new content, answered with
+/// what the file holds then (also when nothing changed: the page takes it
+/// as the acknowledgment). A file changed outside the app is answered as a
+/// conflict and not written, unless `overwrite`, the dialog's Use ours.
+/// A failure is answered in the host's words. A step: the saves of one
+/// editing session, the page's group, are one (`saving.md#undo`).
+pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overwrite: bool) {
+    let mut changes = Changes::default();
+    let saved = app
+        .vault
+        .save_content(&id, &markdown, overwrite, &mut changes);
+    let step = Text::new("undo.save_doc_content").arg("title", structure::named(app, &id, ""));
+    app.keep_step(&req, step, changes.files);
+    match saved {
+        Ok(SaveOutcome::Conflict(_)) => {
+            log::info!("Not saving {id}: changed outside the app");
+            req.ok(Content {
+                conflict: Some(Conflict::of(app, id)),
+                ..Default::default()
+            });
+        }
+        Ok(SaveOutcome::Saved | SaveOutcome::Unchanged) => req.ok(Content::of(app, &id)),
+        Err(err) => {
+            log::warn!("Could not save {id}: {err}");
+            let text = match err {
+                Error::NotFound => Text::new("save.document_gone"),
+                _ => Text::new("save.document"),
+            };
+            req.fail(err, text);
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -109,7 +149,7 @@ pub(crate) fn post_taken_in(app: &mut App, id: &Id, now: Option<Id>) {
 // ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
-    use crate::testing::{notes, shape};
+    use crate::testing::{notes, parse, shape};
     use av_utils::id::Id;
     use serde_json::json;
     use std::fs;
@@ -149,5 +189,68 @@ mod tests {
         let sent = h.call("load_doc_content", json!({ "id": ids[0] }));
         assert_eq!(shape(&sent), ["entity_deleted", "reply"]);
         assert_eq!(sent[1]["ok"], json!({ "gone": true }));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn saving_writes_and_answers_with_what_the_file_holds() {
+        let (mut h, ids) = notes("save", 1);
+        let args = json!({ "id": ids[0], "markdown": "Ours\n" });
+        let sent = h.call("save_doc_content", args);
+        assert_eq!(shape(&sent), ["reply"]);
+        assert_eq!(sent[0]["ok"]["source"], "Ours\n");
+        let text = fs::read_to_string(h.vault().join("Notes/n0.md")).unwrap();
+        assert!(text.ends_with("---\nOurs\n"), "{text}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_save_over_a_changed_file_is_a_conflict_until_overwritten() {
+        let (mut h, ids) = notes("save-conflict", 1);
+        let path = h.vault().join("Notes/n0.md");
+        fs::write(&path, theirs(ids[0])).unwrap();
+
+        let args = json!({ "id": ids[0], "markdown": "Ours\n" });
+        let sent = h.call("save_doc_content", args);
+        assert_eq!(shape(&sent), ["reply"]);
+        let ok = &sent[0]["ok"];
+        assert_eq!(ok["conflict"]["id"], ids[0].to_string());
+        assert!(ok.get("source").is_none(), "{ok}");
+        assert_eq!(fs::read_to_string(&path).unwrap(), theirs(ids[0]));
+
+        let args = json!({ "id": ids[0], "markdown": "Ours\n", "overwrite": true });
+        let sent = h.call("save_doc_content", args);
+        assert_eq!(sent[0]["ok"]["source"], "Ours\n");
+        assert!(fs::read_to_string(&path).unwrap().ends_with("---\nOurs\n"));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_saves_of_one_editing_session_are_one_step() {
+        let (mut h, ids) = notes("save-step", 1);
+        let before = h.files();
+        for (n, markdown) in ["One\n", "Two\n"].iter().enumerate() {
+            let args = json!({ "id": ids[0], "markdown": markdown, "overwrite": false });
+            let request =
+                json!({ "id": n, "cmd": "save_doc_content", "args": args, "step": "edit:1" });
+            h.send(&request.to_string());
+        }
+        let after = h.files();
+        let sent = parse(&h.send(r#"{"id": 3, "cmd": "undo"}"#));
+        assert_eq!(shape(&sent), ["entity", "content", "notice", "reply"]);
+        assert_eq!(
+            sent[1]["data"]["source"], "Body 0\n",
+            "the editor gets the body back"
+        );
+        assert_eq!(h.files(), before);
+        h.send(r#"{"id": 4, "cmd": "redo"}"#);
+        assert_eq!(h.files(), after);
+
+        // Another session is another step.
+        let args = json!({ "id": ids[0], "markdown": "Three\n", "overwrite": false });
+        let request = json!({ "id": 5, "cmd": "save_doc_content", "args": args, "step": "edit:2" });
+        h.send(&request.to_string());
+        h.send(r#"{"id": 6, "cmd": "undo"}"#);
+        assert_eq!(h.files(), after);
     }
 }

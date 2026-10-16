@@ -25,7 +25,7 @@ what the lens shows, and so do the labels picked in the lens head.
 Filtering is entirely on the page: all metadata
 arrives with the indexing (`renderSidebar`, `features/sidebar.js`;
 `matchesFilter`, `model/entities.js`). The counts per project are derived on
-the page, once per frame.
+the page, once per frame (`panel.md#host-pushes`).
 
 - **Marked** is a row while it narrows the list (`aria-current`): a
   project, No project, a source. "All Projects" and "All Sources", the

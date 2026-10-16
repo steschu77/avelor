@@ -3,7 +3,8 @@
 export const $ = id => document.getElementById(id);
 
 // A scheduler that runs `fn()` once in the next animation frame however often
-// it is called before then. `fn` gets no arguments (not rAF's timestamp).
+// it is called before then; `.cancel()` drops a pending run. `fn` gets no
+// arguments (not rAF's timestamp).
 export function oncePerFrame(fn) {
   let frame = null;
   const schedule = () => {
@@ -12,6 +13,10 @@ export function oncePerFrame(fn) {
       frame = null;
       fn();
     });
+  };
+  schedule.cancel = () => {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
   };
   return schedule;
 }

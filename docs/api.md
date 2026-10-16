@@ -22,6 +22,8 @@ which answers through a `Req`.
 - **Exactly one reply per request**: `ok` with the command's value, or
   `err` with a `code` and a `text`, what the page shows
   (`localization.md#host-texts`).
+- **A request** is `{id, cmd, args}`, and `step`, a group the page names:
+  the edits of one group are one step to undo (`saving.md#undo`).
 - **Two-step decode** (envelope first, then the command), so a bad payload
   still has an `id` to answer: a request whose command or `args` don't
   decode is answered `bad_request`. A message that isn't JSON, or has no
@@ -59,8 +61,9 @@ which answers through a `Req`.
 
 `rpc.js` is the page's only door to the host.
 
-- `rpcCall(cmd, args)` sends a command and returns a promise of
-  its one reply, which rejects with an `RpcError {cmd, code, message}`.
+- `rpcCall(cmd, args, {step})` sends a command, `step` its group
+  (`#rules`), and returns a promise of its one reply, which rejects with
+  an `RpcError {cmd, code, message}`.
 - `rpcOn(event, fn)` listens for the pushes.
 - A failed call nobody handles is shown in the status bar as an error that
   stays until dismissed, unless it is `cancelled`, so no
@@ -77,10 +80,10 @@ Host modules: `api.rs`, `indexing.rs`.
 | Command | Args | Reply and pushes |
 |---|---|---|
 | `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one: the indexing (`vault`, an `entity` per file, `vault_error`, the indexing's `job` events; `vault.md#opening`). `null` once the indexing has started. |
-| `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and indexed as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. |
+| `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and indexed as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. The page sends its unsaved edits first. |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
 | `reveal_vault` | — | Open the vault's folder in Explorer (on Linux the file manager) once the handler has returned. `null`; `invalid_path` ("No vault is open."), or the shell's error ("Could not show the vault's folder."). |
-| `open_url` | `{ url }` | Open a link in its default app (the browser, the email app). Only `http://`, `https://`, `mailto:` and `tel:` links, else `invalid_argument`: anything else could start a program or open a file. `null` once the shell has taken the link, or the shell's error ("Could not open …"). An `id:` link never reaches the host. |
+| `open_url` | `{ url }` | Open a link in its default app (the browser, the email app). Only `http://`, `https://`, `mailto:` and `tel:` links, else `invalid_argument`: anything else could start a program or open a file. `null` once the shell has taken the link, or the shell's error ("Could not open …"). An `id:` link never reaches the host (`editor.md#links`). |
 
 ### Document commands <a id="documents"></a>
 
@@ -89,6 +92,7 @@ Host module: `documents.rs`. The page side is `saving.md`.
 | Command | Args | Reply and pushes |
 |---|---|---|
 | `load_doc_content` | `{ id }` | A document's content for an editor, once its file was looked at (`saving.md#conflicts`). What was taken in is pushed first (`entity`, `content`, `entity_deleted`). `ok {source, html}`: the markdown body and its `to_html` rendering, `html` empty for a YAML record; with `conflict: {id, changed}` too if the app's own saved edits were written over; or `ok {gone: true}` if the entity left the vault (its file gone, or its `id` changed by hand), after `entity_deleted`, or if the open vault doesn't hold it (the page asked before it heard that another vault opened). |
+| `save_doc_content` | `{ id, markdown, overwrite? }` | Save an editor's markdown (`serializeMarkdown(root)`), written only if the content or the frontmatter differs from the file. `ok {source, html}` after every successful save, also when nothing changed: `source` is the body now on disk, `html` its rendering. `ok {conflict: {id, changed}}` if the file changed outside the app since it was last read or written, nothing written: `changed` is its modified time now (ISO 8601), empty if it was deleted. `overwrite: true` (Use ours) writes over the changed file, or as the deleted file again. A failure in the host's words ("Could not save the document."). A step; the saves of one editing session, its group, are one (`saving.md#undo`). |
 
 ### Structural commands <a id="structure"></a>
 
@@ -122,7 +126,7 @@ Host module: `close.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `close_ready` | `{ id, ready }` | The page's answer to the `close` event `id` (`saving.md#closing-the-app`): `ready` closes the window; not ready keeps it. An answer to an earlier close changes nothing. `null`. |
+| `close_ready` | `{ id, ready }` | The page's answer to the `close` event `id`, sent once every save it sent is answered (`saving.md#closing-the-app`): `ready` closes the window; not ready keeps it. An answer to an earlier close changes nothing. `null`. |
 
 ## Events <a id="events"></a>
 
@@ -136,5 +140,5 @@ What the host pushes; the page listens with `rpcOn`.
 | `job` | `{ id, label, state: "running"\|"done", done, total, summary, stoppable }`, `label` a text and `summary` a list of them (`localization.md#host-texts`) | A job started, made progress, or ended: an indexing. `summary` is an ended job's summary (what it did, what failed, or why it failed); a job that ended did all its steps (`done` = `total`). |
 | `entity` | `{ id, kind, title, path, source, type, date, projects, labels, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during an indexing, and for every entity an edit rewrote, whatever the edit (a structural command, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
 | `entity_deleted` | `{ id }` | The entity left the vault: its file is gone. |
-| `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: its file was read again. `load_doc_content` answers with the same `source` and `html`. |
+| `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: an undo or a redo rewrote it, or its file was read again. `load_doc_content` answers with the same `source` and `html`. |
 | `notice` | `{ level, text }` | `error`: the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), `config.yaml` couldn't be read at start (on `ready`), or a step wasn't undone or redone. `info`: what an undo or a redo did. A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |

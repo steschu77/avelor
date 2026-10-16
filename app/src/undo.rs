@@ -14,9 +14,11 @@ use crate::texts::Text;
 const KEPT: usize = 100;
 
 // ----------------------------------------------------------------------------
-/// An edit the user made, named for the notices ("Renamed The Money Pit").
+/// An edit the user made, named for the notices ("Renamed The Money Pit"):
+/// several, when the page made them one group.
 struct Step {
     name: Text,
+    group: Option<String>,
     files: Vec<FileStep>,
 }
 
@@ -31,9 +33,17 @@ pub struct History {
 
 impl History {
     // ------------------------------------------------------------------------
-    /// Keep `step`, the newest; the steps to redo go with it.
+    /// Keep `step`, the newest; the steps to redo go with it. One of the
+    /// last step's group joins it.
     fn push(&mut self, step: Step) {
         self.undone.clear();
+        if let Some(last) = self.done.last_mut() {
+            if step.group.is_some() && last.group == step.group {
+                let files = std::mem::take(&mut last.files);
+                last.files = FileStep::joined(files, step.files);
+                return;
+            }
+        }
         self.done.push(step);
         if self.done.len() > KEPT {
             self.done.remove(0);
@@ -62,11 +72,11 @@ impl History {
 
 impl App {
     // ------------------------------------------------------------------------
-    /// Run the user's edit `f` as `App::edit` does, and keep what it wrote
-    /// as the step `name`, to undo. An edit that wrote nothing is no step;
-    /// one that failed part-way is the step of what it wrote.
+    /// Run the user's edit `f`, the request `req`'s, as `App::edit` does,
+    /// and keep what it wrote as the step `name`, to undo.
     pub fn step<R>(
         &mut self,
+        req: &Req,
         name: Text,
         f: impl FnOnce(&mut Index, &mut Changes) -> Result<R>,
     ) -> Result<R> {
@@ -76,10 +86,19 @@ impl App {
             files = std::mem::take(&mut changes.files);
             result
         });
-        if !files.is_empty() {
-            self.vault.history.push(Step { name, files });
-        }
+        self.keep_step(req, name, files);
         result
+    }
+
+    // ------------------------------------------------------------------------
+    /// Keep `files`, what the request `req`'s edit wrote, as the step
+    /// `name`, to undo. An edit that wrote nothing is no step; one that
+    /// failed part-way is the step of what it wrote.
+    pub fn keep_step(&mut self, req: &Req, name: Text, files: Vec<FileStep>) {
+        if !files.is_empty() {
+            let group = req.group().map(str::to_string);
+            self.vault.history.push(Step { name, group, files });
+        }
     }
 }
 
@@ -98,6 +117,11 @@ pub fn replay(app: &mut App, req: Req, op: Op) {
     };
     let result = app.edit(|index, changes| index.replay(&step.files, op, changes));
     let name = step.name.clone();
+    if result.is_ok() {
+        for file in step.files.iter().filter(|file| file.writes_body()) {
+            app.post_content(&file.id());
+        }
+    }
     match result {
         Ok(SaveOutcome::Saved | SaveOutcome::Unchanged) => {
             app.vault.history.taken(op, step);

@@ -29,12 +29,15 @@
   tests. It checks the catalogs too (`localization.md#check`), with
   `av-texts`' rules tested the same way.
 - `cargo clippy --workspace`.
+- `markdown.selftest.html` for the editor's markdown: the build's copy in
+  `OUT_DIR`, opened from disk, in CI by Chrome (`markdown.md#testing`).
 - The user tests new flows by hand against `data/forged`.
 
 ## The bundled page <a id="the-bundled-page"></a>
 
 `build.rs` bundles the page into
-`target/debug/build/avelor/<hash>/out/index.html`. Several hash
+`target/debug/build/avelor/<hash>/out/index.html`, and the
+markdown selftest beside it (`markdown.selftest.html`). Several hash
 folders exist, so take the one newer than the edited file. While the app
 runs, `cargo build` compiles but can't replace the locked exe; `cargo test
 -p avelor --no-run` still runs `build.rs`, so the page is bundled
@@ -52,8 +55,8 @@ exported, an exported `let`, a write to an import, a name used without
 its import (`features/x.js uses el, which core/dom.js declares, without
 importing it`), a module in no layer, or one importing from a higher layer
 (`core/dom.js imports from ui/log.js, a higher layer (ui/)`). So does an
-export no module of the page imports (`core/x.js exports b, which no
-module imports`), and a non-ASCII character in any page source, a module, a stylesheet or an HTML file
+export no module of the page or the selftest imports (`core/x.js exports
+b, which no module imports`), and a non-ASCII character in any page source, a module, a stylesheet or an HTML file
 (`line 273, column 53: '§' (U+00A7) isn't ASCII`), listed once per module
 that imports the file.
 

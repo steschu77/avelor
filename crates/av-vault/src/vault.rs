@@ -31,7 +31,7 @@ pub use indexing::{IndexControl, IndexEvent, index_vault};
 /// What a write did. A conflict is an expected outcome, not an error: the
 /// entity's file changed outside the app since it was last read or written,
 /// so nothing was written, and the user decides -- reload the file
-/// ([`Index::reload`]).
+/// ([`Index::reload`]) or overwrite it.
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SaveOutcome {
@@ -132,6 +132,13 @@ pub struct Changes {
     pub files: Vec<FileStep>,
 }
 
+impl Changes {
+    /// Keep `step`, a file's part in the operation's step.
+    fn wrote(&mut self, step: FileStep) {
+        FileStep::join(&mut self.files, step);
+    }
+}
+
 // ----------------------------------------------------------------------------
 /// Which way a step is taken (`saving.md#undo`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +190,38 @@ impl FileStep {
             Op::Undo => (&self.after, &self.before),
             Op::Redo => (&self.before, &self.after),
         }
+    }
+
+    /// Whether the step changed the file's body.
+    pub fn writes_body(&self) -> bool {
+        self.after.body.is_some()
+    }
+
+    /// The steps `files` and `later` as one step: a file written in both
+    /// goes from what it held before the first to what it held after the
+    /// last, in the place of the first.
+    pub fn joined(mut files: Vec<FileStep>, later: Vec<FileStep>) -> Vec<FileStep> {
+        for step in later {
+            FileStep::join(&mut files, step);
+        }
+        files
+    }
+
+    /// Put `step` to `files`: into the part its file has in them, if it was
+    /// written before.
+    fn join(files: &mut Vec<FileStep>, step: FileStep) {
+        match files.iter_mut().find(|file| file.id == step.id) {
+            Some(first) => first.then(step),
+            None => files.push(step),
+        }
+    }
+
+    /// This step of a file followed by `later`, the same file's.
+    fn then(&mut self, later: FileStep) {
+        // A body the first left alone was then what the later found.
+        self.before.body = self.before.body.take().or(later.before.body);
+        self.after.envelope = later.after.envelope;
+        self.after.body = later.after.body.or(self.after.body.take());
     }
 }
 
@@ -252,13 +291,14 @@ impl Index {
     /// preserved) through a temporary file, then record what the file holds
     /// now (`Document::written`), so `Document::is_dirty` reflects "clean"
     /// again afterward. A file changed outside the app since the
-    /// last read or write is a conflict and isn't touched.
-    fn save(&mut self, id: &Id, _overwrite: bool) -> Result<SaveOutcome> {
+    /// last read or write is a conflict and isn't touched, unless
+    /// `overwrite` (which also recreates a deleted file).
+    fn save(&mut self, id: &Id, overwrite: bool) -> Result<SaveOutcome> {
         let Some(&i) = self.by_id.get(id) else {
             return Err(Error::NotFound);
         };
         let entry = &self.documents[i];
-        if entry.changed_on_disk()? {
+        if !overwrite && entry.changed_on_disk()? {
             return Ok(SaveOutcome::Conflict(*id));
         }
         let text = renormalize(&entry.bom, entry.crlf, entry.doc.save());
@@ -270,6 +310,26 @@ impl Index {
         entry.written = true;
         entry.doc.written(stamp);
         Ok(SaveOutcome::Saved)
+    }
+
+    /// Set `id`'s body content and write it to disk -- but only if that
+    /// actually changed anything (`Document::is_dirty`); an unchanged
+    /// document is never rewritten. On a conflict (see [`Index::save`]) or
+    /// a failure, the in-memory content stays what the file holds. Its step
+    /// goes into `changes`.
+    pub fn save_content(
+        &mut self,
+        id: &Id,
+        content: String,
+        overwrite: bool,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        let before = self.get(id).map(Document::snapshot);
+        let outcome = self.write_change(id, overwrite, |doc| doc.set_content(content))?;
+        if outcome == SaveOutcome::Saved {
+            self.keep_step(id, before, changes);
+        }
+        Ok(outcome)
     }
 
     /// Read `id`'s file again and take in whatever it holds now: the
@@ -333,15 +393,26 @@ impl Index {
         change: impl FnOnce(&mut Document),
     ) -> Result<SaveOutcome> {
         let before = self.get(id).map(Document::snapshot);
-        let outcome = self.write_change(id, change)?;
+        let outcome = self.write_change(id, false, change)?;
         if outcome == SaveOutcome::Saved {
             changes.saved.push(*id);
-            let after = self.get(id).map(Document::snapshot);
-            if let Some((before, after)) = before.zip(after) {
-                changes.files.push(FileStep::saved(*id, before, after));
-            }
+            self.keep_step(id, before, changes);
         }
         Ok(outcome)
+    }
+
+    /// Keep the step of the write of `id` in `changes`: from what it held
+    /// `before` (`Document::snapshot`) to what it holds now.
+    fn keep_step(
+        &self,
+        id: &Id,
+        before: Option<(Option<Envelope>, String)>,
+        changes: &mut Changes,
+    ) {
+        let after = self.get(id).map(Document::snapshot);
+        if let Some((before, after)) = before.zip(after) {
+            changes.wrote(FileStep::saved(*id, before, after));
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -392,17 +463,24 @@ impl Index {
     /// anything. On a conflict or a failed save the document's envelope and
     /// body -- all it holds -- are put back as they were, so memory keeps
     /// matching the file.
-    fn write_change(&mut self, id: &Id, change: impl FnOnce(&mut Document)) -> Result<SaveOutcome> {
+    fn write_change(
+        &mut self,
+        id: &Id,
+        overwrite: bool,
+        change: impl FnOnce(&mut Document),
+    ) -> Result<SaveOutcome> {
         let Some(&i) = self.by_id.get(id) else {
             return Err(Error::NotFound);
         };
         let doc = &mut self.documents[i].doc;
         let before = doc.snapshot();
         change(doc);
-        if !doc.is_dirty() {
+        // An overwrite writes even an unchanged document: the file is what
+        // differs (Use ours after the app's own save was written over).
+        if !doc.is_dirty() && !overwrite {
             return Ok(SaveOutcome::Unchanged);
         }
-        let saved = self.save(id, false);
+        let saved = self.save(id, overwrite);
         if !matches!(saved, Ok(SaveOutcome::Saved)) {
             self.documents[i].doc.restore(before);
         }
