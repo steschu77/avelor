@@ -22,6 +22,7 @@ use av_utils::id::Id;
 use av_utils::text::renormalize;
 use av_utils::text::{LineEnding, normalize};
 
+mod create;
 mod indexing;
 mod properties;
 mod structure;
@@ -74,7 +75,8 @@ pub struct Entry {
 }
 
 impl Entry {
-    /// An entry for an entity that has no file yet.
+    /// An entry for an entity created in the app that has no file yet (see
+    /// [`Document::create`]): no path, so [`Index::save`] refuses it.
     pub fn unsaved(doc: Document) -> Self {
         Self {
             path: PathBuf::new(),
@@ -126,8 +128,13 @@ impl Entry {
 /// when the operation fails part-way.
 #[derive(Debug, Default)]
 pub struct Changes {
+    /// An entity new in the index: made in the app, written to its own new
+    /// file.
+    pub created: Option<Id>,
     /// Entities whose file was rewritten.
     pub saved: Vec<Id>,
+    /// Entities whose file an undo took away again: it left the index.
+    pub removed: Vec<Id>,
     /// What each written file held before and after, in the order written:
     /// the operation's step, to undo and redo ([`Index::replay`]).
     pub files: Vec<FileStep>,
@@ -151,13 +158,25 @@ pub enum Op {
 }
 
 // ----------------------------------------------------------------------------
-/// A file's part in a step (`saving.md#undo`): what the file of `id` held
-/// before the step, and after it.
+/// A file's part in a step (`saving.md#undo`): where the file of `id`, at
+/// `local` in the vault (vault-relative), was before the step, and after.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileStep {
     id: Id,
-    before: FileState,
-    after: FileState,
+    local: PathBuf,
+    before: Place,
+    after: Place,
+}
+
+// ----------------------------------------------------------------------------
+/// Where a step's file is.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Place {
+    /// In the vault, holding a state.
+    Vault(FileState),
+    /// Not in the vault: before the step made it, or once its undo took it
+    /// away again.
+    Gone,
 }
 
 impl FileStep {
@@ -165,6 +184,7 @@ impl FileStep {
     /// `Document::snapshot` takes them.
     fn saved(
         id: Id,
+        local: PathBuf,
         before: (Option<Envelope>, String),
         after: (Option<Envelope>, String),
     ) -> Self {
@@ -175,8 +195,19 @@ impl FileStep {
         };
         FileStep {
             id,
-            before: state(before),
-            after: state(after),
+            local,
+            before: Place::Vault(state(before)),
+            after: Place::Vault(state(after)),
+        }
+    }
+
+    /// The file of `doc` made at `local`.
+    fn created(local: PathBuf, doc: &Document) -> Self {
+        FileStep {
+            id: doc.id(),
+            local,
+            before: Place::Gone,
+            after: Place::Vault(FileState::of(doc)),
         }
     }
 
@@ -185,17 +216,17 @@ impl FileStep {
         self.id
     }
 
-    /// What `op` expects the file to hold, and what it leaves in it.
-    fn transition(&self, op: Op) -> (&FileState, &FileState) {
+    /// Where `op` expects the file, and where it leaves it.
+    fn transition(&self, op: Op) -> (&Place, &Place) {
         match op {
             Op::Undo => (&self.after, &self.before),
             Op::Redo => (&self.before, &self.after),
         }
     }
 
-    /// Whether the step changed the file's body.
+    /// Whether the step changed the file's body where it is.
     pub fn writes_body(&self) -> bool {
-        self.after.body.is_some()
+        matches!((&self.before, &self.after), (Place::Vault(_), Place::Vault(state)) if state.body.is_some())
     }
 
     /// The steps `files` and `later` as one step: a file written in both
@@ -220,9 +251,16 @@ impl FileStep {
     /// This step of a file followed by `later`, the same file's.
     fn then(&mut self, later: FileStep) {
         // A body the first left alone was then what the later found.
-        self.before.body = self.before.body.take().or(later.before.body);
-        self.after.envelope = later.after.envelope;
-        self.after.body = later.after.body.or(self.after.body.take());
+        if let (Place::Vault(was), Place::Vault(found)) = (&mut self.before, later.before) {
+            was.body = was.body.take().or(found.body);
+        }
+        match (&mut self.after, later.after) {
+            (Place::Vault(then), Place::Vault(last)) => {
+                then.envelope = last.envelope;
+                then.body = last.body.or(then.body.take());
+            }
+            (then, last) => *then = last,
+        }
     }
 }
 
@@ -236,6 +274,23 @@ pub struct FileState {
 }
 
 impl FileState {
+    /// All `doc` holds: its frontmatter and its body.
+    fn of(doc: &Document) -> Self {
+        let (envelope, body) = doc.snapshot();
+        FileState {
+            envelope: envelope.map(Box::new),
+            body: Some(body),
+        }
+    }
+
+    /// A document of the format `format` holding this state, as read from
+    /// its file.
+    fn document(&self, format: FileFormat) -> Document {
+        let mut doc = Document::load(String::new(), format);
+        self.put(&mut doc);
+        Document::load(doc.save(), format)
+    }
+
     /// Whether `doc` holds this state.
     fn held_by(&self, doc: &Document) -> bool {
         doc.envelope() == self.envelope.as_deref()
@@ -299,6 +354,9 @@ impl Index {
             return Err(Error::NotFound);
         };
         let entry = &self.documents[i];
+        if entry.is_unsaved() {
+            return Err(Error::Unsaved);
+        }
         if !overwrite && entry.changed_on_disk()? {
             return Ok(SaveOutcome::Conflict(*id));
         }
@@ -342,6 +400,9 @@ impl Index {
             return Err(Error::NotFound);
         };
         let entry = &self.documents[i];
+        if entry.is_unsaved() {
+            return Err(Error::Unsaved);
+        }
         let readonly = match fs::metadata(&entry.path) {
             Ok(metadata) => metadata.permissions().readonly(),
             Err(err) if err.kind() == ErrorKind::NotFound => {
@@ -410,10 +471,11 @@ impl Index {
         before: Option<(Option<Envelope>, String)>,
         changes: &mut Changes,
     ) {
-        let after = self.get(id).map(Document::snapshot);
-        if let Some((before, after)) = before.zip(after) {
-            changes.wrote(FileStep::saved(*id, before, after));
-        }
+        let (Some(entry), Some(before)) = (self.entry(id), before) else {
+            return;
+        };
+        let local = entry.local.clone();
+        changes.wrote(FileStep::saved(*id, local, before, entry.doc.snapshot()));
     }
 
     // ------------------------------------------------------------------------
@@ -430,7 +492,7 @@ impl Index {
         // Every file checked before any is written: a conflict writes nothing.
         for file in files {
             let (expected, _) = file.transition(op);
-            if !self.holds(&file.id, expected)? {
+            if !self.holds(file, expected)? {
                 return Ok(SaveOutcome::Conflict(file.id));
             }
         }
@@ -440,8 +502,7 @@ impl Index {
         }
         let mut outcome = SaveOutcome::Unchanged;
         for file in order {
-            let (_, target) = file.transition(op);
-            match self.update(&file.id, changes, |d| target.put(d))? {
+            match self.move_file(file, op, changes)? {
                 SaveOutcome::Saved => outcome = SaveOutcome::Saved,
                 SaveOutcome::Unchanged => {}
                 conflict => return Ok(conflict),
@@ -450,14 +511,50 @@ impl Index {
         Ok(outcome)
     }
 
-    /// Whether the file of `id` holds `state`, in memory and on disk, and
-    /// may be written.
-    fn holds(&self, id: &Id, state: &FileState) -> Result<bool> {
+    /// Whether `file` is at `place`: in the vault holding its state, in
+    /// memory and on disk, and writable; or gone, its place free.
+    fn holds(&self, file: &FileStep, place: &Place) -> Result<bool> {
+        match place {
+            Place::Vault(state) => {
+                let Some(entry) = self.entry(&file.id) else {
+                    return Ok(false);
+                };
+                self.check_writable(&file.id)?;
+                Ok(state.held_by(&entry.doc) && !entry.changed_on_disk()?)
+            }
+            Place::Gone => {
+                Ok(self.entry(&file.id).is_none() && !self.root.join(&file.local).exists())
+            }
+        }
+    }
+
+    /// Move `file` from where `op` finds it to where it leaves it.
+    fn move_file(&mut self, file: &FileStep, op: Op, changes: &mut Changes) -> Result<SaveOutcome> {
+        match file.transition(op) {
+            (Place::Vault(_), Place::Vault(state)) => {
+                self.update(&file.id, changes, |d| state.put(d))
+            }
+            (Place::Vault(_), Place::Gone) => self.take_away(&file.id, changes),
+            (Place::Gone, Place::Vault(state)) => {
+                let format = FileFormat::of_path(&file.local).unwrap_or(FileFormat::Markdown);
+                self.create_at(state.document(format), file.local.clone())?;
+                changes.saved.push(file.id);
+                Ok(SaveOutcome::Saved)
+            }
+            (Place::Gone, Place::Gone) => Ok(SaveOutcome::Unchanged),
+        }
+    }
+
+    /// Take the file of `id`, made by a step undone now, away again: off
+    /// the disk and out of the index.
+    fn take_away(&mut self, id: &Id, changes: &mut Changes) -> Result<SaveOutcome> {
         let Some(entry) = self.entry(id) else {
-            return Ok(false);
+            return Err(Error::NotFound);
         };
-        self.check_writable(id)?;
-        Ok(state.held_by(&entry.doc) && !entry.changed_on_disk()?)
+        fs::remove_file(&entry.path)?;
+        self.remove(id);
+        changes.removed.push(*id);
+        Ok(SaveOutcome::Saved)
     }
 
     /// Apply `change` to `id`'s document and save it if that changed
@@ -506,6 +603,17 @@ impl Index {
             }
             _ => Ok(()),
         }
+    }
+
+    /// The open vault's root: `InvalidPath` without one, as an index without
+    /// a vault has an empty root.
+    fn open_root(&self) -> Result<&Path> {
+        if self.root.as_os_str().is_empty() {
+            return Err(Error::InvalidPath {
+                path: PathBuf::new(),
+            });
+        }
+        Ok(&self.root)
     }
 
     fn check_project(&self, id: &Id) -> Result<()> {

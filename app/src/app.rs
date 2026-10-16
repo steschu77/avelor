@@ -444,12 +444,16 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// Send what an edit wrote: every rewritten entity (`entity`).
+    /// Send what an edit wrote: every created or rewritten entity
+    /// (`entity`), every one an undo took away (`entity_deleted`).
     fn post_changes(&self, changes: &Changes) {
-        for id in &changes.saved {
+        for id in changes.created.iter().chain(&changes.saved) {
             if let Some(entry) = self.vault.index().entry(id) {
                 self.post_entity(entry);
             }
+        }
+        for id in &changes.removed {
+            self.post_entity_deleted(id);
         }
     }
 }

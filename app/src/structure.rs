@@ -22,7 +22,8 @@ use crate::texts::Text;
 /// The answer of a structural command.
 #[derive(Serialize)]
 pub struct Done {
-    /// The entity the command is about: the entity itself.
+    /// The entity the command is about: the new project, the project of a
+    /// membership edit, the entity itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<Id>,
     /// Nothing was written: a file changed outside the app.
@@ -92,6 +93,17 @@ pub(crate) fn named(app: &App, id: &Id, instead: &str) -> String {
         .map(|d| d.title())
         .unwrap_or_default();
     if title.is_empty() { instead } else { title }.to_string()
+}
+
+// ----------------------------------------------------------------------------
+/// `create_project`: a project titled `title`, in `Projects/`.
+pub fn create_project(app: &mut App, req: Req, title: String) {
+    let step = Text::new("undo.create_project").arg("title", title.clone());
+    let created = app.step(&req, step, |index, changes| {
+        index.create_project(title, changes)
+    });
+    let id = created.as_ref().ok().copied();
+    answer(app, req, created.map(|_| SaveOutcome::Saved), id);
 }
 
 // ----------------------------------------------------------------------------
@@ -203,7 +215,6 @@ pub fn reload_entity(app: &mut App, req: Req, id: Id) {
 // ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
-    use crate::testing::Harness;
     use crate::testing::parse;
     use crate::testing::{notes, shape, shown, undoes};
     use av_utils::error::Error;
@@ -242,33 +253,6 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn starring_and_archiving_push_the_project_before_the_answer() {
-        let project = Id::generate();
-        let text = format!("id: {project}\nproject: {{}}\ntitle: Move\n");
-        let mut h = Harness::with_vault("star-archive", &[("Projects/move.yaml", text)]);
-
-        let sent = h.call("set_starred", json!({ "id": project, "starred": true }));
-        assert_eq!(shape(&sent), ["entity", "reply"]);
-        assert_eq!(sent[0]["data"]["starred"], true);
-        let sent = h.call("set_archived", json!({ "id": project, "archived": true }));
-        assert_eq!(shape(&sent), ["entity", "reply"]);
-        assert_eq!(sent[0]["data"]["archived"], true);
-        assert_eq!(sent[1]["ok"]["id"], project.to_string());
-
-        undoes(
-            &mut h,
-            "set_starred",
-            json!({ "id": project, "starred": false }),
-        );
-        undoes(
-            &mut h,
-            "set_archived",
-            json!({ "id": project, "archived": false }),
-        );
-    }
-
-    // ------------------------------------------------------------------------
-    #[test]
     fn a_file_changed_outside_is_answered_with_the_conflict() {
         let (mut h, ids) = notes("conflict", 1);
         let path = h.vault().join("Notes/n0.md");
@@ -301,31 +285,63 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn a_new_project_is_undone_and_made_again() {
+        let (mut h, _) = notes("undo-new-project", 1);
+        let sent = undoes(&mut h, "create_project", json!({ "title": "Move" }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        let project = sent[1]["ok"]["id"].as_str().unwrap().to_string();
+
+        let sent = h.call("undo", json!({}));
+        assert_eq!(shape(&sent), ["entity_deleted", "notice", "reply"]);
+        assert_eq!(sent[0]["data"]["id"], project);
+        let sent = h.call("redo", json!({}));
+        assert_eq!(shape(&sent), ["entity", "notice", "reply"]);
+        assert_eq!(sent[0]["data"]["id"], project);
+        assert_eq!(shown(&sent[1]["data"]["text"]), "Redone: Created Move");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn joining_a_project_answers_with_the_project() {
-        let (project, note) = (Id::generate(), Id::generate());
-        let files = [
-            (
-                "Projects/move.yaml".to_string(),
-                format!("id: {project}\nproject: {{}}\ntitle: Move\n"),
-            ),
-            (
-                "Notes/n0.md".to_string(),
-                format!("---\nid: {note}\ntitle: Note 0\ndocument: {{}}\n---\nBody 0\n"),
-            ),
-        ];
-        let mut h = Harness::with_vault("join-project", &files);
-        let sent = h.call("join_project", json!({ "id": note, "project": project }));
+        let (mut h, ids) = notes("join-project", 1);
+        let sent = h.call("create_project", json!({ "title": "Move" }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["kind"], "project");
+        let project = sent[1]["ok"]["id"].clone();
+
+        let sent = h.call("join_project", json!({ "id": ids[0], "project": project }));
         assert_eq!(shape(&sent), ["entity", "reply"]);
         assert_eq!(sent[0]["data"]["projects"], json!([project]));
-        assert_eq!(sent[1]["ok"]["id"], project.to_string());
+        assert_eq!(sent[1]["ok"]["id"], project);
 
-        let sent = h.call("leave_project", json!({ "id": note, "project": project }));
+        let args = json!({ "id": ids[0], "project": project });
+        undoes(&mut h, "leave_project", args.clone());
+        undoes(&mut h, "join_project", args);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn archiving_pushes_the_project_before_the_answer() {
+        let (mut h, _) = notes("archive", 1);
+        let sent = h.call("create_project", json!({ "title": "Move" }));
+        assert_eq!(sent[0]["data"]["archived"], false);
+        let project = sent[1]["ok"]["id"].clone();
+
+        let sent = h.call("set_archived", json!({ "id": project, "archived": true }));
         assert_eq!(shape(&sent), ["entity", "reply"]);
-        assert_eq!(sent[0]["data"]["projects"], json!([]));
+        assert_eq!(sent[0]["data"]["archived"], true);
+        assert_eq!(sent[1]["ok"]["id"], project);
 
-        let args = json!({ "id": note, "project": project });
-        undoes(&mut h, "join_project", args.clone());
-        undoes(&mut h, "leave_project", args);
+        undoes(
+            &mut h,
+            "set_archived",
+            json!({ "id": project, "archived": false }),
+        );
+        undoes(
+            &mut h,
+            "set_starred",
+            json!({ "id": project, "starred": true }),
+        );
     }
 
     // ------------------------------------------------------------------------

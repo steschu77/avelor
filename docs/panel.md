@@ -234,7 +234,8 @@ entity (`renderCardChips`, `features/panel/panel.js`).
 
 Every entity's title is set by the host through `set_title`
 (`Index::set_title`), whatever its kind (`architecture.md#conventions`):
-an empty title removes the `title` key, and the file keeps its name.
+an empty title removes the `title` key, and the file keeps its name
+(`vault.md#filenames`).
 
 - The pen at the end of a card's title line and the thread header's
   (`#thread-rename-btn`) make the title editable in place (`renameEntity`
@@ -253,6 +254,8 @@ an empty title removes the `title` key, and the file keeps its name.
 Projects are entities with the `project` role (`vault.md#project`); the
 vault panel lists them and filters by them (`ui.md#vault-panel`).
 
+- **Create**: the sidebar's "+" (`addProject`) creates "New project" in
+  `Projects/`, whose new pill opens in rename mode.
 - **Rename**: the pen on a sidebar project row (`editProject`), or the
   rename button in the vault header's project toolbar (`editProjectName`,
   which edits `#project-name` in place, `panel.md#titles`): the name
@@ -340,6 +343,7 @@ and save their bodies at once.
 | D12 | Rename | the pen in a card's head or the thread header → `renameEntity` → `editTextInPlace`; Enter or blur | `set_title` → `entity` | the card's head, the thread header, chips and links follow; the file keeps its name |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E5 | Switch thread | a chip in the threads line of a card in several threads → `switchThread` | — | that thread shown, the entity still selected and focused |
+| C1 | Create a project | "+" → `addProject` → `structureCall('create_project', {title: 'New project'})` | `Index::create_project` in `Projects/` → `entity`, `ok {id}` | new pill in rename mode |
 | C2 | Rename a project | pill pen or header rename → inline input, Enter/blur | `set_title` → `entity` | header and chips follow (`projects_rev`) |
 | C3 | Star | star icon → `toggleStar` | `set_starred {starred}` → `entity` | starred first |
 | C4 | Add to a project | a project in a card's "+" menu → `joinProjectLocal` | `join_project` → `entity` | the card's chips and the counts update |

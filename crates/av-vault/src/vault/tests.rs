@@ -1,5 +1,6 @@
 use super::*;
 use crate::envelope::DocumentType;
+use crate::envelope::Source;
 use av_utils::id::Id;
 
 fn fixture_vault() -> (PathBuf, Id, Id, Id, Id, Id, Id) {
@@ -154,6 +155,60 @@ fn indexing_ends_where_it_is_told_to_stop() {
     fs::remove_dir_all(&root).ok();
 }
 
+#[test]
+fn added_unsaved_entity_is_indexed_but_not_saved() {
+    use crate::envelope::{Bare, Roles, Thread};
+
+    let mut index = Index::default();
+    let roles = Roles {
+        thread: Some(Thread::default()),
+        ..Default::default()
+    };
+    let doc = Document::create(
+        roles,
+        Source::Created(Bare::default()),
+        "New thread".into(),
+        Vec::new(),
+        FileFormat::YAML,
+    );
+    let id = doc.id();
+
+    let entry = index.add(Entry::unsaved(doc));
+    assert!(entry.is_unsaved());
+    assert_eq!(entry.doc.format(), FileFormat::YAML);
+    assert_eq!(index.get(&id).unwrap().kind(), DocumentType::Thread);
+    assert!(matches!(index.save(&id, false), Err(Error::Unsaved)));
+}
+
+#[test]
+fn remove_keeps_the_other_entries_findable() {
+    use crate::envelope::{Bare, Roles};
+
+    let mut index = Index::default();
+    let ids: Vec<Id> = (0..3)
+        .map(|i| {
+            let doc = Document::create(
+                Roles::default(),
+                Source::Created(Bare::default()),
+                format!("doc {i}"),
+                Vec::new(),
+                FileFormat::Markdown,
+            );
+            index.add(Entry::unsaved(doc)).doc.id()
+        })
+        .collect();
+
+    let removed = index.remove(&ids[0]).expect("entry");
+    assert_eq!(removed.doc.id(), ids[0]);
+    assert!(index.get(&ids[0]).is_none());
+    assert!(index.remove(&ids[0]).is_none(), "second remove is a no-op");
+
+    // The last entry was moved into the freed slot; it must still resolve.
+    assert_eq!(index.get(&ids[1]).unwrap().title(), "doc 1");
+    assert_eq!(index.get(&ids[2]).unwrap().title(), "doc 2");
+    assert_eq!(index.all().len(), 2);
+}
+
 fn thread_vault() -> (PathBuf, Vec<Id>) {
     let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
     let ids: Vec<Id> = (0..3)
@@ -173,18 +228,35 @@ fn thread_vault() -> (PathBuf, Vec<Id>) {
 }
 
 #[test]
-fn remove_keeps_the_other_entries_findable() {
-    let (root, ids) = thread_vault();
+fn created_project_survives_reindexing() {
+    let (root, _) = thread_vault();
     let mut index = Index::build(&root);
-    let first = index.all()[0].doc.id();
 
-    let removed = index.remove(&first).unwrap();
-    assert_eq!(removed.doc.id(), first);
-    assert!(index.get(&first).is_none());
-    assert_eq!(index.all().len(), 2);
-    for id in ids.iter().filter(|id| **id != first) {
-        assert_eq!(index.get(id).unwrap().id(), *id);
-    }
+    let mut changes = Changes::default();
+    let project = index
+        .create_project("New project".into(), &mut changes)
+        .unwrap();
+    assert_eq!(changes.created, Some(project));
+    assert!(changes.saved.is_empty());
+
+    let entry = index.entry(&project).unwrap();
+    assert!(entry.local.starts_with("Projects"));
+    let name = entry
+        .local
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    assert!(
+        name.contains(".new-project.") && name.ends_with(".prj.md"),
+        "{name}"
+    );
+    assert!(entry.is_writable());
+
+    let reindexed = Index::build(&root);
+    let doc = reindexed.get(&project).unwrap();
+    assert_eq!(doc.kind(), DocumentType::Project);
+    assert_eq!(doc.title(), "New project");
 
     fs::remove_dir_all(&root).ok();
 }
@@ -573,7 +645,15 @@ fn a_step_is_undone_and_redone() {
     let titled = index.set_title(&ids[0], "Renamed".into(), &mut step);
     assert_eq!(titled.unwrap(), SaveOutcome::Saved);
     let renamed = fs::read_to_string(&path).unwrap();
-    let [FileStep { id, before, after }] = &step.files[..] else {
+    let [
+        FileStep {
+            id,
+            before: Place::Vault(before),
+            after: Place::Vault(after),
+            ..
+        },
+    ] = &step.files[..]
+    else {
         panic!("{:?}", step.files);
     };
     assert_eq!(*id, ids[0]);
@@ -637,6 +717,55 @@ fn a_body_is_a_step_and_steps_join_into_one() {
         SaveOutcome::Saved
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), after);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_new_file_is_taken_away_and_made_again() {
+    let (root, _) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut step = Changes::default();
+    let project = index.create_project("Move".into(), &mut step).unwrap();
+    let mut titled = Changes::default();
+    let renamed = index.set_title(&project, "Moving".into(), &mut titled);
+    assert_eq!(renamed.unwrap(), SaveOutcome::Saved);
+    let files = FileStep::joined(step.files, titled.files);
+    let [
+        FileStep {
+            local,
+            before: Place::Gone,
+            ..
+        },
+    ] = &files[..]
+    else {
+        panic!("{files:?}");
+    };
+    let path = root.join(local);
+    let made = fs::read_to_string(&path).unwrap();
+
+    let mut changes = Changes::default();
+    assert_eq!(
+        index.replay(&files, Op::Undo, &mut changes).unwrap(),
+        SaveOutcome::Saved
+    );
+    assert_eq!(changes.removed, [project]);
+    assert!(!path.exists() && index.get(&project).is_none());
+
+    let mut changes = Changes::default();
+    assert_eq!(
+        index.replay(&files, Op::Redo, &mut changes).unwrap(),
+        SaveOutcome::Saved
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), made);
+    assert_eq!(index.get(&project).unwrap().title(), "Moving");
+
+    // Changed since, it stays.
+    let titled = index.set_title(&project, "Moved".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    let undone = index.replay(&files, Op::Undo, &mut Changes::default());
+    assert_eq!(undone.unwrap(), SaveOutcome::Conflict(project));
+    assert!(path.exists());
 
     fs::remove_dir_all(&root).ok();
 }

@@ -10,7 +10,7 @@ use av_utils::text::unique_trimmed;
 impl Index {
     /// Set the title of `id`, which may be any entity. An empty title removes
     /// it ([`Document::set_title`]). Only the file's content changes; the file
-    /// is not renamed to match.
+    /// is not renamed to match (vault.md#filenames).
     pub fn set_title(
         &mut self,
         id: &Id,

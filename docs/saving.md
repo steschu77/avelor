@@ -249,8 +249,11 @@ changed it, so undoing a title keeps the text written since.
 `Index::replay` takes a step back (`Op::Undo`), its files as they were
 before, the last written first: what they held, the frontmatter's keys
 in the app's order, as any write puts them; or forth again
-(`Op::Redo`), as the step left them. Neither writes anything unless every
-file still holds what it held at that point, in memory and on disk
+(`Op::Redo`), as the step left them. A file goes from one place to
+another (`Place`): one the operation made is gone again with the undo,
+off the disk and out of the index (`Changes::removed`), and made again by
+the redo. Neither writes anything unless every file is where it was at
+that point and holds what it held, in memory and on disk
 (`#the-stamp`): a file written since, by the app or another program, is
 the conflict.
 
