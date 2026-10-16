@@ -52,7 +52,10 @@ window with `FindWindow("Avelor", [NullString]::Value)` (`$null`
 would become `""` and match nothing) and sends `WM_QUERYENDSESSION`
 (0x11), then `WM_ENDSESSION` (0x16, wParam 1). The app keeps running, and
 the log shows "Windows asks to end the session (flags …): yes", "Windows
-is ending the session".
+is ending the session" and, per held conflict, "Kept the edits of … as …".
+To stage a conflict: edit in the app, change the file outside, switch back
+so `check_files` opens the dialog. The kept copy is a new entity tagged
+`conflict`, named from its title (`saving.md#session-end`).
 
 On Linux, `kill -TERM` or `kill -HUP` with the app's process id ends the
 session as a logout's signal does: the log shows "SIGTERM: the session

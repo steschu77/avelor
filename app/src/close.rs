@@ -7,6 +7,9 @@
 //! within `CLOSE_WAIT` is hung or broken and can't save anything: the window
 //! closes then. The app closes the window through the UI queue
 //! (`UiQueue::close_window`), never from a worker.
+//!
+//! The session ending is answered at once, without the page: the UI thread
+//! never waits for it (`architecture.md#principles`, principle 8).
 
 use std::time::Duration;
 
@@ -15,6 +18,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::app::App;
+use crate::documents;
 use crate::protocol::Req;
 
 // ----------------------------------------------------------------------------
@@ -91,11 +95,24 @@ fn waited(app: &mut App, id: Id) {
 }
 
 // ----------------------------------------------------------------------------
+/// The session ends -- Windows ends it (`WM_ENDSESSION`), on Linux the
+/// session manager (`query-end`) or a signal -- and the app ends once this
+/// returns. The page isn't asked: it may be gone already (WebView2 ends its
+/// processes at their own `WM_ENDSESSION`). What it saved is on disk, at
+/// most about a second behind the typing (`saving.md#triggers`); a save
+/// refused for a conflict is kept as a conflict copy (`documents::keep_held`).
+pub fn on_session_end(app: &mut App) {
+    documents::keep_held(app);
+}
+
+// ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::notes;
     use crate::testing::{Harness, parse, shape};
     use serde_json::Value;
+    use std::fs;
 
     // ------------------------------------------------------------------------
     /// Close as the window's Close does; the id the page was asked with.
@@ -158,5 +175,67 @@ mod tests {
         let sent = h.call("close_ready", json!({ "ready": true }));
         assert_eq!(sent[0]["err"]["code"], "bad_request");
         assert!(!h.ui.window_closed());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn ending_the_session_keeps_a_refused_save_as_a_conflict_copy() {
+        let (mut h, ids) = notes("close-session-end", 1);
+        let path = h.vault().join("Notes/n0.md");
+        let theirs = theirs(ids[0]);
+        fs::write(&path, &theirs).unwrap();
+        let sent = h.call(
+            "save_doc_content",
+            json!({ "id": ids[0], "markdown": "Ours\n" }),
+        );
+        assert!(sent[0]["ok"]["conflict"].is_object(), "{sent:?}");
+        session_end_keeps_ours(&mut h, ids[0], &theirs);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn ending_the_session_keeps_saved_edits_written_over_as_a_conflict_copy() {
+        let (mut h, ids) = notes("close-session-end-saved", 1);
+        let sent = h.call(
+            "save_doc_content",
+            json!({ "id": ids[0], "markdown": "Ours\n" }),
+        );
+        assert_eq!(sent[0]["ok"]["source"], "Ours\n");
+        // Another program writes over the app's edits; back in the app, the
+        // dialog asks (`check_files`).
+        let path = h.vault().join("Notes/n0.md");
+        let theirs = theirs(ids[0]);
+        fs::write(&path, &theirs).unwrap();
+        let sent = h.call("check_files", json!({ "ids": [ids[0]] }));
+        assert_eq!(sent[0]["ok"]["conflicts"][0]["id"], ids[0].to_string());
+        session_end_keeps_ours(&mut h, ids[0], &theirs);
+    }
+
+    // ------------------------------------------------------------------------
+    /// `Notes/n0.md` as another program wrote it.
+    fn theirs(id: Id) -> String {
+        format!("---\nid: {id}\ntitle: Note 0\ndocument: {{}}\n---\nTheirs, longer\n")
+    }
+
+    // ------------------------------------------------------------------------
+    /// The session ends while the dialog asks about `id`: its file
+    /// keeps `theirs`, and a copy beside it the app's version, `Ours`.
+    fn session_end_keeps_ours(h: &mut Harness, id: Id, theirs: &str) {
+        let path = h.vault().join("Notes/n0.md");
+        on_session_end(&mut h.app);
+        h.run_queue();
+        assert!(h.app.documents.held(&id).is_none());
+        assert_eq!(fs::read_to_string(&path).unwrap(), theirs, "theirs stays");
+        let entries = h.app.vault.index().all();
+        let copies: Vec<_> = entries
+            .iter()
+            .filter(|e| e.doc.tags().iter().any(|t| t == documents::CONFLICT_TAG))
+            .collect();
+        assert_eq!(copies.len(), 1, "one copy");
+        let copy = copies[0];
+        assert_eq!(copy.doc.title(), "Note 0");
+        assert_eq!(copy.doc.content().trim(), "Ours");
+        assert_eq!(copy.local.parent(), Some(std::path::Path::new("Notes")));
+        assert_ne!(copy.doc.id(), id);
     }
 }

@@ -4,9 +4,21 @@
 //! outside the app is taken in if the app had only read it -- `entity` and
 //! `content` pushed before the answer -- and otherwise answered as a
 //! conflict for the dialog, nothing written (`saving.md#conflicts`).
+//!
+//! The app's version of a document in conflict -- a save refused, or its
+//! saved edits written over outside the app -- is held until the dialog is
+//! answered; if no one is left to answer it -- the session ends, another
+//! vault opens -- it is kept as a conflict copy beside its file
+//! (`keep_held`, `saving.md#held-saves`).
+
+use std::collections::HashMap;
+use std::path::Path;
 
 use av_utils::error::Error;
+use av_utils::error::Result;
 use av_utils::id::Id;
+use av_vault::document::Document;
+use av_vault::envelope::{Empty, Source};
 use av_vault::vault::Refresh;
 use av_vault::vault::SaveOutcome;
 use serde::Serialize;
@@ -15,6 +27,38 @@ use crate::app::App;
 use crate::config::is_false;
 use crate::protocol::Req;
 use crate::structure::Conflict;
+
+// ----------------------------------------------------------------------------
+/// The tag of a version kept beside its entity (`keep_conflict_copy`).
+pub(crate) const CONFLICT_TAG: &str = "conflict";
+
+// ----------------------------------------------------------------------------
+/// The documents in the page's editors (`App::documents`).
+#[derive(Default)]
+pub struct DocumentState {
+    /// The app's version of each document whose file changed outside the
+    /// app while the conflict dialog asks about it -- a refused save
+    /// (`save_doc_content`), or the app's saved edits written over
+    /// (`refresh`) -- until the dialog is answered: kept as conflict copies
+    /// if no one is left to answer it (`keep_held`).
+    held: HashMap<Id, String>,
+}
+
+impl DocumentState {
+    // ------------------------------------------------------------------------
+    /// Drop the app's version of `id` held for the conflict dialog: the file
+    /// was read again (Use theirs, `structure::reload_entity`).
+    pub fn release(&mut self, id: &Id) {
+        self.held.remove(id);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The app's version of `id` held for the conflict dialog, if any.
+    #[cfg(test)]
+    pub fn held(&self, id: &Id) -> Option<&str> {
+        self.held.get(id).map(String::as_str)
+    }
+}
 
 // ----------------------------------------------------------------------------
 /// The answer of `load_doc_content` and `save_doc_content`: the content as
@@ -83,17 +127,24 @@ pub fn load_doc_content(app: &mut App, req: Req, id: Id) {
 /// what the file holds then (also when nothing changed: the page takes it
 /// as the acknowledgment). A file changed outside the app is answered as a
 /// conflict and not written, unless `overwrite`, the dialog's Use ours.
-/// A failure is answered in the host's words.
+/// A refused save is held until a save of the document goes through or it
+/// is reloaded (`DocumentState::held`). A failure is answered in the host's
+/// words.
 pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overwrite: bool) {
     match app.vault.save_content(&id, &markdown, overwrite) {
         Ok(SaveOutcome::Conflict(_)) => {
             log::info!("Not saving {id}: changed outside the app");
+            let conflict = Conflict::of(app, id);
+            app.documents.held.insert(id, markdown);
             req.ok(Content {
-                conflict: Some(Conflict::of(app, id)),
+                conflict: Some(conflict),
                 ..Default::default()
             });
         }
-        Ok(SaveOutcome::Saved | SaveOutcome::Unchanged) => req.ok(Content::of(app, &id)),
+        Ok(SaveOutcome::Saved | SaveOutcome::Unchanged) => {
+            app.documents.held.remove(&id);
+            req.ok(Content::of(app, &id));
+        }
         Err(err) => {
             log::warn!("Could not save {id}: {err}");
             let message = match err {
@@ -101,6 +152,49 @@ pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overw
                 _ => "Could not save the document.",
             };
             req.fail(err, message);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Keep a version of `id` that a conflict would lose as a new entity beside
+/// it, made here and tagged `conflict`, with `content` as its body. The new
+/// entity's id.
+pub(crate) fn keep_conflict_copy(app: &mut App, id: Id, content: String) -> Result<Id> {
+    let Some(entry) = app.vault.index().entry(&id) else {
+        return Err(Error::NotFound);
+    };
+    let doc = &entry.doc;
+    let mut copy = Document::create(
+        doc.roles().clone(),
+        Source::Created(Empty {}),
+        doc.title().to_string(),
+        doc.projects().to_vec(),
+        doc.format(),
+    );
+    copy.set_content(content);
+    if let Some(date) = doc.date() {
+        copy.set_date(date);
+    }
+    let mut tags = doc.tags().to_vec();
+    if !tags.iter().any(|t| t == CONFLICT_TAG) {
+        tags.push(CONFLICT_TAG.to_string());
+    }
+    copy.set_tags(tags);
+    let folder = entry.local.parent().unwrap_or(Path::new("")).to_path_buf();
+    app.edit(|index, changes| index.create(copy, &folder, changes))
+}
+
+// ----------------------------------------------------------------------------
+/// Keep the app's version of every document still in conflict
+/// (`DocumentState::held`) as a conflict copy (`keep_conflict_copy`), when
+/// no one is left to answer the dialog: the session ends
+/// (`close::on_session_end`), another vault opens (`api::open_vault`).
+pub(crate) fn keep_held(app: &mut App) {
+    for (id, markdown) in std::mem::take(&mut app.documents.held) {
+        match keep_conflict_copy(app, id, markdown) {
+            Ok(copy) => log::info!("Kept the edits of {id} held for a conflict as {copy}"),
+            Err(e) => log::warn!("Could not keep the edits of {id} held for a conflict: {e}"),
         }
     }
 }
@@ -128,8 +222,9 @@ pub fn check_files(app: &mut App, req: Req, ids: Vec<Id>) {
 // ----------------------------------------------------------------------------
 /// Refresh `id` (`Vault::refresh`), logging what came of it and pushing
 /// what was taken in (`post_taken_in`). A conflict -- the app's own
-/// saved edits written over -- is left to the caller's answer. `None` if
-/// the file couldn't be looked at.
+/// saved edits written over -- is left to the caller's answer; the app's
+/// version, still the index's, is held for the dialog like a refused save
+/// (`DocumentState::held`). `None` if the file couldn't be looked at.
 fn refresh(app: &mut App, id: &Id) -> Option<Refresh> {
     let path = app
         .vault
@@ -145,6 +240,8 @@ fn refresh(app: &mut App, id: &Id) -> Option<Refresh> {
         }
         Ok(Refresh::Conflict) => {
             log::info!("{path} was changed outside the app after the app saved it");
+            let (ours, _) = app.vault.content(id);
+            app.documents.held.insert(*id, ours);
             Some(Refresh::Conflict)
         }
         Ok(Refresh::Unchanged) => Some(Refresh::Unchanged),
@@ -251,6 +348,62 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn a_refused_save_is_held_until_the_conflict_is_answered() {
+        let (mut h, ids) = notes("save-held", 1);
+        let id = ids[0];
+        // An edit of `markdown` over the file changed outside the app.
+        let refuse = |h: &mut crate::testing::Harness, markdown: &str| {
+            fs::write(h.vault().join("Notes/n0.md"), theirs(id)).unwrap();
+            let sent = h.call(
+                "save_doc_content",
+                json!({ "id": id, "markdown": markdown }),
+            );
+            assert!(sent[0]["ok"]["conflict"].is_object(), "{sent:?}");
+            assert_eq!(h.app.documents.held[&id], markdown);
+        };
+
+        refuse(&mut h, "Ours\n");
+        let use_ours = json!({ "id": id, "markdown": "Ours\n", "overwrite": true });
+        h.call("save_doc_content", use_ours);
+        assert!(h.app.documents.held.is_empty(), "Use ours went through");
+
+        refuse(&mut h, "Ours again\n");
+        h.call("reload_entity", json!({ "id": id }));
+        assert!(h.app.documents.held.is_empty(), "Use theirs");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_vault_switch_keeps_a_held_save_as_a_conflict_copy() {
+        let (mut h, ids) = notes("save-held-switch", 1);
+        let old = h.vault();
+        fs::write(old.join("Notes/n0.md"), theirs(ids[0])).unwrap();
+        h.call(
+            "save_doc_content",
+            json!({ "id": ids[0], "markdown": "Ours\n" }),
+        );
+
+        let other = old.with_file_name("other");
+        fs::create_dir_all(&other).unwrap();
+        crate::api::switch_to(&mut h.app, other.clone());
+        h.wait_scanned();
+        assert!(h.app.documents.held.is_empty());
+        let notes: Vec<String> = fs::read_dir(old.join("Notes"))
+            .unwrap()
+            .map(|e| fs::read_to_string(e.unwrap().path()).unwrap())
+            .collect();
+        assert_eq!(notes.len(), 2, "{notes:?}");
+        assert!(notes.contains(&theirs(ids[0])), "theirs stays");
+        let copy = notes.iter().find(|n| **n != theirs(ids[0])).unwrap();
+        assert!(
+            copy.contains("conflict") && copy.ends_with("Ours\n"),
+            "{copy}"
+        );
+        let _ = fs::remove_dir_all(&other);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn checking_takes_in_read_files_and_asks_about_saved_ones() {
         let (mut h, ids) = notes("check", 2);
         // n1 is saved by the app first, so a change over it is a conflict.
@@ -268,5 +421,8 @@ mod tests {
         let ok = &sent[2]["ok"];
         assert_eq!(ok["taken_in"], 1);
         assert_eq!(ok["conflicts"][0]["id"], ids[1].to_string());
+        // The app's version waits for the dialog's answer.
+        assert_eq!(h.app.documents.held.len(), 1);
+        assert_eq!(h.app.documents.held[&ids[1]], "Ours\n");
     }
 }

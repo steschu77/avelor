@@ -348,6 +348,11 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    pub fn set_date(&mut self, date: DateTime) {
+        self.envelope_mut().date = Some(date);
+    }
+
+    // ------------------------------------------------------------------------
     /// Add the entity to `project`.
     pub fn join_project(&mut self, project: Id) {
         let projects = &mut self.envelope_mut().projects;

@@ -219,6 +219,14 @@ its file and when the file changed, or that it was deleted.
   has arrived, so none of the old content can follow the reload and
   overwrite the file after all; the reload bumps `editSeq`, making any
   in-flight reply stale.
+- **On the host.** The markdown of a save refused for a conflict, or of the
+  app's saved edits another program wrote over (found by `check_files` or a
+  load), is held in `DocumentState` (`documents.rs`) until a save of the document goes
+  through or it is reloaded. If no one is left to answer the dialog —
+  Windows ends the session, another vault opens — it is kept as a new
+  entity beside the file, made here and tagged `conflict`
+  (`documents::keep_conflict_copy`), so the edits survive and the file keeps
+  the other program's version.
 
 ### Atomic writes <a id="atomic-writes"></a>
 
@@ -268,7 +276,13 @@ the page first (`close::on_close`; `close.rs`, `features/close.js`).
 When Windows ends the session (shutdown, sign-out), the page isn't asked.
 Windows wants `WM_QUERYENDSESSION` answered at once, and WebView2 may have
 ended its processes by then; the UI thread never waits for the page
-(`architecture.md#principles`, principle 8). So the host answers yes.
+(`architecture.md#principles`, principle 8). So the host answers yes
+and relies on what it knows: what the page saved is on
+disk, at most about a second behind the typing (`saving.md#triggers`), and
+at `WM_ENDSESSION` the app's version of a document still in conflict becomes
+a conflict copy beside its file (`close::on_session_end`,
+`saving.md#held-saves`). What was typed in the last second is lost. On
+Linux the session manager's `query-end`, SIGTERM and SIGHUP do the same.
 Both messages are logged as they arrive. How to test it:
 `development.md#session-end`.
 

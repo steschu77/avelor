@@ -105,9 +105,11 @@ The rules the code follows, and every change to it:
 8. **The UI thread never waits for the page.** The page is reached only
    through the UI thread's message queue, so a wait for it there needs a
    nested message loop. A Win32 message that needs an answer at once
-   (`WM_QUERYENDSESSION`) gets it from what the host already knows. A
-   request the page can answer later (`WM_CLOSE`) is asked, with a
-   timeout.
+   (`WM_QUERYENDSESSION`) gets it from what the host already knows, and the
+   page keeps the host up to date ahead of time: saves within a second of a
+   pause, the saves a conflict refused. Modal dialogs through `on_ui` stay
+   the only modal loops. A request the page can answer later (`WM_CLOSE`)
+   is asked, with a timeout.
 
 ## Runtime
 
@@ -252,10 +254,10 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `vault_scan.rs` | the vault scan (`vault.md#opening`): `run_scan` with av-vault's `scan` on a worker, its batches into the index (`Vault::apply_scanned`) and to the page (`vault`, `entity`, `vault_error`, the scan's `job`), a replaced scan's batches dropped, `scanning`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events |
-| `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; its dispatch tests |
+| `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
-| `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); their dispatch tests |
+| `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `structure.rs` | the structural commands: projects, titles, stars, archiving, labels, links, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
@@ -296,7 +298,7 @@ the only `cfg(target_os)` in `app/src`:
 - the queue runner and the re-entrancy net (`App` in a
   `RefCell<Option<_>>`, the deferred flag, the modal count;
   `architecture.md#one-way-in`);
-- close, the app's own close;
+- close, the app's own close and the session end;
 - the window active again (`App::on_activated`);
 - the window state.
 

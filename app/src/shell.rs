@@ -108,6 +108,13 @@ impl Shell {
     }
 
     // ------------------------------------------------------------------------
+    /// The session ends: `App` keeps what only it has
+    /// (`close::on_session_end`); before `App` is up nothing is held.
+    pub fn on_session_end(&self) {
+        let _ = self.queue(close::on_session_end);
+    }
+
+    // ------------------------------------------------------------------------
     /// The window became active again (`App::on_activated`); before `App`
     /// is up there is no page to tell.
     pub fn on_activated(&self) {

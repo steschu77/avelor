@@ -54,9 +54,10 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
 
 // ----------------------------------------------------------------------------
 /// The session ends: the session manager's `query-end` (the app registers
-/// with it), or SIGTERM or SIGHUP. The window's state is kept, without
-/// asking anything (`architecture.md#principles`, principle 8); a signal
-/// also ends the app. SIGINT (Ctrl+C in a terminal) closes the window as its
+/// with it), or SIGTERM or SIGHUP. The window's state is kept, and `App`
+/// keeps what only it has (`close::on_session_end`), without asking
+/// anything (`architecture.md#principles`, principle 8); a signal also ends
+/// the app. SIGINT (Ctrl+C in a terminal) closes the window as its
 /// Close does. Each is logged, to see in the log how a session ended.
 fn end_session_on_request(
     app: &gtk::Application,
@@ -67,6 +68,7 @@ fn end_session_on_request(
     app.connect_query_end(move |_| {
         log::info!("The session manager is ending the session");
         window::save_window_state(&w, &s);
+        s.on_session_end();
     });
 
     for (signal, name) in [(libc::SIGTERM, "SIGTERM"), (libc::SIGHUP, "SIGHUP")] {
@@ -74,6 +76,7 @@ fn end_session_on_request(
         glib_unix::unix_signal_add_local_once(signal, move || {
             log::info!("{name}: the session ends");
             window::save_window_state(&w, &s);
+            s.on_session_end();
             a.quit();
         });
     }

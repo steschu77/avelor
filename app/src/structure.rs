@@ -148,10 +148,12 @@ pub fn set_archived(app: &mut App, req: Req, id: Id, archived: bool) {
 /// the conflict dialog's Use theirs (`saving.md#the-dialog`). The entity as it
 /// is now and its content are pushed, or `entity_deleted` if the file is
 /// gone (a file whose `id` was changed by hand comes back as a new entity);
-/// the answer names the id the file has now.
+/// the answer names the id the file has now. A save held for the conflict
+/// is dropped with it.
 pub fn reload_entity(app: &mut App, req: Req, id: Id) {
     match app.vault.reload(&id) {
         Ok(now) => {
+            app.documents.release(&id);
             match now {
                 Some(_) => log::info!("Reloaded {id}"),
                 None => log::info!("Reloaded {id}: the file is gone"),
