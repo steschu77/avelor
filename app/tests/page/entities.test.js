@@ -1,6 +1,8 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
-import { NO_PROJECT, entities, matchesFilter, projectsInOrder, projectsOf } from '../../static/model/entities.js';
+import {
+  NO_PROJECT, entities, knownThreads, matchesFilter, projectsInOrder, projectsOf, threads,
+} from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
 const project = (id, more = {}) => ({ id, kind: 'project', title: id, ...more });
@@ -34,4 +36,17 @@ test("the store's filter is the one without another", () => {
   vault(project('p'), doc('a', { projects: ['p'] }), doc('b'));
   store.setState({ selected_project: 'p' });
   equal([...entities.values()].map(one => matchesFilter(one)), [true, false]);
+});
+
+// A vault with the threads t and u.
+function threaded(...metas) {
+  threads.clear();
+  threads.set('t', { id: 't' });
+  threads.set('u', { id: 'u' });
+  vault(...metas);
+}
+
+test("an entity's threads are those in the vault", () => {
+  threaded(doc('a', { threads: ['dissolved', 'u', 't'] }), doc('b'));
+  equal([knownThreads(entities.get('a')), knownThreads(entities.get('b'))], [['u', 't'], []]);
 });

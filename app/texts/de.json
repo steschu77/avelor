@@ -1,8 +1,11 @@
 {
   "config.unread": "config.yaml konnte nicht gelesen werden; die App ist mit den Standardeinstellungen gestartet.",
   "context.open": "Öffnen",
+  "count.of_total": "{at} von {n}",
   "docs.date": "Datum",
+  "docs.fold_thread": "Verlauf zuklappen",
   "docs.name": "Name",
+  "docs.unfold_thread": "Verlauf aufklappen",
   "error.code": "Etwas ist schiefgegangen ({code}).",
   "indexing.label": "Indizierung von {path}",
   "indexing.replaced": "durch eine andere Indizierung ersetzt",

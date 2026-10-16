@@ -1,11 +1,19 @@
 // The vault's data as the page knows it (architecture.md#page-state): the
-// Maps of the entities and projects, written only from the host's events
-// (model/events.js); the selectors over them.
+// Maps of the entities, projects and threads, written only from the host's
+// events (model/events.js); the selectors over them.
 
 import { store } from './state.js';
 
 export const projects = new Map(); // project_id -> project data
+export const threads = new Map(); // thread_id -> thread data
 export const entities = new Map(); // doc_id -> document data (every non-{project, thread} entity)
+
+// ----------------------------------------------------------------------------
+// The threads `doc` is a member of that are in the vault, in the order of
+// its `threads`.
+export function knownThreads(doc) {
+  return (doc.threads ?? []).filter(thread_id => threads.has(thread_id));
+}
 
 // ----------------------------------------------------------------------------
 // The projects as the vault panel lists them: the starred first, otherwise

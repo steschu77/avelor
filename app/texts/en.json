@@ -1,8 +1,11 @@
 {
   "config.unread": "config.yaml couldn't be read; the app started with the default settings.",
   "context.open": "Open",
+  "count.of_total": "{at} of {n}",
   "docs.date": "Date",
+  "docs.fold_thread": "Fold the thread",
   "docs.name": "Name",
+  "docs.unfold_thread": "Unfold the thread",
   "error.code": "Something went wrong ({code}).",
   "indexing.label": "Indexing {path}",
   "indexing.replaced": "replaced by another indexing",
