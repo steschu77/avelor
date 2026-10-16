@@ -13,7 +13,7 @@ const RRULE_MAX_PERIODS = 20000;
 // ----------------------------------------------------------------------------
 // A recurring event's lines: its RRULE's parts by name (null without one), the line
 // as written, and the local days (`dayKey`) its EXDATEs leave out.
-function parseSchedule(lines) {
+export function parseSchedule(lines) {
     let rule = null;
     let written = null;
     const excluded = new Set();
@@ -35,7 +35,7 @@ function parseSchedule(lines) {
 // Whether `rule` is one the page expands (and puts in words). A yearly
 // rule picks days by month (BYDAY or BYMONTHDAY across the whole year
 // isn't supported).
-function ruleSupported(rule) {
+export function ruleSupported(rule) {
     return !!rule && RRULE_FREQS.includes(rule.FREQ)
         && Object.keys(rule).every(part => RRULE_PARTS.has(part))
         && !(rule.FREQ === 'YEARLY' && !rule.BYMONTH && (rule.BYDAY || rule.BYMONTHDAY));
@@ -128,7 +128,7 @@ function weekdaysInMonth(y, m, length, b) {
 
 // ----------------------------------------------------------------------------
 // A BYDAY entry: `MO`, `2TU`, `-1FR`.
-function byDay(entry) {
+export function byDay(entry) {
     const weekday = WEEKDAYS.indexOf(entry.slice(-2));
     return { weekday, nth: Number(entry.slice(0, -2)) || 0 };
 }
@@ -137,7 +137,7 @@ function byDay(entry) {
 // An iCalendar date (`20261005`) or date-time (`20261005T100000`, local;
 // `...Z`, UTC) as a Date. A plain date as a bound (`endOfDay`) is the day's
 // last second.
-function icalDate(text, endOfDay = false) {
+export function icalDate(text, endOfDay = false) {
     const n = (from, to) => Number(text.slice(from, to));
     const [y, m, d] = [n(0, 4), n(4, 6) - 1, n(6, 8)];
     if (text.length < 15) return endOfDay ? new Date(y, m, d, 23, 59, 59) : new Date(y, m, d);

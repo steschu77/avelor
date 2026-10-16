@@ -10,6 +10,7 @@ const TEXTS = {
   'test.plain': 'plain',
   'test.named': '{name} of {n}',
   'test.count': { one: '{n} entry', other: '{n} entries' },
+  ordinal: { one: '{n}st', two: '{n}nd', few: '{n}rd', other: '{n}th' },
 };
 
 // What the page posted to the host, as objects, oldest first.

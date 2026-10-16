@@ -1,5 +1,5 @@
 import { equal, test } from './harness.js';
-import { t, textOf } from '../../static/core/text.js';
+import { ordinal, t, textOf } from '../../static/core/text.js';
 
 test('a text has its arguments filled in, a number as the locale writes it', () => {
   equal(t('test.plain'), 'plain');
@@ -13,6 +13,10 @@ test('a key without a text is the text', () => {
 
 test('a count picks its form', () => {
   equal([0, 1, 2].map(n => t('test.count', { n })), ['0 entries', '1 entry', '2 entries']);
+});
+
+test('an ordinal picks its form', () => {
+  equal([1, 2, 3, 4, 11, 21].map(ordinal), ['1st', '2nd', '3rd', '4th', '11th', '21st']);
 });
 
 test("the host's text, its arguments texts too", () => {

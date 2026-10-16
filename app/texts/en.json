@@ -1,5 +1,9 @@
 {
   "accounts.address": "Address",
+  "bank.count.transactions": {
+    "one": "{n} transaction",
+    "other": "{n} transactions"
+  },
   "cal.overdue_n": "{n} overdue",
   "cal.today": "Today",
   "card.delete": "Delete document",
@@ -25,9 +29,21 @@
   "conflict.when_day": "on {date} at {time}",
   "conflict.when_today": "at {time}",
   "context.open": "Open",
+  "count.entries": {
+    "one": "{n} entry",
+    "other": "{n} entries"
+  },
   "count.files": {
     "one": "{n} file",
     "other": "{n} files"
+  },
+  "count.items": {
+    "one": "{n} item",
+    "other": "{n} items"
+  },
+  "count.messages": {
+    "one": "{n} message",
+    "other": "{n} messages"
   },
   "count.of_total": "{at} of {n}",
   "dash.all_closed": "All cards are closed.",
@@ -171,6 +187,7 @@
   "layout.resize_sidebar": "Width of the vault panel",
   "lens.dashboard": "Dashboard",
   "lens.documents": "Documents",
+  "lens.timeline": "Timeline",
   "linked.from": "Linked from",
   "linked.link_this": "Link to this",
   "linked.link_to": "Link to…",
@@ -238,6 +255,12 @@
   "new.type": "Type",
   "open.named": "Open {name}",
   "open.url_failed": "Could not open {url}.",
+  "ordinal": {
+    "one": "{n}st",
+    "two": "{n}nd",
+    "few": "{n}rd",
+    "other": "{n}th"
+  },
   "page.close": "Close the page",
   "page.submit": "Run the page’s main action",
   "palette.all": "All",
@@ -308,6 +331,37 @@
   "save.document": "Could not save the document.",
   "save.document_gone": "Could not save the document: it is no longer in the vault.",
   "save.settings": "Could not save the settings.",
+  "schedule.every_day": {
+    "one": "Every day",
+    "other": "Every {n} days"
+  },
+  "schedule.every_month": {
+    "one": "Every month",
+    "other": "Every {n} months"
+  },
+  "schedule.every_week": {
+    "one": "Every week",
+    "other": "Every {n} weeks"
+  },
+  "schedule.every_year": {
+    "one": "Every year",
+    "other": "Every {n} years"
+  },
+  "schedule.in_months": " in {months}",
+  "schedule.last_day": "the last day",
+  "schedule.last_weekday": "the last {day}",
+  "schedule.month_day": "day {n}",
+  "schedule.nth_last_day": "the {nth} last day",
+  "schedule.nth_last_weekday": "the {nth} last {day}",
+  "schedule.nth_weekday": "the {nth} {day}",
+  "schedule.on_days": " on {days}",
+  "schedule.times": {
+    "one": ", once",
+    "other": ", {n} times"
+  },
+  "schedule.until": ", until {date}",
+  "scrub.clear": "Clear",
+  "scrub.drag": "Drag to pick a range of weeks",
   "selection.gone": "The linked entity {id} is not in the vault.",
   "shell.lenses": "Lenses",
   "shell.panel": "Details",
@@ -339,6 +393,11 @@
   "task.waiting": "Waiting",
   "thread.project": "Project",
   "thread.rename": "Rename thread",
+  "timeline.due": "due {day}",
+  "timeline.none_dated": "Nothing with a date here.",
+  "timeline.none_weeks": "Nothing in these weeks.",
+  "timeline.time": "Time · {entries}",
+  "timeline.today": "Today · {day}",
   "trash.delete": "Delete for good",
   "trash.delete_again": "Click again to delete for good",
   "trash.delete_failed": "Could not delete {path} for good.",
@@ -467,6 +526,7 @@
   "vault.switch_also": "open",
   "vault_op.new": "New",
   "vault_op.trash": "Trash",
+  "week.of": "Week of {day} · {what}",
   "workspace.trash": "Trash",
   "workspace.trash_also": "deleted, restore",
   "workspace.vault": "Vault"

@@ -401,7 +401,7 @@ function renderDocuments() {
 
   docTypes.render(shown, counts);
   const hidden = [...counts].reduce((n, [type, count]) => n + (shown.has(type) ? 0 : count), 0);
-  const listedText = t('types.count_documents', { n: listed.length });
+  const listedText = t('count.entries', { n: listed.length });
   countEl.textContent = hidden ? `${listedText} \u00b7 ${t('docs.hidden_count', { n: hidden })}` : listedText;
   hiddenEl.hidden = !hidden;
   hiddenTextEl.textContent = hidden ? t('types.hidden', { list: hiddenText(shown, counts) }) : '';

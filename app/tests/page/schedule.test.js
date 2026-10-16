@@ -1,6 +1,6 @@
 import { equal, test } from './harness.js';
 import { localDay, parseDate } from '../../static/core/format.js';
-import { scheduleStarts } from '../../static/model/schedule.js';
+import { byDay, icalDate, parseSchedule, ruleSupported, scheduleStarts } from '../../static/model/schedule.js';
 
 const FOREVER = new Date(2040, 0, 1);
 
@@ -81,6 +81,32 @@ test("a timed one without a zone keeps its time on this PC's clock", () => {
   const starts = scheduleStarts(new Date(2027, 0, 4, 10, 30), ['RRULE:FREQ=WEEKLY;COUNT=52'], FOREVER);
   equal([...new Set(starts.map(start => `${start.getHours()}:${start.getMinutes()}`))], ['10:30']);
   equal(starts.length, 52);
+});
+
+test('a schedule in its parts', () => {
+  const { rule, written, excluded } = parseSchedule(['RRULE:FREQ=WEEKLY;BYDAY=MO,WE', 'EXDATE;TZID=Europe/Berlin:20270329T100000,20270405T100000']);
+  equal(rule, { FREQ: 'WEEKLY', BYDAY: 'MO,WE' });
+  equal([written, excluded.size], ['RRULE:FREQ=WEEKLY;BYDAY=MO,WE', 2]);
+  equal(parseSchedule([]).rule, null);
+});
+
+test('the rules the page expands', () => {
+  const supported = line => ruleSupported(parseSchedule([line]).rule);
+  equal([
+    supported('RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=MO'), supported('RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=1SU'),
+    supported('RRULE:FREQ=YEARLY;BYDAY=1SU'), supported('RRULE:FREQ=SECONDLY'), supported('RRULE:FREQ=DAILY;BYHOUR=9'), ruleSupported(null),
+  ], [true, true, false, false, false, false]);
+});
+
+test("a rule's weekday, with its place in the month", () => {
+  equal([byDay('MO'), byDay('2TU'), byDay('-1FR')], [{ weekday: 1, nth: 0 }, { weekday: 2, nth: 2 }, { weekday: 5, nth: -1 }]);
+});
+
+test("a calendar's date and date-time", () => {
+  equal(icalDate('20270322'), new Date(2027, 2, 22));
+  equal(icalDate('20270322', true), new Date(2027, 2, 22, 23, 59, 59));
+  equal(icalDate('20270322T100530'), new Date(2027, 2, 22, 10, 5, 30));
+  equal(icalDate('20270322T100530Z'), new Date(Date.UTC(2027, 2, 22, 10, 5, 30)));
 });
 
 test('a timed one to a day is on that day too', () => {
