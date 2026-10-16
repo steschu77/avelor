@@ -29,7 +29,7 @@ It is a personal project, not a commercial product or a claim to have solved per
 ## Features
 
 - **A vault of plain files.** Documents, notes, tasks, events, contacts, lists, and records are Markdown and YAML files in a folder you own.
-- **In your language.** English, German, and Spanish: the system's language or the one set in `config.yaml`. A new language is a catalog of texts, checked by a script.
+- **In your language.** English, German, and Spanish: the system's language or the one set in `config.yaml`, informal by default and formal on request. A new language is a catalog of texts, checked by a script.
 
 ## How It Compares
 
