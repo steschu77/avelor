@@ -154,6 +154,268 @@ fn indexing_ends_where_it_is_told_to_stop() {
     fs::remove_dir_all(&root).ok();
 }
 
+fn thread_vault() -> (PathBuf, Vec<Id>) {
+    let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
+    let ids: Vec<Id> = (0..3)
+        .map(|i| {
+            let id = Id::generate();
+            let p = root.join(format!("Notes/n{i}.md"));
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(
+                p,
+                format!("---\nid: {id}\ndocument: {{}}\ntitle: Note {i}\n---\nBody {i}\n"),
+            )
+            .unwrap();
+            id
+        })
+        .collect();
+    (root, ids)
+}
+
+#[test]
+fn remove_keeps_the_other_entries_findable() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let first = index.all()[0].doc.id();
+
+    let removed = index.remove(&first).unwrap();
+    assert_eq!(removed.doc.id(), first);
+    assert!(index.get(&first).is_none());
+    assert_eq!(index.all().len(), 2);
+    for id in ids.iter().filter(|id| **id != first) {
+        assert_eq!(index.get(id).unwrap().id(), *id);
+    }
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn setting_a_title_rewrites_any_entity() {
+    let (root, ids) = thread_vault();
+    let project = Id::generate();
+    fs::write(
+        root.join("p.yaml"),
+        format!("id: {project}\nproject: {{}}\ntitle: P\n"),
+    )
+    .unwrap();
+    let mut index = Index::build(&root);
+
+    let mut changes = Changes::default();
+    let titled = index.set_title(&project, "  Kitchen  ".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    let titled = index.set_title(&ids[0], "Renamed".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [project, ids[0]]);
+    let yaml = fs::read_to_string(root.join("p.yaml")).unwrap();
+    assert!(yaml.contains("title: Kitchen\n"), "{yaml}");
+    let md = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+    assert!(
+        md.contains("title: Renamed\n") && md.ends_with("---\nBody 0\n"),
+        "{md}"
+    );
+
+    // The same title writes nothing.
+    let mut changes = Changes::default();
+    let titled = index.set_title(&ids[0], "Renamed".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Unchanged);
+    assert!(changes.saved.is_empty());
+
+    // An empty title removes the key; it loads back as "".
+    let titled = index.set_title(&ids[1], " ".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [ids[1]]);
+    let md = fs::read_to_string(root.join("Notes/n1.md")).unwrap();
+    assert!(!md.contains("title"), "{md}");
+    let reindexed = Index::build(&root);
+    assert_eq!(reindexed.get(&ids[1]).unwrap().title(), "");
+    assert_eq!(reindexed.get(&project).unwrap().title(), "Kitchen");
+
+    let err = index.set_title(&Id::generate(), "X".into(), &mut changes);
+    assert!(matches!(err, Err(Error::NotFound)));
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_write_keeps_the_byte_order_mark_and_the_line_endings() {
+    let (root, ids) = thread_vault();
+    let path = root.join("Notes/n0.md");
+    let text = fs::read_to_string(&path).unwrap().replace('\n', "\r\n");
+    fs::write(&path, format!("\u{feff}{text}")).unwrap();
+    let mut index = Index::build(&root);
+
+    let mut changes = Changes::default();
+    let titled = index.set_title(&ids[0], "Renamed".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    let written = fs::read_to_string(&path).unwrap();
+    assert!(written.starts_with("\u{feff}---\r\n"), "{written:?}");
+    assert!(written.contains("title: Renamed\r\n") && written.ends_with("Body 0\r\n"));
+    assert!(!written.replace("\r\n", "").contains('\n'), "{written:?}");
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn read_only_and_broken_files_are_not_written() {
+    let (root, ids) = thread_vault();
+    fs::write(
+        root.join("Notes/broken.md"),
+        "---\n: [ not yaml\n---\nBody\n",
+    )
+    .unwrap();
+    let mut index = Index::build(&root);
+    let broken = index.broken()[0].doc.id();
+    index.documents[index.by_id[&ids[0]]].readonly = true;
+    let before = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+
+    let mut changes = Changes::default();
+    let err = index.set_title(&ids[0], "Mine".into(), &mut changes);
+    assert!(matches!(err, Err(Error::NotWritable { .. })));
+    let err = index.set_title(&broken, "Mine".into(), &mut changes);
+    assert!(matches!(err, Err(Error::NotWritable { .. })));
+    assert!(changes.saved.is_empty());
+    assert_eq!(
+        fs::read_to_string(root.join("Notes/n0.md")).unwrap(),
+        before
+    );
+
+    fs::remove_dir_all(&root).ok();
+}
+
+/// Replace `id`'s file in `thread_vault` as another program would.
+fn edit_outside(root: &Path, i: usize, id: &Id, body: &str) -> PathBuf {
+    let path = root.join(format!("Notes/n{i}.md"));
+    let text = format!("---\nid: {id}\ndocument: {{}}\ntitle: Outside\n---\n{body}");
+    fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn a_file_changed_outside_is_not_overwritten() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let path = edit_outside(&root, 0, &ids[0], "Theirs, longer\n");
+    let theirs = fs::read_to_string(&path).unwrap();
+
+    let mut changes = Changes::default();
+    let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
+    assert!(changes.saved.is_empty());
+    let doc = index.get(&ids[0]).unwrap();
+    assert_eq!(doc.title(), "Note 0", "memory still matches the file");
+    assert!(!doc.is_dirty());
+    assert_eq!(fs::read_to_string(&path).unwrap(), theirs);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_file_without_frontmatter_gets_one_only_when_metadata_is_set() {
+    let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("plain.md");
+    fs::write(&path, "Just text\n").unwrap();
+    let mut index = Index::build(&root);
+    let id = index.all()[0].doc.id();
+    assert!(index.get(&id).unwrap().envelope().is_none());
+
+    let mut changes = Changes::default();
+    let titled = index.set_title(&id, "Plain".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    let text = fs::read_to_string(&path).unwrap();
+    assert_eq!(text, "---\ntitle: Plain\n---\nJust text\n");
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn the_stamp_comes_from_the_read_and_follows_each_write() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let path = root.join("Notes/n0.md");
+    let stamp = |index: &Index| index.entry(&ids[0]).unwrap().doc.stamp();
+    assert_eq!(stamp(&index), FileStamp::read(&path).unwrap());
+
+    let mut changes = Changes::default();
+    let titled = index.set_title(&ids[0], "A longer title than before".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    assert_eq!(stamp(&index), FileStamp::read(&path).unwrap());
+    assert!(!index.entry(&ids[0]).unwrap().changed_on_disk().unwrap());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_same_size_change_is_found_by_its_time() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let path = root.join("Notes/n0.md");
+    let before = fs::metadata(&path).unwrap().modified().unwrap();
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace("Body 0", "Body X");
+    fs::write(&path, &text).unwrap();
+    let file = fs::File::options().write(true).open(&path).unwrap();
+    file.set_modified(before + std::time::Duration::from_secs(2))
+        .unwrap();
+    drop(file);
+
+    let mut changes = Changes::default();
+    let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
+    assert_eq!(fs::read_to_string(&path).unwrap(), text);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_deleted_file_is_a_conflict() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let path = root.join("Notes/n0.md");
+    fs::remove_file(&path).unwrap();
+
+    let mut changes = Changes::default();
+    let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Conflict(ids[0]));
+    assert!(!path.exists());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn reloading_takes_in_what_the_file_holds() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    edit_outside(&root, 0, &ids[0], "Theirs\n");
+
+    assert_eq!(index.reload(&ids[0]).unwrap(), Some(ids[0]));
+    let doc = index.get(&ids[0]).unwrap();
+    assert_eq!((doc.title(), doc.content()), ("Outside", "Theirs\n"));
+    let mut changes = Changes::default();
+    let titled = index.set_title(&ids[0], "Mine".into(), &mut changes);
+    assert_eq!(
+        titled.unwrap(),
+        SaveOutcome::Saved,
+        "no conflict once reloaded"
+    );
+
+    // A file whose `id` was changed comes back under the new one.
+    let other = Id::generate();
+    edit_outside(&root, 1, &other, "Renumbered\n");
+    assert_eq!(index.reload(&ids[1]).unwrap(), Some(other));
+    assert!(index.get(&ids[1]).is_none());
+    assert_eq!(index.get(&other).unwrap().content(), "Renumbered\n");
+
+    // A deleted file leaves the index.
+    fs::remove_file(root.join("Notes/n2.md")).unwrap();
+    assert_eq!(index.reload(&ids[2]).unwrap(), None);
+    assert!(index.get(&ids[2]).is_none());
+    assert_eq!(index.all().len(), 2);
+
+    fs::remove_dir_all(&root).ok();
+}
+
 /// The sample vault under `data/forged` follows vault.md; every
 /// file must load cleanly and derive its intended type.
 #[test]

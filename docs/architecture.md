@@ -41,7 +41,8 @@ read by OCR.
 | Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. UUIDv7, dates are hand-written |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
-| The vault is the source of truth | No database; the index is rebuilt by an indexing |
+| The vault is the source of truth | No database, no drafts; every edit is written to the file; the index is rebuilt by an indexing |
+| Host resolves, page presents | Filenames, conflicts, structural rules live in Rust; the page renders and forwards intents |
 | One coordinator | `App` alone runs background work (`run*`, `UiQueue`) and posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
 
 ## Documents <a id="documents"></a>
@@ -60,11 +61,11 @@ read by OCR.
 
 - **One owner per fact**: each fact is described in one document; the
   others link to it.
-- **References** point at an id: `` `development.md#checks` `` in the
-  docs, `` `#checks` `` alone within `development.md` itself (a `` `#x` ``
-  that names no section of its doc is an element id of the page), and the
-  full form, ASCII, in code comments (`development.md#checks`; every `.md`
-  file is in `docs/`).
+- **References** point at an id: `` `saving.md#conflicts` `` in the docs,
+  `` `#conflicts` `` alone within `saving.md` itself (a `` `#x` `` that
+  names no section of its doc is an element id of the page), and the full
+  form, ASCII, in code comments (`saving.md#conflicts`; every `.md` file
+  is in `docs/`).
   A section something refers to carries its id at the end of its heading
   line: `` ## Conflicts <a id="conflicts"></a> ``. An id is a lowercase
   word or two, at most 16 characters, unique within its file and never
@@ -111,7 +112,7 @@ The rules the code follows, and every change to it:
 
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
-| UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the indexing's batches into the index | — |
+| UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the indexing's batches into the index; every vault write | — |
 | `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the indexing's walk and reads (`indexing.rs`); the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
 | WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
 
@@ -173,18 +174,21 @@ SIGTERM and SIGHUP end it the same way. Both are
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), text normalization, atomic writes (`fs`), cross-thread `Cancel` | |
-| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index`, the indexing (`index_vault`, events applied by `Index::apply`) | no network, no UI |
+| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), text normalization, a file's stamp and atomic writes (`fs`: `FileStamp`, `write_atomic`), cross-thread `Cancel` | |
+| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index` with structural ops and `Changes` (`vault.rs`, its parts in `vault/`: `indexing.rs`, `properties.rs`, the tests in `vault/tests.rs`), the indexing (`index_vault`, events applied by `Index::apply`) | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
 
 ### av-vault's core
 
 - **One copy of the truth in `Document`**: the envelope holds the metadata,
-  read through accessors. `envelope` is an
-  `Option` — a markdown file without frontmatter stays without one — and
+  read through accessors and changed through setters. `envelope` is an
+  `Option` — a markdown file without frontmatter stays without one until
+  metadata is set, where an empty `Envelope` would write `{}` — and
   `Document` keeps its `id` beside it, since a file without `id` gets one
-  made up per indexing.
+  made up per indexing. `OnDisk` holds what the file held at the last read or
+  write, with its stamp (`saving.md#the-stamp`); a failed write in
+  `Index::update` puts back a clone of envelope and body.
 
   ```rust
   pub struct Document {
@@ -435,6 +439,11 @@ abort. Where the bundle lands and how to measure the size:
   logging, the operating system), extended when needed; a separate error type only for functions
   local to one module; expected outcomes are success variants, not errors;
   a failed write is `FileWrite { path, err }`.
+- **Entity ops are generic**: a vault or host op is built on a property
+  every entity has, for any entity (`Index::set_title`, not
+  `rename_project`), even when the UI offers it for one kind. An empty
+  value removes the key (an untitled entity is valid) instead of being
+  refused.
 - **Reuse before writing**: `Req::save_failed`,
   `Req::save_failed`,
   `av_utils::is_false`,
@@ -448,6 +457,6 @@ abort. Where the bundle lands and how to measure the size:
 | Part | Owns | Must not |
 |---|---|---|
 | av-utils | primitives with no domain (dates, ids, atomic writes) | know about vaults, Google, LLMs; carry network types |
-| av-vault | the vault's schema, files, index | do network or UI; start threads (the app decides where indexing runs) |
+| av-vault | the vault's schema, files, index, rules | do network or UI; start threads (the app decides where indexing runs) |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
 | page | rendering, user input, the page's copy of the data | resolve filenames, conflicts or structural rules |

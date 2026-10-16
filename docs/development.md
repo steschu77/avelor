@@ -11,9 +11,9 @@
   every file there must load.
 - The docs (`app/tests/docs.rs`, `architecture.md`, Doc conventions): in
   the docs, the README and the code's comments a reference
-  (`development.md#checks`) names an id at the end of a heading of its
-  doc; in a doc an id alone in backticks is a section of that doc, or else
-  an element of the page (an `id` in its HTML, an `.id` a module sets); a
+  (`saving.md#conflicts`) names an id at the end of a heading of its doc;
+  in a doc an id alone in backticks is a section of that doc, or else an
+  element of the page (an `id` in its HTML, an `.id` a module sets); a
   file name in backticks (`.rs`, `.js`, `.css`, `.html`, with a `:line` or
   not) is the end of a file's path in the repository, `src/` left out
   (`av-vault/envelope.rs`); a link names a file there. An id is at most 16
