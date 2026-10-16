@@ -1,5 +1,7 @@
 {
+  "conflict.changed_editing": "Die Datei auf der Festplatte hat sich {when} geändert, während Sie sie hier bearbeitet haben. Wählen Sie, welche Fassung bleiben soll.",
   "conflict.changed_unsaved": "Die Datei auf der Festplatte hat sich {when} geändert, daher wurde Ihre Änderung nicht gespeichert. Laden Sie die Fassung von der Festplatte und nehmen Sie die Änderung erneut vor.",
+  "conflict.deleted_editing": "Die Datei wurde außerhalb der App gelöscht, während Sie sie hier bearbeitet haben. Wählen Sie, ob Ihre Fassung bleiben soll.",
   "conflict.deleted_unsaved": "Die Datei wurde außerhalb der App gelöscht, daher wurde Ihre Änderung nicht gespeichert.",
   "panel.select_hint": "Wählen Sie ein Dokument aus der Liste."
 }

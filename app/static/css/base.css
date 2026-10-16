@@ -59,6 +59,12 @@ input {
   color: inherit;
 }
 
+button:disabled,
+input:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
 /* The focus the keyboard moved: a ring inside the control, so a list's
    edge doesn't cut it. A component with a focus of its own (.input's
    border, an editor's caret) sets outline: none. */
