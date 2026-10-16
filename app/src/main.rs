@@ -17,6 +17,7 @@ mod sys;
 #[cfg(test)]
 mod testing;
 mod texts;
+mod trash;
 mod undo;
 
 use av_utils::error::Result;

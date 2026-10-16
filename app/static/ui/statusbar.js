@@ -90,11 +90,12 @@ rpcOn('notice', ({ level, text }) => {
 });
 
 // A failed call nobody handled is shown here too, so no failure is only a
-// console line. Cancelled calls are expected, and stay quiet.
+// console line: its text, the command's name is the host's log's.
+// Superseded and cancelled calls are expected, and stay quiet.
 window.addEventListener('unhandledrejection', e => {
   const error = e.reason;
   if (!(error instanceof RpcError)) return;
   e.preventDefault();
-  if (error.code === 'cancelled') return;
+  if (error.code === 'superseded' || error.code === 'cancelled') return;
   showError(error.message);
 });

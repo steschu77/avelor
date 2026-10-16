@@ -27,6 +27,24 @@ test('a call is settled once, and a reply to none is left out', async () => {
   equal(await reply, 1);
 });
 
+test('of the calls on a channel the newest counts', async () => {
+  const first = rpcCall('search', { text: 'a' }, { channel: 'search' });
+  const { id } = posted.at(-1);
+  const second = rpcCall('search', { text: 'ab' }, { channel: 'search' });
+  equal((await first.catch(e => e)).code, 'superseded');
+  receive({ re: id, ok: 'a' });
+  receive({ re: posted.at(-1).id, ok: 'ab' });
+  equal(await second, 'ab');
+});
+
+test('a call on another channel stays', async () => {
+  const first = rpcCall('search', {}, { channel: 'one' });
+  const { id } = posted.at(-1);
+  rpcCall('search', {}, { channel: 'two' });
+  receive({ re: id, ok: true });
+  equal(await first, true);
+});
+
 test('an event goes to its listeners in the order they came', () => {
   const heard = [];
   rpcOn('told', data => heard.push(['first', data]));

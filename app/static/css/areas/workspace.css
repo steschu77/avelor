@@ -1,0 +1,18 @@
+/* The pages of the expanded vault area: the Workspace pages
+   (features/workspace/: trash). The page itself is a component. */
+
+/* Trash (Workspace -> Trash, features/workspace/trash.js): the files in the vault's trash,
+   each with Restore and Delete; Empty trash in the head */
+.trash {
+  gap: 16px;
+}
+
+.trash__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.trash__row {
+  --cols: 22px minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) auto auto;
+  min-height: var(--h-row);
+}

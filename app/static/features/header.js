@@ -24,6 +24,7 @@ import { showMenu } from '../ui/menu.js';
 import { createEditorToolbar } from '../ui/toolbar.js';
 import { editTextInPlace } from '../ui/field.js';
 import { openLink } from './selection.js';
+import { selectFilter } from './selection.js';
 import { leaveCardEditMode } from './panel/panel.js';
 import { labelChips } from './panel/panel.js';
 
@@ -49,7 +50,7 @@ const labelFilterEl = $('label-filter');
 const labelAddBtn = $('label-add-btn');
 store.subscribe(state => state.selected_labels, selected_labels =>
   labelFilterEl.replaceChildren(...labelChips(selected_labels,
-    next => store.setState({ selected_labels: next }),
+    next => selectFilter({ selected_labels: next }),
     label => t('header.stop_label', { label }))));
 const scheduleLabelAdd = oncePerFrame(() => {
   labelAddBtn.hidden = ![...entities.values()].some(doc => doc.labels?.length);
@@ -72,7 +73,7 @@ labelAddBtn.addEventListener('click', () => {
       label: label,
       hint: String(counts.get(label)),
       dim: !counts.get(label),
-      run: () => store.setState({ selected_labels: [...store.getState().selected_labels, label] }),
+      run: () => selectFilter({ selected_labels: [...store.getState().selected_labels, label] }),
     }));
   showMenu(labelAddBtn, items.length ? items : [{ label: t('header.no_other_labels'), dim: true }],
     { head: t('header.filter_label'), filter: { placeholder: t('header.filter_labels') } });

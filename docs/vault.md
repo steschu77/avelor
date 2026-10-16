@@ -79,7 +79,7 @@ There are no drafts or temporary copies: the app always saves edits
 directly to the original vault file. As a safety net, the vault is meant to
 be versioned with git, so any earlier state of a file can be recovered.
 
-## Trash
+## Trash <a id="trash"></a>
 
 Deleting an entity moves its file, unchanged, to `.trash/` at its
 vault-relative path: `Documents/a.md` goes to `.trash/Documents/a.md`. If
@@ -88,6 +88,26 @@ a file of that name is already there, the new one gets the prefix
 every dot-folder. Ctrl+Z after a delete (`saving.md#undo`) brings the file
 back, with what the delete did elsewhere: the members of a deleted project
 join it again, a thread it dissolved is whole again.
+
+- **Workspace > Trash** (`features/workspace/trash.js`) lists what is there,
+  newest first.
+- **Restore** moves a file back to where it was, without that prefix, and
+  selects it: the entity is in the vault again. It is refused when a file
+  is already in that place, or when an entity with the file's `id` is in
+  the vault.
+- A restore brings back what the file holds, not what the delete did
+  elsewhere: a thread the delete dissolved stays dissolved (its other
+  member left it), and a project deleted since then is gone (its members
+  left it). The file still names them in `threads` and `projects`; the app
+  doesn't show references to entities that aren't in the vault, the same
+  as links (`vault.md#metadata`). Ctrl+Z after a delete does bring them
+  back (above); a restore is a step too, and Ctrl+Z puts the file back in
+  the trash.
+- **Delete** in the trash and **Empty trash** remove files for good; both
+  take two clicks. Empty removes the markdown and YAML files the trash
+  lists, and the folders this leaves empty; anything else put into
+  `.trash/` stays. Neither is a step, and a delete whose file is gone for
+  good can't be undone.
 
 ## Roles, Types and Sources
 
@@ -217,7 +237,9 @@ to the letter it originates from, an event to its booking confirmation, a
 reply to the letter it answers, a conversation to the document it discusses, an
 attachment to its email. Any entity can carry one. The other side is
 derived, never stored: an entity is *linked from* every entity whose
-`linked-to` names it.
+`linked-to` names it. Deleting an entity leaves the links to it in place,
+so restoring it from `.trash` brings them back; a link to an id that isn't
+in the vault is not shown.
 
 ### Links in content <a id="links-in-content"></a>
 
@@ -669,6 +691,7 @@ These are the ID card thread's entities; the whole vault has every type.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | A3 | Show in folder | vault menu → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
+| E6 | Restore | Workspace > Trash, Restore → `restore_entity` | `Index::restore` moves the file back → `entity` | the restored entity selected; a thread the delete dissolved stays dissolved |
 
 ## Opening and indexing <a id="opening"></a>
 
@@ -703,8 +726,12 @@ indexing read in how many milliseconds.
 
 An indexing can't be stopped; a new one replaces it (a vault switch). An
 indexing is named by an id: the one replaced is aborted, and the batches and
-the end it already queued are dropped. Until the indexing ends (`App::indexing`), the index holds
-the files read so far.
+the end it already queued are dropped. While the worker walks, the app
+may write a file the walk then finds too (a restore): `Index::apply`
+skips an entry whose id the index already has, since the app's own entry
+is the newer one. Until the indexing ends (`App::indexing`), the index holds
+the files read so far: a command for an entity not read yet answers
+`not_found`.
 
 An indexing starts only when a vault opens, so `vault` (indexing) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:

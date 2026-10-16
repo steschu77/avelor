@@ -4,7 +4,8 @@
 
 import { textOf } from './text.js';
 
-// A failed call: `code` is the host's (`cancelled`, `bad_request`, ...).
+// A failed call: `code` is the host's (`cancelled`, `bad_request`, ...),
+// or `superseded` for a call a newer one on its channel replaced.
 export class RpcError extends Error {
   constructor(cmd, code, text) {
     super(textOf(text) || code);
@@ -16,16 +17,23 @@ export class RpcError extends Error {
 
 const rpcBridge = window.host;
 let rpcNextId = 1;
-const rpcPending = new Map(); // id -> { cmd, resolve, reject }
+const rpcPending = new Map(); // id -> { cmd, channel, resolve, reject }
+const rpcLatest = new Map(); // channel -> id of its latest call
 const rpcListeners = new Map(); // event -> Set of listeners
 
 // Send `cmd` with `args`; `step` names the group of edits its edit is one
 // step with (saving.md#undo). The promise resolves with the reply's value
-// and rejects with an RpcError. Without a host (a test page) a call is
+// and rejects with an RpcError. Of the calls on one `channel` only the
+// latest counts: the one before is rejected as `superseded` at once, and
+// its late reply is ignored. Without a host (a test page) a call is
 // `cancelled`.
 export function rpcCall(cmd, args = {}, { channel, step } = {}) {
   const id = rpcNextId++;
-  const reply = new Promise((resolve, reject) => rpcPending.set(id, { cmd, resolve, reject }));
+  if (channel) {
+    rpcSettle(rpcLatest.get(channel), { err: { code: 'superseded' } });
+    rpcLatest.set(channel, id);
+  }
+  const reply = new Promise((resolve, reject) => rpcPending.set(id, { cmd, channel, resolve, reject }));
   if (rpcBridge) rpcBridge.post(JSON.stringify({ id, cmd, args, step }));
   else rpcSettle(id, { err: { code: 'cancelled' } });
   return reply;
@@ -39,10 +47,12 @@ export function rpcOn(event, fn) {
 }
 
 // Settle the call `id` with `reply`: `{ ok }` or `{ err: { code, text } }`.
+// A call settled before (superseded) is no longer pending and stays as it is.
 function rpcSettle(id, reply) {
   const call = rpcPending.get(id);
   if (!call) return;
   rpcPending.delete(id);
+  if (call.channel && rpcLatest.get(call.channel) === id) rpcLatest.delete(call.channel);
   if (reply.err) call.reject(new RpcError(call.cmd, reply.err.code, reply.err.text));
   else call.resolve(reply.ok);
 }

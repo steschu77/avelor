@@ -137,7 +137,8 @@ thread if the entity is one of its
 members — so clicking a card never jumps to another thread for an entity in
 several — and otherwise uses the entity's first thread in the vault
 (`threadOf`), or `null` for a standalone entity. A thread the entity still
-names but that isn't in the vault is skipped.
+names but that isn't in the vault — dissolved while the entity was in the
+trash — is skipped.
 
 Three related but independent things happen when an entity becomes "the
 one in view":
@@ -205,7 +206,8 @@ calls `switchThread(doc_id, thread_id)`, which sets `selected_entity` and
 thread with the entity focused and scrolled to. The line is per card, so
 every member in several threads switches on its own. Like the link chips,
 it is refreshed in place on `entities_rev` (`refreshCardChips`): a thread
-that is renamed shows without rebuilding the cards.
+that comes back from the trash, or is renamed, shows without rebuilding
+the cards.
 
 ## Links <a id="links"></a>
 
@@ -359,7 +361,8 @@ from the selection. The edits:
   before the delete, so a failed delete loses no edit), then `delete_entity`
   is sent. The host (`Index::delete`) dissolves every thread the entity
   leaves with fewer than two members, as for the remove button, then moves
-  the entity's file to `.trash` unchanged. The
+  the entity's file to `.trash` unchanged — a restore brings it back as it
+  was (`vault.md#trash`), but a dissolved thread stays dissolved. The
   selection follows `selectionWithout`; a deleted standalone entity leaves
   the panel empty. `onEntityDeleted` forgets the id everywhere (`entities`,
   `threads`, the save state of `saving.md#dirty-state`) and lowers the

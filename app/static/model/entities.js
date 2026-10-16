@@ -13,7 +13,8 @@ export const entities = new Map(); // doc_id -> document data (every non-{projec
 // ----------------------------------------------------------------------------
 // The thread shown for `doc_id`: the first of the threads it's a member of
 // (`message.threads`) that is in the vault, or undefined for an entity
-// outside any thread.
+// outside any thread. One it still names after a restore from the trash,
+// dissolved meanwhile, is skipped (vault.md#trash).
 export function threadOf(doc_id) {
   return knownThreads(entities.get(doc_id))[0];
 }
@@ -36,7 +37,8 @@ export function projectsInOrder() {
 // entities in no project of the vault.
 export const NO_PROJECT = 'none';
 
-// The projects of `doc` that are in the vault.
+// The projects of `doc` that are in the vault (a restored file may still
+// name one deleted since, vault.md#trash).
 export function projectsOf(doc) {
   return (doc.projects ?? []).filter(id => projects.has(id));
 }

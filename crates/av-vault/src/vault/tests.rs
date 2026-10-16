@@ -1,3 +1,4 @@
+use super::trash::untrashed;
 use super::*;
 use crate::envelope::DocumentType;
 use crate::envelope::Source;
@@ -543,6 +544,133 @@ fn deleting_a_project_writes_nothing_unless_every_member_can_leave() {
     assert!(changes.saved.is_empty() && changes.trashed.is_empty());
     assert_eq!(index.members_of(&project).len(), 2);
     assert!(index.entry(&project).unwrap().path.exists());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_deleted_entity_is_listed_in_the_trash_and_restored_as_it_was() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let before = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+    let mut changes = Changes::default();
+    let deleted = index.delete(&ids[0], &mut changes);
+    assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+
+    let trashed = index.trashed();
+    assert_eq!(trashed.len(), 1);
+    assert_eq!(trashed[0].local, Path::new("Notes").join("n0.md"));
+    let doc = trashed[0].doc.as_ref().unwrap();
+    assert_eq!((doc.id(), doc.title()), (ids[0], "Note 0"));
+
+    let mut changes = Changes::default();
+    let id = index.restore(&trashed[0].local, &mut changes).unwrap();
+    assert_eq!(id, ids[0]);
+    assert_eq!(changes.created, Some(ids[0]));
+    assert_eq!(
+        fs::read_to_string(root.join("Notes/n0.md")).unwrap(),
+        before
+    );
+    assert_eq!(index.entry(&id).unwrap().local, Path::new("Notes/n0.md"));
+    assert!(
+        !root.join(".trash/Notes").exists(),
+        "emptied folder removed"
+    );
+    assert!(index.trashed().is_empty());
+
+    // Its stamp came along: the next edit is no conflict.
+    let retitled = index.set_title(&id, "Back".into(), &mut changes);
+    assert_eq!(retitled.unwrap(), SaveOutcome::Saved);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_restore_drops_the_prefix_of_a_clash() {
+    let (root, _) = thread_vault();
+    let mut index = Index::build(&root);
+    let id = Id::generate();
+    let trashed = root.join(".trash/Notes/20261005_142301.n9.md");
+    fs::create_dir_all(trashed.parent().unwrap()).unwrap();
+    fs::write(&trashed, format!("---\nid: {id}\ndocument: {{}}\n---\n")).unwrap();
+
+    let local = Path::new("Notes/20261005_142301.n9.md");
+    let restored = index.restore(local, &mut Changes::default()).unwrap();
+    assert_eq!(restored, id);
+    assert!(root.join("Notes/n9.md").exists() && !trashed.exists());
+
+    // A generated name isn't such a prefix.
+    let name = Path::new("Notes/20260915T0340.ad.80c3.doc.md");
+    assert_eq!(untrashed(name), name);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_restore_is_refused_when_its_place_or_id_is_taken() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let deleted = index.delete(&ids[0], &mut changes);
+    assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+
+    fs::write(root.join("Notes/n0.md"), "a new file\n").unwrap();
+    let err = index.restore(Path::new("Notes/n0.md"), &mut changes);
+    assert!(matches!(err, Err(Error::FileExists { path }) if path == Path::new("Notes/n0.md")));
+    assert!(
+        root.join(".trash/Notes/n0.md").exists(),
+        "left in the trash"
+    );
+
+    let copy = root.join(".trash/Copies/n1.md");
+    fs::create_dir_all(copy.parent().unwrap()).unwrap();
+    fs::copy(root.join("Notes/n1.md"), &copy).unwrap();
+    let err = index.restore(Path::new("Copies/n1.md"), &mut changes);
+    assert!(matches!(err, Err(Error::FileExists { path }) if path == Path::new("Notes/n1.md")));
+    assert!(copy.exists() && !root.join("Copies").exists());
+
+    let err = index.restore(Path::new("../Notes/n1.md"), &mut changes);
+    assert!(matches!(err, Err(Error::InvalidPath { .. })));
+    let err = index.restore(&root.join("Notes/n1.md"), &mut changes);
+    assert!(matches!(err, Err(Error::InvalidPath { .. })));
+    let err = index.restore(Path::new("Notes/n0.txt"), &mut changes);
+    assert!(matches!(err, Err(Error::InvalidFileType)));
+    let err = index.restore(Path::new("Notes/gone.md"), &mut changes);
+    assert!(matches!(err, Err(Error::FileNotFound { .. })));
+    assert!(changes.created.is_none());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn trashed_files_are_deleted_one_by_one_or_all_at_once() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    for id in &ids {
+        let deleted = index.delete(id, &mut changes);
+        assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+    }
+    let other = root.join(".trash/notes.txt");
+    fs::write(&other, "not an entity\n").unwrap();
+    let read_only = root.join(".trash/Notes/n2.md");
+    let mut permissions = fs::metadata(&read_only).unwrap().permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(&read_only, permissions).unwrap();
+
+    index.delete_trashed(Path::new("Notes/n0.md")).unwrap();
+    assert!(!root.join(".trash/Notes/n0.md").exists());
+    assert_eq!(index.trashed().len(), 2);
+
+    assert_eq!(index.empty_trash().unwrap(), 2, "the read-only one too");
+    assert!(index.trashed().is_empty());
+    assert!(
+        !root.join(".trash/Notes").exists(),
+        "emptied folder removed"
+    );
+    assert!(other.exists(), "what isn't listed stays");
+    let err = index.delete_trashed(Path::new("Notes/n1.md"));
+    assert!(matches!(err, Err(Error::FileNotFound { .. })));
 
     fs::remove_dir_all(&root).ok();
 }
