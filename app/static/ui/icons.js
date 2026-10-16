@@ -6,11 +6,12 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // ----------------------------------------------------------------------------
 // Keyed by the derived `DocumentType` (kebab-case, see av-vault envelope.rs).
-const KIND_ICONS = {
+export const KIND_ICONS = {
   document: { icon: '#i-note' },
   message: { icon: '#i-chat' },
   email: { icon: '#i-mention' },
   conversation: { icon: '#i-chat' },
+  project: { icon: '#i-folder' },
   statement: { icon: '#i-payment' },
   'bank-account': { icon: '#i-payment' },
   calendar: { icon: '#i-calendar' },

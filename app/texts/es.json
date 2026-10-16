@@ -1,5 +1,6 @@
 {
   "config.unread": "No se pudo leer config.yaml; la aplicación se inició con la configuración predeterminada.",
+  "context.open": "Abrir",
   "docs.date": "Fecha",
   "docs.name": "Nombre",
   "error.code": "Algo ha fallado ({code}).",
@@ -13,6 +14,7 @@
   "layout.resize_panel": "Ancho de los detalles",
   "layout.resize_sidebar": "Ancho del panel de la bóveda",
   "menu.close": "Cerrar el menú",
+  "open.named": "Abrir {name}",
   "panel.close": "Cerrar los detalles",
   "panel.expand": "Mostrar a todo el ancho",
   "save.settings": "No se pudo guardar la configuración.",
