@@ -22,6 +22,7 @@ use av_utils::id::Id;
 use av_utils::text::renormalize;
 use av_utils::text::{LineEnding, normalize};
 
+mod create;
 mod indexing;
 mod properties;
 mod structure;
@@ -74,7 +75,8 @@ pub struct Entry {
 }
 
 impl Entry {
-    /// An entry for an entity that has no file yet.
+    /// An entry for an entity created in the app that has no file yet (see
+    /// [`Document::create`]): no path, so [`Index::save`] refuses it.
     pub fn unsaved(doc: Document) -> Self {
         Self {
             path: PathBuf::new(),
@@ -126,6 +128,9 @@ impl Entry {
 /// when the operation fails part-way.
 #[derive(Debug, Default)]
 pub struct Changes {
+    /// An entity new in the index: made in the app, written to its own new
+    /// file.
+    pub created: Option<Id>,
     /// Entities whose file was rewritten.
     pub saved: Vec<Id>,
 }
@@ -177,6 +182,9 @@ impl Index {
             return Err(Error::NotFound);
         };
         let entry = &self.documents[i];
+        if entry.is_unsaved() {
+            return Err(Error::Unsaved);
+        }
         if !overwrite && entry.changed_on_disk()? {
             return Ok(SaveOutcome::Conflict(*id));
         }
@@ -213,6 +221,9 @@ impl Index {
             return Err(Error::NotFound);
         };
         let entry = &self.documents[i];
+        if entry.is_unsaved() {
+            return Err(Error::Unsaved);
+        }
         let readonly = match fs::metadata(&entry.path) {
             Ok(metadata) => metadata.permissions().readonly(),
             Err(err) if err.kind() == ErrorKind::NotFound => {
@@ -317,6 +328,17 @@ impl Index {
             }
             _ => Ok(()),
         }
+    }
+
+    /// The open vault's root: `InvalidPath` without one, as an index without
+    /// a vault has an empty root.
+    fn open_root(&self) -> Result<&Path> {
+        if self.root.as_os_str().is_empty() {
+            return Err(Error::InvalidPath {
+                path: PathBuf::new(),
+            });
+        }
+        Ok(&self.root)
     }
 
     fn check_project(&self, id: &Id) -> Result<()> {

@@ -125,6 +125,7 @@
   "shell.vault_panel": "Tresorleiste",
   "sidebar.all_projects": "Alle Projekte",
   "sidebar.archived": "Archiviert",
+  "sidebar.new_project": "Projekt hinzufügen",
   "sidebar.no_project": "Kein Projekt",
   "sidebar.no_project_title": "Dokumente ohne Projekt",
   "sidebar.no_vault": "Kein Tresor",
