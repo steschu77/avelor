@@ -9,17 +9,38 @@
 
 use std::collections::HashMap;
 use std::fs::{self, DirEntry};
+use std::io::ErrorKind;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::document::{Document, FileFormat};
+use av_utils::error::Error;
 use av_utils::error::Result;
+use av_utils::fs::{FileStamp, write_atomic};
 use av_utils::id::Id;
+use av_utils::text::renormalize;
 use av_utils::text::{LineEnding, normalize};
 
 mod indexing;
+mod properties;
 
 pub use indexing::{IndexControl, IndexEvent, index_vault};
+
+// ----------------------------------------------------------------------------
+/// What a write did. A conflict is an expected outcome, not an error: the
+/// entity's file changed outside the app since it was last read or written,
+/// so nothing was written, and the user decides -- reload the file
+/// ([`Index::reload`]).
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveOutcome {
+    /// At least one file was written.
+    Saved,
+    /// Nothing had changed, so nothing was written.
+    Unchanged,
+    /// This entity's file changed outside the app; nothing was written.
+    Conflict(Id),
+}
 
 // ----------------------------------------------------------------------------
 #[derive(Debug)]
@@ -50,6 +71,12 @@ impl Entry {
         self.path.as_os_str().is_empty()
     }
 
+    /// Whether the file changed (or went away) since the app last read or
+    /// wrote it.
+    pub fn changed_on_disk(&self) -> Result<bool> {
+        Ok(FileStamp::read(&self.path)? != self.doc.stamp())
+    }
+
     /// Whether the WYSIWYG editor may edit this entry's content: a markdown
     /// file that is writable and whose frontmatter parsed. Broken documents
     /// and YAML records wait for the source editor.
@@ -70,6 +97,16 @@ impl Entry {
     pub fn is_deletable(&self) -> bool {
         !self.readonly && !self.is_unsaved()
     }
+}
+
+// ----------------------------------------------------------------------------
+/// What a structural operation did, so the caller can push exactly the
+/// changed entities. Filled in as the operation goes, so it is accurate even
+/// when the operation fails part-way.
+#[derive(Debug, Default)]
+pub struct Changes {
+    /// Entities whose file was rewritten.
+    pub saved: Vec<Id>,
 }
 
 // ----------------------------------------------------------------------------
@@ -94,6 +131,119 @@ impl Index {
     pub fn add(&mut self, entry: Entry) -> &Entry {
         self.insert(entry);
         &self.documents[self.documents.len() - 1]
+    }
+
+    /// Drop `id`'s entry from the index and return it. Only the in-memory
+    /// index changes: a file on disk stays, and comes back on the next indexing.
+    pub fn remove(&mut self, id: &Id) -> Option<Entry> {
+        let i = self.by_id.remove(id)?;
+        let entry = self.documents.swap_remove(i);
+        // swap_remove moved the former last entry into slot `i`.
+        if let Some(moved) = self.documents.get(i) {
+            self.by_id.insert(moved.doc.id(), i);
+        }
+        Some(entry)
+    }
+
+    /// Write `id`'s current in-memory content/envelope to disk (BOM/CRLF
+    /// preserved) through a temporary file, then record what the file holds
+    /// now (`Document::written`), so `Document::is_dirty` reflects "clean"
+    /// again afterward. A file changed outside the app since the
+    /// last read or write is a conflict and isn't touched.
+    fn save(&mut self, id: &Id, _overwrite: bool) -> Result<SaveOutcome> {
+        let Some(&i) = self.by_id.get(id) else {
+            return Err(Error::NotFound);
+        };
+        let entry = &self.documents[i];
+        if entry.changed_on_disk()? {
+            return Ok(SaveOutcome::Conflict(*id));
+        }
+        let text = renormalize(&entry.bom, entry.crlf, entry.doc.save());
+        write_atomic(&entry.path, text.as_bytes())?;
+        // Without a stamp the next save is a conflict: the safe side.
+        let stamp = FileStamp::read(&entry.path).ok().flatten();
+
+        self.documents[i].doc.written(stamp);
+        Ok(SaveOutcome::Saved)
+    }
+
+    /// Read `id`'s file again and take in whatever it holds now: the
+    /// user's answer to a conflict. Returns the id the file has now (a
+    /// different one if its `id` was changed by hand), or `None` if the
+    /// file is gone, in which case the entry leaves the index.
+    pub fn reload(&mut self, id: &Id) -> Result<Option<Id>> {
+        let Some(&i) = self.by_id.get(id) else {
+            return Err(Error::NotFound);
+        };
+        let entry = &self.documents[i];
+        let readonly = match fs::metadata(&entry.path) {
+            Ok(metadata) => metadata.permissions().readonly(),
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                self.remove(id);
+                return Ok(None);
+            }
+            Err(err) => return Err(Error::FileIo { err }),
+        };
+        let mut fresh = load(
+            entry.path.clone(),
+            entry.local.clone(),
+            readonly,
+            entry.doc.format(),
+        )?;
+        if !fresh.doc.adopted() {
+            fresh.doc.keep_id(*id); // a file without `id` keeps its entity
+        }
+        let fresh_id = fresh.doc.id();
+        self.by_id.remove(id);
+        self.by_id.insert(fresh_id, i);
+        self.documents[i] = fresh;
+        Ok(Some(fresh_id))
+    }
+
+    /// Apply `change` to `id`'s document and save it, recording a write in
+    /// `changes`.
+    fn update(
+        &mut self,
+        id: &Id,
+        changes: &mut Changes,
+        change: impl FnOnce(&mut Document),
+    ) -> Result<SaveOutcome> {
+        let outcome = self.write_change(id, change)?;
+        if outcome == SaveOutcome::Saved {
+            changes.saved.push(*id);
+        }
+        Ok(outcome)
+    }
+
+    /// Apply `change` to `id`'s document and save it if that changed
+    /// anything. On a conflict or a failed save the document's envelope and
+    /// body -- all it holds -- are put back as they were, so memory keeps
+    /// matching the file.
+    fn write_change(&mut self, id: &Id, change: impl FnOnce(&mut Document)) -> Result<SaveOutcome> {
+        let Some(&i) = self.by_id.get(id) else {
+            return Err(Error::NotFound);
+        };
+        let doc = &mut self.documents[i].doc;
+        let before = doc.snapshot();
+        change(doc);
+        if !doc.is_dirty() {
+            return Ok(SaveOutcome::Unchanged);
+        }
+        let saved = self.save(id, false);
+        if !matches!(saved, Ok(SaveOutcome::Saved)) {
+            self.documents[i].doc.restore(before);
+        }
+        saved
+    }
+
+    fn check_writable(&self, id: &Id) -> Result<()> {
+        match self.entry(id) {
+            Some(e) if e.is_writable() => Ok(()),
+            Some(e) => Err(Error::NotWritable {
+                path: e.local.clone(),
+            }),
+            None => Err(Error::NotFound),
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -157,11 +307,14 @@ pub(crate) fn sort_by_date(entries: &mut [&Entry]) {
 // ----------------------------------------------------------------------------
 fn load(path: PathBuf, local: PathBuf, readonly: bool, doc_type: FileFormat) -> Result<Entry> {
     let mut file = fs::File::open(&path)?;
+    // Stamped before reading: a change in between shows up as a conflict
+    // on the next save, never as an overwrite.
+    let stamp = Some(FileStamp::of(&file.metadata()?));
     let mut t = String::new();
     file.read_to_string(&mut t)?;
     let (bom, crlf, text) = normalize(t);
 
-    let doc = Document::load(text, doc_type);
+    let doc = Document::load(text, doc_type).stamped(stamp);
     if let Some(e) = doc.error() {
         log::error!("{path:?}: {e}");
     }
