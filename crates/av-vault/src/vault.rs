@@ -29,6 +29,7 @@ mod structure;
 mod trash;
 
 pub use indexing::{IndexControl, IndexEvent, index_vault};
+pub use trash::Trashed;
 
 // ----------------------------------------------------------------------------
 /// What a write did. A conflict is an expected outcome, not an error: the
@@ -144,7 +145,7 @@ impl Entry {
 #[derive(Debug, Default)]
 pub struct Changes {
     /// An entity new in the index: made in the app, written to its own new
-    /// file.
+    /// file, or restored from the trash ([`Index::restore`]).
     pub created: Option<Id>,
     /// Entities whose file was rewritten.
     pub saved: Vec<Id>,

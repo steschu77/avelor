@@ -12,6 +12,7 @@ use crate::close;
 use crate::documents;
 use crate::structure;
 use crate::texts::Text;
+use crate::trash;
 use av_utils::error::Error;
 use av_utils::id::Id;
 use av_vault::vault::Index;
@@ -62,6 +63,11 @@ enum Command {
     SetLink(Relink),
     DeleteEntity(Target),
     ReloadEntity(Target),
+    // The trash (`trash`).
+    ListTrash,
+    RestoreEntity(TrashPath),
+    DeleteTrashed(TrashPath),
+    EmptyTrash,
 }
 
 /// `{path?}`: no `path` shows the folder picker.
@@ -146,6 +152,12 @@ struct Relabel {
     labels: Vec<String>,
 }
 
+/// `{path}`: a file in the trash, relative to `.trash`.
+#[derive(Deserialize)]
+struct TrashPath {
+    path: String,
+}
+
 /// `{id, to}`: `to` null removes the link.
 #[derive(Deserialize)]
 struct Relink {
@@ -195,6 +207,10 @@ impl Command {
             "set_link" => Command::SetLink(from_value(args)?),
             "delete_entity" => Command::DeleteEntity(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
+            "list_trash" => Command::ListTrash,
+            "restore_entity" => Command::RestoreEntity(from_value(args)?),
+            "delete_trashed" => Command::DeleteTrashed(from_value(args)?),
+            "empty_trash" => Command::EmptyTrash,
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
                 return Err(serde::de::Error::custom(unknown));
@@ -250,6 +266,10 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetLink(a) => structure::set_link(app, req, a.id, a.to),
         Command::DeleteEntity(a) => structure::delete_entity(app, req, a.id),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),
+        Command::ListTrash => trash::list_trash(app, req),
+        Command::RestoreEntity(a) => trash::restore_entity(app, req, a.path),
+        Command::DeleteTrashed(a) => trash::delete_trashed(app, req, a.path),
+        Command::EmptyTrash => trash::empty_trash(app, req),
     }
 }
 
