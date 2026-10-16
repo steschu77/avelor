@@ -1,7 +1,7 @@
 // The lens header (panel.md#projects): the selected project's name, the
 // active labels with the "+" that filters by another one
 // (ui.md#vault-panel), and the project's details -- a toolbar (rename, edit
-// description, archive) and the description, an editor bound like
+// description, archive, delete) and the description, an editor bound like
 // any document's (saving.md). Also `leaveEditModes`, which takes every
 // editor out of edit mode, the cards' and the description (closing the
 // app, switching the vault).
@@ -16,6 +16,7 @@ import {
   bindDocContent, editorRoots, onEdited, trySave,
 } from '../model/documents.js';
 import { structureCall } from '../model/structure.js';
+import { armedButton } from '../ui/confirm.js';
 import { showMenu } from '../ui/menu.js';
 import { createEditorToolbar } from '../ui/toolbar.js';
 import { editTextInPlace } from '../ui/field.js';
@@ -76,7 +77,7 @@ labelAddBtn.addEventListener('click', () => {
 
 // The selected project's details under the header, shown while the fold
 // button (the chevron) is unfolded: a toolbar (rename, edit description,
-// archive) and the description -- its file's body in an editor, loaded and
+// archive, delete) and the description -- its file's body in an editor, loaded and
 // saved like any document (saving.md). The description pen toggles edit
 // mode, Escape leaves it. The description is hidden while empty and not
 // being edited.
@@ -149,6 +150,17 @@ projectArchiveBtn.addEventListener('click', () => {
   if (projectArchiveBtn.getAttribute('aria-disabled') !== 'true') toggleArchive(descProjectId);
 });
 
+// Delete: two clicks (`armedButton`). The description is saved first, so
+// if the delete fails no edit is lost; the host takes the project out of
+// its members and moves its file to `.trash`, and `onEntityDeleted` clears
+// the filter.
+const projectDeleteBtn = $('project-delete-btn');
+armedButton(projectDeleteBtn, 'Click again to delete the project', () => {
+  const project_id = descProjectId;
+  setProjectDescEditMode(false);
+  structureCall('delete_entity', { id: project_id }, () => store.getState());
+});
+
 // The buttons follow the selected project: what the host may do with its
 // file, and whether it is archived.
 store.subscribe(
@@ -159,6 +171,7 @@ store.subscribe(
     projectArchiveBtn.setAttribute('aria-disabled', String(!project?.writable));
     projectArchiveBtn.setAttribute('aria-pressed', String(archived));
     projectArchiveBtn.title = archived ? 'Unarchive project' : 'Archive project';
+    projectDeleteBtn.setAttribute('aria-disabled', String(!project?.deletable));
   });
 
 // Another project selected: the outgoing one is saved first. The fold state

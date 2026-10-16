@@ -63,7 +63,8 @@ Every entity — markdown file or YAML record — carries a stable `id`.
 Every entity can belong to zero or more projects; a thread's projects
 are its members' (`vault.md#thread`). Projects are themselves entities
 with a `project:` block and a `title`. Entities are linked to projects via
-their `projects` metadata field.
+their `projects` metadata field. Creating, renaming, starring,
+archiving and deleting projects is in `panel.md#projects`.
 
 ## External Edits
 
@@ -77,6 +78,14 @@ asks the user which version to keep. The rules are in `saving.md#conflicts`.
 There are no drafts or temporary copies: the app always saves edits
 directly to the original vault file. As a safety net, the vault is meant to
 be versioned with git, so any earlier state of a file can be recovered.
+
+## Trash <a id="trash"></a>
+
+Deleting an entity moves its file, unchanged, to `.trash/` at its
+vault-relative path: `Documents/a.md` goes to `.trash/Documents/a.md`. If
+a file of that name is already there, the new one gets the prefix
+`YYYYMMDD_hhmmss.`, the time of the delete. The scan skips `.trash/` like
+every dot-folder.
 
 ## Roles, Types and Sources
 
@@ -632,6 +641,7 @@ not by location:
 ```
 Vault/
   Projects/            # *.md / *.yaml project descriptors
+  .trash/              # deleted entities, at their vault-relative path (§ Trash)
   …any user folders for notes, letters, tasks…
 ```
 

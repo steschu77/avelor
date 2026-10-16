@@ -3,12 +3,12 @@
 // in #panel-thread-view, vault.md#thread), or a standalone entity (one card in
 // #doc-content) -- driven only by store state (`selected_entity`,
 // `selected_thread`, `threads_rev`). Structural edits (drops, the
-// remove-from-thread button) are host round trips (`structureCall`,
-// model/structure.js) that end in a published selection, never in a direct
-// render call; the requests (`joinThreadLocal`, ...) are model/structure.js's.
-// app.js reaches into `msgControllers` for the cards' dirty dots, and
-// features/header.js leaves edit mode; autosave lives in model/documents.js
-// and covers every editor in edit mode.
+// remove-from-thread and delete buttons) are host round trips
+// (`structureCall`, model/structure.js) that end in a published selection,
+// never in a direct render call; the requests (`joinThreadLocal`, ...) are
+// model/structure.js's. app.js reaches into `msgControllers` for the cards'
+// dirty dots, and features/header.js leaves edit mode; autosave lives in
+// model/documents.js and covers every editor in edit mode.
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
@@ -23,9 +23,11 @@ import {
   joinProjectLocal, leaveProjectLocal, setLinkLocal, setTagsLocal,
 } from '../../model/structure.js';
 import { createThreadLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
+import { selectionWithout } from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
+import { armedButton } from '../../ui/confirm.js';
 import {
   createDocPreviewToolbar, createEditorToolbar,
 } from '../../ui/toolbar.js';
@@ -81,6 +83,19 @@ attachDropZone(docContentEl, doc_id => {
 threadRenameBtn.addEventListener('click', () => {
   if (renderedThreadId) renameEntity(renderedThreadId, threadTitleEl);
 });
+
+// ----------------------------------------------------------------------------
+// Deletes `doc_id` (the card's delete button), shown in `thread_id` or
+// standalone (null): the host moves its file to `.trash` and dissolves any
+// thread it leaves with fewer than two members. A card being edited is
+// saved first -- the save reaches the host before the delete, and if the
+// delete fails, no edit is lost.
+function deleteEntityLocal(doc_id, thread_id) {
+  if (!entities.has(doc_id)) return;
+  if (activeEditId === doc_id) setMessageEditMode(doc_id, false);
+
+  structureCall('delete_entity', { id: doc_id }, selectionWithout(doc_id, thread_id));
+}
 
 // ----------------------------------------------------------------------------
 // A card's projects and labels on one line, as `projectChips` and
@@ -600,6 +615,12 @@ function createMessageController(msg, { selectable = false, thread = false } = {
     if (threadBtn.getAttribute('aria-disabled') === 'true') return;
     leaveThreadLocal(doc_id, renderedThreadId);
   });
+
+  // Delete: two clicks, no dialog (`armedButton`).
+  const deleteBtn = previewToolbar.querySelector('button[data-cmd="delete"]');
+  deleteBtn.setAttribute('aria-disabled', String(!entities.get(doc_id)?.deletable));
+  armedButton(deleteBtn, 'Click again to delete',
+    () => deleteEntityLocal(doc_id, thread ? renderedThreadId : null));
 
   const controller = {
     doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,

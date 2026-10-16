@@ -258,7 +258,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
-| `structure.rs` | the structural commands: threads, projects, titles, stars, archiving, labels, links, `reload_entity`; their answers; their dispatch tests |
+| `structure.rs` | the structural commands: threads, projects, titles, stars, archiving, labels, links, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
 ## Platforms <a id="platforms"></a>
@@ -340,8 +340,7 @@ nothing imports `app.js`.
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`, `threadMembers`, `threadProjects`); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts (`editorRoots`) |
 | `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinProjectLocal`, …, `setLinkLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
-| `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
-| `ui/toolbar.js` | the editors' toolbars |
+| `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc; the two-click confirm (`armedButton`: one armed button page-wide); the editors' toolbars |
 | `ui/field.js` | editing in place (`editTextInPlace`) |
 | `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
 | `features/selection.js` | the selection (`selectDocument`, `selectById`, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |

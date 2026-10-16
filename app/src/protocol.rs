@@ -59,6 +59,7 @@ enum Command {
     SetArchived(Archive),
     SetTags(Retag),
     SetLink(Relink),
+    DeleteEntity(Target),
     ReloadEntity(Target),
 }
 
@@ -191,6 +192,7 @@ impl Command {
             "set_archived" => Command::SetArchived(from_value(args)?),
             "set_tags" => Command::SetTags(from_value(args)?),
             "set_link" => Command::SetLink(from_value(args)?),
+            "delete_entity" => Command::DeleteEntity(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
@@ -245,6 +247,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),
         Command::SetTags(a) => structure::set_tags(app, req, a.id, a.tags),
         Command::SetLink(a) => structure::set_link(app, req, a.id, a.to),
+        Command::DeleteEntity(a) => structure::delete_entity(app, req, a.id),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),
     }
 }

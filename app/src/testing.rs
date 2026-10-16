@@ -145,6 +145,14 @@ pub fn shape(sent: &[Value]) -> Vec<&str> {
 }
 
 // ----------------------------------------------------------------------------
+/// Whether `path` is in the vault's `.trash`.
+pub fn trashed(root: &Path, path: &str) -> bool {
+    root.join(av_vault::schema::layout::TRASH)
+        .join(path)
+        .exists()
+}
+
+// ----------------------------------------------------------------------------
 /// A vault of `n` documents, `Notes/n<i>.md`, titled `Note <i>`, with the
 /// body `Body <i>`.
 pub fn notes(name: &str, n: usize) -> (Harness, Vec<Id>) {

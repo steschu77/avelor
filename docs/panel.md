@@ -2,7 +2,7 @@
 
 > The side panel and what the user organizes in it: the card every entity
 > is shown as, a thread's members, links, labels, projects, and the
-> structural edits (threads, projects, titles, labels, links) with how they are
+> structural edits (threads, projects, titles, labels, links, deletes) with how they are
 > saved. The lenses and the vault panel are
 > `ui.md`; the editor inside each card, `editor.md`; saving its content,
 > `saving.md`.
@@ -82,8 +82,8 @@ template itself:
   editing toolbar, passed to `createEditor()`'s `toolbar` option.
 - **`#preview-toolbar-template`** — the action row:
   `data-cmd="edit"` (edit mode, if the entity is `editable`; one card in
-  edit mode at a time) and `data-cmd="thread"`
-  (remove from thread). The template's elements
+  edit mode at a time), `data-cmd="thread"`
+  (remove from thread) and `data-cmd="delete"`. The template's elements
   carry no ids, since it is cloned for every card.
 
 ## Panel state <a id="panel-state"></a>
@@ -121,7 +121,9 @@ standalone card to the thread (or back; `renderedDocId` /
 `renderedMembers`) never leaves an entity's editor and content
 subscription twice. `renderEmpty()` is the `none` mode's builder:
 after the teardown it shows a placeholder ("No document selected",
-`.empty`) in `#doc-content`; the panel itself stays open.
+`.empty`) in `#doc-content`; the panel itself stays open. This is what a
+deleted standalone entity leaves behind: no card, and no controller that
+could still autosave the deleted id.
 
 Nothing else calls `renderThread`/`renderDocument`. Selection changes go
 through `selectDocument`; membership changes go through
@@ -290,10 +292,16 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   while the project is archived (`toggleArchive`), sends `set_archived`;
   the sidebar folds archived projects under an "Archived" row
   (`toggleArchived`, not kept across restarts).
+- **Delete**: the project header's Delete, two clicks (`armedButton`):
+  the description is saved first, then `delete_entity`. The host takes the
+  project out of every member (all writable and unchanged, or nothing is
+  written) and moves its file to `.trash`, pushing the members as `entity`
+  and the project as `entity_deleted`; `onEntityDeleted` drops it and, if
+  it was the filter, shows all documents.
 
 ## Membership and structural edits <a id="structural-edits"></a>
 
-Membership is edited by the host, never on the page
+Membership is edited, and entities deleted, by the host, never on the page
 (`panel.md#saving-structure` explains why). Each edit is a typed command
 (`api.md#structure`) sent through `structureCall(cmd, args,
 select)`; once it is answered, `select(id)` (the answer's `id`) is applied
@@ -341,6 +349,21 @@ from the selection. The edits:
   (`.is-drop-target`) while dragged over; a drop there calls
   `leaveThreadLocal`, exactly as the remove button does. Both card panels
   ignore them, so a card can't be dropped back into its own thread.
+- **Delete button** (`data-cmd="delete"`, enabled when the entity's
+  `deletable` is set: it has a file, and the file isn't read-only). Two
+  clicks, no dialog, as every two-click confirm of the page (`armedButton`,
+  `ui/confirm.js`): the first arms the button (`[data-armed]`, filled red,
+  tooltip "Click again to delete"), which disarms after 3 s or when the
+  pointer leaves it; the second calls `deleteEntityLocal(doc_id,
+  thread_id)`. A card being edited is saved first (the save reaches the host
+  before the delete, so a failed delete loses no edit), then `delete_entity`
+  is sent. The host (`Index::delete`) dissolves every thread the entity
+  leaves with fewer than two members, as for the remove button, then moves
+  the entity's file to `.trash` unchanged. The
+  selection follows `selectionWithout`; a deleted standalone entity leaves
+  the panel empty. `onEntityDeleted` forgets the id everywhere (`entities`,
+  `threads`, the save state of `saving.md#dirty-state`) and lowers the
+  vault's file count.
 
 Both drop targets of the card panels are wired through the same
 `attachDropZone(containerEl, onDrop)`; while dragging, the panel's last
@@ -348,17 +371,19 @@ card is highlighted (`.is-drop-after`) as the drop target.
 
 ## Saving structural edits <a id="saving-structure"></a>
 
-The vault file is the source of truth, a file is written only when
-something in it changed, and the host answers with what is now on disk.
+Structural edits are saved the way content is (`saving.md`): the vault
+file is the source of truth, a file is written only when something in it
+changed, and the host answers with what is now on disk. They differ in who
+applies the edit:
 
-| | Structure |
-|---|---|
-| The page sends | an intent: `create_thread`, `join_thread`, `leave_thread`, `join_project`, `leave_project`, `set_title`, … |
-| The host writes | the matching `Index` op → `Index::save` |
-| The host answers | `entity` / `entity_deleted` per changed entity, then the command's answer |
-| Stale-reply guard | none needed: nothing is applied optimistically |
-| On failure | an error answer, shown in the status bar; the page shows whatever the host pushed, so it never shows unsaved structure |
-| File changed outside the app | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs, after which the user makes the edit again |
+| | Content (`saving.md`) | Structure |
+|---|---|---|
+| The page sends | the full body (state) | an intent: `create_thread`, `join_thread`, `leave_thread`, `join_project`, `leave_project`, `set_title`, `delete_entity`, … |
+| The host writes | `Index::save_content` → `Index::save`, only if dirty | the matching `Index` op → the same `Index::save`; deletes move the file (`Index::trash`) |
+| The host answers | `ok {source, html}` with the saved source | `entity` / `entity_deleted` per changed entity, then the command's answer |
+| Stale-reply guard | `edit_seq`, kept with the call on the page | none needed: nothing is applied optimistically; the answer only says how to select |
+| On failure | an error answer, shown in the status bar; the document stays dirty, the next poll retries | an error answer, shown in the status bar; the page shows whatever the host pushed, so it never shows unsaved structure |
+| File changed outside the app | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs / Use ours | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs, after which the user makes the edit again |
 
 - **The host owns the rules.** Edits span files (a dissolve rewrites another
   member and removes the thread's file), so the rules live in av-vault where
@@ -366,7 +391,8 @@ something in it changed, and the host answers with what is now on disk.
   built on a property every entity has (`architecture.md#conventions`).
 - **Validate, then write.** Every entity an edit will rewrite must be
   writable (`Entry::is_writable`: has a file, not read-only, frontmatter
-  parsed) before anything changes; otherwise nothing is written and the
+  parsed), and a deleted one deletable (`Entry::is_deletable`: broken
+  frontmatter is fine, the file isn't rewritten), before anything changes; otherwise nothing is written and the
   error is `NotWritable`. Each file to rewrite must also be as the app
   last read or wrote it (its `FileStamp`, `saving.md#the-stamp`); a
   changed or deleted one makes the edit a `SaveOutcome::Conflict` that
@@ -408,6 +434,7 @@ and save their bodies at once.
 |---|---|---|---|---|
 | D1 | Open | an entity's row in Documents → `selectDocument` (`features/selection.js`) → `openPanel`, `selected_entity` / `selected_thread` → `renderPanel` (`features/panel/panel.js`) → `panelMode` | — | one card, or the thread's cards |
 | D3 | Edit | card Edit (if `editable`) → `setMessageEditMode` | — | one card in edit mode at a time; Esc leaves |
+| D5 | Delete | card delete, two clicks within 3 s → save first → `deleteEntityLocal` | `delete_entity` → `Index::delete` (dissolve threads, move to `.trash/`) → `entity_deleted`, changed members as `entity`, the answer | neighbour selected (`selectionWithout`) |
 | D6 | Labels | card "+" → `addChip`'s menu: a label in use or "New label", Enter or a click; a chip's × → `setTagsLocal` | `set_tags` → `entity` | the card's chips follow |
 | D10 | Unlink | × on a link chip → `setLinkLocal(id, null)` on the entity holding the link | `set_link {id, to: null}` → `entity` | the key removed |
 | D11 | Follow a link | a link chip, or an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |
@@ -424,3 +451,4 @@ and save their bodies at once.
 | C5 | Remove from a project | × on a project chip → `leaveProjectLocal` | `leave_project` → `entity` | chip gone, counts update |
 | C6 | Description | fold chevron → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
 | C7 | Archive | header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |
+| C8 | Delete a project | header Delete, two clicks within 3 s → description saved first → `structureCall('delete_entity')` | `Index::delete`: members leave the project, file to `.trash/` → `entity` per member, `entity_deleted`, the answer | filter back to all documents |

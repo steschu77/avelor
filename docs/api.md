@@ -116,6 +116,7 @@ has no file, is read-only or has broken frontmatter, `not_found`,
 | `set_archived` | `{ id, archived }` | Archive any entity, or take it out of the archive; unarchiving removes the key. | the entity |
 | `set_tags` | `{ id, tags }` | Set the labels of any entity: each trimmed, empty ones dropped, a repeated one kept once; none removes the key. | the entity |
 | `set_link` | `{ id, to }` | Set the `linked-to` of any entity to `to`, another entity in the vault (not `id`); `null` removes the key. | the entity |
+| `delete_entity` | `{ id }` | Move `id`'s file to `.trash`; every thread it leaves with fewer than two members dissolves. A project's members (threads included) leave it first; if one of them is read-only or changed outside the app, nothing is written. Threads can't be deleted this way. | — |
 | `reload_entity` | `{ id }` | Read the file again and take in what it holds (the conflict dialog's Use theirs): pushes `entity` and `content`, or `entity_deleted` if the file is gone. | the id the file has now; none if it is gone |
 
 ### Jobs and closing
@@ -138,6 +139,6 @@ What the host pushes; the page listens with `rpcOn`.
 | `close` | `{ id }` | The window's Close (`saving.md#closing-the-app`). |
 | `job` | `{ id, label, state: "running"\|"done", done, total, note, stoppable }` | A job started, made progress, or ended: a vault scan. `note` is an ended job's summary (what it did, what failed, or why it failed); a job that ended did all its steps (`done` = `total`). |
 | `entity` | `{ id, kind, title, path, source, genre, date, projects, tags, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during a vault scan, and for every entity an edit created or rewrote, whatever the edit (a structural command, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
-| `entity_deleted` | `{ id }` | The entity left the vault: its file is gone. |
+| `entity_deleted` | `{ id }` | The entity left the vault: its file was moved to `.trash` (a delete, a dissolved thread) or is gone. |
 | `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: its file was read again. `load_doc_content` answers with the same `source` and `html`. |
 | `notice` | `{ level: "error", message }` | `error`: the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), or `config.yaml` couldn't be read at start (on `ready`). A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |

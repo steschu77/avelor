@@ -49,6 +49,12 @@
   color: var(--c-danger);
 }
 
+/* a delete button between its first (arming) and second click */
+.tool--danger[data-armed] {
+  background: var(--c-danger);
+  color: var(--c-card);
+}
+
 /* A round icon button; --quiet shows its ring only on hover. */
 .icon-btn {
   flex: none;
