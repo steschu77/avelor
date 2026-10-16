@@ -1,8 +1,9 @@
 # Avelor — Side panel and structural edits
 
 > The side panel and what the user organizes in it: the card every entity
-> is shown as, a thread's members, projects, and the structural edits
-> (titles) with how they are saved. The lenses and the vault panel are
+> is shown as, a thread's members, links, labels, projects, and the
+> structural edits (projects, titles, labels, links) with how they are
+> saved. The lenses and the vault panel are
 > `ui.md`; the editor inside each card, `editor.md`; saving its content,
 > `saving.md`.
 
@@ -44,6 +45,9 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
 - a header: icon, title, dirty dot, a pen that renames it
   (`panel.md#titles`), date, path, and for an entity in
   several threads a line of them (`panel.md#thread-switch`);
+- its project and label chips on one line, with the "+" menu that adds
+  either (`panel.md#labels`, `panel.md#projects`), and its link chips
+  (`panel.md#links`);
 - an action toolbar (edit, cloned from
   `#preview-toolbar-template`), an editing toolbar (cloned from
   `#editor-toolbar-template`), and its own `createEditor()` instance.
@@ -65,7 +69,7 @@ Its option: `selectable` — a click selects
 its entity (`panel.md#selection`), in a thread,
 but not for a lone document, with nothing else on screen to select. A
 card's head (title, date) follows its entity in place on `entities_rev`,
-with its threads line (`refreshCardChips`).
+with its links and threads lines (`refreshCardChips`).
 
 Two `<template>` elements in `index.html` hold the markup each card
 clones from, via `createEditorToolbar()`/`createDocPreviewToolbar()`
@@ -171,8 +175,12 @@ nothing to reorder by hand.
 In the Documents lens a thread's members fold under the thread's row
 (`ui.md#documents`). "Is this a thread member" is simply "does its
 `threads` list contain a thread", independent of its derived type: a
-letter dragged into a thread stays a `doc`, an email stays an `eml`. The
-panel header shows the thread's own title, with a pen that renames it
+letter dragged into a thread stays a `doc`, an email stays an `eml`. Each
+member keeps its own `projects`, and a thread's projects are its members'
+(`vault.md#thread`, `threadProjects`): the thread view's Project row lists
+them, without an × — a member leaves a project on its own card
+(`#thread-project`, refreshed with the cards' chips). The panel header
+shows the thread's own title, with a pen that renames it
 (`panel.md#titles`, `#thread-title`).
 
 ## Switching threads <a id="thread-switch"></a>
@@ -186,9 +194,41 @@ then has a third line in its head, `.doc-head__threads`
 calls `switchThread(doc_id, thread_id)`, which sets `selected_entity` and
 `selected_thread` together, so `renderPanel` rebuilds the panel for that
 thread with the entity focused and scrolled to. The line is per card, so
-every member in several threads switches on its own. It is refreshed in
-place on `entities_rev` (`refreshCardChips`): a thread that is renamed
-shows without rebuilding the cards.
+every member in several threads switches on its own. Like the link chips,
+it is refreshed in place on `entities_rev` (`refreshCardChips`): a thread
+that is renamed shows without rebuilding the cards.
+
+## Links <a id="links"></a>
+
+An entity can be linked to one other entity: a task to the letter it comes
+from, a reply to the letter it answers, a payment to its bill. The link is
+the entity's `linked-to` (`vault.md#metadata`); the
+other side is derived.
+
+- A card lists its links as chips below its labels (`renderCardLinks`,
+  `features/panel/panel.js`): the one it links to first, then those that link to
+  it. A
+  click selects the other entity, × removes the link (on an entity the app
+  can't write, there is none). The chips are refreshed on `entities_rev`
+  without rebuilding the card.
+- A link in a document's body to `id:<uuid>` (`vault.md#links-in-content`)
+  selects that entity, thread or project when clicked in the preview
+  (`editor.md#links`).
+
+## Labels <a id="labels"></a>
+
+Labels are the entities' `tags`. A card shows its project chips, then its
+label chips, on one line, and ends it with a "+" if the host can write the
+entity (`renderCardChips`, `features/panel/panel.js`).
+
+- The "+" opens a menu at once (`addChip`): a filter box, focused; the
+  active projects, starred first; the labels in use. What the entity
+  already has is left out. Typing keeps the entries that contain the text,
+  and a text that names no label (in any case) adds "New label". Up and
+  down move the highlight, Enter or a click picks, Esc closes.
+- A project picked joins it (`joinProjectLocal` → `join_project`), a label
+  is added (`setTagsLocal` → `set_tags`); a label chip's × removes it.
+- The filter is `showMenu`'s (`ui/menu.js`), its `filter` option.
 
 ## Titles <a id="titles"></a>
 
@@ -201,8 +241,8 @@ an empty title removes the `title` key, and the file keeps its name.
   → `editTextInPlace`, `ui/field.js`, which the project header uses
   too). It starts all selected. Enter or leaving it sends `set_title` if
   the text changed (whitespace runs, such as pasted line breaks, become
-  one space), Esc cancels. The pushed `entity` renames the card and the
-  thread header.
+  one space), Esc cancels. The pushed `entity` renames the card, the thread
+  header, and the chips and links that show the entity.
 - The pen is hidden for an entity or thread the host can't write
   (`renderCardHead`, `renderThread`).
 - While a title is edited, nothing overwrites it (`renderCardHead`,
@@ -218,9 +258,15 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   which edits `#project-name` in place): the name
   becomes an input; Enter
   or leaving it sends `set_title` if the text changed, Esc cancels. The
-  pushed `entity` bumps `projects_rev`, so the header follows.
+  pushed `entity` bumps `projects_rev`, so the header and the panel's
+  project chips follow (`renameProjectChips`, without rebuilding the
+  cards).
 - **Star**: the star at the start of a sidebar project row (`toggleStar`)
   sends `set_starred`; starred projects are listed first.
+- **Members**: a project picked in a card's "+" menu (`panel.md#labels`)
+  joins the project (`joinProjectLocal` → `join_project`); the × on a
+  project chip of a card (`projectChips`) leaves it (`leaveProjectLocal` →
+  `leave_project`).
 - **Archive**: the Archive button in the project header's toolbar, pressed
   while the project is archived (`toggleArchive`), sends `set_archived`;
   the sidebar folds archived projects under an "Archived" row
@@ -284,10 +330,14 @@ and save their bodies at once.
 |---|---|---|---|---|
 | D1 | Open | an entity's row in Documents → `selectDocument` (`features/selection.js`) → `openPanel`, `selected_entity` / `selected_thread` → `renderPanel` (`features/panel/panel.js`) → `panelMode` | — | one card, or the thread's cards |
 | D3 | Edit | card Edit (if `editable`) → `setMessageEditMode` | — | one card in edit mode at a time; Esc leaves |
-| D11 | Follow a link | an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |
-| D12 | Rename | the pen in a card's head or the thread header → `renameEntity` → `editTextInPlace`; Enter or blur | `set_title` → `entity` | the card's head and the thread header follow; the file keeps its name |
+| D6 | Labels | card "+" → `addChip`'s menu: a label in use or "New label", Enter or a click; a chip's × → `setTagsLocal` | `set_tags` → `entity` | the card's chips follow |
+| D10 | Unlink | × on a link chip → `setLinkLocal(id, null)` on the entity holding the link | `set_link {id, to: null}` → `entity` | the key removed |
+| D11 | Follow a link | a link chip, or an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |
+| D12 | Rename | the pen in a card's head or the thread header → `renameEntity` → `editTextInPlace`; Enter or blur | `set_title` → `entity` | the card's head, the thread header, chips and links follow; the file keeps its name |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E5 | Switch thread | a chip in the threads line of a card in several threads → `switchThread` | — | that thread shown, the entity still selected and focused |
-| C2 | Rename a project | pill pen or header rename → inline input, Enter/blur | `set_title` → `entity` | header follows (`projects_rev`) |
+| C2 | Rename a project | pill pen or header rename → inline input, Enter/blur | `set_title` → `entity` | header and chips follow (`projects_rev`) |
 | C3 | Star | star icon → `toggleStar` | `set_starred {starred}` → `entity` | starred first |
+| C4 | Add to a project | a project in a card's "+" menu → `joinProjectLocal` | `join_project` → `entity` | the card's chips and the counts update |
+| C5 | Remove from a project | × on a project chip → `leaveProjectLocal` | `leave_project` → `entity` | chip gone, counts update |
 | C7 | Archive | header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |

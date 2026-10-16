@@ -37,7 +37,8 @@ which answers through a `Req`.
   current when the reply arrives.
 - **Error codes** are the names of `av_utils::Error`'s variants in
   snake_case (`Error::code()`): `bad_request`, `invalid_argument`,
-  `cancelled`, `not_found` (no entity with that id), `not_writable`,
+  `cancelled`, `not_found` (no entity with that id), `wrong_kind` (the id
+  names something of another kind than the command takes), `not_writable`,
   `file_write`, `win32`, `gtk`, …. `Req::fail` answers in the host's own
   words where the page shows the message.
 - The page sends **strings** (`JSON.stringify`), since the host reads with
@@ -97,14 +98,19 @@ Host module: `structure.rs`. Each pushes the `entity` / `entity_deleted`
 events of what it wrote, then answers `ok {id}` with the id below, or
 `ok {conflict: {id, changed}}` when a file changed outside the app and
 nothing was written, or an error: `not_writable` when an entity to rewrite
-has no file, is read-only or has broken frontmatter, `not_found`, …. The
-rules are `panel.md#saving-structure`.
+has no file, is read-only or has broken frontmatter, `not_found`,
+`wrong_kind` (a project or thread that isn't one), …. The rules are
+`panel.md#saving-structure`.
 
 | Command | Args | Does | Answer `id` |
 |---|---|---|---|
+| `join_project` | `{ id, project }` | Make `id` a member of the project; nothing if it already is. | the project |
+| `leave_project` | `{ id, project }` | Remove `id` from the project. | the project |
 | `set_title` | `{ id, title }` | Set the title of any entity; an empty title removes the `title` key. The file keeps its name. | the entity |
 | `set_starred` | `{ id, starred }` | Star or unstar any entity; unstarring removes the key. | the entity |
 | `set_archived` | `{ id, archived }` | Archive any entity, or take it out of the archive; unarchiving removes the key. | the entity |
+| `set_tags` | `{ id, tags }` | Set the labels of any entity: each trimmed, empty ones dropped, a repeated one kept once; none removes the key. | the entity |
+| `set_link` | `{ id, to }` | Set the `linked-to` of any entity to `to`, another entity in the vault (not `id`); `null` removes the key. | the entity |
 | `reload_entity` | `{ id }` | Read the file again and take in what it holds (the conflict dialog's Use theirs): pushes `entity` and `content`, or `entity_deleted` if the file is gone. | the id the file has now; none if it is gone |
 
 ### Jobs and closing

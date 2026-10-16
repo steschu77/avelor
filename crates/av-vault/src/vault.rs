@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::document::{Document, FileFormat};
+use crate::envelope::DocumentType;
 use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::fs::write_atomic;
@@ -370,6 +371,36 @@ impl Index {
     // recording each file it wrote in `changes`. A failed save restores that
     // entity's in-memory state, so the index always matches the disk.
 
+    pub fn join_project(
+        &mut self,
+        doc: &Id,
+        project: &Id,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        match self.get(project) {
+            Some(p) if p.kind() == DocumentType::Project => {}
+            Some(_) => return Err(Error::WrongKind),
+            None => return Err(Error::NotFound),
+        }
+        self.check_writable(doc)?;
+        self.update(doc, changes, |d| d.join_project(*project))
+    }
+
+    pub fn leave_project(
+        &mut self,
+        doc: &Id,
+        project: &Id,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        match self.get(project) {
+            Some(p) if p.kind() == DocumentType::Project => {}
+            Some(_) => return Err(Error::WrongKind),
+            None => return Err(Error::NotFound),
+        }
+        self.check_writable(doc)?;
+        self.update(doc, changes, |d| d.leave_project(project))
+    }
+
     /// Set the title of `id`, which may be any entity. An empty title removes
     /// it ([`Document::set_title`]). Only the file's content changes; the file
     /// is not renamed to match.
@@ -381,6 +412,35 @@ impl Index {
     ) -> Result<SaveOutcome> {
         self.check_writable(id)?;
         self.update(id, changes, |d| d.set_title(title))
+    }
+
+    /// Set the labels (`tags`) of `id`, which may be any entity: each one
+    /// trimmed, empty ones dropped, a repeated one kept once where it first
+    /// appears. No labels removes the key.
+    pub fn set_tags(
+        &mut self,
+        id: &Id,
+        tags: Vec<String>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        let labels = clean_labels(tags);
+        self.check_writable(id)?;
+        self.update(id, changes, |d| d.set_tags(labels))
+    }
+
+    /// Link `id`, which may be any entity, to `to`, another entity in the
+    /// vault, replacing an older link; `None` removes the `linked-to` key
+    /// ([`Document::set_link`]). Deleting an entity leaves the links to it
+    /// in place, so restoring it brings them back.
+    pub fn set_link(
+        &mut self,
+        id: &Id,
+        to: Option<Id>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_link(id, to.as_ref())?;
+        self.check_writable(id)?;
+        self.update(id, changes, |d| d.set_link(to))
     }
 
     /// Star or unstar `id`, which may be any entity; unstarring removes the
@@ -458,6 +518,16 @@ impl Index {
                 path: e.local.clone(),
             }),
             None => Err(Error::NotFound),
+        }
+    }
+
+    /// `id` may link to `to`: another entity in the vault.
+    fn check_link(&self, id: &Id, to: Option<&Id>) -> Result<()> {
+        match to {
+            Some(to) if to == id || self.get(to).is_none() => {
+                Err(Error::InvalidArgument { arg: "to".into() })
+            }
+            _ => Ok(()),
         }
     }
 
@@ -567,6 +637,20 @@ pub fn scan(root: &Path, mut on_event: impl FnMut(ScanEvent) -> ScanControl) {
         }
     }
     on_event(ScanEvent::Done);
+}
+
+// ----------------------------------------------------------------------------
+/// Labels (`tags`) as written: each one trimmed, empty ones dropped, a
+/// repeated one kept once where it first appears.
+fn clean_labels(tags: Vec<String>) -> Vec<String> {
+    let mut labels: Vec<String> = Vec::new();
+    for tag in tags {
+        let tag = tag.trim();
+        if !tag.is_empty() && !labels.iter().any(|t| t == tag) {
+            labels.push(tag.to_string());
+        }
+    }
+    labels
 }
 
 // ----------------------------------------------------------------------------
@@ -969,6 +1053,122 @@ mod tests {
         );
         let text = fs::read_to_string(&path).unwrap();
         assert!(!text.contains("archived"), "{text}");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn leaving_a_project_rewrites_the_member() {
+        let (root, ids) = thread_vault();
+        let project = Id::generate();
+        fs::write(
+            root.join("p.yaml"),
+            format!("id: {project}\nproject: {{}}\ntitle: P\n"),
+        )
+        .unwrap();
+        let p = root.join("Notes/n0.md");
+        let text = fs::read_to_string(&p).unwrap().replacen(
+            "title:",
+            &format!("projects: [{project}]\ntitle:"),
+            1,
+        );
+        fs::write(&p, text).unwrap();
+        let mut index = Index::scan(&root);
+        assert_eq!(index.members_of(&project).len(), 1);
+
+        let mut changes = Changes::default();
+        let err = index.leave_project(&ids[0], &ids[1], &mut changes);
+        assert!(matches!(err, Err(Error::WrongKind)), "not a project");
+        let left = index.leave_project(&ids[0], &project, &mut changes);
+        assert_eq!(left.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [ids[0]]);
+        assert!(Index::scan(&root).members_of(&project).is_empty());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn joining_a_project_rewrites_the_member() {
+        let (root, ids) = thread_vault();
+        let project = Id::generate();
+        fs::write(
+            root.join("p.yaml"),
+            format!("id: {project}\nproject: {{}}\ntitle: P\n"),
+        )
+        .unwrap();
+        let mut index = Index::scan(&root);
+
+        let mut changes = Changes::default();
+        let err = index.join_project(&ids[0], &ids[1], &mut changes);
+        assert!(matches!(err, Err(Error::WrongKind)), "not a project");
+        let joined = index.join_project(&ids[0], &project, &mut changes);
+        assert_eq!(joined.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [ids[0]]);
+        assert_eq!(Index::scan(&root).members_of(&project).len(), 1);
+
+        // Joining again changes nothing, so nothing is written.
+        let mut changes = Changes::default();
+        let joined = index.join_project(&ids[0], &project, &mut changes);
+        assert_eq!(joined.unwrap(), SaveOutcome::Unchanged);
+        assert!(changes.saved.is_empty());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn labels_are_trimmed_kept_once_and_removed_with_the_last() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        let tags = [" bill ", "", "paid", "bill", "  "]
+            .map(String::from)
+            .to_vec();
+        let set = index.set_tags(&ids[0], tags, &mut changes);
+        assert_eq!(set.unwrap(), SaveOutcome::Saved);
+        assert_eq!(index.get(&ids[0]).unwrap().tags(), ["bill", "paid"]);
+
+        let set = index.set_tags(&ids[0], Vec::new(), &mut changes);
+        assert_eq!(set.unwrap(), SaveOutcome::Saved);
+        let text = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+        assert!(!text.contains("tags"), "{text}");
+
+        index.documents[index.by_id[&ids[1]]].readonly = true;
+        let refused = index.set_tags(&ids[1], vec!["x".into()], &mut changes);
+        assert!(matches!(refused, Err(Error::NotWritable { .. })));
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_link_is_set_replaced_and_removed_on_any_entity() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        let set = index.set_link(&ids[0], Some(ids[1]), &mut changes);
+        assert_eq!(set.unwrap(), SaveOutcome::Saved);
+        let set = index.set_link(&ids[0], Some(ids[2]), &mut changes);
+        assert_eq!(set.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [ids[0], ids[0]]);
+        let rescanned = Index::scan(&root);
+        assert_eq!(rescanned.get(&ids[0]).unwrap().linked_to(), Some(ids[2]));
+
+        let set = index.set_link(&ids[0], None, &mut changes);
+        assert_eq!(set.unwrap(), SaveOutcome::Saved);
+        let text = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+        assert!(!text.contains("linked-to"), "{text}");
+        let again = index.set_link(&ids[0], None, &mut changes);
+        assert_eq!(again.unwrap(), SaveOutcome::Unchanged);
+
+        for to in [ids[0], Id::generate()] {
+            let refused = index.set_link(&ids[0], Some(to), &mut changes);
+            assert!(
+                matches!(refused, Err(Error::InvalidArgument { ref arg }) if arg == "to"),
+                "{refused:?}"
+            );
+        }
+        index.documents[index.by_id[&ids[1]]].readonly = true;
+        let refused = index.set_link(&ids[1], Some(ids[0]), &mut changes);
+        assert!(matches!(refused, Err(Error::NotWritable { .. })));
 
         fs::remove_dir_all(&root).ok();
     }

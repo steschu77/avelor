@@ -61,7 +61,7 @@ export function openLink(href) {
 
 // Select whatever `id` names: an entity in the panel, a thread in the
 // panel's thread view, a project as the filter. A link's click
-// (`openLink`), a thread's row.
+// (`openLink`, the link chips), a thread's row.
 export function selectById(id) {
   if (entities.has(id)) {
     selectDocument(id);

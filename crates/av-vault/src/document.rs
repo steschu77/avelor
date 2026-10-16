@@ -271,6 +271,25 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    pub fn set_tags(&mut self, tags: Vec<String>) {
+        self.envelope_mut().tags = tags;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Link the entity to `to`, replacing an older link; `None` removes the
+    /// `linked-to` key.
+    pub fn set_link(&mut self, to: Option<Id>) {
+        match to {
+            Some(to) => self.envelope_mut().linked_to = Some(to),
+            None => {
+                if let Some(envelope) = &mut self.envelope {
+                    envelope.linked_to = None;
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
     /// Set the entity's title. An empty (or all-whitespace) title removes the
     /// `title` key altogether; a missing title loads as `""` again.
     pub fn set_title(&mut self, title: String) {
@@ -290,6 +309,23 @@ impl Document {
     /// the `archived` key; a missing key loads as not archived.
     pub fn set_archived(&mut self, archived: bool) {
         self.envelope_mut().archived = archived.then_some(true);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Add the entity to `project`.
+    pub fn join_project(&mut self, project: Id) {
+        let projects = &mut self.envelope_mut().projects;
+        if !projects.contains(&project) {
+            projects.push(project);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Remove the entity from `project`.
+    pub fn leave_project(&mut self, project: &Id) {
+        if let Some(envelope) = &mut self.envelope {
+            envelope.projects.retain(|p| p != project);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -432,6 +468,20 @@ mod tests {
     }
 
     #[test]
+    fn leaving_a_project_updates_the_envelope() {
+        let (p1, p2) = (Id::generate(), Id::generate());
+        let text = format!("---\ndocument: {{}}\nprojects: [{p1}, {p2}]\n---\n");
+        let mut doc = Document::load(text, FileFormat::Markdown);
+        doc.leave_project(&p1);
+        assert_eq!(doc.projects(), [p2]);
+        assert!(doc.is_dirty());
+        let saved = doc.save();
+        assert!(saved.contains(&p2.to_string()) && !saved.contains(&p1.to_string()));
+        doc.leave_project(&p2);
+        assert!(!doc.save().contains("projects"), "empty list is omitted");
+    }
+
+    #[test]
     fn starring_round_trips_and_unstarring_drops_the_key() {
         let mut doc = Document::load("---\nproject: {}\n---\n".into(), FileFormat::Markdown);
         assert!(!doc.starred());
@@ -464,6 +514,37 @@ mod tests {
         assert!(
             !doc.save().contains("archived"),
             "unarchiving removes the key"
+        );
+    }
+
+    #[test]
+    fn a_link_is_replaced_and_unlinking_drops_the_key() {
+        let mut doc = Document::load("---\ntask: {}\n---\n".into(), FileFormat::Markdown);
+        assert_eq!(doc.linked_to(), None);
+
+        let (a, b) = (Id::generate(), Id::generate());
+        doc.set_link(Some(a));
+        doc.set_link(Some(b));
+        let saved = doc.save();
+        assert!(saved.contains(&format!("linked-to: {b}")), "{saved}");
+        assert!(!saved.contains(&a.to_string()), "one link: replaced");
+        assert_eq!(
+            Document::load(saved, FileFormat::Markdown).linked_to(),
+            Some(b)
+        );
+
+        doc.set_link(None);
+        assert_eq!(doc.linked_to(), None);
+        assert!(
+            !doc.save().contains("linked-to"),
+            "unlinking removes the key"
+        );
+
+        let mut plain = Document::load("Body\n".into(), FileFormat::Markdown);
+        plain.set_link(None);
+        assert!(
+            !plain.is_dirty(),
+            "no frontmatter is made to remove nothing"
         );
     }
 

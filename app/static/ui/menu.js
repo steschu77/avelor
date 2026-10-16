@@ -3,6 +3,7 @@
 // Esc (the `menu.close` action).
 
 import { accEl } from '../core/dom.js';
+import { iconEl } from './icons.js';
 import { registerAction } from '../core/actions.js';
 
 let openMenu = null;
@@ -20,11 +21,13 @@ function closeMenu() {
   }
 }
 
-// `items`: { label, hint?, dim?, run? } -- `hint` is the small label on
-// the right. `options.head` is a label over the items. `options.filter`
-// ({ placeholder }) puts a text box over the items, focused: typing keeps
-// the items whose label contains the text; up and down move the
-// highlight, Enter runs it.
+// `items`: { label, hint?, icon?, dim?, run? } or { head } -- `hint` is the
+// small label on the right, `icon` an icon before the label (`#i-<name>`);
+// `head` labels a section, the items up to the next head. `options.head` is
+// a label over the items. `options.filter` ({ placeholder, extra(text) })
+// puts a text box over the items, focused: typing keeps the items whose
+// label contains the text (a head while an item of its section stays) and
+// adds `extra(text)`'s; up and down move the highlight, Enter runs it.
 // The anchor is marked `aria-expanded` while its menu is open. Showing the
 // open menu's anchor again closes it (a toggle).
 export function showMenu(anchor, items, options = {}) {
@@ -35,15 +38,22 @@ export function showMenu(anchor, items, options = {}) {
   closeMenu();
   const menu = accEl('div', 'menu');
   menu.setAttribute('role', 'menu');
-  if (options.head) menu.appendChild(accEl('div', 'label menu__head', options.head));
+  const menuHead = text => {
+    const head = accEl('div', 'label menu__head', text);
+    return head;
+  };
+  if (options.head) menu.appendChild(menuHead(options.head));
   const pick = it => {
     closeMenu();
     it.run();
   };
+  const icons = items.some(it => it.icon);
   const menuItem = it => {
+    if (it.head) return menuHead(it.head);
     const mi = accEl('div', 'menu__item');
     mi.setAttribute('role', 'menuitem');
     if (it.dim) mi.setAttribute('aria-disabled', 'true');
+    if (icons) mi.appendChild(iconEl(it.icon ?? '', 'menu__icon'));
     const label = accEl('span', 'menu__label', it.label);
     mi.appendChild(label);
     if (it.hint) {
@@ -84,10 +94,14 @@ export function showMenu(anchor, items, options = {}) {
     list.className = 'menu__list';
     filter = accEl('input', 'input menu__filter');
     filter.type = 'text';
-    filter.placeholder = options.filter.placeholder;
+    const { placeholder = '', extra } = options.filter;
+    filter.placeholder = placeholder;
     const matching = () => {
-      const needle = filter.value.trim().toLowerCase();
-      return items.filter(it => it.label.toLowerCase().includes(needle));
+      const text = filter.value.trim();
+      const needle = text.toLowerCase();
+      const kept = items.filter(it => it.head || it.label.toLowerCase().includes(needle));
+      const its = kept.filter((it, i) => !it.head || (kept[i + 1] && !kept[i + 1].head));
+      return [...its, ...(text && extra ? extra(text) : [])];
     };
     filter.addEventListener('input', () => fill(matching()));
     filter.addEventListener('keydown', e => {

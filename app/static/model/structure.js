@@ -1,12 +1,15 @@
 // The structural edits (panel.md#saving-structure, api.md#structure):
-// titles and reloads, each a host round trip that ends in a published
-// selection (`commitExistingSelection`, model/entities.js). The panel's
-// buttons (features/panel/panel.js), the sidebar and the project header
-// (features/sidebar.js, features/header.js) send them.
+// projects, titles, labels, links and reloads, each a host round trip that
+// ends in a published selection (`commitExistingSelection`,
+// model/entities.js); joining and leaving projects, labels and links as
+// requests of their own (`joinProjectLocal`, ..., `setLinkLocal`). The
+// panel's buttons (features/panel/panel.js), the sidebar and the project
+// header (features/sidebar.js, features/header.js) send them.
 
 import { rpcCall } from '../core/rpc.js';
 import { store } from './state.js';
 import { commitExistingSelection } from './entities.js';
+import { entities } from './entities.js';
 import { showConflict } from './documents.js';
 import { isDirty, startReload, trySave } from './documents.js';
 
@@ -53,4 +56,35 @@ export function reloadEntity(id) {
     selected_entity: selected_entity === id ? now : selected_entity,
     selected_thread,
   }));
+}
+
+// ----------------------------------------------------------------------------
+// Adds `doc_id` to the project `project_id`; the selection stays.
+export function joinProjectLocal(doc_id, project_id) {
+  const doc = entities.get(doc_id);
+  if (!doc || doc.projects?.includes(project_id)) return;
+
+  structureCall('join_project', { id: doc_id, project: project_id }, () => store.getState());
+}
+
+// ----------------------------------------------------------------------------
+// Removes `doc_id` from the project `project_id`; the selection stays.
+export function leaveProjectLocal(doc_id, project_id) {
+  const doc = entities.get(doc_id);
+  if (!doc || !doc.projects?.includes(project_id)) return;
+
+  structureCall('leave_project', { id: doc_id, project: project_id }, () => store.getState());
+}
+
+// ----------------------------------------------------------------------------
+// Set `doc_id`'s labels to `tags`; the host writes them and pushes the
+// entity back. The selection stays.
+export function setTagsLocal(doc_id, tags) {
+  structureCall('set_tags', { id: doc_id, tags }, () => store.getState());
+}
+
+// Link `id` to `to`, null to remove its link; the host writes it and pushes
+// the entity back. The selection stays.
+export function setLinkLocal(id, to) {
+  structureCall('set_link', { id, to }, () => store.getState());
 }

@@ -11,16 +11,22 @@ import { DATE_FORMAT } from '../../core/format.js';
 import { createEditor } from '../../editor/editor.js';
 import { store } from '../../model/state.js';
 import { entities, knownThreads, threadMembers, threads } from '../../model/entities.js';
+import { projects, projectsInOrder, threadProjects } from '../../model/entities.js';
 import { bindDocContent } from '../../model/documents.js';
 import { editorRoots, isDirty, onEdited, trySave } from '../../model/documents.js';
 import { structureCall } from '../../model/structure.js';
+import {
+  joinProjectLocal, leaveProjectLocal, setLinkLocal, setTagsLocal,
+} from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
+import { showMenu } from '../../ui/menu.js';
 import {
   createDocPreviewToolbar, createEditorToolbar,
 } from '../../ui/toolbar.js';
 import { editTextInPlace } from '../../ui/field.js';
 import { openLink, panelMode, selectDocument } from '../selection.js';
+import { selectById } from '../selection.js';
 
 export const msgControllers = new Map(); // doc_id -> controller
 let activeEditId = null; // the one card currently in edit mode, or null
@@ -35,6 +41,7 @@ const threadIconEl = $('thread-icon');
 const threadPathEl = $('thread-path');
 const threadTitleEl = $('thread-title');
 const threadRenameBtn = $('thread-rename-btn');
+const threadProjectEl = $('thread-project');
 const threadMessagesEl = $('thread-messages');
 const docContentEl = $('doc-content');
 const panelDocViewEl = $('panel-doc-view');
@@ -46,12 +53,198 @@ threadRenameBtn.addEventListener('click', () => {
 });
 
 // ----------------------------------------------------------------------------
-// The cards' heads and threads lines follow every entity change -- a title
-// changed -- without rebuilding the cards (and their editors); subscribed
-// below.
+// A card's projects and labels on one line, as `projectChips` and
+// `tagChips`, then the "+" that adds either (`addChip`); no row for an
+// entity in no project and without labels that can't get any.
+function renderCardChips(doc_id, msg) {
+  const projectIds = msg.projects ?? [];
+  const tags = msg.tags ?? [];
+  const leave = msg.writable ? project_id => leaveProjectLocal(doc_id, project_id) : null;
+  const chips = [
+    ...projectChips(projectIds, leave),
+    ...tagChips(tags, msg.writable ? next => setTagsLocal(doc_id, next) : null),
+  ];
+  if (msg.writable) {
+    chips.push(addChip({ projects: projectIds, tags }, {
+      onJoin: project_id => joinProjectLocal(doc_id, project_id),
+      onAddTag: label => setTagsLocal(doc_id, [...tags, label]),
+    }));
+  }
+  if (!chips.length) return null;
+  const row = accEl('div', 'pane-section msg__chips');
+  row.append(...chips);
+  return row;
+}
+
+// The projects `project_ids` as chips, each with an x that calls
+// `onRemove(project_id)` -- no x without it (an entity the host can't
+// write). Projects not in the vault are left out. `renameProjectChips`
+// keeps the names in the panel current. The card's and the thread's.
+function projectChips(project_ids, onRemove) {
+  return project_ids.filter(project_id => projects.has(project_id)).map(project_id => {
+    const chip = accEl('span', 'chip');
+    chip.dataset.project = project_id;
+    const name = accEl('span', '', projects.get(project_id).name);
+    chip.append(name);
+    if (onRemove) {
+      const remove = accEl('button', 'chip__remove', '\u00d7');
+      remove.type = 'button';
+      remove.title = 'Remove from the project';
+      remove.addEventListener('click', () => onRemove(project_id));
+      chip.append(remove);
+    }
+    return chip;
+  });
+}
+
+// A project was renamed: its chips in the panel take the new name, without
+// rebuilding the cards (and their editors).
+function renameProjectChips() {
+  for (const chip of document.querySelectorAll('#panel .chip[data-project]')) {
+    const name = projects.get(chip.dataset.project)?.name;
+    if (name !== undefined) chip.firstElementChild.textContent = name;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Labels (`tags`) as chips, each with an x that calls `onChange(tags)` with
+// the label removed -- no x without it; `removeTitle(tag)` titles the x.
+// The card's and the lens header's (the active label filter,
+// features/header.js).
+export function tagChips(tags, onChange, removeTitle = tag => `Remove the label ${tag}`) {
+  return tags.map(tag => {
+    const chip = accEl('span', 'chip chip--tag', tag);
+    if (onChange) {
+      const remove = accEl('button', 'chip__remove', '\u00d7');
+      remove.type = 'button';
+      remove.title = removeTitle(tag);
+      remove.addEventListener('click', () => onChange(tags.filter(t => t !== tag)));
+      chip.append(remove);
+    }
+    return chip;
+  });
+}
+
+const STAR_ICON = '#i-star-filled';
+
+// The "+" chip after a row of project and label chips. It opens a menu with
+// a filter: the active projects, starred first, and the labels in use --
+// but those in `has` ({ projects, tags }) -- and "New label" for a text
+// that names none. A pick calls `onJoin(project_id)` or `onAddTag(label)`.
+// The card's.
+function addChip(has, { onJoin, onAddTag }) {
+  const add = accEl('button', 'chip chip--action', '+');
+  add.type = 'button';
+  add.title = 'Add to a project or a label';
+  add.addEventListener('click', () => {
+    const projectItems = projectsInOrder()
+      .filter(p => !p.archived && !has.projects.includes(p.id))
+      .map(p => ({ label: p.name, icon: p.starred ? STAR_ICON : '', run: () => onJoin(p.id) }));
+    const used = new Set();
+    for (const doc of entities.values()) for (const tag of doc.tags ?? []) used.add(tag);
+    const labelItems = [...used].filter(tag => !has.tags.includes(tag)).sort((a, b) => a.localeCompare(b))
+      .map(tag => ({ label: tag, run: () => onAddTag(tag) }));
+    const known = new Set([...used, ...has.tags].map(tag => tag.toLowerCase()));
+    const newLabel = text => known.has(text.toLowerCase())
+      ? []
+      : [{ label: `New label \u201c${text}\u201d`, run: () => onAddTag(text) }];
+    showMenu(add, [{ head: 'Projects' }, ...projectItems, { head: 'Labels' }, ...labelItems],
+      { filter: { placeholder: 'Filter, or a new label', extra: newLabel } });
+  });
+  return add;
+}
+
+// ----------------------------------------------------------------------------
+// Links (vault.md#metadata): an entity's one
+// `linked-to`, and the other side, derived -- the entities and threads
+// whose `linked-to` names it, and the transaction items that do. Shown on
+// the card (`renderCardLinks`).
+
+// The entity, thread or project `id` as a link shows it: its title and
+// icon; null if it isn't in the vault.
+function linkTarget(id) {
+  const doc = entities.get(id);
+  if (doc) return { title: doc.title, icon: KIND_ICONS[doc.kind]?.icon };
+  const thread = threads.get(id);
+  if (thread) return { title: thread.title, icon: KIND_ICONS.thread.icon };
+  const project = projects.get(id);
+  if (project) return { title: project.name, icon: KIND_ICONS.project.icon };
+  return null;
+}
+
+// The links of `id`: `to`, the one it links to (null if none, or not in the
+// vault); `from`, the ids of the entities and threads that link to it,
+// newest first; `items`, the transaction items that do, as `{ doc_id,
+// title }` of their transactions entity and the item.
+function linksOf(id) {
+  const holder = entities.get(id) ?? threads.get(id);
+  const to = holder?.linked_to && linkTarget(holder.linked_to) ? holder.linked_to : null;
+  const from = [];
+  const items = [];
+  for (const doc of [...entities.values(), ...threads.values()]) {
+    if (doc.linked_to === id) from.push(doc.id);
+    for (const item of doc.transactions?.transactions ?? []) {
+      if (item['linked-to'] === id) items.push({ doc_id: doc.id, title: item.title ?? '' });
+    }
+  }
+  const time = id => entities.get(id)?.date?.getTime() ?? 0;
+  from.sort((a, b) => time(b) - time(a));
+  return { to, from, items };
+}
+
+// A link to `id` as a chip: an arrow for its direction (`incoming`: `id`
+// links here), its icon and title -- `label` instead of the title, for a
+// transaction item -- which select it, and an x that calls `onRemove` (none
+// without it). The card's.
+function linkChip(id, { incoming = false, label = null, onRemove = null } = {}) {
+  const target = linkTarget(id);
+  const title = label ?? (target?.title || 'Untitled');
+  const chip = accEl('span', 'chip chip--link');
+  chip.title = `${incoming ? 'Linked from' : 'Links to'} \u201c${title}\u201d`;
+  const name = accEl('button', 'chip__name', title);
+  name.type = 'button';
+  name.addEventListener('click', () => selectById(id));
+  const icon = iconEl(target?.icon ?? '');
+  chip.append(incoming ? '\u2190' : '\u2192', icon, name);
+  if (onRemove) {
+    const remove = accEl('button', 'chip__remove', '\u00d7');
+    remove.type = 'button';
+    remove.title = 'Remove the link';
+    remove.addEventListener('click', onRemove);
+    chip.append(remove);
+  }
+  return chip;
+}
+
+// Fill `row` with the links of the card `doc_id`, as `linkChip`s: the one
+// it links to, then those linking to it. An x where the entity holding the
+// link can be written; none on a transaction item. The row is hidden while
+// empty.
+function renderCardLinks(doc_id, row) {
+  const { to, from, items } = linksOf(doc_id);
+  const writable = id => (entities.get(id) ?? threads.get(id))?.writable;
+  const chips = [];
+  if (to) {
+    chips.push(linkChip(to, { onRemove: writable(doc_id) ? () => setLinkLocal(doc_id, null) : null }));
+  }
+  for (const id of from) {
+    chips.push(linkChip(id, { incoming: true, onRemove: writable(id) ? () => setLinkLocal(id, null) : null }));
+  }
+  for (const item of items) {
+    chips.push(linkChip(item.doc_id, { incoming: true, label: item.title || linkTarget(item.doc_id)?.title }));
+  }
+  row.replaceChildren(...chips);
+  row.hidden = !chips.length;
+}
+
+// The cards' heads, links and threads lines follow every entity change --
+// a title changed -- without rebuilding the cards (and their editors);
+// subscribed below.
 const refreshCardChips = oncePerFrame(() => {
+  renderThreadProjects();
   for (const controller of msgControllers.values()) {
     renderCardHead(controller);
+    renderCardLinks(controller.doc_id, controller.linksEl);
     renderCardThreads(controller.doc_id, controller.threadsEl);
   }
 });
@@ -211,9 +404,16 @@ function renderThread(threadId, focusDocId) {
   threadRenameBtn.hidden = !thread.writable;
 
   renderMembers(threadId, threadMembers(threadId));
+  renderThreadProjects();
 
   focusMessage(focusDocId);
   scrollIntoView(focusDocId);
+}
+
+// The thread view's Project row: its members' projects (vault.md#thread),
+// without an x -- a member leaves a project on its own card.
+function renderThreadProjects() {
+  if (renderedThreadId) threadProjectEl.replaceChildren(...projectChips(threadProjects(renderedThreadId), null));
 }
 
 // ----------------------------------------------------------------------------
@@ -310,6 +510,13 @@ function createMessageController(msg, { selectable = false, thread = false } = {
   head.appendChild(threadsEl);
   card.appendChild(head);
 
+  const chipsEl = renderCardChips(doc_id, msg);
+  if (chipsEl) card.appendChild(chipsEl);
+
+  const linksEl = accEl('div', 'pane-section msg__chips');
+  renderCardLinks(doc_id, linksEl);
+  card.appendChild(linksEl);
+
   const previewToolbar = createDocPreviewToolbar();
   card.appendChild(previewToolbar);
 
@@ -342,7 +549,7 @@ function createMessageController(msg, { selectable = false, thread = false } = {
 
   const controller = {
     doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
-    dateEl, threadsEl, unsubscribeContent,
+    dateEl, linksEl, threadsEl, unsubscribeContent,
   };
   msgControllers.set(doc_id, controller);
   renderCardHead(controller);
@@ -410,6 +617,10 @@ store.subscribe([
   state => state.selected_entity, state => state.selected_thread, state => state.threads_rev,
 ], (_values, state) => renderPanel(state));
 
-// The cards' heads and threads lines show the entities and threads as they
-// are now.
+// The cards' heads, links and threads lines show the entities and threads
+// as they are now.
 store.subscribe(state => state.entities_rev, refreshCardChips);
+
+// A project was added or renamed: only its chips show its name, so they
+// alone are refreshed rather than rebuilding the panel (and its editors).
+store.subscribe(state => state.projects_rev, renameProjectChips);
