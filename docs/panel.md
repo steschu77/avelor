@@ -410,7 +410,7 @@ applies the edit:
 
 | | Content (`saving.md`) | Structure |
 |---|---|---|
-| The page sends | the full body (state) | an intent: `create_thread`, `join_thread`, `leave_thread`, `join_project`, `leave_project`, `set_title`, `delete_entity`, … |
+| The page sends | the full body (state) | an intent: `create_thread`, `join_thread`, `leave_thread`, `join_project`, `leave_project`, `set_title`, `edit_entities`, `delete_entity`, … |
 | The host writes | `Index::save_content` → `Index::save`, only if dirty | the matching `Index` op → the same `Index::save`; deletes move the file (`Index::trash`) |
 | The host answers | `ok {source, html}` with the saved source | `entity` / `entity_deleted` per changed entity, then the command's answer |
 | Stale-reply guard | `edit_seq`, kept with the call on the page | none needed: nothing is applied optimistically; the answer only says how to select |

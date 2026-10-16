@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/areas/shell.css">
   <link rel="stylesheet" href="css/areas/sidebar.css">
+  <link rel="stylesheet" href="css/areas/dashboard.css">
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/panel.css">
   <link rel="stylesheet" href="css/areas/editor.css">
@@ -65,7 +66,12 @@
   </template>
 
   <div class="shell">
-    <header class="topbar"></header>
+    <header class="topbar">
+      <nav class="tabs">
+        <span data-lens="dashboard" aria-selected="true" data-t="lens.dashboard"></span>
+        <span data-lens="documents" aria-selected="false" data-t="lens.documents"></span>
+      </nav>
+    </header>
 
     <aside class="sidebar" id="sidebar">
       <div class="sidebar__list">
@@ -120,8 +126,13 @@
         <span class="label-filter" id="label-filter"></span>
         <button type="button" class="chip chip--action" id="label-add-btn" data-t-title="header.filter_label"
           aria-haspopup="menu" hidden>+</button>
-        <span class="meta docs-count" id="doc-count"></span>
-        <button type="button" class="tool lens-types" id="types-btn" data-t-title="header.types_title"><span data-t="header.types"></span><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
+        <span class="meta docs-count" id="doc-count" hidden></span>
+        <button type="button" class="tool lens-types" id="types-btn" data-t-title="header.types_title"
+          hidden><span data-t="header.types"></span><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
+        <span class="meta" id="dash-today" hidden></span>
+        <button type="button" class="tool dash__cards" id="dash-cards-btn" data-t-title="header.cards_title"
+          aria-haspopup="menu" hidden><span data-t="header.cards"></span><span class="meta" id="dash-cards-closed"
+            hidden></span><svg class="icon"><use href="#i-chevron-down" /></svg></button>
       </div>
       <div class="toolbar project-tools" id="project-tools" hidden>
         <button type="button" class="tool" id="project-rename-btn" data-t-title="header.rename"><svg class="icon"><use href="#i-rename" /></svg></button>
@@ -132,8 +143,17 @@
       </div>
       <div class="project-desc editor prose" id="project-desc"></div>
 
+      <!-- Dashboard (features/dashboard/dashboard.js) -->
+      <div class="dash" id="lens-dashboard">
+        <div class="dash__empty" id="dash-empty" hidden>
+          <p class="note" data-t="dash.all_closed"></p>
+          <button type="button" class="btn" id="dash-show-all" data-t="dash.show_all"></button>
+        </div>
+        <div class="dash__grid" id="dash-grid"></div>
+      </div>
+
       <!-- Documents (features/lenses/documents.js) -->
-      <div class="stack docs-lens" id="lens-documents">
+      <div class="stack docs-lens" id="lens-documents" hidden>
         <div class="filter-bar" id="doc-types" hidden></div>
         <div class="table docs">
           <div class="list-row table__head">

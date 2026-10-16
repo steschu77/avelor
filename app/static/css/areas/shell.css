@@ -1,5 +1,5 @@
-/* The shell (index.html, features/layout.js): its grid, the top bar, the
-   main area and the status bar (ui/statusbar.js). */
+/* The shell (index.html, features/layout.js): its grid, the top bar with
+   the lens tabs, the main area and the status bar (ui/statusbar.js). */
 
 .shell {
   display: grid;
@@ -16,7 +16,7 @@
   transition: grid-template-columns 250ms ease;
 }
 
-/* Top bar: a shaded strip. */
+/* Top bar = lens tabs. A shaded strip, the active tab opens into the paper ground below. */
 .topbar {
   grid-area: topbar;
   display: flex;
