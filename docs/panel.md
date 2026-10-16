@@ -375,7 +375,7 @@ from the selection. The edits:
   entity's row (so a drop on a project pill, or on a project's or thread's
   row in the Documents lens, joins that), and the thread it is shown in as
   `application/x-avelor-thread` (`MEMBER_DRAG`). The rest of the Documents
-  lens (`#lens-documents`) accepts
+  lens (`#lens-documents`) and the Timeline lens (`#lens-timeline`) accept
   only such drags (`takeMemberDrops`, `ui/dropzone.js`), highlighted
   (`.is-drop-target`) while dragged over; a drop there calls
   `leaveThreadLocal`, exactly as the remove button does. Both card panels
@@ -476,7 +476,7 @@ and save their bodies at once.
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |
 | E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |
-| E4 | Leave | card thread button, or the card's head dropped on the Documents lens → `leaveThreadLocal` | `leave_thread`; below two members the thread file goes to `.trash/` | selection per `selectionWithout` |
+| E4 | Leave | card thread button, or the card's head dropped on the Documents or Timeline lens → `leaveThreadLocal` | `leave_thread`; below two members the thread file goes to `.trash/` | selection per `selectionWithout` |
 | E5 | Switch thread | a chip in the threads line of a card in several threads → `switchThread` | — | that thread shown, the entity still selected and focused |
 | C1 | Create a project | "+" → `addProject` → `structureCall('create_project', {title: 'New project'})` | `Index::create_project` in `Projects/` → `entity`, `ok {id}` | new pill in rename mode |
 | C2 | Rename a project | pill pen or header rename → inline input, Enter/blur | `set_title` → `entity` | header and chips follow (`projects_rev`) |

@@ -69,9 +69,15 @@
   color: var(--c-label);
 }
 
-/* the lens head: the documents shown and hidden, and the bar's fold */
-.docs-count {
+/* the lens head: the documents shown and hidden, and the bar's fold (alone
+   under the Timeline lens) */
+.docs-count,
+.lens-types {
   margin-left: auto;
+}
+
+.docs-count:not([hidden])+.lens-types {
+  margin-left: 0;
 }
 
 .docs {

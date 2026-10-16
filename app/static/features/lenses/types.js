@@ -1,9 +1,9 @@
-// The type selection of a lens that lists entities (ui.md#documents): a
-// bar of type toggles, each with its count in the vault panel's filter --
-// the lens's own filter, which the vault panel's counts and the other
-// lenses don't follow. A lens makes its bar with `typeBar`; the types shown
-// and the bar's fold are its preferences. The lens head's Types button
-// folds the bar of the lens shown.
+// The type selection of a lens that lists entities (ui.md#documents,
+// ui.md#timeline): a bar of type toggles, each with its count in the vault
+// panel's filter -- the lens's own filter, which the vault panel's counts
+// and the other lenses don't follow. A lens makes its bar with `typeBar`;
+// the types shown and the bar's fold are its preferences. The lens head's
+// Types button folds the bar of the lens shown.
 
 import { $, accEl } from '../../core/dom.js';
 import { plural } from '../../core/format.js';

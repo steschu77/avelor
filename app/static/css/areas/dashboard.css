@@ -114,7 +114,7 @@
 }
 
 /* the lens head's menus: the dashboard's Cards, the Types of the Documents
-   lens */
+   and Timeline lenses */
 .dash__cards,
 .lens-types {
   gap: 6px;

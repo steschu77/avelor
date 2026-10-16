@@ -352,7 +352,8 @@ nothing imports `app.js`.
 | `features/panel/panel.js` | the side panel renderer (thread, standalone card), its chips, the structural edits it starts, its subscriptions |
 | `features/dashboard/dashboard.js`, `features/dashboard/cards.js` | the Dashboard lens: its cards' order and the closed ones, the Cards menu, dragging a card; the cards Week, Tasks (a task dragged to another column), Upcoming, Recent files and Recent chats |
 | `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`) |
-| `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
+| `features/lenses/timeline.js` | Timeline has the scrubber with its range and the feed of day blocks |
+| `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/workspace/trash.js` | Workspace pages: the trash |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
@@ -414,7 +415,7 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
 | `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `input`, `menu`, `list-row`, `section-head`, the forms, `pane-head`, the dialogs, the vault area's `page`, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), header (the lens header, the titles edited in place) |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, timeline, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 

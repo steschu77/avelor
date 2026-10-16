@@ -35,6 +35,7 @@ import { initDocumentsLens } from './features/lenses/documents.js';
 import { revealInDocuments } from './features/lenses/documents.js';
 import { getDocRows } from './features/lenses/documents.js';
 import { restoreSelection } from './features/selection.js';
+import './features/lenses/timeline.js';
 
 initDocumentsLens();
 restoreLens();
@@ -42,13 +43,14 @@ restoreSelection(revealInDocuments);
 
 // The lenses and the sidebar follow the model (model/events.js): the
 // entities as they are now, the projects the sidebar lists, the threads
-// and projects the Documents lens groups by (`commitThreadChange`).
+// and projects the Documents lens groups by (`commitThreadChange`), and
+// the projects the Timeline lens's rows name.
 store.subscribe(state => state.entities_rev, () => {
   invalidateLenses();
   scheduleRenderSidebar();
 });
 store.subscribe(state => state.projects_rev, () => scheduleRenderSidebar());
-store.subscribe([state => state.threads_rev, state => state.projects_rev], () => invalidateLenses('documents'));
+store.subscribe([state => state.threads_rev, state => state.projects_rev], () => invalidateLenses('documents', 'timeline'));
 
 function updateDirtyIndicator(doc_id) {
   for (const row of getDocRows(doc_id)) row.querySelector('.dirty-dot').hidden = !isDirty(doc_id);

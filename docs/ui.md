@@ -53,7 +53,7 @@ several shows the entities carrying all of them.
 
 ## Lenses <a id="lenses"></a>
 
-The main view's tabs are Dashboard and Documents; each
+The main view's tabs are Dashboard, Documents and Timeline; each
 lens registers itself (`registerLens`, `features/lenses/registry.js`), a
 tab selects it (`selectLens`), and the visible lens is rendered again if
 it is stale. The lens shown last comes back on the next start
@@ -136,9 +136,10 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   it shows under (`selectDocument(id, thread)`), a thread's row selects
   the thread (`selectById`). The selected entity's rows are marked
   (`markSelection`), and the rows of the thread the panel shows.
-- **Types**: the bar under the lens head (`#doc-types`; `typeBar`,
-  `features/lenses/types.js`), the lens's own filter — the vault panel's
-  counts don't follow it: Documents (a `document` but a note, a `message`),
+- **Types**: the bar under the lens head (`#doc-types`; its code shared
+  with the Timeline lens, `typeBar`, `features/lenses/types.js`), the
+  lens's own filter — the vault panel's counts and the other lenses don't
+  follow it: Documents (a `document` but a note, a `message`),
   Mail, Notes (the genre `note`), Chats, Bank (bank accounts and
   transactions), Lists, Records, Contacts, Tasks and Events (with
   calendars), each a toggle with its count in the vault panel's filter,
@@ -159,6 +160,45 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
 - **Shown on request** (the selection restored on start,
   `revealInDocuments`): the group and thread holding the entity's first
   row unfold and it is scrolled to.
+
+### Timeline <a id="timeline"></a>
+
+`features/lenses/timeline.js`:
+the entities in the vault panel's filter with a date, each once on its
+day — a series on its first start, a task on its own date — but calendars
+(dated when they were connected) and cancelled events.
+
+- **Types**: the Documents lens's bar (`#tl-types`, `typeBar`), with the
+  lens's own selection, every type shown at first; each toggle counts its
+  entries in the range. The feed ends with what the types hide and Show
+  all types; the lens head's Types button folds this lens's bar.
+- **The scrubber**: "Time · 12 entries" (the feed's), a bar per week from
+  Monday over last year and this one, as high as its entries of the types
+  shown against the busiest week's; the weeks to come lighter, a dashed
+  line at today, the two years under it. A drag across it picks the weeks
+  it passes as the range, a click one week; the range is named ("5–18 Oct
+  2026") with Clear, the feed and the toggles keep to it, and it lasts
+  while the app runs. Today scrolls the feed to today, dropping a range
+  without it. Older and later entries are in the feed, not on the
+  scrubber.
+- **The feed**: newest first, a heading per month, a block per day with
+  its number and weekday beside its entries (the date stays while they
+  scroll), the latest first; the days to come dimmed, "Today · Tuesday 13
+  October" between them and the past, while today is in the range. Once a
+  vault is open, the feed starts at that line; at midnight, today moves
+  on.
+- **A row**: its type's icon, its title, what its kind tells
+  (`summaryOf`) — an event's place, times and rule, a mail's sender and
+  time, a task's status and due day, a chat's model and messages, a
+  list's items, a contact's phone or mail, a bank account's bank and
+  number, transactions' bookings, a document's author or sender and genre
+  — then its projects while no project is selected (`projectNames`), its
+  labels at the right. A click or Enter selects it, the selected one
+  marked (`markSelection`). It drags as a Documents row does; the lens
+  takes a card dragged out of a thread, which leaves it
+  (`takeMemberDrops`, `panel.md#structural-edits`).
+- **Kept parts**: rows by entity, day blocks by day, month headings by
+  month, so a scan only adds.
 
 ## Status bar <a id="status-bar"></a>
 
@@ -213,7 +253,9 @@ joined by commas) and the Week card's start (`week_start`: `today` or
 (`doc_types`, type ids joined by commas; an id the page doesn't know is
 dropped), its bar (`doc_types_bar`: `open` or `closed`) and its folded
 projects (`doc_folded`, project ids joined by commas; project ids are
-unique across vaults, so one list serves every vault); the selection
+unique across vaults, so one list serves every vault); the Timeline lens's types
+shown and its bar (`tl_types`, `tl_types_bar`, as the Documents lens's);
+the selection
 (`entity`, `thread`: ids, empty for none), saved once the vault's scan
 has ended and selected again after the next one (`restoreSelection`,
 `features/selection.js`), if it is still in the vault and nothing else
@@ -241,3 +283,4 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | F5 | Task dropped on a column | a task card of the Tasks card dragged onto another column (`dragTask`, `dropColumn`, `features/dashboard/cards.js`) → `editEntityLocal(id, {task: {status}})` | `edit_entities` → `entity` (with `task.done` for Done), `ok {changed, skipped}` | the task in its new column, Done first; the panel's card follows |
 | F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selectFilter`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |
+| F8 | Timeline | a drag or click across the scrubber's track (`pointerdown` … `pointerup`, `features/lenses/timeline.js`); Clear; Today; a type toggle, Show all types, Types; a row → `selectDocument`; a card's head dropped on the lens → `leaveThreadLocal` | `set_prefs {prefs}` (`tl_types`, `tl_types_bar`); `leave_thread` | the feed kept to the weeks picked, or to all; scrolled to today; the types and the bar kept across restarts; the entity in the panel; the card out of its thread |
