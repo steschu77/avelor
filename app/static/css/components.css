@@ -1,6 +1,6 @@
 /* Components: the parts several areas share (buttons, tools, chips,
-   inputs, menus, grips, list rows, pane heads, dialogs, the vault area's
-   page, ...). They come before the areas, so an area's rule can override
+   inputs, menus, grips, list rows, section heads, pane heads, dialogs,
+   the vault area's page, ...). They come before the areas, so an area's rule can override
    them. */
 
 /* Buttons: bordered and set like a label. */
@@ -123,11 +123,13 @@
   min-width: 0;
 }
 
-/* buttons drawn as text: a link's title, which selects what it names, and
-   a chip's x that removes a label, a project or a link
-   (features/panel/panel.js) */
+/* buttons drawn as text: a link's title, which selects what it names (a
+   chip's, a Linked tab row's, a card's threads line's), and a chip's x that
+   removes a label, a project or a link (features/panel/panel.js,
+   features/linked.js) */
 .chip__name,
-.chip__remove {
+.chip__remove,
+.linked__name {
   padding: 0;
   border: none;
   background: none;
@@ -135,7 +137,8 @@
   cursor: pointer;
 }
 
-.chip__name:hover {
+.chip__name:hover,
+.linked__name:hover {
   text-decoration: underline;
 }
 
@@ -293,6 +296,21 @@
   gap: 0 8px;
   align-items: center;
   border-bottom: 1px solid var(--c-line);
+}
+
+/* A heading over a part of a page: label type over a rule. */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--c-line);
+  color: var(--c-ink);
+}
+
+.section-head__note {
+  margin-left: auto;
+  color: var(--c-label);
 }
 
 /* A failure, marked by a bar on the left. */

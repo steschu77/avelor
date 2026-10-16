@@ -85,7 +85,7 @@
 
   /* the only radius */
   --r-pill: 99px;
-
+  --z-tab: 1;
   --z-panel: 2;
   /* above the panel and the expanded vault area (3) */
   --z-snackbar: 4;

@@ -2,9 +2,11 @@
 // listens (`ready`). Nothing imports it.
 //
 // Its imports run the page's modules (development.md#the-bundled-page): each
-// module that acts when it loads -- subscribes to the store, listens to the
-// host or the DOM -- is imported here, in the order it acts. A module that only
-// declares names runs when another first imports it.
+// module that acts when it loads -- registers an action or a tab, subscribes to
+// the store, listens to the host or the DOM -- is imported here, in the
+// order it acts: the context tabs as the strip shows them
+// (features/context.js). A module that only declares names runs when
+// another first imports it.
 
 import { rpcCall } from './core/rpc.js';
 import { store } from './model/state.js';
@@ -18,6 +20,7 @@ import './features/jobs.js';
 import './features/header.js';
 import './features/conflict.js';
 import './features/workspace/trash.js';
+import './features/linked.js';
 import './features/layout.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
 import { initDocumentsLens, scheduleRenderDocuments } from './features/lenses/documents.js';
