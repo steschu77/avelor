@@ -1,6 +1,7 @@
 /* The Documents lens (features/lenses/documents.js). */
 
-/* features/lenses/documents.js: the table of the rows. */
+/* features/lenses/documents.js: the table of the rows under their
+   projects. */
 .table {
   display: flex;
   flex-direction: column;
@@ -78,11 +79,19 @@
   flex: none;
 }
 
+/* the projects' groups, then the entities in no project after a gap and a
+   rule */
+.docs__projects:not(:last-child) {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--c-line);
+}
+
 .docs__head-date {
   justify-content: flex-end;
 }
 
-/* a row's name: its icon and title */
+/* a row's name: its fold, icon and title; one level deeper under a
+   project's group */
 .docs__cell {
   min-width: 0;
   display: flex;
@@ -101,7 +110,56 @@
   width: 14px;
 }
 
+.docs__cell--l1 {
+  padding-left: 22px;
+}
+
+.docs__fold {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-ink-mute);
+  cursor: pointer;
+}
+
 .docs__date {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* a project's group, stuck under the head while its rows scroll */
+.group-row {
+  position: sticky;
+  top: var(--h-table-head);
+  z-index: 1;
+  height: var(--h-group);
+  background: var(--c-paper);
+  cursor: pointer;
+}
+
+.group-row__icon {
+  flex: none;
+  width: 14px;
+  color: var(--c-ink-mute);
+}
+
+.group-row__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 500 var(--fs-body)/1.3 var(--f-serif);
+  color: var(--c-ink);
+}
+
+.group-row__open {
+  display: none;
+}
+
+.group-row:hover .group-row__open {
+  display: inline-flex;
 }

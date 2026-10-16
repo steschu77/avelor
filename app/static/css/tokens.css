@@ -43,8 +43,10 @@
   --h-control-sm: 22px;
   /* an icon (index.html's sprite, build.rs) */
   --h-icon: 16px;
-  /* the Documents lens: its sticky head */
+  /* the Documents lens: its sticky head, and a project's group row stuck
+     under it */
   --h-table-head: 28px;
+  --h-group: 34px;
 
   /* sidebar inset */
   --p-gutter: 12px;

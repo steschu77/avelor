@@ -1,5 +1,6 @@
 {
   "config.unread": "config.yaml couldn't be read; the app started with the default settings.",
+  "context.open": "Open",
   "docs.date": "Date",
   "docs.name": "Name",
   "error.code": "Something went wrong ({code}).",
@@ -25,6 +26,7 @@
   "kind.task": "Task",
   "kind.thread": "Thread",
   "menu.close": "Close the menu",
+  "open.named": "Open {name}",
   "save.settings": "Could not save the settings.",
   "sidebar.all_projects": "All Projects",
   "sidebar.archived": "Archived",
