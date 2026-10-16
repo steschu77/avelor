@@ -25,4 +25,29 @@ impl Index {
         self.check_writable(id)?;
         self.update(id, changes, |d| d.set_title(title))
     }
+
+    /// Star or unstar `id`, which may be any entity; unstarring removes the
+    /// key ([`Document::set_starred`]). Nothing is written if it already is.
+    pub fn set_starred(
+        &mut self,
+        id: &Id,
+        starred: bool,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        self.update(id, changes, |d| d.set_starred(starred))
+    }
+
+    /// Archive `id`, which may be any entity, or take it out of the archive;
+    /// unarchiving removes the key ([`Document::set_archived`]). Nothing is
+    /// written if it already is.
+    pub fn set_archived(
+        &mut self,
+        id: &Id,
+        archived: bool,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        self.update(id, changes, |d| d.set_archived(archived))
+    }
 }

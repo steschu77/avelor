@@ -1,4 +1,5 @@
-//! The structural commands (`panel.md#saving-structure`): titles -- and
+//! The structural commands (`panel.md#saving-structure`): titles, stars,
+//! archiving -- and
 //! `reload_entity`, the conflict dialog's Use theirs, which ends like
 //! them. Typed commands (`api.md#structure`): each edit goes through
 //! `App::step`, `App::edit` keeping the step to undo, which pushes every
@@ -100,6 +101,36 @@ pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
 }
 
 // ----------------------------------------------------------------------------
+/// `set_starred`: star or unstar `id`, any entity; unstarring removes the
+/// key.
+pub fn set_starred(app: &mut App, req: Req, id: Id, starred: bool) {
+    let step = match starred {
+        true => Text::new("undo.set_starred"),
+        false => Text::new("undo.set_unstarred"),
+    };
+    let step = step.arg("title", named(app, &id, ""));
+    let result = app.step(step, |index, changes| {
+        index.set_starred(&id, starred, changes)
+    });
+    answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
+/// `set_archived`: archive `id`, any entity, or take it out of the archive;
+/// unarchiving removes the key.
+pub fn set_archived(app: &mut App, req: Req, id: Id, archived: bool) {
+    let step = match archived {
+        true => Text::new("undo.set_archived"),
+        false => Text::new("undo.set_unarchived"),
+    };
+    let step = step.arg("title", named(app, &id, ""));
+    let result = app.step(step, |index, changes| {
+        index.set_archived(&id, archived, changes)
+    });
+    answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
 /// `reload_entity`: read `id`'s file again and take in what it holds now,
 /// the conflict dialog's Use theirs (`saving.md#the-dialog`). The entity as
 /// it is now is pushed, or `entity_deleted` if the file is gone (a file
@@ -141,6 +172,7 @@ fn post_taken_in(app: &App, id: &Id, now: Option<Id>) {
 // ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
+    use crate::testing::Harness;
     use crate::testing::parse;
     use crate::testing::{notes, shape, shown, undoes};
     use av_utils::error::Error;
@@ -174,6 +206,33 @@ mod tests {
             &mut h,
             "set_title",
             json!({ "id": ids[0], "title": "Renamed" }),
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn starring_and_archiving_push_the_project_before_the_answer() {
+        let project = Id::generate();
+        let text = format!("id: {project}\nproject: {{}}\ntitle: Move\n");
+        let mut h = Harness::with_vault("star-archive", &[("Projects/move.yaml", text)]);
+
+        let sent = h.call("set_starred", json!({ "id": project, "starred": true }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["starred"], true);
+        let sent = h.call("set_archived", json!({ "id": project, "archived": true }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["archived"], true);
+        assert_eq!(sent[1]["ok"]["id"], project.to_string());
+
+        undoes(
+            &mut h,
+            "set_starred",
+            json!({ "id": project, "starred": false }),
+        );
+        undoes(
+            &mut h,
+            "set_archived",
+            json!({ "id": project, "archived": false }),
         );
     }
 
