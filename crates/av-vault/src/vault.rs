@@ -28,6 +28,7 @@ mod properties;
 mod structure;
 mod trash;
 
+pub use create::NewEntity;
 pub use indexing::{IndexControl, IndexEvent, index_vault};
 pub use trash::Trashed;
 
@@ -493,8 +494,9 @@ impl Index {
         Ok(Refresh::TakenIn(self.reload(id)?))
     }
 
-    /// Apply `change` to `id`'s document and save it, recording a write in
-    /// `changes` with its step.
+    /// Apply `change` to `id`'s document and save it if that changed
+    /// anything ([`Index::write_change`]), recording a write in `changes`
+    /// with its step.
     fn update(
         &mut self,
         id: &Id,

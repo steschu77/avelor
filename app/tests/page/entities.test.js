@@ -1,8 +1,8 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import {
-  NO_PROJECT, entities, knownThreads, matchesFilter, projectsInOrder, projectsOf, threadMatchesFilter, threadMembers, threadOf,
-  threadProjects, threads,
+  NO_PROJECT, entities, knownThreads, matchesFilter, projectScope, projectsFor, projectsInOrder, projectsOf, threadMatchesFilter,
+  threadMembers, threadOf, threadProjects, threads,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -80,4 +80,14 @@ test("a thread's projects are its members', each once", () => {
 test('a thread is in the filter with one of its members', () => {
   vault(...MEMBERS);
   equal([threadMatchesFilter('t', { ...FILTER, selected_project: 'p' }), threadMatchesFilter('t', { ...FILTER, selected_project: NO_PROJECT })], [true, false]);
+});
+
+test('something new starts in the projects of what it is for, else in the one selected', () => {
+  threaded(project('p'), project('q'), doc('a', { projects: ['q'] }), doc('b'), doc('m', { threads: ['t'], projects: ['q'] }));
+  store.setState({ selected_project: 'p' });
+  equal(projectsFor('a'), { projects: ['q'], scope: null });
+  equal(projectsFor('t'), { projects: ['q'], scope: null });
+  equal([projectsFor('b'), projectsFor(null)], [{ projects: ['p'], scope: 'p' }, { projects: ['p'], scope: 'p' }]);
+  store.setState({ selected_project: NO_PROJECT });
+  equal([projectsFor('b'), projectScope()], [{ projects: [], scope: null }, null]);
 });

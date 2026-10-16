@@ -57,6 +57,7 @@
     <div class="pane-section pane-section--ruled toolbar">
       <button type="button" class="tool" data-cmd="edit" data-t-title="card.edit"><svg class="icon"><use href="#i-edit" /></svg></button>
       <button type="button" class="tool" data-cmd="link" data-t-title="card.link"><svg class="icon"><use href="#i-link" /></svg></button>
+      <button type="button" class="tool" data-cmd="task" data-t-title="card.task"><svg class="icon"><use href="#i-clipboard-task" /></svg></button>
       <button type="button" class="tool tool--danger push" data-cmd="thread"
         data-t-title="card.leave_thread"><svg class="icon"><use href="#i-arrow-step-in-left" /></svg></button>
       <button type="button" class="tool tool--danger" data-cmd="delete" data-t-title="card.delete"><svg class="icon"><use href="#i-delete" /></svg></button>
@@ -74,6 +75,12 @@
           <span id="vault-name"></span>
         </div>
         <div class="sidebar__scroll">
+          <a class="nav-item nav-item--compact" id="new-item" tabindex="0" role="button" data-vault-op="new" data-action="new"
+            aria-haspopup="menu">
+            <svg class="icon"><use href="#i-add" /></svg>
+            <span data-t="sidebar.new"></span><kbd data-t="kbd.ctrl_n"></kbd>
+          </a>
+
           <div class="nav-section label" tabindex="0" role="button"><svg class="icon disclosure"><use href="#i-chevron-down" /></svg><span data-t="sidebar.projects"></span>
             <button type="button" id="add-project-btn" class="nav-section__add"
               data-t-title="sidebar.new_project"><svg class="icon"><use href="#i-add" /></svg></button>
@@ -99,7 +106,7 @@
       <div class="sidebar__area" id="vault-area">
         <div class="pane-head">
           <span id="vault-area-title"></span>
-          <button type="button" class="tool push" id="vault-area-close-btn"><svg class="icon"><use href="#i-dismiss" /></svg></button>
+          <button type="button" class="tool push" id="vault-area-close-btn" data-t-title="page.close"><svg class="icon"><use href="#i-dismiss" /></svg></button>
         </div>
         <div class="sidebar__area-body" id="vault-area-body"></div>
       </div>
@@ -178,6 +185,8 @@
         <!-- Tabs about what the panel shows (context.js) -->
         <div class="context">
           <nav class="tabs context__tabs" id="context-tabs" role="tablist"></nav>
+          <!-- A new task for what is shown (features/new.js) -->
+          <div id="context-task" class="context__pane" hidden></div>
           <!-- The links of what is shown (features/linked.js) -->
           <div id="context-linked" class="context__pane" hidden></div>
         </div>

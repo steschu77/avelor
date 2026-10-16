@@ -7,15 +7,36 @@ use std::path::{Path, PathBuf};
 
 use super::{Changes, Entry, FileStep, Index, SaveOutcome};
 use crate::document::{Document, FileFormat};
+use crate::envelope::DocumentType;
 use crate::envelope::Thread;
 use crate::envelope::{Bare, Project, Roles, Source};
 use crate::filename;
 use crate::schema::layout;
+use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::fs::FileStamp;
 use av_utils::id::Id;
-use av_utils::text::LineEnding;
+use av_utils::text::{LineEnding, unique_trimmed};
+use serde::Deserialize;
+
+// ----------------------------------------------------------------------------
+/// An entity to make in the app (New, [`Index::create_new`]): its role
+/// blocks, which decide its type, and the well-known fields it starts with.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct NewEntity {
+    pub roles: Roles,
+    pub title: String,
+    /// Not given: now; an event's is its `start`.
+    pub date: Option<DateTime>,
+    pub projects: Vec<Id>,
+    pub labels: Vec<String>,
+    /// The entity it is linked to (`linked-to`).
+    pub linked_to: Option<Id>,
+    /// The markdown body; a list or a record has none.
+    pub content: String,
+}
 
 // ----------------------------------------------------------------------------
 impl Index {
@@ -90,6 +111,64 @@ impl Index {
             FileFormat::Markdown,
         );
         self.create(doc, Path::new(layout::PROJECTS), changes)
+    }
+
+    /// Make the entity `new` (New in the app): a document, task, event,
+    /// contact, list or record, as its roles derive -- the other types have
+    /// flows of their own, and are refused. It is created here (`created:
+    /// {}`), a list or record as YAML without a body, the others as
+    /// markdown, in the conventional folder of its type
+    /// ([`layout`]). Its `date` is an event's start, else the one given,
+    /// else now. Nothing is written if the title is empty, an event has no
+    /// start, one of `projects` isn't a project, or `linked_to` isn't in the
+    /// vault.
+    pub fn create_new(&mut self, new: NewEntity, changes: &mut Changes) -> Result<Id> {
+        let invalid = |arg: &str| Error::InvalidArgument { arg: arg.into() };
+        let (format, folder) = match new.roles.derived_type() {
+            Some(DocumentType::Document) => (FileFormat::Markdown, layout::DOCUMENTS),
+            Some(DocumentType::Task) => (FileFormat::Markdown, layout::TASKS),
+            Some(DocumentType::Event) => (FileFormat::Markdown, layout::CREATED_EVENTS),
+            Some(DocumentType::Contact) => (FileFormat::Markdown, layout::CONTACTS),
+            Some(DocumentType::List) => (FileFormat::YAML, layout::LISTS),
+            Some(DocumentType::Record) => (FileFormat::YAML, layout::RECORDS),
+            _ => return Err(invalid("roles")),
+        };
+        let title = new.title.trim().to_string();
+        if title.is_empty() {
+            return Err(invalid("title"));
+        }
+        let date = match &new.roles.event {
+            Some(event) => Some(event.start.ok_or_else(|| invalid("event.start"))?),
+            None => new.date,
+        };
+        let is_project = |id: &Id| {
+            self.get(id)
+                .is_some_and(|d| d.kind() == DocumentType::Project)
+        };
+        if !new.projects.iter().all(is_project) {
+            return Err(invalid("projects"));
+        }
+        if new.linked_to.is_some_and(|to| self.get(&to).is_none()) {
+            return Err(invalid("linked_to"));
+        }
+
+        let mut doc = Document::create(
+            new.roles,
+            Source::Created(Bare::default()),
+            title,
+            new.projects,
+            format,
+        );
+        if let Some(date) = date {
+            doc.set_date(date);
+        }
+        doc.set_labels(unique_trimmed(new.labels));
+        doc.set_link(new.linked_to);
+        let body = new.content.trim_end();
+        if format == FileFormat::Markdown && !body.is_empty() {
+            doc.set_content(format!("{body}\n"));
+        }
+        self.create(doc, Path::new(folder), changes)
     }
 
     /// Write the new entity `doc` to a file with its generated name in

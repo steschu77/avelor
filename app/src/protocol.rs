@@ -16,6 +16,7 @@ use crate::trash;
 use crate::undo;
 use av_utils::error::Error;
 use av_utils::id::Id;
+use av_vault::vault::NewEntity;
 use av_vault::vault::{Index, Op};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -54,6 +55,7 @@ enum Command {
     SaveDocContent(Save),
     CheckFiles(Ids),
     // The structural commands (`structure`).
+    CreateEntity(Box<NewEntity>),
     CreateThread(NewThread),
     CreateProject(Title),
     JoinThread(InThread),
@@ -201,6 +203,7 @@ impl Command {
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "save_doc_content" => Command::SaveDocContent(from_value(args)?),
             "check_files" => Command::CheckFiles(from_value(args)?),
+            "create_entity" => Command::CreateEntity(from_value(args)?),
             "create_thread" => Command::CreateThread(from_value(args)?),
             "create_project" => Command::CreateProject(from_value(args)?),
             "join_thread" => Command::JoinThread(from_value(args)?),
@@ -261,6 +264,7 @@ fn route(app: &mut App, req: Req, command: Command) {
             documents::save_doc_content(app, req, a.id, a.markdown, a.overwrite)
         }
         Command::CheckFiles(a) => documents::check_files(app, req, a.ids),
+        Command::CreateEntity(a) => structure::create_entity(app, req, *a),
         Command::CreateThread(a) => structure::create_thread(app, req, a.title, a.members),
         Command::CreateProject(a) => structure::create_project(app, req, a.title),
         Command::JoinThread(a) => structure::membership(
