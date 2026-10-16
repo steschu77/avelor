@@ -15,6 +15,18 @@ export function parseDate(text) {
 export const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 // ----------------------------------------------------------------------------
+// Run `fn` just after every local midnight, from now on: what shows today
+// moves on (the calendar's grid, the dashboard).
+export function everyMidnight(fn) {
+  const now = new Date();
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  setTimeout(() => {
+    fn();
+    everyMidnight(fn);
+  }, tomorrow - now + 1000);
+}
+
+// ----------------------------------------------------------------------------
 // `date`'s local day as `YYYY-MM-DD`, the value of an <input type="date">.
 export function localDay(date) {
   const pad = n => String(n).padStart(2, '0');
@@ -45,12 +57,17 @@ export function relativeDay(date) {
 const format = options => new Intl.DateTimeFormat(undefined, options);
 
 export const DATE_FORMAT = format();                                    // 10/14/2026
-const DAY_MONTH = format({ day: '2-digit', month: '2-digit' });         // 10/14
+export const DAY_MONTH = format({ day: '2-digit', month: '2-digit' }); // 10/14
 // A time of day, wherever the page shows one: 9:05 AM.
 export const TIME_FORMAT = format({ hour: 'numeric', minute: '2-digit' });
+export const WEEKDAY = format({ weekday: 'short' });                    // Tue
+export const MONTH = format({ month: 'short' });                        // Oct
+export const DAY_SHORT_MONTH = format({ day: 'numeric', month: 'short' });   // Oct 14
+export const DAY_LONG_MONTH = format({ day: 'numeric', month: 'long' });     // October 14
+export const LONG_DATE = format({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); // Tuesday, October 14, 2026
 
-// A date in a list: day and month, with the year if it isn't this one (a
-// thread's days in the Documents lens).
+// A date in a list: day and month, with the year if it isn't this one (the
+// dashboard's cards, a thread's days in the Documents lens).
 export function shortDate(date) {
   return date.getFullYear() === new Date().getFullYear() ? DAY_MONTH.format(date) : DATE_FORMAT.format(date);
 }

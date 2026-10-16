@@ -4,9 +4,9 @@
 // listens (`ready`). Nothing imports it.
 //
 // Its imports run the page's modules (development.md#the-bundled-page): each
-// module that acts when it loads -- registers an action, a page or a tab,
-// subscribes to the store, listens to the host or the DOM -- is imported
-// here, in the order it acts: the menu's Esc before the vault pages'
+// module that acts when it loads -- registers an action, a page, a tab or a
+// lens, subscribes to the store, listens to the host or the DOM -- is
+// imported here, in the order it acts: the menu's Esc before the vault pages'
 // (core/actions.js), the context tabs as the strip shows them
 // (features/context.js). A module that only declares names runs when
 // another first imports it.
@@ -19,7 +19,9 @@ import './model/events.js';
 import './ui/menu.js';
 import { shownVaultPage } from './ui/page.js';
 import './ui/statusbar.js';
+import { invalidateLenses, restoreLens } from './features/lenses/registry.js';
 import { msgControllers } from './features/panel/panel.js';
+import './features/dashboard/dashboard.js';
 import './features/close.js';
 import './features/jobs.js';
 import './features/header.js';
@@ -29,23 +31,24 @@ import './features/new.js';
 import './features/linked.js';
 import './features/layout.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
-import { initDocumentsLens, scheduleRenderDocuments } from './features/lenses/documents.js';
+import { initDocumentsLens } from './features/lenses/documents.js';
 import { revealInDocuments } from './features/lenses/documents.js';
 import { getDocRows } from './features/lenses/documents.js';
 import { restoreSelection } from './features/selection.js';
 
 initDocumentsLens();
+restoreLens();
 restoreSelection(revealInDocuments);
 
 // The lenses and the sidebar follow the model (model/events.js): the
 // entities as they are now, the projects the sidebar lists, the threads
 // and projects the Documents lens groups by (`commitThreadChange`).
 store.subscribe(state => state.entities_rev, () => {
-  scheduleRenderDocuments();
+  invalidateLenses();
   scheduleRenderSidebar();
 });
 store.subscribe(state => state.projects_rev, () => scheduleRenderSidebar());
-store.subscribe([state => state.threads_rev, state => state.projects_rev], () => scheduleRenderDocuments());
+store.subscribe([state => state.threads_rev, state => state.projects_rev], () => invalidateLenses('documents'));
 
 function updateDirtyIndicator(doc_id) {
   for (const row of getDocRows(doc_id)) row.querySelector('.dirty-dot').hidden = !isDirty(doc_id);
@@ -68,13 +71,9 @@ store.subscribe(state => state.dirty_docs, dirty_docs => {
 store.subscribe(
   [state => state.selected_project, state => state.selected_labels],
   () => {
-    scheduleRenderDocuments();
+    invalidateLenses();
     scheduleRenderSidebar();
   });
-
-// The lens's type selection (features/lenses/types.js): a change renders
-// the lens again.
-store.subscribe(({ prefs }) => prefs.doc_types, scheduleRenderDocuments);
 
 // Another vault opens (`forgetVault`, model/events.js): a page about the
 // old one (New) closes.

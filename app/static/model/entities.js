@@ -48,6 +48,13 @@ export function projectsOf(doc) {
   return (doc.projects ?? []).filter(id => projects.has(id));
 }
 
+// The names of `doc`'s projects, joined, while no project is selected (the
+// filter names it already): the dashboard's cards.
+export function projectNames(doc, { selected_project } = store.getState()) {
+  if (selected_project) return '';
+  return projectsOf(doc).map(id => projects.get(id).name).filter(Boolean).join(' \u00b7 ');
+}
+
 // The project something new starts in, and the header shows: the selected
 // one, null for All Projects and No project.
 export function projectScope({ selected_project } = store.getState()) {
@@ -127,4 +134,17 @@ export function projectsFor(target) {
   if (own.length) return { projects: own, scope: null };
   const scope = projectScope();
   return { projects: scope ? [scope] : [], scope };
+}
+
+// ----------------------------------------------------------------------------
+// `Source` serializes as a tagged object (e.g. `{ scan: {...} }`), not a
+// bare string, or as null when an entity has none.
+function sourceKind(source) {
+  return typeof source === 'string' ? source : Object.keys(source ?? {})[0];
+}
+
+// ----------------------------------------------------------------------------
+// Whether `doc` is a chat with an AI: a conversation from the `ai` source.
+export function isAiConversation(doc) {
+  return doc?.kind === 'conversation' && sourceKind(doc.source) === 'ai';
 }

@@ -22,13 +22,15 @@ function closeMenu() {
   }
 }
 
-// `items`: { label, hint?, icon?, dim?, run? } or { head } -- `hint` is the
-// small label on the right, `icon` an icon before the label (`#i-<name>`);
-// `head` labels a section, the items up to the next head. `options.head` is
-// a label over the items. `options.filter` ({ placeholder, extra(text) })
-// puts a text box over the items, focused: typing keeps the items whose
-// label contains the text (a head while an item of its section stays) and
-// adds `extra(text)`'s; up and down move the highlight, Enter runs it.
+// `items`: { label, hint?, icon?, checked?, separator?, dim?, run? } or
+// { head } -- `hint` is the small label on the right, `icon` an icon before
+// the label (`#i-<name>`), `checked` shows a check column, `separator` draws
+// a line above the item; `head` labels a section, the items up to the next
+// head. `options.head` is a label over the items. `options.filter`
+// ({ placeholder, extra(text) }) puts a text box over the items, focused:
+// typing keeps the items whose label contains the text (a head while an
+// item of its section stays) and adds `extra(text)`'s; up and down move the
+// highlight, Enter runs it.
 // The anchor is marked `aria-expanded` while its menu is open. Showing the
 // open menu's anchor again closes it (a toggle).
 export function showMenu(anchor, items, options = {}) {
@@ -49,11 +51,17 @@ export function showMenu(anchor, items, options = {}) {
     it.run();
   };
   const icons = items.some(it => it.icon);
+  const checks = items.some(it => it.checked !== undefined);
   const menuItem = it => {
     if (it.head) return menuHead(it.head);
-    const mi = accEl('div', 'menu__item');
-    mi.setAttribute('role', 'menuitem');
+    const mi = accEl('div', 'menu__item' + (it.separator ? ' menu__item--sep' : ''));
+    mi.setAttribute('role', checks ? 'menuitemcheckbox' : 'menuitem');
+    if (checks) mi.setAttribute('aria-checked', String(!!it.checked));
     if (it.dim) mi.setAttribute('aria-disabled', 'true');
+    if (checks) {
+      const check = accEl('span', 'menu__check', it.checked ? '\u2713' : '');
+      mi.appendChild(check);
+    }
     if (icons) mi.appendChild(iconEl(it.icon ?? '', 'menu__icon'));
     const label = accEl('span', 'menu__label', it.label);
     mi.appendChild(label);

@@ -6,6 +6,7 @@
 //! through the app never loses user data.
 
 use crate::envelope::Message;
+use crate::envelope::Task;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
 use crate::vault::FileStamp;
 use av_utils::datetime::DateTime;
@@ -308,6 +309,28 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// Set a task's `status` (vault.md#task): becoming `done` writes when
+    /// (`done`, `now`), any other status removes it. Nothing changes for an
+    /// entity that isn't a task, or a done task set to done again.
+    pub fn set_task_status(&mut self, status: String, now: DateTime) {
+        let Some(task) = self.task_mut() else {
+            return;
+        };
+        if status != "done" {
+            task.done = None;
+        } else if task.status.as_deref() != Some("done") {
+            task.done = Some(now);
+        }
+        task.status = Some(status);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The `task` block to change, if the entity has one.
+    fn task_mut(&mut self) -> Option<&mut Task> {
+        self.envelope.as_mut().and_then(|e| e.roles.task.as_mut())
+    }
+
+    // ------------------------------------------------------------------------
     /// Make the entity a member of `thread`, adding the `message` role if
     /// needed (vault.md#message).
     pub fn join_thread(&mut self, thread: Id) {
@@ -560,6 +583,38 @@ mod tests {
         assert_eq!(md.kind(), DocumentType::Document);
         let yaml = Document::load("title: x\n".into(), FileFormat::YAML);
         assert_eq!(yaml.kind(), DocumentType::Record);
+    }
+
+    #[test]
+    fn done_is_written_with_the_status_done_and_removed_with_another() {
+        let mut doc = Document::load(
+            "---\ntask:\n  status: todo\n---\n".into(),
+            FileFormat::Markdown,
+        );
+        let now = DateTime::from_iso8601("2026-10-12T08:30:00Z").unwrap();
+        doc.set_task_status("done".into(), now);
+        let task = doc.roles().task.clone().unwrap();
+        assert_eq!(
+            (task.status.as_deref(), task.done),
+            (Some("done"), Some(now))
+        );
+
+        let later = DateTime::from_iso8601("2026-10-13T09:00:00Z").unwrap();
+        doc.set_task_status("done".into(), later);
+        assert_eq!(doc.roles().task.as_ref().unwrap().done, Some(now), "kept");
+
+        doc.set_task_status("waiting".into(), later);
+        let task = doc.roles().task.clone().unwrap();
+        assert_eq!((task.status.as_deref(), task.done), (Some("waiting"), None));
+        assert!(!doc.save().contains("done"), "{}", doc.save());
+    }
+
+    #[test]
+    fn task_fields_change_only_on_a_task() {
+        let mut doc = Document::load("---\ndocument: {}\n---\n".into(), FileFormat::Markdown);
+        let now = DateTime::from_iso8601("2026-10-12").unwrap();
+        doc.set_task_status("done".into(), now);
+        assert!(!doc.is_dirty());
     }
 
     #[test]

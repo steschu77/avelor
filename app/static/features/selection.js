@@ -39,9 +39,9 @@ function selectionOf(selected_entity, thread_id) {
 }
 
 // Mark what shows the selected entity in `containerEl` -- its elements
-// with that `data-id` -- as `aria-selected`: now, whenever the selection
-// changes, and through the function returned, which a render calls once it
-// has drawn.
+// with that `data-id`, every occurrence of a series -- as `aria-selected`:
+// now, whenever the selection changes, and through the function returned,
+// which a render calls once it has drawn (the dashboard).
 export function markSelection(containerEl) {
   const mark = () => {
     const { selected_entity } = store.getState();
@@ -51,6 +51,10 @@ export function markSelection(containerEl) {
   };
   store.subscribe(state => state.selected_entity, mark);
   return mark;
+}
+
+export function selectLens(selected_lens) {
+  store.setState({ selected_lens });
 }
 
 // Open a link clicked in a preview (an editor's `onLinkClick`): a link

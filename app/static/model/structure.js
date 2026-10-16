@@ -1,14 +1,16 @@
 // The structural edits (panel.md#saving-structure, api.md#structure):
-// threads, projects, titles, labels, links, deletes and reloads, each a
-// host round trip that ends in a published selection (`commitExistingSelection`,
-// model/entities.js); joining and leaving threads and projects, labels and
-// links as requests of their own (`joinThreadLocal`, ..., `setLinkLocal`).
+// threads, projects, titles, labels, links, a task's fields, deletes and
+// reloads, each a host round trip that ends in a published selection
+// (`commitExistingSelection`, model/entities.js); joining and leaving
+// threads and projects, labels, links and the entity edits as requests of
+// their own (`joinThreadLocal`, ..., `editEntityLocal`).
 // The panel's drops and buttons (features/panel/panel.js), the table, the
 // sidebar and the project header (features/sidebar.js, features/header.js)
 // and the Linked tab send them.
 
 import { rpcCall } from '../core/rpc.js';
 import { store } from './state.js';
+import { showError } from './state.js';
 import { commitExistingSelection } from './entities.js';
 import { entities } from './entities.js';
 import { threadMembers, threads } from './entities.js';
@@ -29,14 +31,22 @@ import { isDirty, startReload, trySave } from './documents.js';
 // cards follow from its push (features/panel/panel.js's `refreshCardChips`).
 // A conflict (a file changed outside the app, nothing written) opens the
 // conflict dialog; unsaved edits of it are sent first, so their own
-// conflict offers Use ours too. A failure shows in the status bar, in the
-// host's words (core/rpc.js).
+// conflict offers Use ours too. `edit_entities` names the entities it
+// skipped instead: one changed outside the app is such a conflict, any
+// other is reported. A failure shows in the status bar, in the host's words
+// (core/rpc.js).
 export function structureCall(cmd, args, select = null) {
   rpcCall(cmd, args).then(reply => {
-    const conflict = reply?.conflict;
+    const skipped = reply?.skipped ?? [];
+    const conflict = reply?.conflict ?? skipped.find(skip => skip.reason === 'changed_outside');
     if (conflict) {
       showConflict(conflict.id, false, conflict.changed);
       if (isDirty(conflict.id)) trySave(conflict.id);
+    }
+    for (const { id, reason } of skipped) {
+      if (reason === 'changed_outside') continue;
+      const title = entities.get(id)?.title || 'Untitled';
+      showError(`Could not save the change to \u201c${title}\u201d: ${SKIP_REASONS[reason] ?? reason}.`);
     }
     if (select) commitExistingSelection(conflict ? store.getState() : select(reply?.id ?? null));
   }, e => {
@@ -158,3 +168,17 @@ export function setTagsLocal(doc_id, tags) {
 export function setLinkLocal(id, to) {
   structureCall('set_link', { id, to }, () => store.getState());
 }
+
+// Write `change` to the entity `id` (`edit_entities`, api.md#structure): a
+// task's `{task: {status}}`. The host pushes the entity back, which the
+// cards, the lenses and the dashboard follow; the selection stays as it is.
+export function editEntityLocal(id, change) {
+  structureCall('edit_entities', { ids: [id], change });
+}
+
+// Why `edit_entities` skipped an entity, by the reason it names.
+const SKIP_REASONS = {
+  not_writable: 'its file is read-only or its frontmatter can\u2019t be read',
+  not_found: 'it is no longer in the vault',
+  invalid_argument: 'it can\u2019t take this change',
+};

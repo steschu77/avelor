@@ -51,10 +51,20 @@ rpcOn('content', ({ id, source, html }) => onDocContent(id, source, html));
 
 // ----------------------------------------------------------------------------
 function onDocMeta(doc_id, meta) {
+  const parsedDate = parseDate(meta.date);
+  // YYYY-MM-DD vs. full datetime string
+  const all_day = parsedDate && meta.date.length === 10;
+
   entities.set(doc_id, {
     ...meta,
     doc_id,
-    date: parseDate(meta.date),
+    date: parsedDate,
+    // an event's end (all-day: the day after the last)
+    end: parseDate(meta.event?.end),
+    // a task's due date, and when it was marked done
+    due: parseDate(meta.task?.due),
+    done: parseDate(meta.task?.done),
+    all_day,
   });
   store.setState({ entities_rev: store.getState().entities_rev + 1 });
 }
@@ -81,6 +91,9 @@ function onEntityDeleted(id) {
 // ----------------------------------------------------------------------------
 // A vault opens (at the start, or after a switch): the page forgets the one
 // shown before, so the scan fills an empty page (vault.md#opening).
+// The lens and the panel's size stay. The documents are forgotten first, so
+// the cards torn down by the selection's reset save nothing
+// (`forgetDocuments`). A page about the old vault closes (app.js).
 function forgetVault() {
   forgetDocuments();
 

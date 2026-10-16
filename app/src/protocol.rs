@@ -14,6 +14,7 @@ use crate::structure;
 use crate::trash;
 use av_utils::error::Error;
 use av_utils::id::Id;
+use av_vault::change::Change;
 use av_vault::vault::Index;
 use av_vault::vault::NewEntity;
 use serde::{Deserialize, Serialize};
@@ -62,6 +63,7 @@ enum Command {
     SetArchived(Archive),
     SetTags(Retag),
     SetLink(Relink),
+    EditEntities(EditEntities),
     DeleteEntity(Target),
     ReloadEntity(Target),
     // The trash (`trash`).
@@ -166,6 +168,13 @@ struct Relink {
     to: Option<Id>,
 }
 
+/// `{ids, change}`: one change to every entity named.
+#[derive(Deserialize)]
+struct EditEntities {
+    ids: Vec<Id>,
+    change: Change,
+}
+
 /// `{id, starred}`
 #[derive(Deserialize)]
 struct Star {
@@ -207,6 +216,7 @@ impl Command {
             "set_archived" => Command::SetArchived(from_value(args)?),
             "set_tags" => Command::SetTags(from_value(args)?),
             "set_link" => Command::SetLink(from_value(args)?),
+            "edit_entities" => Command::EditEntities(from_value(args)?),
             "delete_entity" => Command::DeleteEntity(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
             "list_trash" => Command::ListTrash,
@@ -267,6 +277,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),
         Command::SetTags(a) => structure::set_tags(app, req, a.id, a.tags),
         Command::SetLink(a) => structure::set_link(app, req, a.id, a.to),
+        Command::EditEntities(a) => structure::edit_entities(app, req, a.ids, a.change),
         Command::DeleteEntity(a) => structure::delete_entity(app, req, a.id),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),
         Command::ListTrash => trash::list_trash(app, req),

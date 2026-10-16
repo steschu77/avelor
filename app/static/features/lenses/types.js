@@ -1,12 +1,14 @@
 // The type selection of a lens that lists entities (ui.md#documents): a
 // bar of type toggles, each with its count in the vault panel's filter --
-// the lens's own filter, which the vault panel's counts don't follow. A
-// lens makes its bar with `typeBar`; the types shown and the bar's fold are
-// its preferences. The lens head's Types button folds the bar.
+// the lens's own filter, which the vault panel's counts and the other
+// lenses don't follow. A lens makes its bar with `typeBar`; the types shown
+// and the bar's fold are its preferences. The lens head's Types button
+// folds the bar of the lens shown.
 
 import { $, accEl } from '../../core/dom.js';
 import { plural } from '../../core/format.js';
 import { savePrefs, store } from '../../model/state.js';
+import { invalidateLenses } from './registry.js';
 
 // The types, each a toggle: an entity's by its kind, a document's notes
 // (the genre `note`) apart.
@@ -42,15 +44,29 @@ export function hiddenText(shown, counts) {
 }
 
 // ----------------------------------------------------------------------------
-// The lens head's Types button.
+// The lens head's Types button, shown under a lens with a bar.
 const typesBtn = $('types-btn');
+const bars = new Map(); // lens id -> { el, barPref }
 
-// The bar in `el`: the types shown are the preference `pref` (their ids
-// joined by commas; an id this page doesn't know is dropped;
-// `shownAtFirst` while it is missing), the bar's fold `barPref` (`open` /
-// `closed`). `render(shown, counts)` sets the toggles; `shown()` the types
-// shown; `showAll()` switches types on.
-export function typeBar({ el, pref, barPref, shownAtFirst }) {
+function showTypesBtn(selected_lens) {
+  const bar = bars.get(selected_lens);
+  typesBtn.hidden = !bar;
+  if (bar) typesBtn.setAttribute('aria-expanded', String(!bar.el.hidden));
+}
+store.subscribe(state => state.selected_lens, showTypesBtn);
+
+typesBtn.addEventListener('click', () => {
+  const bar = bars.get(store.getState().selected_lens);
+  if (bar) savePrefs({ [bar.barPref]: bar.el.hidden ? 'open' : 'closed' });
+});
+
+// The bar of the lens `lens` in `el`: the types shown are the preference
+// `pref` (their ids joined by commas; an id this page doesn't know is
+// dropped; `shownAtFirst` while it is missing), the bar's fold `barPref`
+// (`open` / `closed`). A change renders the lens again. `render(shown,
+// counts)` sets the toggles; `shown()` the types shown; `showAll()` switches
+// types on.
+export function typeBar({ lens, el, pref, barPref, shownAtFirst = DOC_TYPES.map(type => type.id) }) {
   function shown() {
     const saved = store.getState().prefs[pref];
     const ids = saved === undefined ? shownAtFirst : saved.split(',');
@@ -87,11 +103,12 @@ export function typeBar({ el, pref, barPref, shownAtFirst }) {
     }
   }
 
+  bars.set(lens, { el, barPref });
   store.subscribe(({ prefs }) => prefs[barPref], value => {
     el.hidden = value === 'closed';
-    typesBtn.setAttribute('aria-expanded', String(!el.hidden));
+    showTypesBtn(store.getState().selected_lens);
   });
-  typesBtn.addEventListener('click', () => savePrefs({ [barPref]: el.hidden ? 'open' : 'closed' }));
+  store.subscribe(({ prefs }) => prefs[pref], () => invalidateLenses(lens));
 
   return {
     shown,

@@ -1,0 +1,420 @@
+/* The Dashboard lens (features/dashboard/). */
+
+/* The cards (features/dashboard/): paper lifted off the shaded canvas, in
+   six columns that stack as the lens narrows; their content (the days, the
+   tasks) rises to white. */
+.dash {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  container-type: inline-size;
+  background: var(--c-shade);
+}
+
+.dash__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--p-dash-gap);
+  align-items: stretch;
+  padding: var(--p-dash-gap) var(--p-gutter);
+}
+
+.dash__section {
+  position: relative;
+  min-width: 0;
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--p-card-y) var(--p-card-x) var(--p-card-x);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  box-shadow: var(--shadow-card);
+  transition: opacity 150ms ease;
+}
+
+.dash__section--full {
+  grid-column: 1 / -1;
+}
+
+.dash__section--wide {
+  grid-column: span 4;
+}
+
+.dash__section.is-dragging {
+  opacity: .4;
+}
+
+/* a card is dragged by its head; where it would go shows as a bar in the
+   gap beside it, or above or below a card as wide as the grid */
+.dash__head {
+  cursor: grab;
+  user-select: none;
+}
+
+.dash__head>.meta {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.dash__head>.toolbar {
+  margin: -4px 0 -4px auto;
+}
+
+.dash__close {
+  margin: -4px -6px -4px auto;
+  color: var(--c-ink-mute);
+}
+
+.toolbar+.dash__close {
+  margin-left: 2px;
+}
+
+.dash__section.is-drop-left::before,
+.dash__section.is-drop-right::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 3px;
+  background: var(--c-accent);
+  pointer-events: none;
+}
+
+.dash__section.is-drop-top::before,
+.dash__section.is-drop-bottom::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 3px;
+  background: var(--c-accent);
+  pointer-events: none;
+}
+
+.dash__section.is-drop-left::before {
+  left: calc(var(--p-dash-gap) / -2 - 2px);
+}
+
+.dash__section.is-drop-right::before {
+  right: calc(var(--p-dash-gap) / -2 - 2px);
+}
+
+.dash__section.is-drop-top::before {
+  top: calc(var(--p-dash-gap) / -2 - 2px);
+}
+
+.dash__section.is-drop-bottom::before {
+  bottom: calc(var(--p-dash-gap) / -2 - 2px);
+}
+
+/* the lens header's Cards menu, with the count of the closed cards */
+.dash__cards {
+  margin-left: auto;
+}
+
+/* the lens head's menus: the dashboard's Cards, the Types of the Documents
+   lens */
+.dash__cards,
+.lens-types {
+  gap: 6px;
+  font: 400 var(--fs-ui)/1 var(--f-chrome);
+}
+
+.dash__cards>.icon {
+  width: 12px;
+  height: 12px;
+  color: var(--c-ink-mute);
+}
+
+/* every card closed */
+.dash__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 64px var(--p-gutter);
+}
+
+.dash__empty>p {
+  margin: 0;
+}
+
+/* an overdue task */
+.chip--danger {
+  white-space: nowrap;
+  border-color: transparent;
+  background: var(--c-danger-soft);
+  color: var(--c-ink);
+}
+
+/* Week: white days on paper, like the month grid */
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 1px solid var(--c-line);
+}
+
+.week__day {
+  min-width: 0;
+  min-height: var(--h-week-day);
+  padding: 6px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-right: 1px solid var(--c-line);
+  background: var(--c-card);
+}
+
+.week__day:last-child {
+  border-right: none;
+}
+
+.week__day--past {
+  background: transparent;
+}
+
+.week__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.week__num {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  font: 400 var(--fs-meta)/1 var(--f-chrome);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-label);
+}
+
+.week__day--today .week__num {
+  background: var(--c-ink);
+  color: var(--c-card);
+}
+
+.week__day--weekend .week__dow {
+  color: var(--c-ink-faint);
+}
+
+.week__month {
+  margin-left: auto;
+}
+
+.week__event {
+  width: 100%;
+  display: grid;
+  grid-template-columns: var(--w-week-time) minmax(0, 1fr);
+  align-items: baseline;
+  padding: 3px 4px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.week__event:hover {
+  background: var(--c-hover);
+}
+
+.week__event[aria-selected="true"] {
+  background: var(--c-accent-soft);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+.week__time {
+  font: 400 var(--fs-meta)/1.3 var(--f-chrome);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-label);
+}
+
+.week__title {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  font: 400 var(--fs-small)/1.3 var(--f-serif);
+}
+
+/* Tasks: a column per status, white cards lifted off paper; done ones
+   settle back */
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.board__col {
+  min-width: 0;
+  min-height: var(--h-board-col);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+/* a task dragged from another column would be dropped here
+   (features/dashboard/cards.js's dropColumn) */
+.board__col.is-drop-target {
+  background: var(--c-accent-soft);
+  box-shadow: 0 0 0 4px var(--c-accent-soft);
+}
+
+.board__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-bottom: 2px;
+}
+
+.board__name {
+  color: var(--c-ink);
+}
+
+.board__more {
+  align-self: flex-start;
+  margin-left: -10px;
+}
+
+.board__empty {
+  margin: 0;
+  padding: 4px 0;
+}
+
+.task {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 9px;
+  border: 1px solid transparent;
+  background: var(--c-card);
+  box-shadow: var(--shadow-card);
+  color: var(--c-ink);
+  cursor: pointer;
+  outline: none;
+}
+
+.task:hover {
+  border-color: var(--c-line);
+}
+
+.task:focus-visible {
+  border-color: var(--c-ink);
+}
+
+.task[aria-selected="true"] {
+  border-color: var(--c-accent);
+}
+
+/* a task the host can write drags to another column */
+.task[draggable="true"] {
+  cursor: grab;
+}
+
+.task.is-dragging {
+  opacity: .4;
+}
+
+.task__title {
+  font: 400 var(--fs-body)/1.3 var(--f-serif);
+  text-wrap: pretty;
+}
+
+.task__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.task__meta:empty {
+  display: none;
+}
+
+.task--done {
+  background: transparent;
+  border-color: var(--c-line);
+  box-shadow: none;
+}
+
+.task--done .task__title {
+  color: var(--c-label);
+  text-decoration: line-through;
+  text-decoration-color: var(--c-ink-faint);
+}
+
+/* Upcoming, Recent files and chats: one-line rows on paper, the selected
+   one like the table's */
+.feed {
+  display: flex;
+  flex-direction: column;
+}
+
+.feed__row {
+  --cols: 16px minmax(0, 1fr) auto;
+  height: var(--h-row);
+  padding: 0 6px;
+  color: var(--c-ink);
+  cursor: pointer;
+  outline: none;
+}
+
+.feed__row--event {
+  --cols: var(--w-feed-when) 16px minmax(0, 1fr) auto;
+}
+
+.feed__row:hover {
+  background: var(--c-hover);
+}
+
+.feed__row:focus-visible {
+  outline: 1px solid var(--c-ink);
+  outline-offset: -1px;
+}
+
+.feed__row[aria-selected="true"] {
+  background: var(--c-card);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+.feed__empty {
+  margin: 0;
+  padding: 6px 0;
+}
+
+/* narrower: two cards a row, the wide and full ones alone; the week's
+   times above their titles; narrower still, one card a row */
+@container (max-width: 960px) {
+  .dash__section {
+    grid-column: span 3;
+  }
+
+  .dash__section--wide,
+  .dash__section--full {
+    grid-column: 1 / -1;
+  }
+
+  .week__event {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 620px) {
+  .dash__section {
+    grid-column: 1 / -1;
+  }
+
+  .board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

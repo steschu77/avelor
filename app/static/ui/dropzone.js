@@ -24,6 +24,11 @@ function setMark(next) {
   mark = next;
 }
 
+// Clear the mark of a drag that ended without a drop (its `dragend`).
+export function clearDropMark() {
+  setMark(null);
+}
+
 // Make `target` take drops. `over(ev)` says where a drag over it would
 // land, or null when `target` doesn't take it: `{ el, cls }`, the element
 // marked while the drag is there by the class `cls` ('is-drop-target'

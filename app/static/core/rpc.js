@@ -2,8 +2,9 @@
 // `rpcCall` sends a command and returns a promise of its one reply;
 // `rpcOn` listens for the events the host pushes.
 
-// A failed call: `code` is the host's (`cancelled`, `bad_request`, ...),
-// or `superseded` for a call a newer one on its channel replaced.
+// A failed call: `code` is the host's (`cancelled`, `bad_request`,
+// `invalid_argument`, ...), or `superseded` for a call a newer one on its
+// channel replaced.
 export class RpcError extends Error {
   constructor(cmd, code, message) {
     super(message || code);

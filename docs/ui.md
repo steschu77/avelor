@@ -53,6 +53,59 @@ several shows the entities carrying all of them.
 
 ## Lenses <a id="lenses"></a>
 
+The main view's tabs are Dashboard and Documents; each
+lens registers itself (`registerLens`, `features/lenses/registry.js`), a
+tab selects it (`selectLens`), and the visible lens is rendered again if
+it is stale. The lens shown last comes back on the next start
+(`restoreLens`, the `lens` preference); one that no longer exists leaves
+the Dashboard. There is no task kanban of its own: the Dashboard's Tasks
+card is one.
+
+### Dashboard <a id="dashboard"></a>
+
+`features/dashboard/`: cards over the data the page has, each following
+the vault panel's filter (`matchesFilter`), in a grid of six columns that
+stacks as the lens narrows (container queries): paper lifted off the
+shaded canvas, their days and tasks on white. A row, an event or a task
+selects its entity (`selectDocument`), by click or Enter, and the
+selected one is marked, every occurrence of a series (`markSelection`).
+
+- **Week** (full width): seven days from today, or the calendar week from
+  Monday (the `week_start` preference, from the card's gear), with
+  previous, next and Today; each day its open tasks due ("due") and its
+  events with their time (`eventsBetween`, series expanded); past days,
+  today and weekends marked.
+- **Tasks** (four of six columns): the entities with a task block, in the
+  columns of `TASK_STATUSES` (To do, In progress, Waiting, Done; an
+  unknown status under To do). The open ones by due date, an "Overdue"
+  chip once it has passed, the projects named while none is selected;
+  Done the last done first ("Done 11/10", `task.done`; one without a done
+  date after them, the newest first), three of them, the rest behind "N
+  more". The head counts the open and the overdue ones. A task the host
+  can write drags to another column, which sets its status
+  (`edit_entities`): the card dims while dragged, the column it
+  would go to is marked, and its own column takes no drop. The drag
+  carries the task as a type only the columns take, and as text too, so
+  a project pill in the vault panel takes it like an entity's row in
+  the Documents lens.
+- **Upcoming**: the next six events and open tasks due after the Week's
+  seven days (from today while the Week card is closed), within a year.
+- **Recent files**: the six newest dated entities that aren't events,
+  tasks, calendars or chats with an AI.
+- **Recent chats**: the four newest chats with an AI, with their
+  projects.
+
+The cards (`features/dashboard/cards.js`) are drawn by the lens
+(`features/dashboard/dashboard.js`), again when the entities, the filter,
+a project's name, the layout or the day change (`everyMidnight`). A
+card's head drags it before or after another (its own drag type, which
+nothing else takes); its × closes it. The lens header shows the date and
+the Cards menu: each card, checked while shown, and Reset layout; the
+button counts the closed cards. With every card closed, the lens says so
+and offers Show all cards. The order and the closed cards are
+preferences (`dashboard_cards`, `dashboard_closed`); an id they don't
+know is dropped, a card they don't name joins at the end.
+
 ### Documents <a id="documents"></a>
 
 `features/lenses/documents.js`: the entities in
@@ -153,7 +206,10 @@ Task tab of the context column uses the same form (`panel.md#context-column`).
 
 The page keeps its preferences as one JSON object of strings
 (`savePrefs`, `model/state.js` → `set_prefs`): `sidebar_width`,
-`panel_width` and `context_width`; the Documents lens's types shown
+`panel_width` and `context_width`; the lens shown last (`lens`); the
+dashboard's layout (`dashboard_cards`, `dashboard_closed`, card ids
+joined by commas) and the Week card's start (`week_start`: `today` or
+`monday`); the Documents lens's types shown
 (`doc_types`, type ids joined by commas; an id the page doesn't know is
 dropped), its bar (`doc_types_bar`: `open` or `closed`) and its folded
 projects (`doc_folded`, project ids joined by commas; project ids are
@@ -176,8 +232,12 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
+| B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | D7 | New | New item or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
+| F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Recent files or Recent chats → `selectDocument` | — | the entity in the panel, its rows marked on the dashboard |
+| F4 | Dashboard layout | a card's ×, the Cards menu, Show all cards, a card's head dropped on another, Reset layout; the Week card's gear | `set_prefs {prefs}` (`dashboard_cards`, `dashboard_closed`, `week_start`) | the cards in their order, the closed ones hidden and counted on the Cards button; kept across restarts |
+| F5 | Task dropped on a column | a task card of the Tasks card dragged onto another column (`dragTask`, `dropColumn`, `features/dashboard/cards.js`) → `editEntityLocal(id, {task: {status}})` | `edit_entities` → `entity` (with `task.done` for Done), `ok {changed, skipped}` | the task in its new column, Done first; the panel's card follows |
 | F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selectFilter`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |

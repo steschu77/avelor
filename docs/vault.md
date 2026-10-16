@@ -387,7 +387,9 @@ A task is a markdown file with the following additional fields:
 * `status`: string,
 * `assignee`: ContactRef?,
 * `due`: Date, when the task is due. Optional,
-* `done`: Date, when the task was marked done. Optional.
+* `done`: Date, when the task was marked done. The app writes it when the
+  status becomes `done` and removes it when the status changes again; a
+  file edited by hand may lack it. Optional.
 
 The `date` metadata field keeps its usual meaning (when the task was
 created); the due date lives in `due`.

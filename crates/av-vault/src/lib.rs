@@ -3,6 +3,7 @@
 //!
 //! Pure file-and-data logic — no UI, no network.
 
+pub mod change;
 pub mod document;
 pub mod envelope;
 pub mod filename;

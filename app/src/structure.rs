@@ -4,10 +4,14 @@
 //! them. Typed commands (`api.md#structure`): each edit goes through
 //! `App::edit`, which pushes every entity it wrote (`entity`,
 //! `entity_deleted`) before the answer: `ok {id}`, `ok {conflict: {id, changed}}` if a file changed
-//! outside the app (nothing is written), or an error.
+//! outside the app (nothing is written), or an error. `edit_entities` --
+//! a task's field -- answers with the entities it wrote and those it
+//! skipped instead.
 
+use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
+use av_vault::change::Change;
 use av_vault::vault::NewEntity;
 use av_vault::vault::SaveOutcome;
 use av_vault::vault::{Changes, Index};
@@ -166,6 +170,69 @@ pub fn set_starred(app: &mut App, req: Req, id: Id, starred: bool) {
 pub fn set_archived(app: &mut App, req: Req, id: Id, archived: bool) {
     let result = app.edit(|index, changes| index.set_archived(&id, archived, changes));
     answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
+/// The answer of `edit_entities`: the entities written, and those skipped.
+#[derive(Serialize)]
+struct Edited {
+    changed: Vec<Id>,
+    skipped: Vec<Skipped>,
+}
+
+// ----------------------------------------------------------------------------
+/// An entity `edit_entities` didn't write: why, as the error code a single
+/// command would answer with -- `changed_outside` with when its file
+/// changed, as in a [`Conflict`].
+#[derive(Serialize)]
+struct Skipped {
+    id: Id,
+    reason: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    changed: Option<String>,
+}
+
+// ----------------------------------------------------------------------------
+/// `edit_entities`: `change` to each of `ids` (`Index::edit_entities`)
+/// in one vault edit, every entity it wrote pushed before the answer. One
+/// that changed outside the app, can't be written or can't take the change
+/// is skipped and named, not asked about; an invalid change writes nothing.
+pub fn edit_entities(app: &mut App, req: Req, ids: Vec<Id>, change: Change) {
+    if let Err(err) = change.check() {
+        return req.err(err);
+    }
+    let now = DateTime::now();
+    let edited = app.edit(|index, changes| Ok(index.edit_entities(&ids, &change, now, changes)));
+    let edited = match edited {
+        Ok(edited) => edited,
+        Err(err) => return req.err(err),
+    };
+    let mut answer = Edited {
+        changed: Vec::new(),
+        skipped: Vec::new(),
+    };
+    for (id, outcome) in edited {
+        let skipped = match outcome {
+            Ok(SaveOutcome::Saved) => {
+                answer.changed.push(id);
+                continue;
+            }
+            Ok(SaveOutcome::Unchanged) => continue,
+            Ok(SaveOutcome::Conflict(changed)) => Skipped {
+                id: changed,
+                reason: "changed_outside",
+                changed: Some(Conflict::of(app, changed).changed),
+            },
+            Err(err) => Skipped {
+                id,
+                reason: err.code(),
+                changed: None,
+            },
+        };
+        log::info!("Edit of {}: skipped ({})", skipped.id, skipped.reason);
+        answer.skipped.push(skipped);
+    }
+    req.ok(answer);
 }
 
 // ----------------------------------------------------------------------------
@@ -467,5 +534,97 @@ mod tests {
         let sent = parse(&h.take());
         assert_eq!(shape(&sent), ["entity"]);
         assert_eq!(sent[0]["data"]["id"], ids[0].to_string());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_task_marked_done_is_pushed_with_its_done_date_then_answered() {
+        let (mut h, _) = notes("edit-done", 1);
+        let task = new_task(&mut h, "Pay the bill");
+        let done = json!({ "ids": [task], "change": { "task": { "status": "done" } } });
+
+        let sent = h.call("edit_entities", done.clone());
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        let entity = &sent[0]["data"];
+        assert_eq!(entity["task"]["status"], "done");
+        assert!(
+            !entity["task"]["done"].as_str().unwrap().is_empty(),
+            "{entity}"
+        );
+        assert_eq!(sent[1]["ok"], json!({ "changed": [task], "skipped": [] }));
+
+        let sent = h.call("edit_entities", done);
+        assert_eq!(shape(&sent), ["reply"], "done again writes nothing");
+        assert_eq!(sent[0]["ok"], json!({ "changed": [], "skipped": [] }));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_change_an_entity_cannot_take_is_skipped_and_nothing_pushed() {
+        let (mut h, ids) = notes("edit-skipped", 1);
+        let args = json!({ "ids": [ids[0]], "change": { "task": { "status": "done" } } });
+        let sent = h.call("edit_entities", args);
+        assert_eq!(shape(&sent), ["reply"]);
+        let skipped = json!([{ "id": ids[0], "reason": "invalid_argument" }]);
+        assert_eq!(sent[0]["ok"], json!({ "changed": [], "skipped": skipped }));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_entity_changed_outside_is_skipped_while_the_others_are_written() {
+        let (mut h, _) = notes("edit-conflict", 0);
+        let tasks = [new_task(&mut h, "First"), new_task(&mut h, "Second")];
+        let path = fs::read_dir(h.vault().join("Tasks"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .find(|path| fs::read_to_string(path).unwrap().contains(&tasks[0]))
+            .unwrap();
+        let theirs = fs::read_to_string(&path)
+            .unwrap()
+            .replace("title: First", "title: Theirs, longer");
+        fs::write(&path, &theirs).unwrap();
+
+        let args = json!({ "ids": tasks, "change": { "task": { "status": "done" } } });
+        let sent = h.call("edit_entities", args);
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["id"], tasks[1]);
+        assert_eq!(sent[0]["data"]["task"]["status"], "done");
+        let answer = &sent[1]["ok"];
+        assert_eq!(answer["changed"], json!([tasks[1]]));
+        let skipped = &answer["skipped"][0];
+        assert_eq!(
+            (&skipped["id"], &skipped["reason"]),
+            (&json!(tasks[0]), &json!("changed_outside"))
+        );
+        assert!(!skipped["changed"].as_str().unwrap().is_empty());
+        assert_eq!(fs::read_to_string(&path).unwrap(), theirs);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_empty_status_or_an_unknown_change_writes_nothing() {
+        let (mut h, _) = notes("edit-invalid", 1);
+        let task = new_task(&mut h, "Pay the bill");
+        let sent = h.call(
+            "edit_entities",
+            json!({ "ids": [task], "change": { "task": { "status": " " } } }),
+        );
+        assert_eq!(shape(&sent), ["reply"]);
+        assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+
+        let sent = h.call(
+            "edit_entities",
+            json!({ "ids": [task], "change": { "starred": true } }),
+        );
+        assert_eq!(shape(&sent), ["reply"]);
+        assert!(sent[0]["err"].is_object(), "{}", sent[0]);
+    }
+
+    // ------------------------------------------------------------------------
+    /// A new task in `h`'s vault, titled `title`, to do; its id.
+    fn new_task(h: &mut crate::testing::Harness, title: &str) -> String {
+        let args = json!({ "roles": { "task": { "status": "todo" } }, "title": title });
+        let sent = h.call("create_entity", args);
+        sent[1]["ok"]["id"].as_str().unwrap().to_string()
     }
 }
