@@ -286,6 +286,10 @@
   overflow: auto;
 }
 
+.menu__item--sep {
+  border-top-color: var(--c-line);
+}
+
 .menu__item[aria-disabled="true"] {
   background: none;
   color: var(--c-label);
@@ -294,6 +298,11 @@
 
 .menu__head {
   padding: 8px 12px 6px;
+}
+
+.menu__check {
+  width: 10px;
+  font-size: var(--fs-meta);
 }
 
 /* a line of its own height, as what overflows is cut (a descender too) */

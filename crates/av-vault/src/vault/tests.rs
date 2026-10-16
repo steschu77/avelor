@@ -1,5 +1,6 @@
 use super::trash::untrashed;
 use super::*;
+use crate::change::Change;
 use crate::envelope::DocumentType;
 use crate::envelope::{Roles, Source};
 use crate::schema::layout;
@@ -1625,11 +1626,17 @@ fn refreshing_leaves_a_change_over_the_apps_own_save_alone() {
         "kept for Use ours"
     );
 
-    // Use ours writes it back, although memory didn't change.
+    // Use ours writes it back, although memory didn't change; then the
+    // file is the app's again.
     let saved = index.save_content(&ids[0], "Mine\n".into(), true, &mut Changes::default());
     assert_eq!(saved.unwrap(), SaveOutcome::Saved);
     let text = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
     assert!(text.ends_with("---\nMine\n"), "{text}");
+    let mut changes = Changes::default();
+    let edited = index.edit(&ids[0], &mut changes, |doc| {
+        doc.set_content("Mine 2\n".into())
+    });
+    assert_eq!(edited.unwrap(), SaveOutcome::Saved);
 
     // After a reload, the app has only read the file again.
     index.reload(&ids[0]).unwrap();
@@ -1698,4 +1705,69 @@ fn forged_vault_loads_with_multi_roles() {
         .collect();
     assert!(links.len() >= 20, "{} links", links.len());
     assert!(links.iter().all(|to| index.get(to).is_some()));
+}
+
+#[test]
+fn an_edit_writes_each_entity_it_fits_and_refuses_the_others() {
+    use crate::change::TaskChange;
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let new_task = |index: &mut Index, title: &str| {
+        let new = NewEntity {
+            roles: roles("task: {status: todo}"),
+            title: title.into(),
+            ..Default::default()
+        };
+        create_new(index, new).0
+    };
+    let task = new_task(&mut index, "Pay the bill");
+    let read_only = new_task(&mut index, "Read only");
+    index.documents[index.by_id[&read_only]].readonly = true;
+    let unknown = Id::generate();
+
+    let now = DateTime::from_iso8601("2026-10-12T08:30:00Z").unwrap();
+    let done = Change::Task(TaskChange::Status("done".into()));
+    let mut changes = Changes::default();
+    let edited = index.edit_entities(
+        &[ids[0], task, read_only, unknown],
+        &done,
+        now,
+        &mut changes,
+    );
+
+    let ids_of: Vec<Id> = edited.iter().map(|(id, _)| *id).collect();
+    assert_eq!(ids_of, [ids[0], task, read_only, unknown], "in their order");
+    assert!(
+        matches!(edited[0].1, Err(Error::InvalidArgument { .. })),
+        "not a task"
+    );
+    assert_eq!(edited[1].1.as_ref().unwrap(), &SaveOutcome::Saved);
+    assert!(matches!(edited[2].1, Err(Error::NotWritable { .. })));
+    assert!(matches!(edited[3].1, Err(Error::NotFound)));
+    assert_eq!(changes.saved, [task]);
+
+    let text = fs::read_to_string(&index.entry(&task).unwrap().path).unwrap();
+    assert!(
+        text.contains("status: done") && text.contains("done: 2026-10-12T08:30:00Z"),
+        "{text}"
+    );
+    let doc = Index::build(&root);
+    assert_eq!(
+        doc.get(&task).unwrap().roles().task.as_ref().unwrap().done,
+        Some(now)
+    );
+
+    // Done again writes nothing; another status removes the date.
+    let mut changes = Changes::default();
+    let again = index.edit_entities(&[task], &done, now, &mut changes);
+    assert_eq!(again[0].1.as_ref().unwrap(), &SaveOutcome::Unchanged);
+    let todo = Change::Task(TaskChange::Status("todo".into()));
+    index.edit_entities(&[task], &todo, now, &mut changes);
+    let text = fs::read_to_string(&index.entry(&task).unwrap().path).unwrap();
+    assert!(
+        text.contains("status: todo") && !text.contains("done"),
+        "{text}"
+    );
+
+    fs::remove_dir_all(&root).ok();
 }

@@ -1,8 +1,8 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import {
-  NO_PROJECT, entities, knownThreads, matchesFilter, projectScope, projectsFor, projectsInOrder, projectsOf, threadMatchesFilter,
-  threadMembers, threadOf, threadProjects, threads,
+  NO_PROJECT, entities, knownThreads, matchesFilter, projectNames, projectScope, projectsFor, projectsInOrder, projectsOf,
+  threadMatchesFilter, threadMembers, threadOf, threadProjects, threads,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -90,4 +90,10 @@ test('something new starts in the projects of what it is for, else in the one se
   equal([projectsFor('b'), projectsFor(null)], [{ projects: ['p'], scope: 'p' }, { projects: ['p'], scope: 'p' }]);
   store.setState({ selected_project: NO_PROJECT });
   equal([projectsFor('b'), projectScope()], [{ projects: [], scope: null }, null]);
+});
+
+test("the names of an entity's projects, while none is the filter", () => {
+  vault(project('p'), project('q'));
+  equal(projectNames({ projects: ['p', 'q', 'deleted'] }, { selected_project: null }), 'p \u00b7 q');
+  equal(projectNames({ projects: ['p'] }, { selected_project: 'p' }), '');
 });

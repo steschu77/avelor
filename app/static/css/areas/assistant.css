@@ -15,7 +15,8 @@
   box-shadow: var(--shadow-raise);
 }
 
-/* the shown tab merges into the card below */
+/* the shown tab merges into the card below, as the lens tabs do into the
+   main view */
 .context__tabs {
   flex: none;
   padding-top: 8px;

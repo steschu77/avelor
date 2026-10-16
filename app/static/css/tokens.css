@@ -39,6 +39,8 @@
   --c-danger: #de9193;
   /* danger as text, an icon or a thin line, 4.5:1 on the shade */
   --c-danger-ink: light-dark(#a64b4e, #de9193);
+  /* a filled warning: an overdue task's chip */
+  --c-danger-soft: light-dark(rgba(222, 145, 147, 0.26), rgba(222, 145, 147, 0.22));
   /* hover tint */
   --c-hover: light-dark(rgba(10, 10, 11, 0.04), oklch(0.935 0.008 80 / 0.05));
   /* the shade over the app behind a dialog */
@@ -78,6 +80,9 @@
   --h-control-sm: 22px;
   /* the title input of the New page */
   --h-new-title: 40px;
+  /* the dashboard: a day of the Week card, a column of the Tasks card */
+  --h-week-day: 116px;
+  --h-board-col: 96px;
   /* an icon (index.html's sprite, build.rs) */
   --h-icon: 16px;
   /* the Documents lens: its sticky head, and a project's group row stuck
@@ -97,6 +102,10 @@
   /* the sheet of the New page */
   --p-sheet-x: 28px;
   --p-sheet-y: 22px;
+  /* the dashboard: the gap between its cards, and a card's inset */
+  --p-dash-gap: 14px;
+  --p-card-x: 14px;
+  --p-card-y: 10px;
 
   --w-sidebar: 232px;
   --w-vault-list: 232px;
@@ -109,6 +118,9 @@
   --w-new-sheet: 720px;
   --w-new-date: 150px;
   --w-new-time: 96px;
+  /* the dashboard: an event's time in the Week card, the day in Upcoming */
+  --w-week-time: 34px;
+  --w-feed-when: 62px;
 
   /* the only radius */
   --r-pill: 99px;

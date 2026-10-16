@@ -8,7 +8,7 @@
 // file owns the rows, the folds and the sort-state UI, model/entities.js
 // the entities and features/selection.js the selection.
 
-import { $, accEl, oncePerFrame, placeChildren } from '../../core/dom.js';
+import { $, accEl, placeChildren } from '../../core/dom.js';
 import { setAria } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
 import { DATE_FORMAT, compareText } from '../../core/format.js';
@@ -31,6 +31,7 @@ import {
 import { markSelection, selectById, selectDocument } from '../selection.js';
 import { selectFilter } from '../selection.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
+import { invalidateLenses, registerLens } from './registry.js';
 
 const lensEl = $('lens-documents');
 const rowsEl = $('doc-rows');
@@ -42,10 +43,16 @@ const hiddenTextEl = $('doc-hidden-text');
 // The type selection (features/lenses/types.js): every type shown at
 // first.
 const docTypes = typeBar({
-  el: $('doc-types'), pref: 'doc_hidden', barPref: 'doc_types_bar',
+  lens: 'documents', el: $('doc-types'), pref: 'doc_hidden', barPref: 'doc_types_bar',
 });
 
 $('doc-show-all').addEventListener('click', docTypes.showAll);
+
+// The lens head's count, while the lens is shown.
+function showHeader(selected_lens) {
+  countEl.hidden = selected_lens !== 'documents';
+}
+store.subscribe(state => state.selected_lens, showHeader);
 
 // ----------------------------------------------------------------------------
 const SORT_COMPARATORS = {
@@ -146,12 +153,12 @@ function toggleGroup(key) {
   revealedGroups.delete(key);
   const doc_folded = [...folded].join(',');
   if (doc_folded !== store.getState().prefs.doc_folded) savePrefs({ doc_folded });
-  scheduleRenderDocuments();
+  invalidateLenses('documents');
 }
 
 function toggleThread(thread_id) {
   if (!unfoldedThreads.delete(thread_id)) unfoldedThreads.add(thread_id);
-  scheduleRenderDocuments();
+  invalidateLenses('documents');
 }
 
 // ----------------------------------------------------------------------------
@@ -315,7 +322,7 @@ let revealId = null;
 
 export function revealInDocuments(id) {
   revealId = id;
-  scheduleRenderDocuments();
+  invalidateLenses('documents');
 }
 
 // Unfold the first group holding `id` (an entity, or a thread one of whose
@@ -400,10 +407,6 @@ function renderDocuments() {
   hiddenTextEl.textContent = hidden ? t('types.hidden', { list: hiddenText(shown, counts) }) : '';
 }
 
-// The lenses showing entities render at most once per frame. A scan sends
-// an `entity` event per file.
-export const scheduleRenderDocuments = oncePerFrame(renderDocuments);
-
 // ----------------------------------------------------------------------------
 // A click: a fold folds, Open makes the group's project the filter, a group
 // row folds, a thread's row shows the thread in the panel, an entity's row
@@ -485,7 +488,7 @@ function onSortClick(key) {
     : [entry, ...rest];
   store.setState({ sort_state: next });
   renderSortHead();
-  scheduleRenderDocuments();
+  invalidateLenses('documents');
 }
 
 export function initDocumentsLens() {
@@ -494,3 +497,6 @@ export function initDocumentsLens() {
   }
   renderSortHead();
 }
+
+showHeader(store.getState().selected_lens);
+registerLens('documents', lensEl, renderDocuments);

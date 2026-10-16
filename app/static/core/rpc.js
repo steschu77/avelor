@@ -4,8 +4,9 @@
 
 import { textOf } from './text.js';
 
-// A failed call: `code` is the host's (`cancelled`, `bad_request`, ...),
-// or `superseded` for a call a newer one on its channel replaced.
+// A failed call: `code` is the host's (`cancelled`, `bad_request`,
+// `invalid_argument`, ...), or `superseded` for a call a newer one on its
+// channel replaced; its message the host's `text` in the run's language.
 export class RpcError extends Error {
   constructor(cmd, code, text) {
     super(textOf(text) || code);

@@ -3,6 +3,7 @@
   "conflict.changed_unsaved": "El archivo del disco cambió {when}, así que su cambio no se guardó. Cargue la versión del disco y vuelva a hacer el cambio.",
   "conflict.deleted_editing": "El archivo se eliminó fuera de la aplicación mientras lo editaba aquí. Elija si conservar su versión.",
   "conflict.deleted_unsaved": "El archivo se eliminó fuera de la aplicación, así que su cambio no se guardó.",
+  "dash.drag": "Arrastre para mover",
   "header.delete_armed": "Haga clic otra vez para eliminar el proyecto",
   "linked.select_hint": "Seleccione un documento para ver sus enlaces.",
   "new.enter_name": "Escriba primero un nombre",

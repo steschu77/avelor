@@ -26,5 +26,9 @@ export function entity(meta) {
     ...meta,
     doc_id: meta.id,
     date,
+    end: parseDate(meta.event?.end),
+    due: parseDate(meta.task?.due),
+    done: parseDate(meta.task?.done),
+    all_day: date && meta.date.length === 10,
   };
 }

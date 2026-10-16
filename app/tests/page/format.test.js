@@ -1,5 +1,5 @@
 import { equal, test } from './harness.js';
-import { isoInstant, localDay, parseDate } from '../../static/core/format.js';
+import { addDays, isoInstant, localDay, parseDate, relativeDay } from '../../static/core/format.js';
 
 test("a day is the local day's start, not UTC's", () => {
   const day = parseDate('2027-03-28');
@@ -17,4 +17,10 @@ test('a local day as a date input has it', () => {
 
 test('an instant as the host writes it, to the second', () => {
   equal(isoInstant(new Date(Date.UTC(2027, 6, 8, 23, 5, 0, 123))), '2027-07-08T23:05:00Z');
+});
+
+test('a day as seen from today', () => {
+  const today = new Date();
+  equal([0, 1, -1, 3, -3].map(n => relativeDay(addDays(today, n))), ['today', 'tomorrow', 'yesterday', 'in 3 days', '3 days ago']);
+  equal([relativeDay(undefined), relativeDay(new Date(NaN))], ['', '']);
 });
