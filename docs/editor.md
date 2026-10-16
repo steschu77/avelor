@@ -474,7 +474,7 @@ carry scripts, styles, or arbitrary markup outside the editor's model.
   read-only mode (where the WebView2 host, like WebKitGTK on Linux, has no
   back button, so navigating away would leave the app). In read-only mode the `href` is
   handed to the optional `onLinkClick` callback. The app passes `openLink`
-  (`features/selection.js`) for the cards: a web, mail or phone link opens in its default app through the
+  (`features/selection.js`) for the cards and the project description: a web, mail or phone link opens in its default app through the
   host (`open_url`); an `id:` link selects its entity, thread or project
   (`selectById`), and an id not in the vault is reported in the status
   bar.

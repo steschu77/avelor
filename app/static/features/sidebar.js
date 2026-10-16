@@ -164,7 +164,8 @@ function selectProject(project_id) {
 // removes it) and pushes the project back as `entity`.
 function editProject(project_id, row) {
   const name = projects.get(project_id)?.name ?? '';
-  editSidebarName(row, name, title => structureCall('set_title', { id: project_id, title }));
+  editSidebarName(row, name, title =>
+    structureCall('set_title', { id: project_id, title }, () => store.getState()));
 }
 
 allProjectsEl.addEventListener('click', () => store.setState({ selected_project: null }));
@@ -175,7 +176,7 @@ noProjectEl.addEventListener('click', () => selectProject(NO_PROJECT));
 // The selection and the filter stay.
 function toggleStar(project_id) {
   const starred = !projects.get(project_id)?.starred;
-  structureCall('set_starred', { id: project_id, starred });
+  structureCall('set_starred', { id: project_id, starred }, () => store.getState());
 }
 
 // The "Archived" row folds and unfolds the archived projects; not kept

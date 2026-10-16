@@ -1,20 +1,30 @@
 // The lens header (panel.md#projects): the selected project's name, the
 // active labels with the "+" that filters by another one
-// (ui.md#vault-panel), and the project's details -- a toolbar (rename,
-// archive). Also `leaveEditModes`, which takes every editor out of edit
-// mode, the cards' (closing the app, switching the vault).
+// (ui.md#vault-panel), and the project's details -- a toolbar (rename, edit
+// description, archive) and the description, an editor bound like
+// any document's (saving.md). Also `leaveEditModes`, which takes every
+// editor out of edit mode, the cards' and the description (closing the
+// app, switching the vault).
 
 import { $, oncePerFrame } from '../core/dom.js';
+import { createEditor } from '../editor/editor.js';
+import { serializeMarkdown } from '../editor/markdown.js';
 import { store } from '../model/state.js';
 import { NO_PROJECT, entities, matchesFilter, projects } from '../model/entities.js';
 import { projectScope } from '../model/entities.js';
+import {
+  bindDocContent, editorRoots, onEdited, trySave,
+} from '../model/documents.js';
 import { structureCall } from '../model/structure.js';
 import { showMenu } from '../ui/menu.js';
+import { createEditorToolbar } from '../ui/toolbar.js';
 import { editTextInPlace } from '../ui/field.js';
+import { openLink } from './selection.js';
 import { leaveCardEditMode } from './panel/panel.js';
 import { tagChips } from './panel/panel.js';
 
 const projectNameEl = $('project-name');
+const projectDescEl = $('project-desc');
 
 // The header names the selected project, No project or All Projects;
 // `projects_rev` catches a rename. A name being edited in place is left
@@ -65,10 +75,24 @@ labelAddBtn.addEventListener('click', () => {
 });
 
 // The selected project's details under the header, shown while the fold
-// button (the chevron) is unfolded: a toolbar (rename, archive).
+// button (the chevron) is unfolded: a toolbar (rename, edit description,
+// archive) and the description -- its file's body in an editor, loaded and
+// saved like any document (saving.md). The description pen toggles edit
+// mode, Escape leaves it. The description is hidden while empty and not
+// being edited.
 const projectFoldBtn = $('project-fold-btn');
 const projectToolsEl = $('project-tools');
+const projectDescBtn = $('project-desc-btn');
 let descProjectId = null; // the project the details are bound to
+let unbindProjectDesc = null;
+const projectDescToolbar = createEditorToolbar();
+projectDescEl.before(projectDescToolbar);
+const projectDescEditor = createEditor(projectDescEl, {
+  toolbar: projectDescToolbar,
+  onEscape: () => setProjectDescEditMode(false),
+  onChange: () => onEdited(descProjectId),
+  onLinkClick: openLink,
+});
 
 function projectUnfolded() {
   return projectFoldBtn.getAttribute('aria-expanded') === 'true';
@@ -77,12 +101,23 @@ function projectUnfolded() {
 function updateProjectDesc() {
   const shown = Boolean(descProjectId) && projectUnfolded();
   projectToolsEl.hidden = !shown;
+  projectDescEl.hidden = !shown || (!projectDescEditor.isEditable()
+    && serializeMarkdown(projectDescEl).trim() === '');
 }
 
-// Every editor leaves edit mode -- the card being edited -- saving as it
-// does (closing the app, switching the vault).
+function setProjectDescEditMode(on) {
+  if (!descProjectId) return;
+  if (!on && projectDescEditor.isEditable()) trySave(descProjectId);
+  projectDescEditor.setEditable(on);
+  projectDescBtn.setAttribute('aria-pressed', String(on));
+  updateProjectDesc();
+}
+
+// Every editor leaves edit mode -- the card being edited, the project
+// description -- saving as it does (closing the app, switching the vault).
 export function leaveEditModes() {
   leaveCardEditMode();
+  if (projectDescEditor.isEditable()) setProjectDescEditMode(false);
 }
 
 // Rename the selected project in the header itself, like its sidebar pill
@@ -90,18 +125,23 @@ export function leaveEditModes() {
 // back as `entity`, which renames the header.
 function editProjectName() {
   const project_id = descProjectId;
+  if (!project_id) return;
   editTextInPlace(projectNameEl, () => projects.get(project_id)?.name ?? '',
-    title => structureCall('set_title', { id: project_id, title }));
+    title => structureCall('set_title', { id: project_id, title }, () => store.getState()));
 }
 
+// Folding while the description is edited saves it first.
 projectFoldBtn.addEventListener('click', () => {
   const unfold = !projectUnfolded();
+  if (!unfold) setProjectDescEditMode(false);
   projectFoldBtn.setAttribute('aria-expanded', String(unfold));
   projectFoldBtn.title = unfold ? 'Hide project details' : 'Show project details';
   updateProjectDesc();
 });
 
 $('project-rename-btn').addEventListener('click', editProjectName);
+projectDescBtn.addEventListener('click',
+  () => setProjectDescEditMode(!projectDescEditor.isEditable()));
 
 // Archive toggles: an archived project's button is pressed and unarchives.
 const projectArchiveBtn = $('project-archive-btn');
@@ -121,11 +161,22 @@ store.subscribe(
     projectArchiveBtn.title = archived ? 'Unarchive project' : 'Archive project';
   });
 
-// Another project selected: the fold state stays. All Projects and No
-// project have no details.
+// Another project selected: the outgoing one is saved first. The fold state
+// stays. All Projects and No project have no details.
 store.subscribe(state => state.selected_project, () => {
+  if (descProjectId) {
+    setProjectDescEditMode(false);
+    unbindProjectDesc();
+    editorRoots.delete(descProjectId);
+  }
   descProjectId = projectScope();
   projectFoldBtn.hidden = !descProjectId;
+  projectDescEditor.setHTML('');
+  if (descProjectId) {
+    editorRoots.set(descProjectId, projectDescEl);
+    unbindProjectDesc = bindDocContent(
+      descProjectId, projectDescEditor, projectDescEl, updateProjectDesc);
+  }
   updateProjectDesc();
 });
 
@@ -134,5 +185,5 @@ store.subscribe(state => state.selected_project, () => {
 // the active and the archived projects. The selection stays.
 function toggleArchive(project_id) {
   const archived = !projects.get(project_id)?.archived;
-  structureCall('set_archived', { id: project_id, archived });
+  structureCall('set_archived', { id: project_id, archived }, () => store.getState());
 }

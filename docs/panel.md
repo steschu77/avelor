@@ -255,7 +255,7 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
 
 - **Rename**: the pen on a sidebar project row (`editProject`), or the
   rename button in the vault header's project toolbar (`editProjectName`,
-  which edits `#project-name` in place): the name
+  which edits `#project-name` in place, `panel.md#titles`): the name
   becomes an input; Enter
   or leaving it sends `set_title` if the text changed, Esc cancels. The
   pushed `entity` bumps `projects_rev`, so the header and the panel's
@@ -267,6 +267,9 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   joins the project (`joinProjectLocal` → `join_project`); the × on a
   project chip of a card (`projectChips`) leaves it (`leaveProjectLocal` →
   `leave_project`).
+- **Description**: the project file's body, under the vault header behind
+  a fold chevron and edited with its pen (`#project-desc` via
+  `bindDocContent`), loaded and saved like a document (`saving.md`).
 - **Archive**: the Archive button in the project header's toolbar, pressed
   while the project is archived (`toggleArchive`), sends `set_archived`;
   the sidebar folds archived projects under an "Archived" row
@@ -310,7 +313,8 @@ something in it changed, and the host answers with what is now on disk.
 one shape for every kind (`post_entity`); the page sorts it by its derived
 type (`kind`, `Document::kind()`):
 
-- `project` → `onProject` (the sidebar),
+- `project` → `onProject` (the sidebar; its description is loaded and
+  saved like a document),
 - `thread` → `onThread` into the page's `threads` Map, which
   the Documents lens reads for a thread's row,
 - everything else → `onDocMeta` into `entities`: an entity's rows in the
@@ -340,4 +344,5 @@ and save their bodies at once.
 | C3 | Star | star icon → `toggleStar` | `set_starred {starred}` → `entity` | starred first |
 | C4 | Add to a project | a project in a card's "+" menu → `joinProjectLocal` | `join_project` → `entity` | the card's chips and the counts update |
 | C5 | Remove from a project | × on a project chip → `leaveProjectLocal` | `leave_project` → `entity` | chip gone, counts update |
+| C6 | Description | fold chevron → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
 | C7 | Archive | header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |
