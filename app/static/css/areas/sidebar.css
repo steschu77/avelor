@@ -109,9 +109,14 @@
   height: 12px;
 }
 
-/* a project's star: the glyph follows the row's aria-selected (starred) */
+/* a project's star: the glyph follows the row's aria-selected (starred);
+   off, it shows only while the row is hovered */
 .nav-item__icon--star {
   color: transparent;
+}
+
+.nav-item:hover .nav-item__icon--star {
+  color: var(--c-label);
 }
 
 .nav-item[aria-selected="true"] .nav-item__icon--star {

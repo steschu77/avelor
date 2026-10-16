@@ -21,6 +21,7 @@
   "docs.unfold_thread": "Desplegar el hilo",
   "documents.reload_failed": "No se pudo cargar la versión del disco.",
   "error.code": "Algo ha fallado ({code}).",
+  "header.archive": "Archivar proyecto",
   "header.filter_label": "Filtrar por una etiqueta",
   "header.filter_labels": "Filtrar etiquetas",
   "header.hide_details": "Ocultar los detalles del proyecto",
@@ -30,6 +31,7 @@
   "header.stop_label": "Dejar de filtrar por {label}",
   "header.types": "Tipos",
   "header.types_title": "Mostrar u ocultar los tipos",
+  "header.unarchive": "Desarchivar proyecto",
   "indexing.label": "Indexando {path}",
   "indexing.replaced": "sustituida por otra indexación",
   "indexing.unread": {

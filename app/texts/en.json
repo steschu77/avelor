@@ -18,6 +18,7 @@
   "docs.unfold_thread": "Unfold the thread",
   "documents.reload_failed": "Could not load the version on disk.",
   "error.code": "Something went wrong ({code}).",
+  "header.archive": "Archive project",
   "header.filter_label": "Filter by a label",
   "header.filter_labels": "Filter labels",
   "header.hide_details": "Hide project details",
@@ -27,6 +28,7 @@
   "header.stop_label": "Stop filtering by {label}",
   "header.types": "Types",
   "header.types_title": "Show or hide the types",
+  "header.unarchive": "Unarchive project",
   "indexing.label": "Indexing {path}",
   "indexing.replaced": "replaced by another indexing",
   "indexing.unread": {

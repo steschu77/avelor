@@ -18,6 +18,7 @@
   "docs.unfold_thread": "Verlauf aufklappen",
   "documents.reload_failed": "Die Fassung auf der Festplatte konnte nicht geladen werden.",
   "error.code": "Etwas ist schiefgegangen ({code}).",
+  "header.archive": "Projekt archivieren",
   "header.filter_label": "Nach einem Label filtern",
   "header.filter_labels": "Labels filtern",
   "header.hide_details": "Projektdetails ausblenden",
@@ -27,6 +28,7 @@
   "header.stop_label": "Nicht mehr nach {label} filtern",
   "header.types": "Typen",
   "header.types_title": "Typen ein- oder ausblenden",
+  "header.unarchive": "Projekt wiederherstellen",
   "indexing.label": "Indizierung von {path}",
   "indexing.replaced": "durch eine andere Indizierung ersetzt",
   "indexing.unread": {
