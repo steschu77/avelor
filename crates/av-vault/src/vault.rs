@@ -26,6 +26,7 @@ mod create;
 mod indexing;
 mod properties;
 mod structure;
+mod trash;
 
 pub use indexing::{IndexControl, IndexEvent, index_vault};
 
@@ -43,6 +44,20 @@ pub enum SaveOutcome {
     Unchanged,
     /// This entity's file changed outside the app; nothing was written.
     Conflict(Id),
+}
+
+impl SaveOutcome {
+    /// The outcome of this write followed by `next`: a conflict wins, then
+    /// a write.
+    fn and(self, next: SaveOutcome) -> SaveOutcome {
+        match (self, next) {
+            (conflict @ SaveOutcome::Conflict(_), _) | (_, conflict @ SaveOutcome::Conflict(_)) => {
+                conflict
+            }
+            (SaveOutcome::Saved, _) | (_, SaveOutcome::Saved) => SaveOutcome::Saved,
+            _ => SaveOutcome::Unchanged,
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -123,9 +138,9 @@ impl Entry {
 }
 
 // ----------------------------------------------------------------------------
-/// What a structural operation did, so the caller can push exactly the
-/// changed entities. Filled in as the operation goes, so it is accurate even
-/// when the operation fails part-way.
+/// What a structural operation (thread create/join/leave) did, so the
+/// caller can push exactly the changed entities. Filled in as the operation
+/// goes, so it is accurate even when the operation fails part-way.
 #[derive(Debug, Default)]
 pub struct Changes {
     /// An entity new in the index: made in the app, written to its own new
@@ -133,6 +148,8 @@ pub struct Changes {
     pub created: Option<Id>,
     /// Entities whose file was rewritten.
     pub saved: Vec<Id>,
+    /// Entities whose file was moved to `.trash` and which left the index.
+    pub trashed: Vec<Id>,
 }
 
 // ----------------------------------------------------------------------------
@@ -320,6 +337,20 @@ impl Index {
         }
     }
 
+    /// The first of `ids` whose file changed outside the app since it was
+    /// last read or written, so rewriting it would be a conflict.
+    fn first_changed(&self, ids: &[Id]) -> Result<Option<Id>> {
+        for id in ids {
+            let Some(entry) = self.entry(id) else {
+                return Err(Error::NotFound);
+            };
+            if entry.changed_on_disk()? {
+                return Ok(Some(*id));
+            }
+        }
+        Ok(None)
+    }
+
     /// `id` may link to `to`: another entity in the vault.
     fn check_link(&self, id: &Id, to: Option<&Id>) -> Result<()> {
         match to {
@@ -327,6 +358,14 @@ impl Index {
                 Err(Error::InvalidArgument { arg: "to".into() })
             }
             _ => Ok(()),
+        }
+    }
+
+    fn check_thread(&self, id: &Id) -> Result<()> {
+        match self.get(id) {
+            Some(doc) if doc.kind() == DocumentType::Thread => Ok(()),
+            Some(_) => Err(Error::WrongKind),
+            None => Err(Error::NotFound),
         }
     }
 

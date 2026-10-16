@@ -4,7 +4,7 @@
 > unsaved changes, what a delayed reply may and may not do, how a file
 > changed outside the app is handled, and how the app closes without losing
 > edits. The messages are in `api.md#documents`; how structural edits
-> are saved, `panel.md#saving-structure`.
+> (threads, projects, labels) are saved, `panel.md#saving-structure`.
 
 ## Overview
 

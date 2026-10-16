@@ -114,6 +114,12 @@
   border-color: var(--c-line);
 }
 
+/* a project pill an entity is dragged over (see joinProjectLocal) */
+.nav-item.is-drop-target {
+  background: var(--c-card);
+  border-color: var(--c-accent);
+}
+
 .nav-item--compact {
   font-size: var(--fs-ui);
 }

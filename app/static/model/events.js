@@ -60,8 +60,10 @@ function onDocMeta(doc_id, meta) {
 }
 
 // ----------------------------------------------------------------------------
-// Its file is gone: forget it everywhere. A deleted project that was the
-// filter leaves it, back to all documents.
+// An edit moved `id` to `.trash` (panel.md#structural-edits), or its file is
+// gone: forget it everywhere. Its card goes with the panel rebuild the
+// edit's answer triggers (`structureCall`); a deleted project that was
+// the filter leaves it, back to all documents.
 function onEntityDeleted(id) {
   entities.delete(id);
   threads.delete(id);

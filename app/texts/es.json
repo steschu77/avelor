@@ -1,5 +1,6 @@
 {
   "card.edit": "Editar documento",
+  "card.leave_thread": "Quitar del hilo",
   "config.unread": "No se pudo leer config.yaml; la aplicación se inició con la configuración predeterminada.",
   "conflict.changed_editing": "El archivo del disco cambió {when} mientras lo editabas aquí. Elige qué versión conservar.",
   "conflict.changed_unsaved": "El archivo del disco cambió {when}, así que tu cambio no se guardó. Carga la versión del disco y vuelve a hacer el cambio.",
