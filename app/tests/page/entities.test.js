@@ -1,8 +1,8 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import {
-  NO_PROJECT, entities, knownThreads, matchesFilter, projectsInOrder, projectsOf, threadMembers, threadOf, threadProjects,
-  threads,
+  NO_PROJECT, entities, knownThreads, matchesFilter, projectsInOrder, projectsOf, threadMatchesFilter, threadMembers, threadOf,
+  threadProjects, threads,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -75,4 +75,9 @@ const MEMBERS = [project('p'), project('q'), doc('1', { threads: ['t'], projects
 test("a thread's projects are its members', each once", () => {
   vault(...MEMBERS);
   equal(threadProjects('t'), ['q', 'p']);
+});
+
+test('a thread is in the filter with one of its members', () => {
+  vault(...MEMBERS);
+  equal([threadMatchesFilter('t', { ...FILTER, selected_project: 'p' }), threadMatchesFilter('t', { ...FILTER, selected_project: NO_PROJECT })], [true, false]);
 });

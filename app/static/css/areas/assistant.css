@@ -1,0 +1,62 @@
+/* The context column (features/context.js) and the Linked tab
+   (features/linked.js). */
+
+/* The context column (context.js): tabs about what the panel shows,
+   raised over the panel's body */
+.context {
+  align-self: stretch;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-card);
+  border-left: 1px solid var(--c-line);
+  box-shadow: var(--shadow-raise);
+}
+
+/* the shown tab merges into the card below */
+.context__tabs {
+  flex: none;
+  padding-top: 8px;
+  background: var(--c-paper);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.context__tabs>[aria-selected="true"] {
+  background: var(--c-card);
+  box-shadow: 0 1px 0 var(--c-card);
+}
+
+/* a tab of the column: Linked (features/linked.js) */
+.context__pane {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px var(--p-pane) 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* the Linked tab: the links of what is shown, both ways, and a search to
+   link it to another */
+.linked__head {
+  margin-top: 22px;
+}
+
+.linked__row {
+  --cols: auto minmax(0, 1fr) auto auto;
+  min-height: var(--h-row);
+}
+
+.linked__icon {
+  color: var(--c-label);
+}
+
+.linked__none {
+  padding: 8px 0;
+}
+
+.linked__search {
+  margin: 10px 0 4px;
+}
