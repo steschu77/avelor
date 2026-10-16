@@ -4,7 +4,7 @@
 // archive). Also `leaveEditModes`, which takes every editor out of edit
 // mode, the cards' (closing the app, switching the vault).
 
-import { $, accEl, oncePerFrame } from '../core/dom.js';
+import { $, oncePerFrame } from '../core/dom.js';
 import { compareText } from '../core/format.js';
 import { t } from '../core/text.js';
 import { store } from '../model/state.js';
@@ -14,6 +14,7 @@ import { structureCall } from '../model/structure.js';
 import { showMenu } from '../ui/menu.js';
 import { editTextInPlace } from '../ui/field.js';
 import { leaveCardEditMode } from './panel/panel.js';
+import { labelChips } from './panel/panel.js';
 
 const projectNameEl = $('project-name');
 
@@ -136,19 +137,4 @@ store.subscribe(state => state.selected_project, () => {
 function toggleArchive(project_id) {
   const archived = !projects.get(project_id)?.archived;
   structureCall('set_archived', { id: project_id, archived });
-}
-
-// ----------------------------------------------------------------------------
-// Labels (`tags`) as chips, each with an x that calls `onChange(tags)` with
-// the label removed; `removeTitle(tag)` titles the x.
-function labelChips(labels, onChange, removeTitle) {
-  return labels.map(label => {
-    const chip = accEl('span', 'chip chip--label', label);
-    const remove = accEl('button', 'chip__remove', '\u00d7');
-    remove.type = 'button';
-    remove.title = removeTitle(label);
-    remove.addEventListener('click', () => onChange(labels.filter(t => t !== label)));
-    chip.append(remove);
-    return chip;
-  });
 }

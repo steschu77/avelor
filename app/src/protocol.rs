@@ -15,7 +15,7 @@ use crate::texts::Text;
 use crate::undo;
 use av_utils::error::Error;
 use av_utils::id::Id;
-use av_vault::vault::Op;
+use av_vault::vault::{Index, Op};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -53,9 +53,13 @@ enum Command {
     SaveDocContent(Save),
     CheckFiles(Ids),
     // The structural commands (`structure`).
+    JoinProject(InProject),
+    LeaveProject(InProject),
     SetTitle(Retitle),
     SetStarred(Star),
     SetArchived(Archive),
+    SetLabels(Relabel),
+    SetLink(Relink),
     ReloadEntity(Target),
     // The steps undone and redone (`undo`).
     Undo,
@@ -103,11 +107,32 @@ struct Ids {
     ids: Vec<Id>,
 }
 
+/// `{id, project}`
+#[derive(Deserialize)]
+struct InProject {
+    id: Id,
+    project: Id,
+}
+
 /// `{id, title}`
 #[derive(Deserialize)]
 struct Retitle {
     id: Id,
     title: String,
+}
+
+/// `{id, labels}`
+#[derive(Deserialize)]
+struct Relabel {
+    id: Id,
+    labels: Vec<String>,
+}
+
+/// `{id, to}`: `to` null removes the link.
+#[derive(Deserialize)]
+struct Relink {
+    id: Id,
+    to: Option<Id>,
 }
 
 /// `{id, starred}`
@@ -139,9 +164,13 @@ impl Command {
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "save_doc_content" => Command::SaveDocContent(from_value(args)?),
             "check_files" => Command::CheckFiles(from_value(args)?),
+            "join_project" => Command::JoinProject(from_value(args)?),
+            "leave_project" => Command::LeaveProject(from_value(args)?),
             "set_title" => Command::SetTitle(from_value(args)?),
             "set_starred" => Command::SetStarred(from_value(args)?),
             "set_archived" => Command::SetArchived(from_value(args)?),
+            "set_labels" => Command::SetLabels(from_value(args)?),
+            "set_link" => Command::SetLink(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
             "undo" => Command::Undo,
             "redo" => Command::Redo,
@@ -173,6 +202,7 @@ pub fn on_message(app: &mut App, text: &str) {
 
 // ----------------------------------------------------------------------------
 fn route(app: &mut App, req: Req, command: Command) {
+    use Index as S;
     match command {
         Command::Ready => api::ready(app, req),
         Command::SwitchVault(a) => api::switch_vault(app, req, a.path),
@@ -185,9 +215,27 @@ fn route(app: &mut App, req: Req, command: Command) {
             documents::save_doc_content(app, req, a.id, a.markdown, a.overwrite)
         }
         Command::CheckFiles(a) => documents::check_files(app, req, a.ids),
+        Command::JoinProject(a) => structure::membership(
+            app,
+            req,
+            a.id,
+            a.project,
+            Text::new("undo.join_project"),
+            S::join_project,
+        ),
+        Command::LeaveProject(a) => structure::membership(
+            app,
+            req,
+            a.id,
+            a.project,
+            Text::new("undo.leave_project"),
+            S::leave_project,
+        ),
         Command::SetTitle(a) => structure::set_title(app, req, a.id, a.title),
         Command::SetStarred(a) => structure::set_starred(app, req, a.id, a.starred),
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),
+        Command::SetLabels(a) => structure::set_labels(app, req, a.id, a.labels),
+        Command::SetLink(a) => structure::set_link(app, req, a.id, a.to),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),
         Command::Undo => undo::replay(app, req, Op::Undo),
         Command::Redo => undo::replay(app, req, Op::Redo),

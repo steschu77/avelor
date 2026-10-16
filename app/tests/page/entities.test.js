@@ -1,7 +1,8 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import {
-  NO_PROJECT, entities, knownThreads, matchesFilter, projectsInOrder, projectsOf, threadMembers, threadOf, threads,
+  NO_PROJECT, entities, knownThreads, matchesFilter, projectsInOrder, projectsOf, threadMembers, threadOf, threadProjects,
+  threads,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -67,4 +68,11 @@ test("an entity's threads are those in the vault", () => {
 test("an entity's thread is the first in the vault", () => {
   threaded(doc('a', { threads: ['dissolved', 'u', 't'] }), doc('b'));
   equal([threadOf('a'), threadOf('b'), threadOf('gone')], ['u', undefined, undefined]);
+});
+
+const MEMBERS = [project('p'), project('q'), doc('1', { threads: ['t'], projects: ['q'] }), doc('2', { threads: ['t'], projects: ['p', 'q', 'deleted'] })];
+
+test("a thread's projects are its members', each once", () => {
+  vault(...MEMBERS);
+  equal(threadProjects('t'), ['q', 'p']);
 });

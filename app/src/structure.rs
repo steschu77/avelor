@@ -1,5 +1,5 @@
-//! The structural commands (`panel.md#saving-structure`): titles, stars,
-//! archiving -- and
+//! The structural commands (`panel.md#saving-structure`): projects,
+//! titles, stars, archiving, labels, links -- and
 //! `reload_entity`, the conflict dialog's Use theirs, which ends like
 //! them. Typed commands (`api.md#structure`): each edit goes through
 //! `App::step`, `App::edit` keeping the step to undo, which pushes every
@@ -10,6 +10,7 @@
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_vault::vault::SaveOutcome;
+use av_vault::vault::{Changes, Index};
 use serde::Serialize;
 
 use crate::app::App;
@@ -94,11 +95,51 @@ pub(crate) fn named(app: &App, id: &Id, instead: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// An entity joining or leaving a group -- a project; the answer names the
+/// group. The step `name` names both.
+pub fn membership(
+    app: &mut App,
+    req: Req,
+    id: Id,
+    group: Id,
+    name: Text,
+    op: impl FnOnce(&mut Index, &Id, &Id, &mut Changes) -> Result<SaveOutcome>,
+) {
+    let step = name
+        .arg("title", named(app, &id, ""))
+        .arg("group", named(app, &group, ""));
+    let result = app.step(&req, step, |index, changes| op(index, &id, &group, changes));
+    answer(app, req, result, Some(group));
+}
+
+// ----------------------------------------------------------------------------
 /// `set_title`: the title of `id`, any entity; an empty title removes it.
 pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
     let step = Text::new("undo.set_title").arg("title", named(app, &id, &title));
     let result = app.step(&req, step, |index, changes| {
         index.set_title(&id, title, changes)
+    });
+    answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
+/// `set_labels`: the labels of `id`, any entity (`Index::set_labels`); none
+/// removes the key.
+pub fn set_labels(app: &mut App, req: Req, id: Id, labels: Vec<String>) {
+    let step = Text::new("undo.set_labels").arg("title", named(app, &id, ""));
+    let result = app.step(&req, step, |index, changes| {
+        index.set_labels(&id, labels, changes)
+    });
+    answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
+/// `set_link`: link `id`, any entity, to `to`, another one in the vault
+/// (`Index::set_link`); none removes the key.
+pub fn set_link(app: &mut App, req: Req, id: Id, to: Option<Id>) {
+    let step = Text::new("undo.set_link").arg("title", named(app, &id, ""));
+    let result = app.step(&req, step, |index, changes| {
+        index.set_link(&id, to, changes)
     });
     answer(app, req, result, Some(id));
 }
@@ -256,6 +297,88 @@ mod tests {
             shown(&sent[0]["err"]["text"]),
             "Could not save the change: it is no longer in the vault."
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn joining_a_project_answers_with_the_project() {
+        let (project, note) = (Id::generate(), Id::generate());
+        let files = [
+            (
+                "Projects/move.yaml".to_string(),
+                format!("id: {project}\nproject: {{}}\ntitle: Move\n"),
+            ),
+            (
+                "Notes/n0.md".to_string(),
+                format!("---\nid: {note}\ntitle: Note 0\ndocument: {{}}\n---\nBody 0\n"),
+            ),
+        ];
+        let mut h = Harness::with_vault("join-project", &files);
+        let sent = h.call("join_project", json!({ "id": note, "project": project }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["projects"], json!([project]));
+        assert_eq!(sent[1]["ok"]["id"], project.to_string());
+
+        let sent = h.call("leave_project", json!({ "id": note, "project": project }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["projects"], json!([]));
+
+        let args = json!({ "id": note, "project": project });
+        undoes(&mut h, "join_project", args.clone());
+        undoes(&mut h, "leave_project", args);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn labels_are_set_on_the_entity_and_pushed_before_the_answer() {
+        let (mut h, ids) = notes("set-labels", 1);
+        let sent = h.call(
+            "set_labels",
+            json!({ "id": ids[0], "labels": ["bill", " paid "] }),
+        );
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["labels"], json!(["bill", "paid"]));
+        assert_eq!(sent[0]["data"]["writable"], true);
+        assert_eq!(sent[1], json!({ "re": 1, "ok": { "id": ids[0] } }));
+        let text = fs::read_to_string(h.vault().join("Notes/n0.md")).unwrap();
+        assert!(text.contains("- bill") && text.contains("- paid"), "{text}");
+
+        undoes(
+            &mut h,
+            "set_labels",
+            json!({ "id": ids[0], "labels": ["tax"] }),
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_link_is_written_pushed_and_removed() {
+        let (mut h, ids) = notes("set-link", 2);
+        let sent = h.call("set_link", json!({ "id": ids[0], "to": ids[1] }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["linked_to"], ids[1].to_string());
+        assert_eq!(sent[1], json!({ "re": 1, "ok": { "id": ids[0] } }));
+        let text = fs::read_to_string(h.vault().join("Notes/n0.md")).unwrap();
+        assert!(text.contains(&format!("linked-to: {}", ids[1])), "{text}");
+
+        let sent = h.call("set_link", json!({ "id": ids[0], "to": null }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["linked_to"], json!(null));
+        let text = fs::read_to_string(h.vault().join("Notes/n0.md")).unwrap();
+        assert!(!text.contains("linked-to"), "{text}");
+
+        undoes(&mut h, "set_link", json!({ "id": ids[0], "to": ids[1] }));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_link_to_itself_or_outside_the_vault_is_refused() {
+        let (mut h, ids) = notes("set-link-refused", 1);
+        for to in [ids[0], Id::generate()] {
+            let sent = h.call("set_link", json!({ "id": ids[0], "to": to }));
+            assert_eq!(shape(&sent), ["reply"], "nothing written, nothing pushed");
+            assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+        }
     }
 
     // ------------------------------------------------------------------------

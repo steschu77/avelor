@@ -54,7 +54,7 @@ events from Google Calendar, scanned pictures read by OCR.
 | `vault.md` | the file format: identity, roles, types, sources, metadata; opening and indexing a vault |
 | `api.md` | the protocol: transport, rules, the page's side, every command and event |
 | `ui.md` | the main window: layout, vault panel and filters, lenses, status bar, jobs panel, keys, preferences |
-| `panel.md` | the side panel: cards, threads, projects, structural edits and how they are saved |
+| `panel.md` | the side panel: cards, threads, links, labels, projects, structural edits and how they are saved |
 | `editor.md` | the WYSIWYG editor |
 | `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
@@ -213,8 +213,8 @@ temporary vault and its events and reply asserted (`testing.rs`:
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), url (the link schemes, `is_link`), text normalization, a file's stamp and atomic writes (`fs`: `FileStamp`, `write_atomic`), cross-thread `Cancel` | |
-| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index` with structural ops, `Changes` and their steps undone and redone (`vault.rs`, its parts in `vault/`: `indexing.rs`, `properties.rs`, the tests in `vault/tests.rs`), the indexing (`index_vault`, events applied by `Index::apply`), `to_html` | no network, no UI |
+| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), url (the link schemes, `is_link`), text normalization and unique names (`text`), a file's stamp and atomic writes (`fs`: `FileStamp`, `write_atomic`), cross-thread `Cancel` | |
+| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index` with structural ops, `Changes` and their steps undone and redone (`vault.rs`, its parts in `vault/`: `indexing.rs`, `structure.rs`, `properties.rs`, the tests in `vault/tests.rs`), the indexing (`index_vault`, events applied by `Index::apply`), `to_html` | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
 
@@ -262,7 +262,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); their dispatch tests |
-| `structure.rs` | the structural commands: titles, stars, archiving, `reload_entity`; their answers; their dispatch tests |
+| `structure.rs` | the structural commands: projects, titles, stars, archiving, labels, links, `reload_entity`; their answers; their dispatch tests |
 | `undo.rs` | undo and redo (`saving.md#undo`): `History`, `App::step`, the commands `undo` and `redo`; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
@@ -345,15 +345,15 @@ nothing imports `app.js`.
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`, which makes its parts for each editor (`editor/selection.js`, `editor/blocks.js`, `editor/tables.js`, `editor/shortcuts.js`, `editor/paste.js`); `isLink` (`editor/links.js`); the tags both read (`editor/tags.js`); `serializeMarkdown` |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `setNotice`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`, `threadMembers`); the selection published minus what is gone (`commitExistingSelection`) |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`, `threadMembers`, `threadProjects`); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, an editing session's group (`beginEditSession`), the conflicts (`editorRoots`) |
-| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
+| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinProjectLocal`, …, `setLinkLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/toolbar.js` | the editors' toolbars |
 | `ui/field.js` | editing in place (`editTextInPlace`) |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them, an info notice going on its own |
 | `features/selection.js` | the selection (`selectDocument`, `selectById`, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
-| `features/panel/panel.js` | the side panel renderer (thread, standalone card), its subscriptions |
+| `features/panel/panel.js` | the side panel renderer (thread, standalone card), its chips, the structural edits it starts, its subscriptions |
 | `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, and shows an entity on request (`revealInDocuments`) |
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
@@ -532,7 +532,7 @@ abort. Where the bundle lands and how to measure the size:
   refused.
 - **Reuse before writing**: `Req::save_failed`,
   `Req::save_failed`,
-  `av_utils::is_false`,
+  `text::unique_trimmed`, `av_utils::is_false`,
   `DateTime::{from_system_time, plus_seconds}`. A new shared
   helper replaces every existing copy of its pattern in the same change.
 - **Formatting**: Rust code is rustfmt-formatted; `cargo fmt --all` is

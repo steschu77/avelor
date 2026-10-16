@@ -38,7 +38,7 @@ the page, once per frame (`panel.md#host-pushes`).
 
 **Labels** filter from the lens head, for every lens: after the project's
 name the active labels, each a label chip whose × takes it out of the
-filter (`labelChips`), then a "+" while any label
+filter (`labelChips`, `features/panel/panel.js`), then a "+" while any label
 is in use (`#label-add-btn`, `features/header.js`). Its menu lists the
 labels in use but the active ones, with a filter box, each with the
 entities in the filter carrying it; one with none is dim. Selecting

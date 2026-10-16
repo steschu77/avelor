@@ -14,7 +14,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::document::{Document, FileFormat};
-use crate::envelope::Envelope;
+use crate::envelope::{DocumentType, Envelope};
 use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::fs::{FileStamp, write_atomic};
@@ -24,6 +24,7 @@ use av_utils::text::{LineEnding, normalize};
 
 mod indexing;
 mod properties;
+mod structure;
 
 pub use indexing::{IndexControl, IndexEvent, index_vault};
 
@@ -493,6 +494,24 @@ impl Index {
             Some(e) => Err(Error::NotWritable {
                 path: e.local.clone(),
             }),
+            None => Err(Error::NotFound),
+        }
+    }
+
+    /// `id` may link to `to`: another entity in the vault.
+    fn check_link(&self, id: &Id, to: Option<&Id>) -> Result<()> {
+        match to {
+            Some(to) if to == id || self.get(to).is_none() => {
+                Err(Error::InvalidArgument { arg: "to".into() })
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn check_project(&self, id: &Id) -> Result<()> {
+        match self.get(id) {
+            Some(doc) if doc.kind() == DocumentType::Project => Ok(()),
+            Some(_) => Err(Error::WrongKind),
             None => Err(Error::NotFound),
         }
     }

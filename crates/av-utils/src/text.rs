@@ -49,3 +49,32 @@ pub fn renormalize(bom: &str, ending: LineEnding, text: String) -> String {
     }
     result
 }
+
+// ----------------------------------------------------------------------------
+/// `names` each trimmed, without the empty ones and the repeats, the first
+/// of each kept where it was.
+pub fn unique_trimmed(names: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut unique: Vec<String> = Vec::new();
+    for name in names {
+        let name = name.trim();
+        if !name.is_empty() && !unique.iter().any(|kept| kept == name) {
+            unique.push(name.to_string());
+        }
+    }
+    unique
+}
+
+// ----------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn unique_trimmed_drops_empties_and_repeats_in_order() {
+        let names = ["b", "", "a", "b", "c", "a"].map(String::from);
+        assert_eq!(unique_trimmed(names), ["b", "a", "c"]);
+        let patterns = [" *.jpg", "*.png", "", "*.jpg "].map(String::from);
+        assert_eq!(unique_trimmed(patterns), ["*.jpg", "*.png"]);
+    }
+}
