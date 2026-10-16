@@ -1,8 +1,12 @@
 // The structural edits (panel.md#saving-structure, api.md#structure):
-// titles and reloads, each a host round trip. The sidebar and the project
-// header (features/sidebar.js, features/header.js) send them.
+// titles and reloads, each a host round trip that ends in a published
+// selection (`commitExistingSelection`, model/entities.js). The panel's
+// buttons (features/panel/panel.js), the sidebar and the project header
+// (features/sidebar.js, features/header.js) send them.
 
 import { rpcCall } from '../core/rpc.js';
+import { store } from './state.js';
+import { commitExistingSelection } from './entities.js';
 import { endConflict, showConflict } from './documents.js';
 
 // ----------------------------------------------------------------------------
@@ -10,18 +14,35 @@ import { endConflict, showConflict } from './documents.js';
 // never here: each is a typed command (`structureCall`). The host pushes
 // what it wrote -- `entity` for every written entity -- before it
 // answers, so once the answer arrives, `entities` and `threads` already
-// show what is on disk, success or not. A conflict (a file changed outside
-// the app, nothing written) opens the conflict dialog. A failure shows in
-// the status bar, in the host's words (core/rpc.js).
+// show what is on disk, success or not. `select(id)` is the selection
+// afterwards, `id` the answer's (the id a reloaded file has now); after a
+// failure or a conflict the selection stays. Each is applied minus
+// anything that no longer exists; publishing it rebuilds the panel's cards
+// (`threads_rev`). Without `select`, nothing is published: an entity's own
+// fields, which the cards follow from its push (features/panel/panel.js's
+// `refreshCardChips`). A conflict (a file changed outside the app, nothing
+// written) opens the conflict dialog. A failure shows in the status bar,
+// in the host's words (core/rpc.js).
 export function structureCall(cmd, args, select = null) {
   return rpcCall(cmd, args).then(reply => {
-    if (reply?.conflict) showConflict(reply.conflict.id, false, reply.conflict.changed);
+    const conflict = reply?.conflict;
+    if (conflict) showConflict(conflict.id, false, conflict.changed);
+    if (select) commitExistingSelection(conflict ? store.getState() : select(reply?.id ?? null));
+  }, e => {
+    if (select) commitExistingSelection(store.getState());
+    throw e;
   });
 }
 
 // ----------------------------------------------------------------------------
 // Reload: read `id`'s file again. It ends like a structural edit
-// (`structureCall`), and with its answer the conflict over `id` ends.
+// (`structureCall`), so the panel is rebuilt -- without the entity if its
+// file is gone, with its new id if that was changed by hand -- and with
+// its answer the conflict over `id` ends.
 export function reloadEntity(id) {
-  structureCall('reload_entity', { id }).then(() => endConflict(id));
+  const { selected_entity, selected_thread } = store.getState();
+  structureCall('reload_entity', { id }, now => ({
+    selected_entity: selected_entity === id ? now : selected_entity,
+    selected_thread,
+  })).then(() => endConflict(id));
 }

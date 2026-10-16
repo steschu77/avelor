@@ -63,6 +63,7 @@ version = "0.1.0"
 dependencies = [
  "av-utils",
  "log",
+ "pulldown-cmark",
  "serde",
  "serde_yaml_ng",
 ]

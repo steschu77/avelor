@@ -69,7 +69,7 @@
   margin-left: auto;
 }
 
-/* a flex column filling its parent: lens views */
+/* a flex column filling its parent: lens and panel views */
 .stack {
   display: flex;
   flex-direction: column;

@@ -65,6 +65,13 @@ are its members' (`vault.md#thread`). Projects are themselves entities
 with a `project:` block and a `title`. Entities are linked to projects via
 their `projects` metadata field.
 
+## External Edits
+
+The vault files can be edited by other programs at any time. The app
+detects such a change before it writes and when it looks at a file again;
+if nothing of the app's own is lost, it takes the change in, otherwise it
+asks the user which version to keep. The rules are in `saving.md#conflicts`.
+
 ## Roles, Types and Sources
 
 An entity is described along two independent, stored axes:
@@ -192,7 +199,7 @@ attachment to its email. Any entity can carry one. The other side is
 derived, never stored: an entity is *linked from* every entity whose
 `linked-to` names it.
 
-### Links in content
+### Links in content <a id="links-in-content"></a>
 
 A markdown body links to another entity by its id, with the `id:` scheme:
 
@@ -632,6 +639,6 @@ the files read so far.
 An indexing starts only when a vault opens, so `vault` (indexing) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 
-- the entities, projects and threads;
+- the entities, projects and threads and their content (`docContent`);
 - the conflicts;
 - the selection and the filter.
