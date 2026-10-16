@@ -191,6 +191,27 @@ export function startReload(doc_id) {
   reloading.add(doc_id);
 }
 
+// The window is active again, maybe back from another program that changed
+// a file shown here (saving.md#file-checks). Unsaved edits are saved now, so a
+// changed file asks at once; the host looks at the files of the others and
+// takes in what changed (`check_files`). Their content is in their editors
+// then; the panel is rebuilt for their heads and without what is gone, and
+// nothing is rebuilt if nothing changed. A file changed after the app's own
+// save is asked about.
+export function onActivated() {
+  const clean = [];
+  for (const [doc_id, root] of editorRoots) {
+    if (conflicted.has(doc_id) || reloading.has(doc_id)) continue;
+    if (serializeMarkdown(root) !== (baseline.get(doc_id) ?? '')) trySave(doc_id);
+    else clean.push(doc_id);
+  }
+  if (!clean.length) return;
+  rpcCall('check_files', { ids: clean }).then(({ taken_in, conflicts }) => {
+    for (const { id, changed } of conflicts) onDocConflict(id, changed);
+    if (taken_in > 0) commitExistingSelection(store.getState());
+  });
+}
+
 // The conflict over `doc_id` is answered (or the entity is gone).
 function endConflict(doc_id) {
   conflicted.delete(doc_id);

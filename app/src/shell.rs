@@ -108,6 +108,13 @@ impl Shell {
     }
 
     // ------------------------------------------------------------------------
+    /// The window became active again (`App::on_activated`); before `App`
+    /// is up there is no page to tell.
+    pub fn on_activated(&self) {
+        let _ = self.queue(App::on_activated);
+    }
+
+    // ------------------------------------------------------------------------
     /// Whether a dialog or a handler is running further up the stack: a
     /// modal loop dispatched this message. The window's Close is refused
     /// then.
