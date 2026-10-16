@@ -13,6 +13,7 @@ use av_vault::vault::SaveOutcome;
 use serde::Serialize;
 
 use crate::app::App;
+use crate::documents;
 use crate::protocol::Req;
 use crate::texts::Text;
 
@@ -32,7 +33,7 @@ pub struct Done {
 /// The entity whose file changed outside the app, to ask about: the
 /// conflict dialog (`saving.md#the-dialog`).
 #[derive(Serialize)]
-struct Conflict {
+pub(crate) struct Conflict {
     id: Id,
     /// When the file changed (ISO 8601), empty if it is gone.
     changed: String,
@@ -41,7 +42,7 @@ struct Conflict {
 impl Conflict {
     // ------------------------------------------------------------------------
     /// The conflict over `id`, whose file changed outside the app.
-    fn of(app: &App, id: Id) -> Self {
+    pub(crate) fn of(app: &App, id: Id) -> Self {
         Self {
             id,
             changed: app
@@ -132,10 +133,10 @@ pub fn set_archived(app: &mut App, req: Req, id: Id, archived: bool) {
 
 // ----------------------------------------------------------------------------
 /// `reload_entity`: read `id`'s file again and take in what it holds now,
-/// the conflict dialog's Use theirs (`saving.md#the-dialog`). The entity as
-/// it is now is pushed, or `entity_deleted` if the file is gone (a file
-/// whose `id` was changed by hand comes back as a new entity); the answer
-/// names the id the file has now.
+/// the conflict dialog's Use theirs (`saving.md#the-dialog`). The entity as it
+/// is now and its content are pushed, or `entity_deleted` if the file is
+/// gone (a file whose `id` was changed by hand comes back as a new entity);
+/// the answer names the id the file has now.
 pub fn reload_entity(app: &mut App, req: Req, id: Id) {
     match app.vault.reload(&id) {
         Ok(now) => {
@@ -143,7 +144,7 @@ pub fn reload_entity(app: &mut App, req: Req, id: Id) {
                 Some(_) => log::info!("Reloaded {id}"),
                 None => log::info!("Reloaded {id}: the file is gone"),
             }
-            post_taken_in(app, &id, now);
+            documents::post_taken_in(app, &id, now);
             req.ok(Done {
                 id: now,
                 conflict: None,
@@ -153,19 +154,6 @@ pub fn reload_entity(app: &mut App, req: Req, id: Id) {
             log::warn!("Could not reload {id}: {err}");
             req.fail(err, Text::new("documents.reload_failed"));
         }
-    }
-}
-
-// ----------------------------------------------------------------------------
-/// Send what reading `id`'s file again gave (`now`: the id the file has
-/// now, `None` if it is gone): the entity, or `entity_deleted` -- both, if
-/// its `id` was changed by hand.
-fn post_taken_in(app: &App, id: &Id, now: Option<Id>) {
-    if now != Some(*id) {
-        app.post_entity_deleted(id);
-    }
-    if let Some(entry) = now.and_then(|now| app.vault.index().entry(&now)) {
-        app.post_entity(entry);
     }
 }
 
@@ -280,9 +268,10 @@ mod tests {
         fs::write(&path, theirs).unwrap();
 
         let sent = h.call("reload_entity", json!({ "id": ids[0] }));
-        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(shape(&sent), ["entity", "content", "reply"]);
         assert_eq!(sent[0]["data"]["title"], "Theirs");
-        assert_eq!(sent[1], json!({ "re": 1, "ok": { "id": ids[0] } }));
+        assert_eq!(sent[1]["data"]["source"], "Theirs\n");
+        assert_eq!(sent[2], json!({ "re": 1, "ok": { "id": ids[0] } }));
 
         // A file that is gone leaves the vault.
         fs::remove_file(h.vault().join("Notes/n1.md")).unwrap();

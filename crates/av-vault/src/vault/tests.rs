@@ -579,6 +579,27 @@ fn reloading_takes_in_what_the_file_holds() {
     fs::remove_dir_all(&root).ok();
 }
 
+#[test]
+fn refreshing_takes_in_a_change_to_a_file_only_read() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    assert_eq!(index.refresh(&ids[0]).unwrap(), Refresh::Unchanged);
+
+    edit_outside(&root, 0, &ids[0], "Theirs\n");
+    assert_eq!(
+        index.refresh(&ids[0]).unwrap(),
+        Refresh::TakenIn(Some(ids[0]))
+    );
+    assert_eq!(index.get(&ids[0]).unwrap().content(), "Theirs\n");
+    assert_eq!(index.refresh(&ids[0]).unwrap(), Refresh::Unchanged);
+
+    fs::remove_file(root.join("Notes/n1.md")).unwrap();
+    assert_eq!(index.refresh(&ids[1]).unwrap(), Refresh::TakenIn(None));
+    assert!(index.get(&ids[1]).is_none());
+
+    fs::remove_dir_all(&root).ok();
+}
+
 /// The sample vault under `data/forged` follows vault.md; every
 /// file must load cleanly and derive its intended type.
 #[test]

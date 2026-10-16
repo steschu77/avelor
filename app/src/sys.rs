@@ -11,7 +11,8 @@
 //!   tests use `Owner::none()`.
 //! - `pick_folder(owner: &Owner, title) -> Option<PathBuf>`: a folder the
 //!   user picks; `open_path(path) -> Result<()>`: a file or folder opened
-//!   in its default app. Both wait in the platform's modal loop.
+//!   in its default app; `open_url(url) -> Result<()>`: a link opened in
+//!   its default app. All three wait in the platform's modal loop.
 //! - `BRIDGE_JS`: the page's bridge to the host, `window.host.post(text)`
 //!   and `window.host.receive(text)` (`architecture.md#platforms`).
 //! - `show_error(title, text)`: a failure before or after the main window,
@@ -21,6 +22,8 @@
 
 #[cfg(target_os = "windows")]
 mod win32;
+#[cfg(target_os = "windows")]
+pub use win32::open_url;
 #[cfg(target_os = "windows")]
 pub use win32::run;
 #[cfg(target_os = "windows")]
@@ -32,6 +35,8 @@ pub use win32::{languages, paths, show_error};
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::open_url;
 #[cfg(target_os = "linux")]
 pub use linux::run;
 #[cfg(target_os = "linux")]

@@ -1,7 +1,7 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import {
-  NO_PROJECT, entities, knownThreads, matchesFilter, projectsInOrder, projectsOf, threads,
+  NO_PROJECT, entities, knownThreads, matchesFilter, projectsInOrder, projectsOf, threadMembers, threadOf, threads,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -43,6 +43,14 @@ test("the store's filter is the one without another", () => {
   equal([...entities.values()].map(one => matchesFilter(one)), [true, false]);
 });
 
+test("a thread's members are by date, those without one first, else as they were made", () => {
+  vault(
+    doc('4', { threads: ['t'], date: '2027-07-09' }), doc('3', { threads: ['t'], date: '2027-07-08' }), doc('2', { threads: ['t'], date: '2027-07-08' }),
+    doc('9', { threads: ['t'] }), doc('1', { threads: ['other'] }),
+  );
+  equal(ids(threadMembers('t')), ['9', '2', '3', '4']);
+});
+
 // A vault with the threads t and u.
 function threaded(...metas) {
   threads.clear();
@@ -54,4 +62,9 @@ function threaded(...metas) {
 test("an entity's threads are those in the vault", () => {
   threaded(doc('a', { threads: ['dissolved', 'u', 't'] }), doc('b'));
   equal([knownThreads(entities.get('a')), knownThreads(entities.get('b'))], [['u', 't'], []]);
+});
+
+test("an entity's thread is the first in the vault", () => {
+  threaded(doc('a', { threads: ['dissolved', 'u', 't'] }), doc('b'));
+  equal([threadOf('a'), threadOf('b'), threadOf('gone')], ['u', undefined, undefined]);
 });
