@@ -22,6 +22,7 @@
   --c-ink-soft: light-dark(#232329, oklch(0.87 0.007 80));
   /* icons */
   --c-ink-mute: light-dark(#565660, oklch(0.72 0.012 285));
+  --c-ink-faint: light-dark(#9a9aa3, oklch(0.55 0.01 285));
   --c-label: light-dark(rgba(22, 22, 26, 0.55), oklch(0.935 0.008 80 / 0.55));
   --c-line: light-dark(rgba(10, 10, 11, 0.16), oklch(0.935 0.008 80 / 0.13));
   /* the accent where it draws a line of 2px or less (a selection's ring,

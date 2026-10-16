@@ -4,9 +4,12 @@
   "count.of_total": "{at} of {n}",
   "docs.date": "Date",
   "docs.fold_thread": "Fold the thread",
+  "docs.hidden_count": "{n} hidden",
   "docs.name": "Name",
   "docs.unfold_thread": "Unfold the thread",
   "error.code": "Something went wrong ({code}).",
+  "header.types": "Types",
+  "header.types_title": "Show or hide the types",
   "indexing.label": "Indexing {path}",
   "indexing.replaced": "replaced by another indexing",
   "indexing.unread": {
@@ -50,6 +53,78 @@
   "start.failed": "An error occurred.\n\nCheck the log file for more information.",
   "status.dismiss": "Dismiss",
   "status.more": "+{n} more",
+  "types.bank": "Bank",
+  "types.contacts": "Contacts",
+  "types.conversations": "Conversations",
+  "types.count_bank": {
+    "one": "{n} bank item",
+    "other": "{n} bank items"
+  },
+  "types.count_contacts": {
+    "one": "{n} contact",
+    "other": "{n} contacts"
+  },
+  "types.count_conversations": {
+    "one": "{n} conversation",
+    "other": "{n} conversations"
+  },
+  "types.count_documents": {
+    "one": "{n} document",
+    "other": "{n} documents"
+  },
+  "types.count_email": {
+    "one": "{n} email",
+    "other": "{n} emails"
+  },
+  "types.count_events": {
+    "one": "{n} event",
+    "other": "{n} events"
+  },
+  "types.count_lists": {
+    "one": "{n} list",
+    "other": "{n} lists"
+  },
+  "types.count_notes": {
+    "one": "{n} note",
+    "other": "{n} notes"
+  },
+  "types.count_records": {
+    "one": "{n} record",
+    "other": "{n} records"
+  },
+  "types.count_tasks": {
+    "one": "{n} task",
+    "other": "{n} tasks"
+  },
+  "types.documents": "Documents",
+  "types.email": "Email",
+  "types.events": "Events",
+  "types.hidden": "{list} hidden",
+  "types.hide_bank": "Hide bank items",
+  "types.hide_contacts": "Hide contacts",
+  "types.hide_conversations": "Hide conversations",
+  "types.hide_documents": "Hide documents",
+  "types.hide_email": "Hide emails",
+  "types.hide_events": "Hide events",
+  "types.hide_lists": "Hide lists",
+  "types.hide_notes": "Hide notes",
+  "types.hide_records": "Hide records",
+  "types.hide_tasks": "Hide tasks",
+  "types.lists": "Lists",
+  "types.notes": "Notes",
+  "types.records": "Records",
+  "types.show_all": "Show all types",
+  "types.show_bank": "Show bank items",
+  "types.show_contacts": "Show contacts",
+  "types.show_conversations": "Show conversations",
+  "types.show_documents": "Show documents",
+  "types.show_email": "Show emails",
+  "types.show_events": "Show events",
+  "types.show_lists": "Show lists",
+  "types.show_notes": "Show notes",
+  "types.show_records": "Show records",
+  "types.show_tasks": "Show tasks",
+  "types.tasks": "Tasks",
   "vault.none_open": "No vault is open.",
   "vault.pick": "Select Vault",
   "vault.show_failed": "Could not show the vault's folder."

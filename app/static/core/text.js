@@ -5,7 +5,7 @@
 
 import { $ } from './dom.js';
 
-const locale = document.documentElement.lang || 'en';
+export const locale = document.documentElement.lang || 'en';
 const catalog = JSON.parse($('texts')?.textContent || '{}');
 const forms = new Intl.PluralRules(locale);
 const number = new Intl.NumberFormat(locale);

@@ -37,5 +37,9 @@ store.subscribe(state => state.selected_project, () => {
   scheduleRenderSidebar();
 });
 
+// The lens's type selection (features/lenses/types.js): a change renders
+// the lens again.
+store.subscribe(({ prefs }) => prefs.doc_types, scheduleRenderDocuments);
+
 // The page listens.
 rpcCall('ready');
