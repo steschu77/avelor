@@ -1,5 +1,9 @@
 {
   "accounts.address": "Dirección",
+  "bank.count.bookings": {
+    "one": "{n} movimiento",
+    "other": "{n} movimientos"
+  },
   "cal.overdue_n": {
     "one": "{n} vencida",
     "other": "{n} vencidas"
@@ -28,9 +32,21 @@
   "conflict.when_day": "el {date} a las {time}",
   "conflict.when_today": "a las {time}",
   "context.open": "Abrir",
+  "count.entries": {
+    "one": "{n} elemento",
+    "other": "{n} elementos"
+  },
   "count.files": {
     "one": "{n} archivo",
     "other": "{n} archivos"
+  },
+  "count.items": {
+    "one": "{n} elemento",
+    "other": "{n} elementos"
+  },
+  "count.messages": {
+    "one": "{n} mensaje",
+    "other": "{n} mensajes"
   },
   "count.of_total": "{at} de {n}",
   "dash.all_closed": "Todas las tarjetas están cerradas.",
@@ -154,6 +170,7 @@
   "layout.resize_sidebar": "Ancho del panel de la bóveda",
   "lens.dashboard": "Resumen",
   "lens.documents": "Documentos",
+  "lens.timeline": "Cronología",
   "linked.from": "Enlazado desde",
   "linked.link_this": "Enlazar con esto",
   "linked.link_to": "Enlazar con…",
@@ -212,6 +229,7 @@
   "new.type": "Tipo",
   "open.named": "Abrir {name}",
   "open.url_failed": "No se pudo abrir {url}.",
+  "ordinal": "{n}.º",
   "page.close": "Cerrar la página",
   "page.submit": "Ejecutar la acción principal de la página",
   "panel.add_project_label": "Añadir a un proyecto o una etiqueta",
@@ -247,6 +265,37 @@
   "save.document": "No se pudo guardar el documento.",
   "save.document_gone": "No se pudo guardar el documento: ya no está en la bóveda.",
   "save.settings": "No se pudo guardar la configuración.",
+  "schedule.every_day": {
+    "one": "Cada día",
+    "other": "Cada {n} días"
+  },
+  "schedule.every_month": {
+    "one": "Cada mes",
+    "other": "Cada {n} meses"
+  },
+  "schedule.every_week": {
+    "one": "Cada semana",
+    "other": "Cada {n} semanas"
+  },
+  "schedule.every_year": {
+    "one": "Cada año",
+    "other": "Cada {n} años"
+  },
+  "schedule.in_months": " en {months}",
+  "schedule.last_day": "último día",
+  "schedule.last_weekday": "último {day}",
+  "schedule.month_day": "día {n}",
+  "schedule.nth_last_day": "{nth} último día",
+  "schedule.nth_last_weekday": "{nth} último {day}",
+  "schedule.nth_weekday": "{nth} {day}",
+  "schedule.on_days": " el {days}",
+  "schedule.times": {
+    "one": ", una vez",
+    "other": ", {n} veces"
+  },
+  "schedule.until": ", hasta el {date}",
+  "scrub.clear": "Borrar",
+  "scrub.drag": "Arrastra para elegir un rango de semanas",
   "selection.gone": "El elemento enlazado {id} no está en la bóveda.",
   "shell.lenses": "Vistas",
   "shell.panel": "Detalles",
@@ -278,6 +327,11 @@
   "task.waiting": "En espera",
   "thread.project": "Proyecto",
   "thread.rename": "Renombrar hilo",
+  "timeline.due": "vence el {day}",
+  "timeline.none_dated": "Aquí no hay nada con fecha.",
+  "timeline.none_weeks": "Nada en estas semanas.",
+  "timeline.time": "Tiempo · {entries}",
+  "timeline.today": "Hoy · {day}",
   "trash.delete": "Eliminar para siempre",
   "trash.delete_again": "Haz clic de nuevo para eliminar para siempre",
   "trash.delete_failed": "No se pudo eliminar {path} definitivamente.",
@@ -371,5 +425,6 @@
   "vault.show_failed": "No se pudo mostrar la carpeta de la bóveda.",
   "vault_op.new": "Nuevo",
   "vault_op.trash": "Papelera",
+  "week.of": "Semana del {day} · {what}",
   "workspace.trash": "Papelera"
 }

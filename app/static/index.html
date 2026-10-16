@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/areas/sidebar.css">
   <link rel="stylesheet" href="css/areas/dashboard.css">
   <link rel="stylesheet" href="css/areas/documents.css">
+  <link rel="stylesheet" href="css/areas/timeline.css">
   <link rel="stylesheet" href="css/areas/panel.css">
   <link rel="stylesheet" href="css/areas/editor.css">
   <link rel="stylesheet" href="css/areas/assistant.css">
@@ -70,6 +71,7 @@
       <nav class="tabs" data-t-aria-label="shell.lenses">
         <button type="button" data-lens="dashboard" aria-selected="true" data-t="lens.dashboard"></button>
         <button type="button" data-lens="documents" aria-selected="false" data-t="lens.documents"></button>
+        <button type="button" data-lens="timeline" aria-selected="false" data-t="lens.timeline"></button>
       </nav>
     </header>
 
@@ -164,6 +166,27 @@
           <div class="lens-hidden" id="doc-hidden" hidden>
             <span class="note" id="doc-hidden-text"></span>
             <button type="button" class="tool label" id="doc-show-all" data-t="types.show_all"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Timeline (features/lenses/timeline.js) -->
+      <div class="stack tl-lens" id="lens-timeline" hidden>
+        <div class="filter-bar" id="tl-types" hidden></div>
+        <div class="scrub">
+          <div class="scrub__head">
+            <span class="label" id="tl-count"></span>
+            <span class="label scrub__range" id="tl-range" hidden></span>
+            <button type="button" class="tool label" id="tl-clear" hidden data-t="scrub.clear"></button>
+            <button type="button" class="tool label push" id="tl-today" data-t="cal.today"></button>
+          </div>
+          <div class="scrub__track" id="tl-track" data-t-title="scrub.drag"></div>
+          <div class="scrub__years" id="tl-years"></div>
+        </div>
+        <div class="tl" id="tl-feed">
+          <div class="lens-hidden" id="tl-hidden" hidden>
+            <span class="note" id="tl-hidden-text"></span>
+            <button type="button" class="tool label" id="tl-show-all" data-t="types.show_all"></button>
           </div>
         </div>
       </div>

@@ -8,6 +8,7 @@ import { $ } from './dom.js';
 export const locale = document.documentElement.lang || 'en';
 const catalog = JSON.parse($('texts')?.textContent || '{}');
 const forms = new Intl.PluralRules(locale);
+const ordinals = new Intl.PluralRules(locale, { type: 'ordinal' });
 const number = new Intl.NumberFormat(locale);
 
 // ----------------------------------------------------------------------------
@@ -17,6 +18,11 @@ const number = new Intl.NumberFormat(locale);
 export function t(key, args = {}) {
   return lookup(key, args);
 }
+
+// ----------------------------------------------------------------------------
+// `n` as an ordinal, "2nd" in English, "2." in German: the catalog's forms
+// picked by the locale's ordinal rules.
+export const ordinal = n => t('ordinal', { n, ordinal: true });
 
 // ----------------------------------------------------------------------------
 // A text the host sent (texts.rs): `{ key, args }`, an argument a text too.
@@ -34,7 +40,8 @@ function argOf(value) {
 
 function lookup(key, args) {
   const entry = catalog[key] ?? key;
-  const text = typeof entry === 'string' ? entry : entry[forms.select(args.n)] ?? entry.other;
+  const rules = args.ordinal ? ordinals : forms;
+  const text = typeof entry === 'string' ? entry : entry[rules.select(args.n)] ?? entry.other;
   return text.replace(/\{(\w+)\}/g, (placeholder, name) => {
     const value = args[name];
     if (value == null) return placeholder;

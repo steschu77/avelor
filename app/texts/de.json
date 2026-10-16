@@ -1,5 +1,9 @@
 {
   "accounts.address": "Adresse",
+  "bank.count.bookings": {
+    "one": "{n} Buchung",
+    "other": "{n} Buchungen"
+  },
   "cal.overdue_n": "{n} überfällig",
   "cal.today": "Heute",
   "card.delete": "Dokument löschen",
@@ -25,9 +29,21 @@
   "conflict.when_day": "am {date} um {time}",
   "conflict.when_today": "um {time}",
   "context.open": "Öffnen",
+  "count.entries": {
+    "one": "{n} Eintrag",
+    "other": "{n} Einträge"
+  },
   "count.files": {
     "one": "{n} Datei",
     "other": "{n} Dateien"
+  },
+  "count.items": {
+    "one": "{n} Eintrag",
+    "other": "{n} Einträge"
+  },
+  "count.messages": {
+    "one": "{n} Nachricht",
+    "other": "{n} Nachrichten"
   },
   "count.of_total": "{at} von {n}",
   "dash.all_closed": "Alle Karten sind geschlossen.",
@@ -142,6 +158,7 @@
   "layout.resize_sidebar": "Breite der Tresorleiste",
   "lens.dashboard": "Übersicht",
   "lens.documents": "Dokumente",
+  "lens.timeline": "Chronik",
   "linked.from": "Verknüpft von",
   "linked.link_this": "Hiermit verknüpfen",
   "linked.link_to": "Verknüpfen mit …",
@@ -200,6 +217,7 @@
   "new.type": "Art",
   "open.named": "{name} öffnen",
   "open.url_failed": "{url} konnte nicht geöffnet werden.",
+  "ordinal": "{n}.",
   "page.close": "Seite schließen",
   "page.submit": "Hauptaktion der Seite ausführen",
   "panel.add_project_label": "Zu einem Projekt oder Label hinzufügen",
@@ -235,6 +253,37 @@
   "save.document": "Das Dokument konnte nicht gespeichert werden.",
   "save.document_gone": "Das Dokument konnte nicht gespeichert werden: Es ist nicht mehr im Tresor.",
   "save.settings": "Die Einstellungen konnten nicht gespeichert werden.",
+  "schedule.every_day": {
+    "one": "Jeden Tag",
+    "other": "Alle {n} Tage"
+  },
+  "schedule.every_month": {
+    "one": "Jeden Monat",
+    "other": "Alle {n} Monate"
+  },
+  "schedule.every_week": {
+    "one": "Jede Woche",
+    "other": "Alle {n} Wochen"
+  },
+  "schedule.every_year": {
+    "one": "Jedes Jahr",
+    "other": "Alle {n} Jahre"
+  },
+  "schedule.in_months": " im {months}",
+  "schedule.last_day": "letzten Tag",
+  "schedule.last_weekday": "letzten {day}",
+  "schedule.month_day": "{n}.",
+  "schedule.nth_last_day": "{nth}-letzten Tag",
+  "schedule.nth_last_weekday": "{nth}-letzten {day}",
+  "schedule.nth_weekday": "{nth} {day}",
+  "schedule.on_days": " am {days}",
+  "schedule.times": {
+    "one": ", einmal",
+    "other": ", {n}-mal"
+  },
+  "schedule.until": ", bis {date}",
+  "scrub.clear": "Leeren",
+  "scrub.drag": "Ziehen, um Wochen auszuwählen",
   "selection.gone": "Der verknüpfte Eintrag {id} ist nicht im Tresor.",
   "shell.lenses": "Ansichten",
   "shell.panel": "Details",
@@ -266,6 +315,11 @@
   "task.waiting": "Wartet",
   "thread.project": "Projekt",
   "thread.rename": "Verlauf umbenennen",
+  "timeline.due": "fällig {day}",
+  "timeline.none_dated": "Hier gibt es nichts mit Datum.",
+  "timeline.none_weeks": "Nichts in diesen Wochen.",
+  "timeline.time": "Zeit · {entries}",
+  "timeline.today": "Heute · {day}",
   "trash.delete": "Endgültig löschen",
   "trash.delete_again": "Zum endgültigen Löschen erneut klicken",
   "trash.delete_failed": "{path} konnte nicht endgültig gelöscht werden.",
@@ -359,5 +413,6 @@
   "vault.show_failed": "Der Ordner des Tresors konnte nicht angezeigt werden.",
   "vault_op.new": "Neu",
   "vault_op.trash": "Papierkorb",
+  "week.of": "Woche vom {day} · {what}",
   "workspace.trash": "Papierkorb"
 }
