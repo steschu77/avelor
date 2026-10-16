@@ -291,7 +291,7 @@ nothing imports `app.js`.
 | `model/events.js` | the host's events into the model (`entity`, `vault`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
-| `features/lenses/documents.js` | lenses |
+| `features/lenses/documents.js` | lenses; Documents groups its rows by project |
 | `features/close.js` | closing the app: the `close` event answered `close_ready` |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/sidebar.js` | the vault panel: projects, No project with their counts, the filter, the vault menu |
