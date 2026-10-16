@@ -46,8 +46,9 @@ The page's own markup (`index.html`) names its texts by key too, and the
 host fills them in as it serves the page: `data-t="lens.bank"` is the
 element's text, which it has none of in the markup, and
 `data-t-title="editor.bold"` is its `title` (and so for any attribute).
-A date, a count and a relative day follow the locale through `Intl`
-(`core/format.js`).
+A date, a count, a relative day, an amount and the order of texts follow
+the language's locale through `Intl` (`core/format.js`), not the
+system's region, which the web view would take.
 
 ## The host's texts <a id="host-texts"></a>
 

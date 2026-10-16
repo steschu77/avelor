@@ -1,4 +1,6 @@
-// Dates as the page shows them.
+// Dates and counts as the page shows them.
+
+import { locale } from './text.js';
 
 // ----------------------------------------------------------------------------
 // A host date: `YYYY-MM-DD` as that local day's start (not UTC midnight,
@@ -11,10 +13,15 @@ export function parseDate(text) {
 }
 
 // ----------------------------------------------------------------------------
+// Two texts in the page's order, through a shared collator (`localeCompare`
+// builds one per call).
+export const compareText = new Intl.Collator(locale).compare;
+
+// ----------------------------------------------------------------------------
 // Every date format of the page, here and through shared instances
 // (`toLocale*String` builds a formatter per call); named by what they show,
 // the examples in US English.
-const format = options => new Intl.DateTimeFormat(undefined, options);
+const format = options => new Intl.DateTimeFormat(locale, options);
 
 export const DATE_FORMAT = format();                                    // 10/14/2026
 const DAY_MONTH = format({ day: '2-digit', month: '2-digit' });         // 10/14

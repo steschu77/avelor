@@ -4,9 +4,15 @@
   "count.of_total": "{at} de {n}",
   "docs.date": "Fecha",
   "docs.fold_thread": "Plegar el hilo",
+  "docs.hidden_count": {
+    "one": "{n} oculto",
+    "other": "{n} ocultos"
+  },
   "docs.name": "Nombre",
   "docs.unfold_thread": "Desplegar el hilo",
   "error.code": "Algo ha fallado ({code}).",
+  "header.types": "Tipos",
+  "header.types_title": "Mostrar u ocultar los tipos",
   "indexing.label": "Indexando {path}",
   "indexing.replaced": "sustituida por otra indexación",
   "indexing.unread": {
@@ -35,6 +41,78 @@
   "start.failed": "Se ha producido un error.\n\nEl archivo de registro tiene más información.",
   "status.dismiss": "Descartar",
   "status.more": "+{n} más",
+  "types.bank": "Banco",
+  "types.contacts": "Contactos",
+  "types.conversations": "Conversaciones",
+  "types.count_bank": {
+    "one": "{n} elemento bancario",
+    "other": "{n} elementos bancarios"
+  },
+  "types.count_contacts": {
+    "one": "{n} contacto",
+    "other": "{n} contactos"
+  },
+  "types.count_conversations": {
+    "one": "{n} conversación",
+    "other": "{n} conversaciones"
+  },
+  "types.count_documents": {
+    "one": "{n} documento",
+    "other": "{n} documentos"
+  },
+  "types.count_email": {
+    "one": "{n} correo",
+    "other": "{n} correos"
+  },
+  "types.count_events": {
+    "one": "{n} evento",
+    "other": "{n} eventos"
+  },
+  "types.count_lists": {
+    "one": "{n} lista",
+    "other": "{n} listas"
+  },
+  "types.count_notes": {
+    "one": "{n} nota",
+    "other": "{n} notas"
+  },
+  "types.count_records": {
+    "one": "{n} registro",
+    "other": "{n} registros"
+  },
+  "types.count_tasks": {
+    "one": "{n} tarea",
+    "other": "{n} tareas"
+  },
+  "types.documents": "Documentos",
+  "types.email": "Correo",
+  "types.events": "Eventos",
+  "types.hidden": "{list} ocultos",
+  "types.hide_bank": "Ocultar elementos bancarios",
+  "types.hide_contacts": "Ocultar contactos",
+  "types.hide_conversations": "Ocultar conversaciones",
+  "types.hide_documents": "Ocultar documentos",
+  "types.hide_email": "Ocultar correos",
+  "types.hide_events": "Ocultar eventos",
+  "types.hide_lists": "Ocultar listas",
+  "types.hide_notes": "Ocultar notas",
+  "types.hide_records": "Ocultar registros",
+  "types.hide_tasks": "Ocultar tareas",
+  "types.lists": "Listas",
+  "types.notes": "Notas",
+  "types.records": "Registros",
+  "types.show_all": "Mostrar todos los tipos",
+  "types.show_bank": "Mostrar elementos bancarios",
+  "types.show_contacts": "Mostrar contactos",
+  "types.show_conversations": "Mostrar conversaciones",
+  "types.show_documents": "Mostrar documentos",
+  "types.show_email": "Mostrar correos",
+  "types.show_events": "Mostrar eventos",
+  "types.show_lists": "Mostrar listas",
+  "types.show_notes": "Mostrar notas",
+  "types.show_records": "Mostrar registros",
+  "types.show_tasks": "Mostrar tareas",
+  "types.tasks": "Tareas",
   "vault.none_open": "No hay ninguna bóveda abierta.",
   "vault.pick": "Seleccionar bóveda",
   "vault.show_failed": "No se pudo mostrar la carpeta de la bóveda."

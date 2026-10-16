@@ -1,11 +1,11 @@
 // The page's texts in the run's language (localization.md): its catalog,
 // the language's texts over English's, which the host put into the page
-// (#texts, page.rs), and its locale, the page's lang. The web view is given
-// the same locale, so the dates and numbers of core/format.js follow it.
+// (#texts, page.rs), and its locale, the page's lang, which core/format.js
+// formats its dates, numbers and sorts in, whatever the system's region.
 
 import { $ } from './dom.js';
 
-const locale = document.documentElement.lang || 'en';
+export const locale = document.documentElement.lang || 'en';
 const catalog = JSON.parse($('texts')?.textContent || '{}');
 const forms = new Intl.PluralRules(locale);
 const number = new Intl.NumberFormat(locale);
