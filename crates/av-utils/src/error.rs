@@ -27,6 +27,8 @@ pub enum Error {
     /// The id names something of another kind than the command takes (a
     /// task where a project is expected).
     WrongKind,
+    /// The entity was created in the app and has no file yet.
+    Unsaved,
     /// The entity's file can't be written: read-only, or its frontmatter
     /// didn't parse (rewriting it would lose the broken original).
     NotWritable {
@@ -79,6 +81,7 @@ impl Error {
             Error::InvalidPath { .. } => "invalid_path",
             Error::NotFound => "not_found",
             Error::WrongKind => "wrong_kind",
+            Error::Unsaved => "unsaved",
             Error::NotWritable { .. } => "not_writable",
             Error::FileExists { .. } => "file_exists",
             Error::FileWrite { .. } => "file_write",

@@ -51,8 +51,9 @@ pub struct Document {
     envelope: Option<Envelope>,
     content: String,
     format: FileFormat,
-    /// What the file held when the app last read or wrote it.
-    disk: OnDisk,
+    /// What the file held when the app last read or wrote it; `None` for an
+    /// entity made in the app that isn't written yet.
+    disk: Option<OnDisk>,
     err: Result<()>,
 }
 
@@ -89,15 +90,48 @@ impl Document {
             envelope,
             content,
             format,
-            disk,
+            disk: Some(disk),
             err,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// A new entity made in the app (not loaded from a file): a fresh `id`,
+    /// dated now, already adopted, with the envelope built from the given
+    /// fields. It has no on-disk state yet, so it is dirty until saved.
+    pub fn create(
+        roles: Roles,
+        source: Source,
+        title: String,
+        projects: Vec<Id>,
+        format: FileFormat,
+    ) -> Self {
+        let id = Id::generate();
+        let envelope = Envelope {
+            id: Some(id),
+            title: Some(title),
+            date: Some(DateTime::now()),
+            projects,
+            source: Some(source),
+            roles,
+            ..Default::default()
+        };
+        Self {
+            id,
+            envelope: Some(envelope),
+            content: String::new(),
+            format,
+            disk: None,
+            err: Ok(()),
         }
     }
 
     // ------------------------------------------------------------------------
     /// The document as read from a file stamped `stamp`.
     pub(crate) fn stamped(mut self, stamp: Option<FileStamp>) -> Self {
-        self.disk.stamp = stamp;
+        if let Some(disk) = &mut self.disk {
+            disk.stamp = stamp;
+        }
         self
     }
 
@@ -105,17 +139,17 @@ impl Document {
     /// The document was written to its file, now stamped `stamp`: what it
     /// holds is what is on disk.
     pub(crate) fn written(&mut self, stamp: Option<FileStamp>) {
-        self.disk = OnDisk {
+        self.disk = Some(OnDisk {
             envelope: self.envelope.clone(),
             content: self.content.clone(),
             stamp,
-        };
+        });
     }
 
     // ------------------------------------------------------------------------
     /// The file's stamp at the last read or write.
     pub(crate) fn stamp(&self) -> Option<FileStamp> {
-        self.disk.stamp
+        self.disk.as_ref().and_then(|disk| disk.stamp)
     }
 
     // ------------------------------------------------------------------------
@@ -254,9 +288,11 @@ impl Document {
 
     // ------------------------------------------------------------------------
     /// Whether the document differs from what its file held at the last
-    /// read or write.
+    /// read or write; one made in the app is, until it is written.
     pub fn is_dirty(&self) -> bool {
-        self.disk.envelope != self.envelope || self.disk.content != self.content
+        self.disk
+            .as_ref()
+            .is_none_or(|disk| disk.envelope != self.envelope || disk.content != self.content)
     }
 
     // ------------------------------------------------------------------------
@@ -403,6 +439,7 @@ fn write_content(doc_type: &FileFormat, envelope: &Option<Envelope>, content: &s
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::envelope::Empty;
 
     const DOC: &str = "---\nid: 01a06d07-2b70-708c-9c71-7ddfaa46c0f5\ntitle: Test\ntags: [a, b]\ncustom_key: kept\n---\nBody line.\n";
     const ID: &str = "01a06d07-2b70-708c-9c71-7ddfaa46c0f5";
@@ -457,6 +494,31 @@ mod tests {
             envelope.extra.get("custom_key").and_then(|v| v.as_str()),
             Some("kept")
         );
+    }
+
+    #[test]
+    fn create_builds_a_dirty_adopted_entity() {
+        let project = Id::generate();
+        let roles = Roles {
+            thread: Some(crate::envelope::Thread {}),
+            ..Default::default()
+        };
+        let doc = Document::create(
+            roles,
+            Source::Created(Empty {}),
+            "New thread".into(),
+            vec![project],
+            FileFormat::YAML,
+        );
+
+        assert_eq!(doc.kind(), DocumentType::Thread);
+        assert!(doc.adopted() && doc.is_dirty() && !doc.is_broken());
+        assert!(doc.date().is_some());
+        let saved = doc.save();
+        assert!(saved.contains(&format!("id: {}", doc.id())));
+        assert!(saved.contains("created: {}"));
+        assert!(saved.contains("thread: {}"));
+        assert!(saved.contains(&project.to_string()));
     }
 
     #[test]

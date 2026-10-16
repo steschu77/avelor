@@ -1,6 +1,6 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
 // archived folded) after No project, with their counts, each a filter;
-// renaming and starring projects; the vault's name and menu. It renders at most once per frame
+// renaming, adding and starring projects; the vault's name and menu. It renders at most once per frame
 // (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
@@ -117,14 +117,17 @@ function renderSidebar() {
     return row;
   };
 
-  // Starred projects first; otherwise in the order they arrived. The
-  // archived ones follow, folded under an "Archived" row (`archivedUnfolded`).
+  // Starred projects first; otherwise in the order they arrived, so a new
+  // project's pill stays last while it is renamed in place. The archived
+  // ones follow, folded under an "Archived" row (`archivedUnfolded`).
   const projectRows = [];
   const archivedRows = [];
+  let editRow = null;
   for (const { id, name, starred, archived } of projectsInOrder()) {
     const row = rowFor(`project:${id}`, name, () => {
       const row = sidebarNavItem('nav-item nav-item--project', name, 'nav-item__icon nav-item__icon--star', '#i-star', () => selectProject(id),
         { icon: '#i-edit', title: 'Rename project', onClick: row => editProject(id, row) });
+      row.dataset.id = id;
       row.querySelector('.nav-item__icon').addEventListener('click', e => {
         e.stopPropagation();
         toggleStar(id);
@@ -136,6 +139,7 @@ function renderSidebar() {
     // The star's symbol follows `starred`: an SVG's can't change in CSS.
     row.querySelector('.nav-item__icon use').setAttribute('href', starred ? '#i-star-filled' : '#i-star');
     (archived ? archivedRows : projectRows).push(row);
+    if (id === editProjectId) editRow = row;
   }
   if (archivedRows.length) {
     const fold = rowFor('archived', 'Archived', () =>
@@ -146,6 +150,10 @@ function renderSidebar() {
     if (archivedUnfolded) projectRows.push(...archivedRows);
   }
   placeChildren(projectsContainer, projectRows);
+  if (editRow) {
+    editProjectId = null;
+    editProject(editRow.dataset.id, editRow);
+  }
 
   sidebarRows = rows;
 
@@ -167,6 +175,22 @@ function editProject(project_id, row) {
   editSidebarName(row, name, title =>
     structureCall('set_title', { id: project_id, title }, () => store.getState()));
 }
+
+// The project `addProject` created, to be renamed in place as soon as
+// `renderSidebar` has built its pill.
+let editProjectId = null;
+
+// The "Add project" button: the host writes a new project and pushes it as
+// `entity`; its pill then opens in rename mode. The selection stays.
+function addProject() {
+  structureCall('create_project', { title: 'New project' }, project_id => {
+    editProjectId = project_id;
+    scheduleRenderSidebar();
+    return store.getState();
+  });
+}
+
+$('add-project-btn').addEventListener('click', addProject);
 
 allProjectsEl.addEventListener('click', () => store.setState({ selected_project: null }));
 noProjectEl.addEventListener('click', () => selectProject(NO_PROJECT));

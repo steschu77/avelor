@@ -48,6 +48,7 @@ enum Command {
     SaveDocContent(Save),
     CheckFiles(Ids),
     // The structural commands (`structure`).
+    CreateProject(Title),
     JoinProject(InProject),
     LeaveProject(InProject),
     SetTitle(Retitle),
@@ -97,6 +98,12 @@ struct Save {
 #[derive(Deserialize)]
 struct Ids {
     ids: Vec<Id>,
+}
+
+/// `{title}`
+#[derive(Deserialize)]
+struct Title {
+    title: String,
 }
 
 /// `{id, project}`
@@ -156,6 +163,7 @@ impl Command {
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "save_doc_content" => Command::SaveDocContent(from_value(args)?),
             "check_files" => Command::CheckFiles(from_value(args)?),
+            "create_project" => Command::CreateProject(from_value(args)?),
             "join_project" => Command::JoinProject(from_value(args)?),
             "leave_project" => Command::LeaveProject(from_value(args)?),
             "set_title" => Command::SetTitle(from_value(args)?),
@@ -202,6 +210,7 @@ fn route(app: &mut App, req: Req, command: Command) {
             documents::save_doc_content(app, req, a.id, a.markdown, a.overwrite)
         }
         Command::CheckFiles(a) => documents::check_files(app, req, a.ids),
+        Command::CreateProject(a) => structure::create_project(app, req, a.title),
         Command::JoinProject(a) => {
             structure::membership(app, req, a.id, a.project, S::join_project)
         }

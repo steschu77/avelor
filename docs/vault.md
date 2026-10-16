@@ -1,8 +1,8 @@
 # Avelor — Vault
 
 > The vault's file format and its life cycle: what an entity file holds,
-> identity, roles, types and sources; opening, switching and scanning a
-> vault.
+> identity, roles, types and sources, file names, the layout; opening,
+> switching and scanning a vault.
 
 ## Principles <a id="principles"></a>
 
@@ -52,9 +52,9 @@ Every entity — markdown file or YAML record — carries a stable `id`.
   74 random bits): time-ordered, standard, no coordination needed.
   Implemented in-house: timestamp from `SystemTime`, randomness
   from the system-preferred RNG.
-- Filenames are display/convenience only. Hand-renaming in any tool is
-  always safe: identity is the frontmatter `id`, never the path. The `id`
-  never changes.
+- Filenames are display/convenience only and are app-generated
+  (`vault.md#filenames`). Hand-renaming in any tool is always safe: identity
+  is the frontmatter `id`, never the path. The `id` never changes.
 - All references between entities use IDs.
 - A file without an `id` gets a new random one on every scan.
 
@@ -194,7 +194,8 @@ missing key means not starred.
 `archived` puts an entity away without deleting it. Like `starred`, it is
 only written as `archived: true`; a missing key means not archived.
 
-`rename` says whether the app may rename the file to its generated name.
+`rename` says whether the app may rename the file to its generated name
+(`vault.md#filenames`).
 
 The `date` field always carries a UTC timestamp.
 
@@ -581,6 +582,50 @@ Block: `import:`
 The entity was imported from an external file.
 
 * `origin`: string, filename of the imported file (csv, txt, json, ics, vcf)
+
+## Filenames <a id="filenames"></a>
+
+Filenames are a **generated presentation layer** over the well-known
+metadata fields (`av-vault/filename.rs`).
+
+Formula: `{YYYYMMDDThhmm}.{slug(title)}.{id4}.{type-id}.{ext}`
+
+Every field boundary is a dot — one separator, no special characters. The
+slug never contains a dot (the slug rule replaces them), so the name is
+always exactly five dot-separated segments: `prefix.slug.id4.type-id.ext`.
+
+- **`YYYYMMDDThhmm`** — a datetime prefix on **every** file, using the
+  `date` field of the frontmatter, so a plain directory sort is
+  chronological. No dashes, `T` separator, `hhmm` 24h. Date-only sources
+  (all-day events, most letters) use `T0000`. No seconds — the prefix is
+  to-the-minute only; exact chronological order within a minute comes from
+  sorting on the `id` (UUIDv7), not the filename.
+- **slug** — from `title`: lowercased, ASCII-folded
+  (`Meißen` → `meissen`), spaces and dots → `-`, truncated to ~20 chars.
+  Deterministic: the same title always yields the same slug.
+- **`id4`** — last 4 hex of the `id`. Mandatory. Guarantees filename
+  uniqueness so no `foo 2.md` collision counters: two documents with the
+  same title still differ here.
+- **`type-id`** — three-letter code for the entity's derived type, one per
+  well-known type, so glob filters (`*.evt.md`) are type-aware.
+- **`ext`** — `md` for markdown files, `yaml` for pure YAML files.
+
+Only the files the app creates get generated names, and the app renames no
+file later: a file keeps the slug of the title it was created with, and the
+`rename` key is ignored.
+
+## Vault layout <a id="vault-layout"></a>
+
+A convention, not law. The folders the app writes into are named in
+`av_vault::schema::layout`. Typed collections get conventional folders;
+markdown documents may live anywhere — discovery is by frontmatter scan,
+not by location:
+
+```
+Vault/
+  Projects/            # *.md / *.yaml project descriptors
+  …any user folders for notes, letters, tasks…
+```
 
 ## The forged vault
 

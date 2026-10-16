@@ -12,11 +12,15 @@ use std::fs::Metadata;
 use std::fs::{self, DirEntry};
 use std::io::ErrorKind;
 use std::io::Read;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::document::{Document, FileFormat};
 use crate::envelope::DocumentType;
+use crate::envelope::{Empty, Project, Roles, Source};
+use crate::filename;
+use crate::schema::layout;
 use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::fs::write_atomic;
@@ -103,7 +107,8 @@ pub struct Entry {
 }
 
 impl Entry {
-    /// An entry for an entity that has no file yet.
+    /// An entry for an entity created in the app that has no file yet (see
+    /// [`Document::create`]): no path, so [`Index::save`] refuses it.
     pub fn unsaved(doc: Document) -> Self {
         Self {
             path: PathBuf::new(),
@@ -155,6 +160,9 @@ impl Entry {
 /// when the operation fails part-way.
 #[derive(Debug, Default)]
 pub struct Changes {
+    /// An entity new in the index: made in the app, written to its own new
+    /// file.
+    pub created: Option<Id>,
     /// Entities whose file was rewritten.
     pub saved: Vec<Id>,
 }
@@ -285,6 +293,9 @@ impl Index {
             return Err(Error::NotFound);
         };
         let entry = &self.documents[i];
+        if entry.is_unsaved() {
+            return Err(Error::Unsaved);
+        }
         if !overwrite && entry.changed_on_disk()? {
             return Ok(SaveOutcome::Conflict(*id));
         }
@@ -321,6 +332,9 @@ impl Index {
             return Err(Error::NotFound);
         };
         let entry = &self.documents[i];
+        if entry.is_unsaved() {
+            return Err(Error::Unsaved);
+        }
         let readonly = match fs::metadata(&entry.path) {
             Ok(metadata) => metadata.permissions().readonly(),
             Err(err) if err.kind() == ErrorKind::NotFound => {
@@ -371,6 +385,57 @@ impl Index {
     // recording each file it wrote in `changes`. A failed save restores that
     // entity's in-memory state, so the index always matches the disk.
 
+    /// Create a new project titled `title`. Its file gets its generated
+    /// name (`filename::generated_name`) in `Projects/`, the conventional
+    /// folder (vault.md#vault-layout), and is markdown, so its body
+    /// can serve as the project's readme.
+    pub fn create_project(&mut self, title: String, changes: &mut Changes) -> Result<Id> {
+        let roles = Roles {
+            project: Some(Project {}),
+            ..Default::default()
+        };
+        let doc = Document::create(
+            roles,
+            Source::Created(Empty {}),
+            title,
+            Vec::new(),
+            FileFormat::Markdown,
+        );
+        self.create(doc, Path::new(layout::PROJECTS), changes)
+    }
+
+    /// Write the new entity `doc` to a file with its generated name in
+    /// `folder` (vault-relative), never over an existing file, and add it to
+    /// the index. Without an open vault (no root) it is `InvalidPath`.
+    pub fn create(&mut self, doc: Document, folder: &Path, changes: &mut Changes) -> Result<Id> {
+        if self.root.as_os_str().is_empty() {
+            // no vault is open
+            return Err(Error::InvalidPath {
+                path: PathBuf::new(),
+            });
+        }
+        let local = folder.join(filename::generated_name(&doc));
+        let path = self.root.join(&local);
+        write_new(&path, &doc.save())?;
+        let stamp = FileStamp::read(&path).ok().flatten();
+
+        let id = doc.id();
+        let mut entry = Entry {
+            path,
+            local,
+            readonly: false,
+            bom: String::new(),
+            crlf: LineEnding::default(),
+            written: true,
+            doc,
+        };
+        entry.doc.written(stamp);
+        self.insert(entry);
+
+        changes.created = Some(id);
+        Ok(id)
+    }
+
     pub fn join_project(
         &mut self,
         doc: &Id,
@@ -403,7 +468,7 @@ impl Index {
 
     /// Set the title of `id`, which may be any entity. An empty title removes
     /// it ([`Document::set_title`]). Only the file's content changes; the file
-    /// is not renamed to match.
+    /// is not renamed to match (vault.md#filenames).
     pub fn set_title(
         &mut self,
         id: &Id,
@@ -654,6 +719,27 @@ fn clean_labels(tags: Vec<String>) -> Vec<String> {
 }
 
 // ----------------------------------------------------------------------------
+/// Write `text` to a new file at `path`, creating its folder; fails rather
+/// than replace a file that already exists. A failure is
+/// `Error::FileWrite` with `path`.
+fn write_new(path: &Path, text: &str) -> Result<()> {
+    let written = (|| {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        file.write_all(text.as_bytes())
+    })();
+    written.map_err(|err| Error::FileWrite {
+        path: path.to_path_buf(),
+        err,
+    })
+}
+
+// ----------------------------------------------------------------------------
 fn load(path: PathBuf, local: PathBuf, readonly: bool, doc_type: FileFormat) -> Result<Entry> {
     let mut file = fs::File::open(&path)?;
     // Stamped before reading: a change in between shows up as a conflict
@@ -895,6 +981,60 @@ mod tests {
         fs::remove_dir_all(&root).ok();
     }
 
+    #[test]
+    fn added_unsaved_entity_is_indexed_but_not_saved() {
+        use crate::envelope::{Empty, Roles, Thread};
+
+        let mut index = Index::default();
+        let roles = Roles {
+            thread: Some(Thread {}),
+            ..Default::default()
+        };
+        let doc = Document::create(
+            roles,
+            Source::Created(Empty {}),
+            "New thread".into(),
+            Vec::new(),
+            FileFormat::YAML,
+        );
+        let id = doc.id();
+
+        let entry = index.add(Entry::unsaved(doc));
+        assert!(entry.is_unsaved());
+        assert_eq!(entry.doc.format(), FileFormat::YAML);
+        assert_eq!(index.get(&id).unwrap().kind(), DocumentType::Thread);
+        assert!(matches!(index.save(&id, false), Err(Error::Unsaved)));
+    }
+
+    #[test]
+    fn remove_keeps_the_other_entries_findable() {
+        use crate::envelope::{Empty, Roles};
+
+        let mut index = Index::default();
+        let ids: Vec<Id> = (0..3)
+            .map(|i| {
+                let doc = Document::create(
+                    Roles::default(),
+                    Source::Created(Empty {}),
+                    format!("doc {i}"),
+                    Vec::new(),
+                    FileFormat::Markdown,
+                );
+                index.add(Entry::unsaved(doc)).doc.id()
+            })
+            .collect();
+
+        let removed = index.remove(&ids[0]).expect("entry");
+        assert_eq!(removed.doc.id(), ids[0]);
+        assert!(index.get(&ids[0]).is_none());
+        assert!(index.remove(&ids[0]).is_none(), "second remove is a no-op");
+
+        // The last entry was moved into the freed slot; it must still resolve.
+        assert_eq!(index.get(&ids[1]).unwrap().title(), "doc 1");
+        assert_eq!(index.get(&ids[2]).unwrap().title(), "doc 2");
+        assert_eq!(index.all().len(), 2);
+    }
+
     fn thread_vault() -> (PathBuf, Vec<Id>) {
         let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
         let ids: Vec<Id> = (0..3)
@@ -914,18 +1054,35 @@ mod tests {
     }
 
     #[test]
-    fn remove_keeps_the_other_entries_findable() {
-        let (root, ids) = thread_vault();
+    fn created_project_survives_a_rescan() {
+        let (root, _) = thread_vault();
         let mut index = Index::scan(&root);
-        let first = index.all()[0].doc.id();
 
-        let removed = index.remove(&first).unwrap();
-        assert_eq!(removed.doc.id(), first);
-        assert!(index.get(&first).is_none());
-        assert_eq!(index.all().len(), 2);
-        for id in ids.iter().filter(|id| **id != first) {
-            assert_eq!(index.get(id).unwrap().id(), *id);
-        }
+        let mut changes = Changes::default();
+        let project = index
+            .create_project("New project".into(), &mut changes)
+            .unwrap();
+        assert_eq!(changes.created, Some(project));
+        assert!(changes.saved.is_empty());
+
+        let entry = index.entry(&project).unwrap();
+        assert!(entry.local.starts_with("Projects"));
+        let name = entry
+            .local
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert!(
+            name.contains(".new-project.") && name.ends_with(".prj.md"),
+            "{name}"
+        );
+        assert!(entry.is_writable());
+
+        let rescanned = Index::scan(&root);
+        let doc = rescanned.get(&project).unwrap();
+        assert_eq!(doc.kind(), DocumentType::Project);
+        assert_eq!(doc.title(), "New project");
 
         fs::remove_dir_all(&root).ok();
     }

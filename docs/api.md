@@ -104,6 +104,7 @@ has no file, is read-only or has broken frontmatter, `not_found`,
 
 | Command | Args | Does | Answer `id` |
 |---|---|---|---|
+| `create_project` | `{ title }` | A project titled `title`, as a markdown file in `Projects/`. | the new project |
 | `join_project` | `{ id, project }` | Make `id` a member of the project; nothing if it already is. | the project |
 | `leave_project` | `{ id, project }` | Remove `id` from the project. | the project |
 | `set_title` | `{ id, title }` | Set the title of any entity; an empty title removes the `title` key. The file keeps its name. | the entity |
@@ -132,7 +133,7 @@ What the host pushes; the page listens with `rpcOn`.
 | `activated` | `null` | The window is active again: the page saves its unsaved edits and looks at the files of the others (`check_files`). |
 | `close` | `{ id }` | The window's Close (`saving.md#closing-the-app`). |
 | `job` | `{ id, label, state: "running"\|"done", done, total, note, stoppable }` | A job started, made progress, or ended: a vault scan. `note` is an ended job's summary (what it did, what failed, or why it failed); a job that ended did all its steps (`done` = `total`). |
-| `entity` | `{ id, kind, title, path, source, genre, date, projects, tags, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during a vault scan, and for every entity an edit rewrote, whatever the edit (a structural command, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
+| `entity` | `{ id, kind, title, path, source, genre, date, projects, tags, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during a vault scan, and for every entity an edit created or rewrote, whatever the edit (a structural command, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
 | `entity_deleted` | `{ id }` | The entity left the vault: its file is gone. |
 | `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: its file was read again. `load_doc_content` answers with the same `source` and `html`. |
 | `notice` | `{ level: "error", message }` | `error`: the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), or `config.yaml` couldn't be read at start (on `ready`). A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |

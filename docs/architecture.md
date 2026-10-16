@@ -51,7 +51,7 @@ read by OCR.
 |---|---|
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
-| `vault.md` | the file format: identity, roles, types, sources, metadata; opening and scanning a vault |
+| `vault.md` | the file format: identity, roles, types, sources, metadata, file names, layout; opening and scanning a vault |
 | `api.md` | the protocol: transport, rules, the page's side, every command and event |
 | `ui.md` | the main window: layout, vault panel and filters, lenses, status bar, jobs panel, keys, preferences |
 | `panel.md` | the side panel: cards, threads, links, labels, projects, structural edits and how they are saved |
@@ -94,6 +94,8 @@ The rules the code follows, and every change to it:
    `repositories/`; it needs state that can only be changed through its own
    methods, and modules that don't reach into each other.
 4. **Every request gets exactly one answer; every failure is visible.**
+5. **The vault crate owns the vault's schema**; the app orchestrates; the
+   page presents.
 6. **Pure core, thin shell.** Mapping and decision logic are pure functions
    with tests; I/O sits at the edges.
 7. **One coordinator.** `App` (`app.rs`) is the only place that runs
@@ -207,7 +209,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | Crate | Owns | Notes |
 |---|---|---|
 | av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), logger, random (BCrypt), text normalization, atomic writes (`fs`), cross-thread `Cancel` | |
-| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), `Index` with structural ops and `Changes`, the scan (`scan`, events applied by `Index::apply`), `to_html` | no network, no UI |
+| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes`, the scan (`scan`, events applied by `Index::apply`), filenames, `to_html` | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 
 ### av-vault's core
@@ -227,6 +229,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
       envelope: Option<Envelope>,  // the only copy of the metadata
       content: String,
       format: FileFormat,
+      disk: Option<OnDisk>,        // what the file held at the last read or write
       err: Result<()>,
   }
   ```

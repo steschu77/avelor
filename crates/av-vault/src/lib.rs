@@ -5,6 +5,8 @@
 
 pub mod document;
 pub mod envelope;
+pub mod filename;
 pub mod markdown;
+pub mod schema;
 pub mod shared;
 pub mod vault;

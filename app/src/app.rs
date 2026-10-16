@@ -426,9 +426,10 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// Send what an edit wrote: every rewritten entity (`entity`).
+    /// Send what an edit wrote: every created or rewritten entity
+    /// (`entity`).
     fn post_changes(&self, changes: &Changes) {
-        for id in &changes.saved {
+        for id in changes.created.iter().chain(&changes.saved) {
             if let Some(entry) = self.vault.index().entry(id) {
                 self.post_entity(entry);
             }

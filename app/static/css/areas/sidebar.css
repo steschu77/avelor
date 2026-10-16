@@ -65,6 +65,26 @@
   transform: rotate(-90deg);
 }
 
+/* "+" on the section label, shown on hover */
+.nav-section__add {
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid transparent;
+  background: none;
+  font-size: var(--fs-meta);
+  letter-spacing: 0;
+  color: var(--c-ink-mute);
+  visibility: hidden;
+}
+
+.nav-section__add:hover {
+  background: var(--c-hover);
+}
+
+.nav-section:hover .nav-section__add {
+  visibility: visible;
+}
+
 .nav-item {
   /* the pill's side padding; the round controls at its ends are placed
      from it and the row height */

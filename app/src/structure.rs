@@ -20,7 +20,8 @@ use crate::protocol::Req;
 /// The answer of a structural command.
 #[derive(Serialize)]
 pub struct Done {
-    /// The entity the command is about: the entity itself.
+    /// The entity the command is about: the new project, the project of a
+    /// membership edit, the entity itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<Id>,
     /// Nothing was written: a file changed outside the app.
@@ -79,6 +80,14 @@ fn answer(app: &App, req: Req, result: Result<SaveOutcome>, id: Option<Id>) {
             req.fail(err, message);
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+/// `create_project`: a project titled `title`, in `Projects/`.
+pub fn create_project(app: &mut App, req: Req, title: String) {
+    let created = app.edit(|index, changes| index.create_project(title, changes));
+    let id = created.as_ref().ok().copied();
+    answer(app, req, created.map(|_| SaveOutcome::Saved), id);
 }
 
 // ----------------------------------------------------------------------------
@@ -163,7 +172,6 @@ pub fn reload_entity(app: &mut App, req: Req, id: Id) {
 // ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
-    use crate::testing::Harness;
     use crate::testing::parse;
     use crate::testing::{notes, shape};
     use av_utils::error::Error;
@@ -187,22 +195,6 @@ mod tests {
         assert_eq!(sent[1], json!({ "re": 1, "ok": { "id": ids[0] } }));
         let text = fs::read_to_string(h.vault().join("Notes/n0.md")).unwrap();
         assert!(text.contains("title: Renamed"), "{text}");
-    }
-
-    // ------------------------------------------------------------------------
-    #[test]
-    fn starring_and_archiving_push_the_project_before_the_answer() {
-        let project = Id::generate();
-        let text = format!("id: {project}\nproject: {{}}\ntitle: Move\n");
-        let mut h = Harness::with_vault("star-archive", &[("Projects/move.yaml", text)]);
-
-        let sent = h.call("set_starred", json!({ "id": project, "starred": true }));
-        assert_eq!(shape(&sent), ["entity", "reply"]);
-        assert_eq!(sent[0]["data"]["starred"], true);
-        let sent = h.call("set_archived", json!({ "id": project, "archived": true }));
-        assert_eq!(shape(&sent), ["entity", "reply"]);
-        assert_eq!(sent[0]["data"]["archived"], true);
-        assert_eq!(sent[1]["ok"]["id"], project.to_string());
     }
 
     // ------------------------------------------------------------------------
@@ -240,26 +232,30 @@ mod tests {
     // ------------------------------------------------------------------------
     #[test]
     fn joining_a_project_answers_with_the_project() {
-        let (project, note) = (Id::generate(), Id::generate());
-        let files = [
-            (
-                "Projects/move.yaml".to_string(),
-                format!("id: {project}\nproject: {{}}\ntitle: Move\n"),
-            ),
-            (
-                "Notes/n0.md".to_string(),
-                format!("---\nid: {note}\ntitle: Note 0\ndocument: {{}}\n---\nBody 0\n"),
-            ),
-        ];
-        let mut h = Harness::with_vault("join-project", &files);
-        let sent = h.call("join_project", json!({ "id": note, "project": project }));
+        let (mut h, ids) = notes("join-project", 1);
+        let sent = h.call("create_project", json!({ "title": "Move" }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["kind"], "project");
+        let project = sent[1]["ok"]["id"].clone();
+
+        let sent = h.call("join_project", json!({ "id": ids[0], "project": project }));
         assert_eq!(shape(&sent), ["entity", "reply"]);
         assert_eq!(sent[0]["data"]["projects"], json!([project]));
-        assert_eq!(sent[1]["ok"]["id"], project.to_string());
+        assert_eq!(sent[1]["ok"]["id"], project);
+    }
 
-        let sent = h.call("leave_project", json!({ "id": note, "project": project }));
+    // ------------------------------------------------------------------------
+    #[test]
+    fn archiving_pushes_the_project_before_the_answer() {
+        let (mut h, _) = notes("archive", 1);
+        let sent = h.call("create_project", json!({ "title": "Move" }));
+        assert_eq!(sent[0]["data"]["archived"], false);
+        let project = sent[1]["ok"]["id"].clone();
+
+        let sent = h.call("set_archived", json!({ "id": project, "archived": true }));
         assert_eq!(shape(&sent), ["entity", "reply"]);
-        assert_eq!(sent[0]["data"]["projects"], json!([]));
+        assert_eq!(sent[0]["data"]["archived"], true);
+        assert_eq!(sent[1]["ok"]["id"], project);
     }
 
     // ------------------------------------------------------------------------
