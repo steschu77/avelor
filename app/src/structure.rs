@@ -1,5 +1,5 @@
 //! The structural commands (`panel.md#saving-structure`): threads,
-//! projects, titles, stars, archiving, labels, links -- and
+//! projects, titles, stars, archiving, labels, links, deletes -- and
 //! `reload_entity`, the conflict dialog's Use theirs, which ends like
 //! them. Typed commands (`api.md#structure`): each edit goes through
 //! `App::step`, `App::edit` keeping the step to undo, which pushes every
@@ -23,7 +23,8 @@ use crate::texts::Text;
 #[derive(Serialize)]
 pub struct Done {
     /// The entity the command is about: the new thread or project, the
-    /// thread or project of a membership edit, the entity itself.
+    /// thread or project of a membership edit, the entity itself; none for
+    /// a delete.
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<Id>,
     /// Nothing was written: a file changed outside the app.
@@ -202,6 +203,16 @@ pub fn set_archived(app: &mut App, req: Req, id: Id, archived: bool) {
 }
 
 // ----------------------------------------------------------------------------
+/// `delete_entity`: move `id`'s file to `.trash`; threads it leaves with
+/// fewer than two members are dissolved (`panel.md#structural-edits`), and a
+/// project's members leave it first.
+pub fn delete_entity(app: &mut App, req: Req, id: Id) {
+    let step = Text::new("undo.delete_entity").arg("title", named(app, &id, ""));
+    let result = app.step(&req, step, |index, changes| index.delete(&id, changes));
+    answer(app, req, result, None);
+}
+
+// ----------------------------------------------------------------------------
 /// `reload_entity`: read `id`'s file again and take in what it holds now,
 /// the conflict dialog's Use theirs (`saving.md#the-dialog`). The entity as it
 /// is now and its content are pushed, or `entity_deleted` if the file is
@@ -233,6 +244,7 @@ pub fn reload_entity(app: &mut App, req: Req, id: Id) {
 #[cfg(test)]
 mod tests {
     use crate::testing::parse;
+    use crate::testing::trashed;
     use crate::testing::{notes, shape, shown, undoes};
     use av_utils::error::Error;
     use av_utils::id::Id;
@@ -300,6 +312,42 @@ mod tests {
         let args = json!({ "id": ids[0], "thread": thread });
         let sent = undoes(&mut h, "leave_thread", args);
         assert!(shape(&sent).contains(&"entity_deleted"), "{sent:?}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn deleting_a_member_pushes_the_dissolved_thread_too() {
+        let (mut h, ids) = notes("delete", 2);
+        let sent = h.call("create_thread", json!({ "title": "Trip", "members": ids }));
+        let thread = sent[0]["data"]["id"].as_str().unwrap().to_string();
+
+        let sent = h.call("delete_entity", json!({ "id": ids[0] }));
+        assert_eq!(
+            shape(&sent),
+            ["entity", "entity_deleted", "entity_deleted", "reply"]
+        );
+        assert_eq!(sent[0]["data"]["id"], ids[1].to_string(), "the member left");
+        let mut deleted = [&sent[1]["data"]["id"], &sent[2]["data"]["id"]].map(|v| v.to_string());
+        deleted.sort();
+        let mut expected = [json!(thread), json!(ids[0])].map(|v| v.to_string());
+        expected.sort();
+        assert_eq!(deleted, expected);
+        assert_eq!(sent[3], json!({ "re": 1, "ok": {} }));
+        assert!(trashed(&h.vault(), "Notes/n0.md"));
+
+        // The undo brings back the member, its thread and the other member's
+        // place in it.
+        h.call("undo", json!({}));
+        h.call("redo", json!({}));
+        let sent = h.call("undo", json!({}));
+        let back = shape(&sent).iter().filter(|e| **e == "entity").count();
+        assert_eq!(back, 3, "{sent:?}");
+        assert!(!trashed(&h.vault(), "Notes/n0.md"));
+        let thread_file = h
+            .files()
+            .into_keys()
+            .filter(|p| p.extension().is_some_and(|e| e == "yaml"));
+        assert_eq!(thread_file.count(), 1, "the thread back");
     }
 
     // ------------------------------------------------------------------------
@@ -393,6 +441,27 @@ mod tests {
             "set_starred",
             json!({ "id": project, "starred": true }),
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn deleting_a_project_pushes_its_members_then_the_project() {
+        let (mut h, ids) = notes("delete-project", 2);
+        let sent = h.call("create_project", json!({ "title": "Move" }));
+        let project = sent[1]["ok"]["id"].clone();
+        for id in &ids {
+            h.call("join_project", json!({ "id": id, "project": project }));
+        }
+
+        let sent = h.call("delete_entity", json!({ "id": project }));
+        assert_eq!(
+            shape(&sent),
+            ["entity", "entity", "entity_deleted", "reply"]
+        );
+        assert_eq!(sent[0]["data"]["projects"], json!([]));
+        assert_eq!(sent[1]["data"]["projects"], json!([]));
+        assert_eq!(sent[2]["data"]["id"], project);
+        assert_eq!(sent[3], json!({ "re": 1, "ok": {} }));
     }
 
     // ------------------------------------------------------------------------

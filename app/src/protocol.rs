@@ -64,6 +64,7 @@ enum Command {
     SetArchived(Archive),
     SetLabels(Relabel),
     SetLink(Relink),
+    DeleteEntity(Target),
     ReloadEntity(Target),
     // The steps undone and redone (`undo`).
     Undo,
@@ -199,6 +200,7 @@ impl Command {
             "set_archived" => Command::SetArchived(from_value(args)?),
             "set_labels" => Command::SetLabels(from_value(args)?),
             "set_link" => Command::SetLink(from_value(args)?),
+            "delete_entity" => Command::DeleteEntity(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
             "undo" => Command::Undo,
             "redo" => Command::Redo,
@@ -282,6 +284,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),
         Command::SetLabels(a) => structure::set_labels(app, req, a.id, a.labels),
         Command::SetLink(a) => structure::set_link(app, req, a.id, a.to),
+        Command::DeleteEntity(a) => structure::delete_entity(app, req, a.id),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),
         Command::Undo => undo::replay(app, req, Op::Undo),
         Command::Redo => undo::replay(app, req, Op::Redo),

@@ -1,6 +1,6 @@
 // The structural edits (panel.md#saving-structure, api.md#structure):
-// threads, projects, titles, labels, links and reloads, each a host round
-// trip that ends in a published selection (`commitExistingSelection`,
+// threads, projects, titles, labels, links, deletes and reloads, each a
+// host round trip that ends in a published selection (`commitExistingSelection`,
 // model/entities.js); joining and leaving threads and projects, labels and
 // links as requests of their own (`joinThreadLocal`, ..., `setLinkLocal`).
 // The panel's drops and buttons (features/panel/panel.js), the table, the
@@ -69,7 +69,7 @@ export function reloadEntity(id) {
 //   entity, its neighbor in thread order (next, else previous) is selected
 //   instead.
 // For a standalone entity (`thread_id` null) the selection just drops it.
-function selectionWithout(doc_id, thread_id) {
+export function selectionWithout(doc_id, thread_id) {
   const members = thread_id ? threadMembers(thread_id) : [];
   const index = members.findIndex(m => m.doc_id === doc_id);
   const neighbor = members[index + 1] ?? members[index - 1];

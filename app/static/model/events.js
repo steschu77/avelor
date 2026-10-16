@@ -18,8 +18,8 @@ import { onActivated } from './documents.js';
 
 // ----------------------------------------------------------------------------
 function onProject(id, meta) {
-  const { title: name, path, starred, archived, writable } = meta;
-  projects.set(id, { id, name, path, starred, archived, writable });
+  const { title: name, path, starred, archived, writable, deletable } = meta;
+  projects.set(id, { id, name, path, starred, archived, writable, deletable });
   store.setState({ projects_rev: store.getState().projects_rev + 1 });
 }
 
