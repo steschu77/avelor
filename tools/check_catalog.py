@@ -3,10 +3,12 @@
 Usage: python tools/check_catalog.py app/texts/fr.json [app/texts/pt.json ...]
 
 Lists the keys a catalog lacks, with how much of English it covers; English
-fills those in. Fails on what the build would refuse: a catalog that isn't
-an object of texts, a count's forms without "other" or with a category
-Intl.PluralRules doesn't have, a key English doesn't have (stale), and a
-placeholder English's text doesn't have. The standard library only.
+fills those in. A formal catalog (fr.formal.json) holds only the texts that
+address the user formally, its language's catalog the rest. Fails on what
+the build would refuse: a catalog that isn't an object of texts, a count's
+forms without "other" or with a category Intl.PluralRules doesn't have, a
+key English doesn't have (stale), and a placeholder English's text doesn't
+have. The standard library only.
 """
 
 import json
@@ -52,6 +54,7 @@ def placeholders(text):
 
 def check(path, english):
     catalog = texts_of(path)
+    language, _, variant = path.name[:-len('.json')].partition('.')
     problems = []
     for key, text in catalog.items():
         problems += shape_problems(key, text)
@@ -62,13 +65,22 @@ def check(path, english):
         if extra:
             names = ', '.join(f'{{{name}}}' for name in sorted(extra))
             problems.append(f'"{key}" has {names}, which en.json\'s hasn\'t')
-    lacking = sorted(key for key in english if key not in catalog)
-    covered = len(english) - len(lacking)
-    share = 100 * covered // max(len(english), 1)
-    print(f'{path.name}: {covered} of {len(english)} texts ({share}%)')
-    for key in lacking:
-        shown = json.dumps(english[key], ensure_ascii=False)
-        print(f'  lacks "{key}": {shown}')
+    if variant:
+        base = path.with_name(f'{language}.json')
+        if variant != 'formal':
+            problems.append(f'"{variant}" is no variant; only a formal '
+                            'catalog is named so')
+        elif not base.exists():
+            problems.append(f'there is no {base.name} it is the formal one of')
+        print(f'{path.name}: {len(catalog)} formal texts over {base.name}')
+    else:
+        lacking = sorted(key for key in english if key not in catalog)
+        covered = len(english) - len(lacking)
+        share = 100 * covered // max(len(english), 1)
+        print(f'{path.name}: {covered} of {len(english)} texts ({share}%)')
+        for key in lacking:
+            shown = json.dumps(english[key], ensure_ascii=False)
+            print(f'  lacks "{key}": {shown}')
     for problem in problems:
         print(f'  {problem}')
     return not problems

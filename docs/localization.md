@@ -29,6 +29,11 @@ A catalog is one JSON object of texts by key:
 - **English, German and Spanish** are the app's own: each has every key
   English has. A language from outside may lack some; English fills them
   in.
+- **The way of address**: the catalogs address the user informally ("du",
+  "tú"). A language's formal catalog (`de.formal.json`, `es.formal.json`)
+  holds the texts that address the user, formally ("Wählen Sie ein
+  Modell."); its language's catalog has the rest. A new text that
+  addresses the user gets its formal version too.
 
 The catalogs are UTF-8, outside `app/static` and its ASCII rule
 (`architecture.md`, ASCII-only sources).
@@ -68,6 +73,9 @@ plain texts only: the failed start's box and the folder picker's title
 A run shows one language, chosen at its start:
 
 1. `language` in `config.yaml` (`language: de`), if a catalog has it;
+   after a comma, how the texts address the user (`language: de,
+   informal`, the default, or `language: de, formal`, which takes the
+   language's formal catalog where it has one);
 2. else the first of the system's languages a catalog has: the display
    languages of Windows, in their order; on Linux `LANGUAGE`, `LC_ALL`,
    `LC_MESSAGES` and `LANG`, as GLib reads them;
@@ -90,6 +98,8 @@ catalog, on:
 - a key a catalog has that English lacks, or a placeholder that English's
   text doesn't have;
 - a key English has that German or Spanish lacks;
+- a formal catalog without its language's, or a file named for another
+  variant;
 - an element of `index.html` with a key and a text of its own, and the
   page's script with a `data-t` mark, which the host would fill in;
 - a count's forms for a text the host shows itself;
@@ -102,6 +112,8 @@ A language comes as a pull request with its catalog:
 1. Copy `app/texts/en.json` to the language's file (`fr.json`) and
    translate its texts; keep the keys and the placeholders. A count's
    forms take the categories the language has (CLDR's plural rules).
+   Where the language has a formal way of address, the texts that address
+   the user can go formally into `fr.formal.json` too.
 2. Run `python tools/check_catalog.py app/texts/fr.json`: it lists the
    keys the catalog lacks, with how much of English it covers, and fails
    on a key English no longer has, a placeholder English's text doesn't

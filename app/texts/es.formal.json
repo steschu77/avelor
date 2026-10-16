@@ -1,0 +1,4 @@
+{
+  "conflict.changed_unsaved": "El archivo del disco cambió {when}, así que su cambio no se guardó. Cargue la versión del disco y vuelva a hacer el cambio.",
+  "conflict.deleted_unsaved": "El archivo se eliminó fuera de la aplicación, así que su cambio no se guardó."
+}

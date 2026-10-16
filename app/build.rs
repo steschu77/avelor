@@ -468,12 +468,27 @@ fn build_texts(root: &Path, out_dir: &Path, html: &str, js: &str) {
         failed(&problems);
     }
 
+    // A language's formal catalog (`de.formal.json`) holds the texts that
+    // address the user; the rest are its language's.
     let mut rows = String::new();
     for catalog in std::iter::once(&english).chain(&catalogs) {
+        let file = format!("app/texts/{}.json", catalog.language);
+        let (language, formal) = match catalog.language.split_once('.') {
+            Some((language, "formal")) => (language, true),
+            Some(_) => {
+                panic!("{file}: only a formal catalog is named so (localization.md#catalogs)")
+            }
+            None => (catalog.language.as_str(), false),
+        };
+        let base = catalogs.iter().find(|base| base.language == language);
+        let texts = match (formal, base) {
+            (false, _) => catalog.over(&english),
+            (true, Some(base)) => catalog.over(&base.over(&english)),
+            (true, None) => panic!("{file}: there is no app/texts/{language}.json"),
+        };
         rows.push_str(&format!(
-            "    Catalog {{ language: {:?}, json: {:?} }},\n",
-            catalog.language,
-            catalog.over(&english).to_json(),
+            "    Catalog {{ language: {language:?}, formal: {formal}, json: {:?} }},\n",
+            texts.to_json(),
         ));
     }
     let out = format!("pub static CATALOGS: &[Catalog] = &[\n{rows}];\n");

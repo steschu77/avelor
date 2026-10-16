@@ -1,0 +1,4 @@
+{
+  "conflict.changed_unsaved": "Die Datei auf der Festplatte hat sich {when} geändert, daher wurde Ihre Änderung nicht gespeichert. Laden Sie die Fassung von der Festplatte und nehmen Sie die Änderung erneut vor.",
+  "conflict.deleted_unsaved": "Die Datei wurde außerhalb der App gelöscht, daher wurde Ihre Änderung nicht gespeichert."
+}
