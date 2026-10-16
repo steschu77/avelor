@@ -8,7 +8,7 @@ import { store } from '../../static/model/state.js';
 const project = (id, more = {}) => ({ id, kind: 'project', title: id, ...more });
 const doc = (id, more = {}) => ({ id, kind: 'document', title: id, ...more });
 const ids = list => list.map(one => one.id);
-const FILTER = { selected_project: null };
+const FILTER = { selected_project: null, selected_labels: [] };
 const shown = filter => [...entities.values()].filter(one => matchesFilter(one, { ...FILTER, ...filter })).map(one => one.id);
 
 test('the starred projects come first, the archived last, else as they arrived', () => {
@@ -30,6 +30,11 @@ test('a project as the filter, and none', () => {
   vault(project('p'), project('q'), doc('a', { projects: ['p'] }), doc('b', { projects: ['q', 'p'] }), doc('c'), doc('d', { projects: ['deleted'] }));
   equal(shown({ selected_project: 'p' }), ['a', 'b']);
   equal(shown({ selected_project: NO_PROJECT }), ['c', 'd']);
+});
+
+test('labels as the filter are all carried', () => {
+  vault(doc('a', { labels: ['x', 'y'] }), doc('b', { labels: ['x'] }), doc('c'));
+  equal([shown({ selected_labels: ['x'] }), shown({ selected_labels: ['x', 'y'] })], [['a', 'b'], ['a']]);
 });
 
 test("the store's filter is the one without another", () => {

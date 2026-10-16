@@ -55,7 +55,7 @@ function forgetVault() {
   const { projects_rev, entities_rev } = store.getState();
   store.setState({
     selected_entity: null, selected_thread: null,
-    selected_project: null,
+    selected_project: null, selected_labels: [],
     projects_rev: projects_rev + 1, entities_rev: entities_rev + 1,
   });
 }

@@ -1,0 +1,73 @@
+// The lens header: the selected project's name, the
+// active labels with the "+" that filters by another one
+// (ui.md#vault-panel).
+
+import { $, accEl, oncePerFrame } from '../core/dom.js';
+import { compareText } from '../core/format.js';
+import { t } from '../core/text.js';
+import { store } from '../model/state.js';
+import { NO_PROJECT, entities, matchesFilter, projects } from '../model/entities.js';
+import { showMenu } from '../ui/menu.js';
+
+const projectNameEl = $('project-name');
+
+// The header names the selected project, No project or All Projects;
+// `projects_rev` catches a rename.
+store.subscribe(
+  [state => state.selected_project, state => state.projects_rev],
+  ([selected_project]) => {
+    if (selected_project === NO_PROJECT) projectNameEl.textContent = t('sidebar.no_project');
+    else if (selected_project) projectNameEl.textContent = projects.get(selected_project)?.name ?? '';
+    else projectNameEl.textContent = t('sidebar.all_projects');
+  });
+
+// After the name, the header names the active labels, each with an x that
+// takes it out of the filter, and a "+" that adds one, while any label is
+// in use: looked at once per frame, not once per entity of an indexing.
+const labelFilterEl = $('label-filter');
+const labelAddBtn = $('label-add-btn');
+store.subscribe(state => state.selected_labels, selected_labels =>
+  labelFilterEl.replaceChildren(...labelChips(selected_labels,
+    next => store.setState({ selected_labels: next }),
+    label => t('header.stop_label', { label }))));
+const scheduleLabelAdd = oncePerFrame(() => {
+  labelAddBtn.hidden = ![...entities.values()].some(doc => doc.labels?.length);
+});
+store.subscribe(state => state.entities_rev, scheduleLabelAdd);
+
+// The "+" menu: every label in use but the active ones, filtered as typed,
+// each with what the filter would show with it added; one that would show
+// nothing is dim.
+labelAddBtn.addEventListener('click', () => {
+  const state = store.getState();
+  const counts = new Map(); // label -> the entities in the filter carrying it
+  for (const doc of entities.values()) {
+    const shown = matchesFilter(doc, state);
+    for (const label of doc.labels ?? []) counts.set(label, (counts.get(label) ?? 0) + (shown ? 1 : 0));
+  }
+  const items = [...counts.keys()].filter(label => !state.selected_labels.includes(label))
+    .sort(compareText)
+    .map(label => ({
+      label: label,
+      hint: String(counts.get(label)),
+      dim: !counts.get(label),
+      run: () => store.setState({ selected_labels: [...store.getState().selected_labels, label] }),
+    }));
+  showMenu(labelAddBtn, items.length ? items : [{ label: t('header.no_other_labels'), dim: true }],
+    { head: t('header.filter_label'), filter: { placeholder: t('header.filter_labels') } });
+});
+
+// ----------------------------------------------------------------------------
+// Labels (`tags`) as chips, each with an x that calls `onChange(tags)` with
+// the label removed; `removeTitle(tag)` titles the x.
+function labelChips(labels, onChange, removeTitle) {
+  return labels.map(label => {
+    const chip = accEl('span', 'chip chip--label', label);
+    const remove = accEl('button', 'chip__remove', '\u00d7');
+    remove.type = 'button';
+    remove.title = removeTitle(label);
+    remove.addEventListener('click', () => onChange(labels.filter(t => t !== label)));
+    chip.append(remove);
+    return chip;
+  });
+}
