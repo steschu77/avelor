@@ -21,6 +21,7 @@ import { showMenu } from '../ui/menu.js';
 import { createEditorToolbar } from '../ui/toolbar.js';
 import { editTextInPlace } from '../ui/field.js';
 import { openLink } from './selection.js';
+import { selectFilter } from './selection.js';
 import { leaveCardEditMode } from './panel/panel.js';
 import { tagChips } from './panel/panel.js';
 
@@ -46,7 +47,7 @@ const labelFilterEl = $('label-filter');
 const labelAddBtn = $('label-add-btn');
 store.subscribe(state => state.selected_labels, selected_labels =>
   labelFilterEl.replaceChildren(...tagChips(selected_labels,
-    next => store.setState({ selected_labels: next }),
+    next => selectFilter({ selected_labels: next }),
     tag => `Stop filtering by ${tag}`)));
 const scheduleLabelAdd = oncePerFrame(() => {
   labelAddBtn.hidden = ![...entities.values()].some(doc => doc.tags?.length);
@@ -69,7 +70,7 @@ labelAddBtn.addEventListener('click', () => {
       label: tag,
       hint: String(counts.get(tag)),
       dim: !counts.get(tag),
-      run: () => store.setState({ selected_labels: [...store.getState().selected_labels, tag] }),
+      run: () => selectFilter({ selected_labels: [...store.getState().selected_labels, tag] }),
     }));
   showMenu(labelAddBtn, items.length ? items : [{ label: 'No other labels', dim: true }],
     { head: 'Filter by a label', filter: { placeholder: 'Filter labels' } });

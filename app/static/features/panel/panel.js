@@ -283,8 +283,8 @@ function renderCardLinks(doc_id, row) {
 }
 
 // The cards' heads, links and threads lines follow every entity change --
-// a title changed -- without rebuilding the cards (and their editors);
-// subscribed below.
+// a title changed, a thread restored -- without rebuilding the cards (and
+// their editors); subscribed below.
 const refreshCardChips = oncePerFrame(() => {
   renderThreadProjects();
   for (const controller of msgControllers.values()) {

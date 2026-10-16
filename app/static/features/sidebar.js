@@ -15,6 +15,7 @@ import { iconEl } from '../ui/icons.js';
 import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
+import { selectFilter } from './selection.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
 const projectsContainer = $('projects');
@@ -165,10 +166,12 @@ function renderSidebar() {
 }
 
 // Filter actions: one project, No project or all (clicking the selected one
-// again, or its "All" row, selects all).
+// again, or its "All" row, selects all). Every filter row is a non-page
+// item: a click on it closes the open vault page (`selectFilter`,
+// features/selection.js), even if the filter stays the same.
 function selectProject(project_id) {
   const current = store.getState().selected_project;
-  store.setState({ selected_project: project_id === current ? null : project_id });
+  selectFilter({ selected_project: project_id === current ? null : project_id });
 }
 
 // Rename a project in place; the host writes the new title (an empty one
@@ -211,12 +214,12 @@ dropTarget(projectsContainer, {
   },
 });
 
-allProjectsEl.addEventListener('click', () => store.setState({ selected_project: null }));
+allProjectsEl.addEventListener('click', () => selectFilter({ selected_project: null }));
 noProjectEl.addEventListener('click', () => selectProject(NO_PROJECT));
 
 // The star on a project pill: the host writes `starred` (unstarring removes
 // it) and pushes the project back as `entity`, which re-sorts the pills.
-// The selection and the filter stay.
+// The selection, the filter and an open page stay.
 function toggleStar(project_id) {
   const starred = !projects.get(project_id)?.starred;
   structureCall('set_starred', { id: project_id, starred }, () => store.getState());

@@ -15,9 +15,14 @@ Three panels:
   `panel.md#projects`);
 - the **side panel** on the right.
 
-Both side panels have grips to resize them; the widths are remembered
-across restarts (`ui.md#preferences`). Menus are popups (`showMenu`,
-`ui/menu.js`), which mark their anchor `aria-expanded`.
+Both side panels can be extended to full width for focused work and have
+grips to resize them; the widths are remembered across restarts
+(`ui.md#preferences`). Opening a panel never moves the main view's
+layout. The expanded vault area hosts the
+pages of the vault panel: the Workspace pages (Trash). It is expanded only
+while one of them is shown: a page opens it (`openVaultOp`, `ui/page.js`);
+its × or a click on a filter closes it (`closeVaultArea`). Menus are popups
+(`showMenu`, `ui/menu.js`), which mark their anchor `aria-expanded`.
 
 ## Vault panel <a id="vault-panel"></a>
 
@@ -32,7 +37,9 @@ the page, once per frame (`panel.md#host-pushes`).
   entities in no project of the vault (`NO_PROJECT` as
   `selected_project`); starred projects come first; archived projects are
   folded under an "Archived" row at the end, still selectable
-  (`projectsInOrder`). Editing projects is `panel.md#projects`.
+  (`projectsInOrder`). Creating and editing projects, and dropping rows on
+  them, is `panel.md#projects`.
+- **Workspace**: Trash.
 
 **Labels** filter from the lens head, for every lens: after the project's
 name the active labels, each a label chip whose × takes it out of the
@@ -146,8 +153,8 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | A5 | Panel widths | drag a grip → `saveWidth` → `savePrefs` | `set_prefs {prefs}` → `config.yaml` `prefs` | the width comes back on the next start, inside the page (`#prefs`), without easing |
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
-| B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selected_labels` | — | entities carrying all selected labels; the head names them |
+| B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
-| F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selected_project`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |
+| F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selectFilter`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |

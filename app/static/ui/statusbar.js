@@ -44,11 +44,12 @@ store.subscribe(state => state.notices, renderStatusbar);
 rpcOn('notice', ({ message }) => showError(message));
 
 // A failed call nobody handled is shown here too, so no failure is only a
-// console line. Cancelled calls are expected, and stay quiet.
+// console line. Superseded and cancelled calls are expected, and stay
+// quiet.
 window.addEventListener('unhandledrejection', e => {
   const error = e.reason;
   if (!(error instanceof RpcError)) return;
   e.preventDefault();
-  if (error.code === 'cancelled') return;
+  if (error.code === 'superseded' || error.code === 'cancelled') return;
   showError(`${error.cmd}: ${error.message}`);
 });

@@ -27,6 +27,7 @@ import {
   dropTarget, endDragPreview, startDragPreview, takeMemberDrops,
 } from '../../ui/dropzone.js';
 import { markSelection, selectById, selectDocument } from '../selection.js';
+import { selectFilter } from '../selection.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
 
 const lensEl = $('lens-documents');
@@ -413,7 +414,7 @@ rowsEl.addEventListener('click', ev => {
   const row = ev.target.closest('.list-row');
   if (!row) return;
   if (row.dataset.group !== undefined) {
-    if (ev.target.closest('.group-row__open')) store.setState({ selected_project: row.dataset.group });
+    if (ev.target.closest('.group-row__open')) selectFilter({ selected_project: row.dataset.group });
     else toggleGroup(row.dataset.group);
   } else if (ev.target.closest('.docs__fold')) {
     toggleThread(row.dataset.thread);

@@ -3,7 +3,7 @@
 // an icon button), a second one runs `run`. It disarms after 3 s, when the
 // pointer leaves it, or once it has run; while aria-disabled it does
 // nothing. One button is armed at a time, page-wide. The card's delete and
-// the project header's.
+// the project header's, the trash's.
 
 let armed = null; // { button, restore, timer } of the armed button
 

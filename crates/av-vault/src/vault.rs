@@ -13,6 +13,7 @@ use std::fs::{self, DirEntry};
 use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
+use std::path::Component;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -177,12 +178,29 @@ impl Entry {
 #[derive(Debug, Default)]
 pub struct Changes {
     /// An entity new in the index: made in the app, written to its own new
-    /// file.
+    /// file, or restored from the trash ([`Index::restore`]).
     pub created: Option<Id>,
     /// Entities whose file was rewritten.
     pub saved: Vec<Id>,
     /// Entities whose file was moved to `.trash` and which left the index.
     pub trashed: Vec<Id>,
+}
+
+// ----------------------------------------------------------------------------
+/// A file in the trash ([`Index::trashed`], vault.md#trash): where it
+/// is, relative to `.trash` -- its vault-relative path, unless a clash gave
+/// it a prefix -- and what it holds, or why it couldn't be read.
+#[derive(Debug)]
+pub struct Trashed {
+    pub local: PathBuf,
+    pub doc: std::result::Result<Document, String>,
+}
+
+impl Trashed {
+    /// The date of what it holds, if it could be read and has one.
+    pub fn date(&self) -> Option<DateTime> {
+        self.doc.as_ref().ok().and_then(Document::date)
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -779,6 +797,126 @@ impl Index {
         Ok(())
     }
 
+    /// The files in the trash, newest first: the markdown and YAML files
+    /// under `<root>/.trash`, read as the scan reads the vault.
+    pub fn trashed(&self) -> Vec<Trashed> {
+        let mut files: Vec<Trashed> = self
+            .trash_files()
+            .into_iter()
+            .map(|(path, local, readonly, format)| Trashed {
+                doc: load(path, local.clone(), readonly, format)
+                    .map(|entry| entry.doc)
+                    .map_err(|err| err.to_string()),
+                local,
+            })
+            .collect();
+        files.sort_by(|a, b| b.date().cmp(&a.date()).then_with(|| a.local.cmp(&b.local)));
+        files
+    }
+
+    /// Move the trashed file `local` (relative to `.trash`, as
+    /// [`Index::trashed`] lists it) back to where it was -- its name without
+    /// the prefix [`Index::trash`] adds on a clash -- and add it to the
+    /// index; returns its id. Refused with [`Error::FileExists`] when a file is
+    /// in that place, or an entity with the file's `id` is in the vault.
+    /// The trash folders this leaves empty are removed.
+    pub fn restore(&mut self, local: &Path, changes: &mut Changes) -> Result<Id> {
+        let (from, format) = self.trashed_file(local)?;
+        let target = untrashed(local);
+        let to = self.root.join(&target);
+        if to.try_exists()? {
+            return Err(Error::FileExists { path: target });
+        }
+        let readonly = fs::metadata(&from)?.permissions().readonly();
+        // Read where it is: the move keeps its stamp (time and size).
+        let mut entry = load(from.clone(), target.clone(), readonly, format)?;
+        let id = entry.doc.id();
+        if entry.doc.adopted()
+            && let Some(other) = self.entry(&id)
+        {
+            return Err(Error::FileExists {
+                path: other.local.clone(),
+            });
+        }
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::rename(&from, &to)?;
+        prune_empty(&self.root.join(layout::TRASH), from.parent());
+        entry.path = to;
+        self.insert(entry);
+        changes.created = Some(id);
+        Ok(id)
+    }
+
+    /// Delete the trashed file `local` for good, also a read-only one, and
+    /// the trash folders this leaves empty.
+    pub fn delete_trashed(&self, local: &Path) -> Result<()> {
+        let (path, _) = self.trashed_file(local)?;
+        let mut permissions = fs::metadata(&path)?.permissions();
+        if permissions.readonly() {
+            // Only the trash's own file, about to be deleted.
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            fs::set_permissions(&path, permissions)?;
+        }
+        fs::remove_file(&path)?;
+        prune_empty(&self.root.join(layout::TRASH), path.parent());
+        Ok(())
+    }
+
+    /// Delete every file [`Index::trashed`] lists for good, and the folders
+    /// this leaves empty; anything else in the trash stays. Returns how many
+    /// files were deleted, and stops at the first that can't be.
+    pub fn empty_trash(&self) -> Result<usize> {
+        let files = self.trash_files();
+        for (_, local, _, _) in &files {
+            self.delete_trashed(local)?;
+        }
+        Ok(files.len())
+    }
+
+    /// The markdown and YAML files under `<root>/.trash`, as the scan's walk
+    /// finds them: `(path, local, readonly, format)`, `local` relative to
+    /// the trash. None without a vault.
+    fn trash_files(&self) -> Vec<(PathBuf, PathBuf, bool, FileFormat)> {
+        let mut files = Vec::new();
+        if self.root.as_os_str().is_empty() {
+            return files;
+        }
+        walk(
+            &self.root.join(layout::TRASH),
+            Path::new(""),
+            &mut |path, local, readonly, format| files.push((path, local, readonly, format)),
+        );
+        files
+    }
+
+    /// The trashed file `local` and its format: `local` must be a relative
+    /// path that stays inside the trash ([`Error::InvalidPath`]) and name a
+    /// markdown or YAML file ([`Error::InvalidFileType`]) that is there
+    /// ([`Error::FileNotFound`]). Without a vault, every path is invalid.
+    fn trashed_file(&self, local: &Path) -> Result<(PathBuf, FileFormat)> {
+        let inside = local
+            .components()
+            .all(|c| matches!(c, Component::Normal(_)));
+        if self.root.as_os_str().is_empty() || local.as_os_str().is_empty() || !inside {
+            return Err(Error::InvalidPath {
+                path: local.to_path_buf(),
+            });
+        }
+        let Some(format) = file_format(local) else {
+            return Err(Error::InvalidFileType);
+        };
+        let path = self.root.join(layout::TRASH).join(local);
+        if !path.is_file() {
+            return Err(Error::FileNotFound {
+                path: local.to_path_buf(),
+            });
+        }
+        Ok((path, format))
+    }
+
     /// Apply `change` to `id`'s document and save it, recording a write in
     /// `changes`.
     fn update(
@@ -1031,6 +1169,49 @@ fn load(path: PathBuf, local: PathBuf, readonly: bool, doc_type: FileFormat) -> 
         written: false,
         doc,
     })
+}
+
+// ----------------------------------------------------------------------------
+/// Where the trashed file `local` goes back to: its vault-relative path,
+/// without the `YYYYMMDD_hhmmss.` prefix [`Index::trash`] adds on a clash.
+/// The names the app gives files start `YYYYMMDDThhmm`, never like that.
+fn untrashed(local: &Path) -> PathBuf {
+    let name = local
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    match name.split_once('.') {
+        Some((stamp, rest)) if is_trash_stamp(stamp) && !rest.is_empty() => {
+            local.with_file_name(rest)
+        }
+        _ => local.to_path_buf(),
+    }
+}
+
+/// Whether `text` is a timestamp as [`DateTime::as_timestamp`] writes one
+/// for a moment: `YYYYMMDD_hhmmss`.
+fn is_trash_stamp(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() == 15
+        && bytes.iter().enumerate().all(|(i, b)| {
+            if i == 8 {
+                *b == b'_'
+            } else {
+                b.is_ascii_digit()
+            }
+        })
+}
+
+// ----------------------------------------------------------------------------
+/// Remove the folder `dir` and its parents below `top` while they are
+/// empty; `fs::remove_dir` fails on one that isn't, which ends it.
+fn prune_empty(top: &Path, mut dir: Option<&Path>) {
+    while let Some(d) = dir {
+        if d == top || !d.starts_with(top) || fs::remove_dir(d).is_err() {
+            break;
+        }
+        dir = d.parent();
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1638,6 +1819,133 @@ mod tests {
         assert!(changes.saved.is_empty() && changes.trashed.is_empty());
         assert_eq!(index.members_of(&project).len(), 2);
         assert!(index.entry(&project).unwrap().path.exists());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_deleted_entity_is_listed_in_the_trash_and_restored_as_it_was() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let before = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+        let mut changes = Changes::default();
+        let deleted = index.delete(&ids[0], &mut changes);
+        assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+
+        let trashed = index.trashed();
+        assert_eq!(trashed.len(), 1);
+        assert_eq!(trashed[0].local, Path::new("Notes").join("n0.md"));
+        let doc = trashed[0].doc.as_ref().unwrap();
+        assert_eq!((doc.id(), doc.title()), (ids[0], "Note 0"));
+
+        let mut changes = Changes::default();
+        let id = index.restore(&trashed[0].local, &mut changes).unwrap();
+        assert_eq!(id, ids[0]);
+        assert_eq!(changes.created, Some(ids[0]));
+        assert_eq!(
+            fs::read_to_string(root.join("Notes/n0.md")).unwrap(),
+            before
+        );
+        assert_eq!(index.entry(&id).unwrap().local, Path::new("Notes/n0.md"));
+        assert!(
+            !root.join(".trash/Notes").exists(),
+            "emptied folder removed"
+        );
+        assert!(index.trashed().is_empty());
+
+        // Its stamp came along: the next edit is no conflict.
+        let retitled = index.set_title(&id, "Back".into(), &mut changes);
+        assert_eq!(retitled.unwrap(), SaveOutcome::Saved);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_restore_drops_the_prefix_of_a_clash() {
+        let (root, _) = thread_vault();
+        let mut index = Index::scan(&root);
+        let id = Id::generate();
+        let trashed = root.join(".trash/Notes/20261005_142301.n9.md");
+        fs::create_dir_all(trashed.parent().unwrap()).unwrap();
+        fs::write(&trashed, format!("---\nid: {id}\ndocument: {{}}\n---\n")).unwrap();
+
+        let local = Path::new("Notes/20261005_142301.n9.md");
+        let restored = index.restore(local, &mut Changes::default()).unwrap();
+        assert_eq!(restored, id);
+        assert!(root.join("Notes/n9.md").exists() && !trashed.exists());
+
+        // A generated name isn't such a prefix.
+        let name = Path::new("Notes/20260915T0340.ad.80c3.doc.md");
+        assert_eq!(untrashed(name), name);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_restore_is_refused_when_its_place_or_id_is_taken() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        let deleted = index.delete(&ids[0], &mut changes);
+        assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+
+        fs::write(root.join("Notes/n0.md"), "a new file\n").unwrap();
+        let err = index.restore(Path::new("Notes/n0.md"), &mut changes);
+        assert!(matches!(err, Err(Error::FileExists { path }) if path == Path::new("Notes/n0.md")));
+        assert!(
+            root.join(".trash/Notes/n0.md").exists(),
+            "left in the trash"
+        );
+
+        let copy = root.join(".trash/Copies/n1.md");
+        fs::create_dir_all(copy.parent().unwrap()).unwrap();
+        fs::copy(root.join("Notes/n1.md"), &copy).unwrap();
+        let err = index.restore(Path::new("Copies/n1.md"), &mut changes);
+        assert!(matches!(err, Err(Error::FileExists { path }) if path == Path::new("Notes/n1.md")));
+        assert!(copy.exists() && !root.join("Copies").exists());
+
+        let err = index.restore(Path::new("../Notes/n1.md"), &mut changes);
+        assert!(matches!(err, Err(Error::InvalidPath { .. })));
+        let err = index.restore(&root.join("Notes/n1.md"), &mut changes);
+        assert!(matches!(err, Err(Error::InvalidPath { .. })));
+        let err = index.restore(Path::new("Notes/n0.txt"), &mut changes);
+        assert!(matches!(err, Err(Error::InvalidFileType)));
+        let err = index.restore(Path::new("Notes/gone.md"), &mut changes);
+        assert!(matches!(err, Err(Error::FileNotFound { .. })));
+        assert!(changes.created.is_none());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn trashed_files_are_deleted_one_by_one_or_all_at_once() {
+        let (root, ids) = thread_vault();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        for id in &ids {
+            let deleted = index.delete(id, &mut changes);
+            assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+        }
+        let other = root.join(".trash/notes.txt");
+        fs::write(&other, "not an entity\n").unwrap();
+        let read_only = root.join(".trash/Notes/n2.md");
+        let mut permissions = fs::metadata(&read_only).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&read_only, permissions).unwrap();
+
+        index.delete_trashed(Path::new("Notes/n0.md")).unwrap();
+        assert!(!root.join(".trash/Notes/n0.md").exists());
+        assert_eq!(index.trashed().len(), 2);
+
+        assert_eq!(index.empty_trash().unwrap(), 2, "the read-only one too");
+        assert!(index.trashed().is_empty());
+        assert!(
+            !root.join(".trash/Notes").exists(),
+            "emptied folder removed"
+        );
+        assert!(other.exists(), "what isn't listed stays");
+        let err = index.delete_trashed(Path::new("Notes/n1.md"));
+        assert!(matches!(err, Err(Error::FileNotFound { .. })));
 
         fs::remove_dir_all(&root).ok();
     }

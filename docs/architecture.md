@@ -258,6 +258,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
 | `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
+| `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: threads, projects, titles, stars, archiving, labels, links, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 
@@ -273,7 +274,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
 | Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `gtk::UriLauncher` and `FileLauncher` (they use the XDG desktop portal where there is one) |
 | Random | BCrypt | `av-utils/random.rs` | `getrandom` |
-| File permissions | `readonly()` | av-vault `vault.rs` | `readonly()` is true only when no one may write |
+| File permissions | `readonly()`, `set_readonly(false)` before deleting from the trash | av-vault `vault.rs` | a Unix form for each: `readonly()` is true only when no one may write; `set_readonly(false)` makes a file world-writable (`delete_trashed`) |
 | Editor | developed against WebView2 (Chromium): `contenteditable`, the selection | `editor/editor.js` | WebKitGTK's `contenteditable` and selection differ; `markdown.selftest.html` runs in both (`markdown.md#testing`) |
 | Icons and fonts | inline SVGs from Fluent UI System Icons (MIT), one sprite (`app/static/icons`, `build.rs`); Segoe UI | `css/tokens.css` (`--f-chrome`) | the same SVGs, since the Segoe font can't be shipped; `--f-chrome` already ends in `system-ui` |
 
@@ -342,22 +343,27 @@ nothing imports `app.js`.
 | `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinProjectLocal`, …, `setLinkLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc; the two-click confirm (`armedButton`: one armed button page-wide); the editors' toolbars |
 | `ui/field.js` | editing in place (`editTextInPlace`) |
+| `ui/page.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages (`replaceVaultPage`) |
 | `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
-| `features/selection.js` | the selection (`selectDocument`, `selectById`, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
+| `features/selection.js` | the selection (`selectDocument`, `selectById`, the filter, `openLink`, `panelMode`, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`) |
 | `features/panel/panel.js` | the side panel renderer (thread, standalone card), its chips, the structural edits it starts, its subscriptions |
 | `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`) |
 | `features/lenses/types.js` | the type selection of the Documents lens: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
+| `features/workspace/trash.js` | Workspace pages: the trash |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
-| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the panel's layout, the sidebar's sections, the panel's close and expand buttons |
+| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the vault area's and the panel's layout, the page items, the sidebar's sections, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
 | `icons/` | the icons, Fluent UI System Icons (MIT, `icons/LICENSE`), each a file as it comes, joined into the page's sprite by `build.rs` |
 
 A page is drawn by what it must keep while it changes:
 
+- **Rebuilt whole**, the focused input found again by its
+  `data-focus-key` (`replaceVaultPage`): the pages of the vault area,
+  forms that change as a whole and are small.
 - **Reconciled by key** (`placeChildren`): the lenses and the sidebar,
   long lists whose rows keep their hover, focus and drop state.
 
@@ -399,9 +405,9 @@ order into the page's one `<style>`. The order stands in one place, as
 |---|---|
 | `css/tokens.css` | the colors, fonts, sizes, insets, heights, radii, shadows and layers |
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
-| `css/type.css` | the type roles (`label`, `meta`, `row-title`, …) and the utilities (`icon`, `truncate-start`, `push`, `stack`) |
-| `css/components.css` | what several areas share: `btn`, `tool`, `chip`, `input`, `menu`, `list-row`, `pane-head`, the dialogs, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, editor, header (the lens header, the titles edited in place) |
+| `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
+| `css/components.css` | what several areas share: `btn`, `tool`, `chip`, `input`, `menu`, `list-row`, `pane-head`, the dialogs, the vault area's `page`, … |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), documents, panel, editor, workspace (the vault area's pages), header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 

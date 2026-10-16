@@ -39,7 +39,7 @@ which answers through a `Req`.
   snake_case (`Error::code()`): `bad_request`, `invalid_argument`,
   `cancelled`, `not_found` (no entity with that id), `wrong_kind` (the id
   names something of another kind than the command takes), `not_writable`,
-  `file_write`, `win32`, `gtk`, …. `Req::fail` answers in the host's own
+  `file_not_found`, `file_write`, `file_exists`, `win32`, `gtk`, …. `Req::fail` answers in the host's own
   words where the page shows the message.
 - The page sends **strings** (`JSON.stringify`), since the host reads with
   `TryGetWebMessageAsString`.
@@ -59,11 +59,14 @@ which answers through a `Req`.
 
 `rpc.js` is the page's only door to the host.
 
-- `rpcCall(cmd, args)` sends a command and returns a promise of
+- `rpcCall(cmd, args, {channel})` sends a command and returns a promise of
   its one reply, which rejects with an `RpcError {cmd, code, message}`.
+- Of the calls on one channel only the latest counts: the one before is
+  rejected as `superseded` at once (a code the page adds), and its late
+  reply is ignored.
 - `rpcOn(event, fn)` listens for the pushes.
 - A failed call nobody handles is shown in the status bar as an error that
-  stays until dismissed, unless it is `cancelled`, so no
+  stays until dismissed, unless it is `superseded` or `cancelled`, so no
   failure is only a console line.
 
 The structural commands go through `structureCall`
@@ -126,6 +129,17 @@ Host module: `close.rs`.
 | Command | Args | Reply and pushes |
 |---|---|---|
 | `close_ready` | `{ id, ready }` | The page's answer to the `close` event `id`, sent once every save it sent is answered (`saving.md#closing-the-app`): `ready` closes the window; not ready keeps it. An answer to an earlier close changes nothing. `null`. |
+
+### Trash commands <a id="trash"></a>
+
+Host module: `trash.rs`. `vault.md#trash`.
+
+| Command | Args | Reply and pushes |
+|---|---|---|
+| `list_trash` | — | The files in `.trash/`, newest first: `ok {items: [{path, id?, kind, title, genre?, source?, date?, error?}]}`. `path` is relative to `.trash/` and names the file in the commands below; `id` is missing for a file without one, `error` says why a file couldn't be read, or what is wrong with its frontmatter. |
+| `restore_entity` | `{ path }` | Move the trashed file back to where it was: pushes `entity` (a document, thread or project alike), then `ok {id}`. `file_exists` if a file is in that place or an entity with its `id` is in the vault, `invalid_path` for a path that leaves `.trash/`, `file_not_found` if it isn't there; each in the host's words ("Could not restore …"). |
+| `delete_trashed` | `{ path }` | Delete the trashed file for good: `ok {}`; the errors as for `restore_entity` ("Could not delete … for good."). |
+| `empty_trash` | — | Delete every file `list_trash` lists for good, and the folders this leaves empty: `ok {}`. |
 
 ## Events <a id="events"></a>
 

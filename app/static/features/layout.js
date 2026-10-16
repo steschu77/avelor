@@ -1,10 +1,13 @@
 // The shell's layout (architecture.md#page): the grips that resize the
 // vault panel, the panel and its context column, with the widths kept in
-// the preferences; the panel's layout, which follows `panel_size`; the
-// sidebar's sections; the panel's close and expand buttons.
+// the preferences; the vault area's and the panel's layout, which follow
+// `vault_expanded` and `panel_size`; the page items and the sidebar's
+// sections; the panel's close and expand buttons.
 
 import { $ } from '../core/dom.js';
+import { setAria } from '../core/dom.js';
 import { savePrefs, store } from '../model/state.js';
+import { openVaultOp } from '../ui/page.js';
 
 const root = document.documentElement;
 const shell = document.querySelector(".shell");
@@ -24,10 +27,20 @@ let draggingContext = false;
 let sidebarWidth = 232;
 let panelWidth = 400;
 let contextWidth = 400;
+let vaultMode = "normal";
 
 function applyVaultLayout() {
+  /* the list keeps its width in both modes */
   root.style.setProperty("--w-vault-list", `${sidebarWidth}px`);
-  root.style.setProperty("--w-sidebar", `${sidebarWidth}px`);
+
+  if (vaultMode === "expanded") {
+    sidebar.classList.add("is-expanded");
+    root.style.setProperty("--w-sidebar", "100vw");
+  }
+  else if (vaultMode === "normal") {
+    sidebar.classList.remove("is-expanded");
+    root.style.setProperty("--w-sidebar", `${sidebarWidth}px`);
+  }
 }
 
 function applyPanelLayout() {
@@ -149,6 +162,22 @@ document.addEventListener('mouseup', () => {
   panel.classList.remove("is-resizing");
   main.classList.remove("is-resizing");
   document.body.style.cursor = "";
+});
+
+// The vault area's layout follows `vault_expanded` (`openVaultOp`,
+// `closeVaultArea`, ui/page.js).
+store.subscribe(state => state.vault_expanded, vault_expanded => {
+  vaultMode = vault_expanded ? "expanded" : "normal";
+  applyVaultLayout();
+});
+
+// A page item is highlighted only while its page is shown.
+const vaultOpNavs = sidebar.querySelectorAll("[data-vault-op]");
+for (const nav of vaultOpNavs) {
+  nav.addEventListener('click', () => openVaultOp(nav.dataset.vaultOp));
+}
+store.subscribe([state => state.vault_op, state => state.vault_expanded], ([vault_op, vault_expanded]) => {
+  for (const nav of vaultOpNavs) setAria(nav, "aria-current", vault_expanded && nav.dataset.vaultOp === vault_op);
 });
 
 // collapsible sections: a label owns the siblings up to the next label

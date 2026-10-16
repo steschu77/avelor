@@ -24,9 +24,9 @@ function onProject(id, meta) {
 }
 
 // ----------------------------------------------------------------------------
-// A thread as it is now: its title shows in the cards' threads lines,
-// refreshed on `entities_rev`, so one renamed shows without rebuilding the
-// cards.
+// A thread as it is now: its title shows in the cards' threads lines and
+// link chips, refreshed on `entities_rev`, so one restored or renamed
+// shows without rebuilding the cards.
 function onThread(thread_id, meta) {
   threads.set(thread_id, { id: thread_id, ...meta });
   store.setState({ entities_rev: store.getState().entities_rev + 1 });
@@ -36,8 +36,8 @@ function onThread(thread_id, meta) {
 // The entity events (api.md#events): an entity as it is on disk
 // now, one shape for every kind; one that left the vault; a body sent
 // unasked (`load_doc_content` answers with the same `source` and `html`).
-// One new after the scan is one more file; the scan's are counted by its
-// start.
+// One new after the scan -- restored from the trash -- is one more file;
+// the scan's are counted by its start.
 rpcOn('entity', meta => {
   const known = entities.has(meta.id) || threads.has(meta.id) || projects.has(meta.id);
   const { vault_state, files_total } = store.getState();
@@ -96,11 +96,13 @@ function forgetVault() {
   });
 }
 
-// The vault being opened: its scan starts (the vault's name and file
+// The vault being opened: its scan starts (the vault's name, path and file
 // count) and ends.
-rpcOn('vault', ({ state, name, total }) => {
+rpcOn('vault', ({ state, name, path, total }) => {
   if (state !== 'scanning') return store.setState({ vault_state: state });
   forgetVault();
-  store.setState({ vault_name: name, files_total: total, vault_state: 'scanning' });
+  store.setState({
+    vault_name: name, vault_path: path, files_total: total, vault_state: 'scanning',
+  });
 });
 rpcOn('activated', onActivated);

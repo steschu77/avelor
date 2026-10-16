@@ -15,6 +15,7 @@ mod structure;
 mod sys;
 #[cfg(test)]
 mod testing;
+mod trash;
 mod vault_scan;
 
 use av_utils::error::Result;

@@ -49,6 +49,7 @@
   --fs-body: 13px;
   --fs-sub: 15px;
   --fs-doc-title: 18px;
+  --fs-page-title: 26px;
   --lh-body: 1.55;
   --track-label: 0.13em;
 
@@ -70,6 +71,9 @@
   --p-pane: 20px;
   /* y padding of the panel's stacked parts: doc heads, tags, toolbars, text */
   --p-section: 8px;
+  /* the Workspace pages */
+  --p-page-x: 40px;
+  --p-page-y: 28px;
 
   --w-sidebar: 232px;
   --w-vault-list: 232px;
@@ -83,6 +87,6 @@
   --r-pill: 99px;
 
   --z-panel: 2;
-  /* above the panel */
+  /* above the panel and the expanded vault area (3) */
   --z-snackbar: 4;
 }

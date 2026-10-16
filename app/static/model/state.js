@@ -5,7 +5,8 @@ import { createStore } from '../core/store.js';
 import { rpcCall } from '../core/rpc.js';
 
 export const store = createStore({
-  vault_name: '', // the open vault's folder name (the `vault` event)
+  vault_name: '', // the open vault's folder name and path (the `vault` event)
+  vault_path: '',
   vault_state: 'none', // 'none' | 'scanning' | 'open' (the `vault` event)
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
   // level: 'error' }; always replaced
@@ -24,6 +25,8 @@ export const store = createStore({
   threads_rev: 0,
   entities_rev: 0,
   selected_project: null, // project filter: one, NO_PROJECT (in none) or null (all), see matchesFilter
+  vault_op: null, // the Workspace op shown in the expanded vault area ("trash")
+  vault_expanded: false, // the vault area is open
   // the panel's width: 'closed', 'normal' or 'expanded' (full width)
   panel_size: 'normal',
   selected_labels: [], // label (tag) filter: a doc must carry all of them; always replaced, never mutated

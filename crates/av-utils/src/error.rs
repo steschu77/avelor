@@ -22,6 +22,7 @@ pub enum Error {
     InvalidPath {
         path: PathBuf,
     },
+    InvalidFileType,
     /// No entity has the id: it never did, or it is gone.
     NotFound,
     /// The id names something of another kind than the command takes (a
@@ -34,6 +35,12 @@ pub enum Error {
     NotWritable {
         path: PathBuf,
     },
+    FileNotFound {
+        path: PathBuf,
+    },
+    /// Something is already where a file would go -- a restore from the
+    /// trash: a file in its place, or an entity with its `id`; `path` is
+    /// the one in the way.
     FileExists {
         path: PathBuf,
     },
@@ -79,10 +86,12 @@ impl Error {
             Error::InvalidDate => "invalid_date",
             Error::InvalidTime => "invalid_time",
             Error::InvalidPath { .. } => "invalid_path",
+            Error::InvalidFileType => "invalid_file_type",
             Error::NotFound => "not_found",
             Error::WrongKind => "wrong_kind",
             Error::Unsaved => "unsaved",
             Error::NotWritable { .. } => "not_writable",
+            Error::FileNotFound { .. } => "file_not_found",
             Error::FileExists { .. } => "file_exists",
             Error::FileWrite { .. } => "file_write",
             Error::FileIo { .. } => "file_io",

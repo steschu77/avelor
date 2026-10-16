@@ -1,5 +1,6 @@
 /* Components: the parts several areas share (buttons, tools, chips,
-   inputs, menus, grips, pane heads, dialogs, ...). They come before the areas, so an area's rule can override
+   inputs, menus, grips, list rows, pane heads, dialogs, the vault area's
+   page, ...). They come before the areas, so an area's rule can override
    them. */
 
 /* Buttons: bordered and set like a label. */
@@ -49,8 +50,10 @@
   color: var(--c-danger);
 }
 
-/* a delete button between its first (arming) and second click */
-.tool--danger[data-armed] {
+/* a delete button between its first (arming) and second click: a tool's,
+   or Empty trash (features/workspace/trash.js) */
+.tool--danger[data-armed],
+.btn[data-armed] {
   background: var(--c-danger);
   color: var(--c-card);
 }
@@ -325,7 +328,8 @@
   font-size: var(--fs-body);
 }
 
-/* The strip atop a pane: the vault header. */
+/* The strip atop a pane: the vault header, the vault area's title, the
+   project name over the lenses. */
 .pane-head {
   width: 100%;
   height: var(--h-topbar);
@@ -394,6 +398,26 @@
 
 .docs-lens.is-drop-target {
   box-shadow: inset 0 0 0 2px var(--c-accent);
+}
+
+/* A page of the expanded vault area (ui/page.js): the Workspace pages. */
+.page {
+  padding: var(--p-page-y) var(--p-page-x);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* a page's title line: its title, then what it works on */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+/* the text under a page's title line */
+.page-head+.page-text {
+  margin-top: 6px;
 }
 
 /* One part of the panel's stack; doc heads, tags, toolbars, properties and

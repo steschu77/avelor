@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/panel.css">
   <link rel="stylesheet" href="css/areas/editor.css">
+  <link rel="stylesheet" href="css/areas/workspace.css">
   <link rel="stylesheet" href="css/areas/header.css">
 </head>
 
@@ -89,9 +90,19 @@
             <span class="meta nav-item__count"></span>
           </a>
           <div id="projects"></div>
+
+          <div class="nav-section label"><svg class="icon disclosure"><use href="#i-chevron-down" /></svg>Workspace</div>
+          <a class="nav-item nav-item--compact" data-vault-op="trash"><svg class="icon"><use href="#i-delete" /></svg>Trash</a>
         </div>
 
         <div class="jobs" id="jobs"></div>
+      </div>
+      <div class="sidebar__area" id="vault-area">
+        <div class="pane-head">
+          <span id="vault-area-title"></span>
+          <button type="button" class="tool push" id="vault-area-close-btn"><svg class="icon"><use href="#i-dismiss" /></svg></button>
+        </div>
+        <div class="sidebar__area-body" id="vault-area-body"></div>
       </div>
     </aside>
 

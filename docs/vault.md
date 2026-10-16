@@ -87,6 +87,23 @@ a file of that name is already there, the new one gets the prefix
 `YYYYMMDD_hhmmss.`, the time of the delete. The scan skips `.trash/` like
 every dot-folder.
 
+- **Workspace > Trash** (`features/workspace/trash.js`) lists what is there,
+  newest first.
+- **Restore** moves a file back to where it was, without that prefix, and
+  selects it: the entity is in the vault again. It is refused when a file
+  is already in that place, or when an entity with the file's `id` is in
+  the vault.
+- A restore brings back what the file holds, not what the delete did
+  elsewhere: a thread the delete dissolved stays dissolved (its other
+  member left it), and a project deleted since then is gone (its members
+  left it). The file still names them in `threads` and `projects`; the app
+  doesn't show references to entities that aren't in the vault, the same
+  as links (`vault.md#metadata`).
+- **Delete** in the trash and **Empty trash** remove files for good; both
+  take two clicks. Empty removes the markdown and YAML files the trash
+  lists, and the folders this leaves empty; anything else put into
+  `.trash/` stays.
+
 ## Roles, Types and Sources
 
 An entity is described along two independent, stored axes:
@@ -215,7 +232,9 @@ to the letter it originates from, an event to its booking confirmation, a
 reply to the letter it answers, a chat to the document it discusses, an
 attachment to its mail. Any entity can carry one. The other side is
 derived, never stored: an entity is *linked from* every entity whose
-`linked-to` names it.
+`linked-to` names it. Deleting an entity leaves the links to it in place,
+so restoring it from `.trash` brings them back; a link to an id that isn't
+in the vault is not shown.
 
 ### Links in content <a id="links-in-content"></a>
 
@@ -669,6 +688,7 @@ These are the ID card thread's entities; the whole vault has every type.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | A3 | Show in folder | vault menu → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
+| E6 | Restore | Workspace > Trash, Restore → `restore_entity` | `Index::restore` moves the file back → `entity` | the restored entity selected; a thread the delete dissolved stays dissolved |
 
 ## Opening and scanning <a id="opening"></a>
 
@@ -703,8 +723,12 @@ scan read in how many milliseconds.
 
 A vault scan can't be stopped; a new one replaces it (a vault switch). A
 scan is named by an id: the one replaced is aborted, and the batches and
-the end it already queued are dropped. Until the scan ends (`App::scanning`), the index holds
-the files read so far.
+the end it already queued are dropped. While the worker walks, the app
+may write a file the walk then finds too (a restore): `Index::apply`
+skips an entry whose id the index already has, since the app's own entry
+is the newer one. Until the scan ends (`App::scanning`), the index holds
+the files read so far: a command for an entity not read yet answers
+`not_found`.
 
 A scan starts only when a vault opens, so `vault` (scanning) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:

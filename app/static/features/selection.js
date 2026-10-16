@@ -1,5 +1,6 @@
 // The selection (panel.md#selection): what the panel shows -- an entity, a
-// thread -- all in the store; every feature selects through it.
+// thread -- and the vault panel's filter, all in the store; every feature
+// selects through it.
 
 import { setAria } from '../core/dom.js';
 import { rpcCall } from '../core/rpc.js';
@@ -7,6 +8,15 @@ import { savePrefs, store } from '../model/state.js';
 import { showError } from '../model/state.js';
 import { entities, threadOf, threads } from '../model/entities.js';
 import { projects } from '../model/entities.js';
+import { closeVaultArea } from '../ui/page.js';
+
+// Set the vault panel's filter to `patch`: a filter row's click closes
+// the open vault page, even if the filter stays the same
+// (features/sidebar.js).
+export function selectFilter(patch) {
+  closeVaultArea();
+  store.setState(patch);
+}
 
 // Selects an entity, in the thread `thread_id` if it is one of its members
 // (its row under that thread in the Documents lens). Otherwise the shown
@@ -69,7 +79,7 @@ export function selectById(id) {
     openPanel();
     store.setState({ selected_entity: null, selected_thread: id });
   } else if (projects.has(id)) {
-    store.setState({ selected_project: id });
+    selectFilter({ selected_project: id });
   } else {
     showError(`The linked entity ${id} is not in the vault.`);
   }

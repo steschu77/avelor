@@ -1,5 +1,6 @@
 /* The sidebar (features/sidebar.js): the vault panel's sections and items,
-   and the jobs panel (features/jobs.js). */
+   the expanded vault area (ui/page.js), and the jobs panel
+   (features/jobs.js). */
 
 .sidebar {
   grid-area: sidebar;
@@ -9,7 +10,12 @@
   background: var(--c-shade);
 }
 
-/* the vault list keeps its width */
+/* expanded vault covers main, topbar and the right panel (--z-panel) */
+.sidebar.is-expanded {
+  z-index: 3;
+}
+
+/* the vault list keeps its width; expanding reveals .sidebar__area next to it */
 .sidebar__list {
   position: relative;
   flex: none;
@@ -36,9 +42,29 @@
   direction: ltr;
 }
 
+.sidebar__area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--c-paper);
+}
+
+.sidebar__area-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 /* the sidebar's pane heads line up with the topbar's bottom border */
 .sidebar .pane-head {
   border-bottom: 1px solid var(--c-line);
+}
+
+/* the Workspace page's title strip stays chrome over the page's paper */
+.sidebar__area .pane-head {
+  background: var(--c-shade);
 }
 
 .nav-section {

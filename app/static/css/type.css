@@ -1,5 +1,6 @@
 /* Type roles: the text styles components and areas take (label, meta,
-   row-title, ...), and the utilities icon, truncate-start, push and stack. */
+   row-title, page-title, ...), and the utilities mono, icon,
+   truncate-start, push and stack. */
 
 /* Uppercase labels, and every control set like one. */
 .label,
@@ -29,6 +30,13 @@
   color: var(--c-label);
 }
 
+/* running text on a Workspace page */
+.page-text {
+  max-width: 760px;
+  font: 400 var(--fs-body)/1.5 var(--f-serif);
+  color: var(--c-label);
+}
+
 /* document text */
 .prose {
   font: 400 var(--fs-body)/var(--lh-body) var(--f-serif);
@@ -45,6 +53,14 @@
 
 .doc-title {
   font: 500 var(--fs-doc-title)/1.25 var(--f-serif);
+}
+
+.page-title {
+  font: 500 var(--fs-page-title)/1.15 var(--f-serif);
+}
+
+.mono {
+  font: 400 var(--fs-small)/1.45 var(--f-mono);
 }
 
 /* an icon of the page's sprite (build.rs): its size, in the text's color */
