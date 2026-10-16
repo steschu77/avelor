@@ -20,3 +20,20 @@ test('a value is another one by identity', () => {
   store.setState({ list: [], n: NaN });
   equal(seen, ['list', 'n', 'list']);
 });
+
+test('several values are told together, when any of them changed', () => {
+  const store = createStore({ a: 1, b: 2, c: 3 });
+  const seen = [];
+  store.subscribe([state => state.a, state => state.b], values => seen.push(values));
+  store.setState({ c: 4 });
+  store.setState({ a: 5, b: 6 });
+  equal(seen, [[1, 2], [5, 6]]);
+});
+
+test('of several values one changed is enough', () => {
+  const store = createStore({ a: 1, b: 2 });
+  const seen = [];
+  store.subscribe([state => state.a, state => state.b], values => seen.push(values));
+  store.setState({ b: 3 });
+  equal(seen, [[1, 2], [1, 3]]);
+});

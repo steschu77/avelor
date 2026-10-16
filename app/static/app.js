@@ -16,8 +16,11 @@ import './features/jobs.js';
 import './features/layout.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
 import { initDocumentsLens, scheduleRenderDocuments } from './features/lenses/documents.js';
+import { revealInDocuments } from './features/lenses/documents.js';
+import { restoreSelection } from './features/selection.js';
 
 initDocumentsLens();
+restoreSelection(revealInDocuments);
 
 // The lenses and the sidebar follow the model (model/events.js): the
 // entities as they are now, the projects the sidebar lists.
