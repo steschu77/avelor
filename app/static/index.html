@@ -56,6 +56,7 @@
       <button type="button" class="tool" data-cmd="edit" data-t-title="card.edit"><svg class="icon"><use href="#i-edit" /></svg></button>
       <button type="button" class="tool tool--danger push" data-cmd="thread"
         data-t-title="card.leave_thread"><svg class="icon"><use href="#i-arrow-step-in-left" /></svg></button>
+      <button type="button" class="tool tool--danger" data-cmd="delete" data-t-title="card.delete"><svg class="icon"><use href="#i-delete" /></svg></button>
     </div>
   </template>
 
@@ -106,6 +107,8 @@
         <button type="button" class="tool" id="project-rename-btn" data-t-title="header.rename"><svg class="icon"><use href="#i-rename" /></svg></button>
         <button type="button" class="tool" id="project-desc-btn" data-t-title="header.edit_description"><svg class="icon"><use href="#i-edit" /></svg></button>
         <button type="button" class="tool" id="project-archive-btn" data-t-title="header.archive"><svg class="icon"><use href="#i-archive" /></svg></button>
+        <button type="button" class="tool tool--danger push" id="project-delete-btn"
+          data-t-title="header.delete"><svg class="icon"><use href="#i-delete" /></svg></button>
       </div>
       <div class="project-desc editor prose" id="project-desc"></div>
 

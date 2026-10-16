@@ -405,6 +405,149 @@ fn thread_ops_refuse_non_threads_and_unknown_ids() {
 }
 
 #[test]
+fn deleting_a_standalone_entity_trashes_it_unchanged() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let before = fs::read_to_string(root.join("Notes/n0.md")).unwrap();
+
+    let mut changes = Changes::default();
+    assert_eq!(
+        index.delete(&ids[0], &mut changes).unwrap(),
+        SaveOutcome::Saved
+    );
+    assert_eq!(changes.trashed, [ids[0]]);
+    assert!(changes.saved.is_empty());
+    assert!(index.get(&ids[0]).is_none());
+    assert!(!root.join("Notes/n0.md").exists());
+    assert_eq!(
+        fs::read_to_string(root.join(".trash/Notes/n0.md")).unwrap(),
+        before
+    );
+    assert!(
+        Index::build(&root).get(&ids[0]).is_none(),
+        ".trash isn't indexed"
+    );
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn deleting_a_member_dissolves_only_threads_it_leaves_below_two() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let big = new_thread(&mut index, "Big", &ids, &mut changes);
+    let small = new_thread(&mut index, "Small", &ids[0..2], &mut changes);
+    let trashed_member = fs::read_to_string(index.entry(&ids[0]).unwrap().path.clone()).unwrap();
+
+    let mut changes = Changes::default();
+    assert_eq!(
+        index.delete(&ids[0], &mut changes).unwrap(),
+        SaveOutcome::Saved
+    );
+    assert_eq!(
+        changes.saved,
+        [ids[1]],
+        "only the dissolved thread's last member"
+    );
+    assert_eq!(changes.trashed, [small, ids[0]]);
+    assert_eq!(threads_of(&index, &ids[1]), [big]);
+    assert_eq!(index.thread_members(&big).len(), 2);
+    assert_eq!(
+        fs::read_to_string(root.join(".trash/Notes/n0.md")).unwrap(),
+        trashed_member,
+        "the deleted file keeps its threads"
+    );
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn deleting_refuses_read_only_files_and_threads() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let thread = new_thread(&mut index, "T", &ids[0..2], &mut changes);
+
+    let mut changes = Changes::default();
+    let err = index.delete(&thread, &mut changes);
+    assert!(matches!(err, Err(Error::InvalidArgument { .. })));
+
+    // Deleting ids[0] would rewrite ids[1] to dissolve the thread.
+    index.documents[index.by_id[&ids[1]]].readonly = true;
+    let err = index.delete(&ids[0], &mut changes);
+    assert!(matches!(err, Err(Error::NotWritable { .. })));
+    index.documents[index.by_id[&ids[2]]].readonly = true;
+    let err = index.delete(&ids[2], &mut changes);
+    assert!(matches!(err, Err(Error::NotWritable { .. })));
+    assert!(changes.saved.is_empty() && changes.trashed.is_empty());
+    assert!(root.join("Notes/n0.md").exists() && root.join("Notes/n2.md").exists());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn deleting_a_project_takes_it_out_of_its_members_first() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let project = index.create_project("P".into(), &mut changes).unwrap();
+    let joined = index.join_project(&ids[0], &project, &mut changes);
+    assert_eq!(joined.unwrap(), SaveOutcome::Saved);
+    let created = index.create_thread("T".into(), &ids[1..3], &mut changes);
+    assert_eq!(created.unwrap(), SaveOutcome::Saved);
+    let thread = changes.created.unwrap();
+    // a thread file written before threads lost their own projects
+    let joined = index.join_project(&thread, &project, &mut changes);
+    assert_eq!(joined.unwrap(), SaveOutcome::Saved);
+    let local = index.entry(&project).unwrap().local.clone();
+
+    let mut changes = Changes::default();
+    assert_eq!(
+        index.delete(&project, &mut changes).unwrap(),
+        SaveOutcome::Saved
+    );
+    assert_eq!(changes.saved, [ids[0], thread], "a thread is a member too");
+    assert_eq!(changes.trashed, [project]);
+    assert!(index.get(&project).is_none());
+    assert!(index.members_of(&project).is_empty());
+    assert!(root.join(".trash").join(&local).exists());
+    assert!(Index::build(&root).members_of(&project).is_empty());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn deleting_a_project_writes_nothing_unless_every_member_can_leave() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let project = index.create_project("P".into(), &mut changes).unwrap();
+    for id in &ids[0..2] {
+        let joined = index.join_project(id, &project, &mut changes);
+        assert_eq!(joined.unwrap(), SaveOutcome::Saved);
+    }
+
+    let mut changes = Changes::default();
+    index.documents[index.by_id[&ids[1]]].readonly = true;
+    let err = index.delete(&project, &mut changes);
+    assert!(matches!(err, Err(Error::NotWritable { .. })));
+    index.documents[index.by_id[&ids[1]]].readonly = false;
+
+    let path = index.entry(&ids[1]).unwrap().path.clone();
+    let theirs = fs::read_to_string(&path).unwrap() + "Changed outside\n";
+    fs::write(&path, theirs).unwrap();
+    let outcome = index.delete(&project, &mut changes).unwrap();
+    assert_eq!(outcome, SaveOutcome::Conflict(ids[1]));
+
+    assert!(changes.saved.is_empty() && changes.trashed.is_empty());
+    assert_eq!(index.members_of(&project).len(), 2);
+    assert!(index.entry(&project).unwrap().path.exists());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn setting_a_title_rewrites_any_entity() {
     let (root, ids) = thread_vault();
     let project = Id::generate();
@@ -838,6 +981,11 @@ fn a_changed_member_stops_the_whole_operation() {
     assert_eq!(created.unwrap(), SaveOutcome::Conflict(ids[1]));
     assert!(changes.created.is_none() && changes.saved.is_empty());
     assert_eq!(fs::read_dir(root.join("Notes")).unwrap().count(), files);
+
+    // Deleting the other member would dissolve it as well.
+    let deleted = index.delete(&ids[0], &mut changes);
+    assert_eq!(deleted.unwrap(), SaveOutcome::Conflict(ids[1]));
+    assert!(root.join("Notes/n0.md").exists());
 
     fs::remove_dir_all(&root).ok();
 }

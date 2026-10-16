@@ -1,4 +1,5 @@
 {
+  "card.delete": "Dokument löschen",
   "card.edit": "Dokument bearbeiten",
   "card.leave_thread": "Aus dem Verlauf entfernen",
   "config.unread": "config.yaml konnte nicht gelesen werden; die App ist mit den Standardeinstellungen gestartet.",
@@ -57,6 +58,8 @@
   "editor.ul": "Aufzählung (Strg+Umschalt+8)",
   "error.code": "Etwas ist schiefgegangen ({code}).",
   "header.archive": "Projekt archivieren",
+  "header.delete": "Projekt löschen",
+  "header.delete_armed": "Zum Löschen des Projekts erneut klicken",
   "header.edit_description": "Beschreibung bearbeiten",
   "header.filter_label": "Nach einem Label filtern",
   "header.filter_labels": "Labels filtern",
@@ -93,6 +96,7 @@
   "open.named": "{name} öffnen",
   "open.url_failed": "{url} konnte nicht geöffnet werden.",
   "panel.add_project_label": "Zu einem Projekt oder Label hinzufügen",
+  "panel.delete_armed": "Zum Löschen erneut klicken",
   "panel.edit_message": "Nachricht bearbeiten",
   "panel.filter_or_label": "Filtern oder neues Label",
   "panel.labels": "Labels",
