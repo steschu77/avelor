@@ -133,6 +133,14 @@
   box-shadow: inset 0 0 0 1px var(--c-line);
 }
 
+/* The words typed in Go to (features/palette.js), marked in its list. */
+mark {
+  padding: 0 1px;
+  margin: 0 -1px;
+  background: var(--c-hit);
+  color: inherit;
+}
+
 /* Pills: --tag fills with the accent, --action can be clicked. */
 .chip {
   display: inline-flex;

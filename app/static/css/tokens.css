@@ -36,6 +36,8 @@
   --c-on-accent: #16161a;
   /* tags */
   --c-accent-soft: light-dark(rgba(143, 208, 214, 0.22), rgba(143, 208, 214, 0.18));
+  /* a word typed in Go to, marked in its list */
+  --c-hit: light-dark(rgba(143, 208, 214, 0.5), rgba(143, 208, 214, 0.3));
   --c-danger: #de9193;
   /* danger as text, an icon or a thin line, 4.5:1 on the shade */
   --c-danger-ink: light-dark(#a64b4e, #de9193);
@@ -114,6 +116,10 @@
   --o-panel: 0px;
   /* a dialog */
   --w-dialog: 500px;
+  /* Go to: its width, how far from the top, its box */
+  --w-palette: 680px;
+  --o-palette: 72px;
+  --h-palette-box: 52px;
   /* the New page: its sheet, and its date and time inputs */
   --w-new-sheet: 720px;
   --w-new-date: 150px;

@@ -24,7 +24,7 @@ import { isSafeUrl } from './links.js';
 
 // The commands with a key of their own. No Ctrl+Alt combinations -- see
 // editor.md#toolbar.
-const EDITOR_KEYS = [
+export const EDITOR_KEYS = [
   { command: 'bold', shortcut: 'Ctrl+B' },
   { command: 'italic', shortcut: 'Ctrl+I' },
   { command: 'strike', shortcut: 'Ctrl+Shift+X' },

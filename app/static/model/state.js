@@ -42,6 +42,9 @@ export const store = createStore({
   ],
 });
 
+// Whether a vault is open, or being indexed.
+export const vaultOpen = () => store.getState().vault_state !== 'none';
+
 // ----------------------------------------------------------------------------
 // Merge `patch` into the page's preferences and send them all to the host
 // (`set_prefs`), which stores them as given and fills them into the page on

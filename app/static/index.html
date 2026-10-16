@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="css/areas/assistant.css">
   <link rel="stylesheet" href="css/areas/workspace.css">
   <link rel="stylesheet" href="css/areas/header.css">
+  <link rel="stylesheet" href="css/areas/palette.css">
 </head>
 
 <body>
@@ -84,7 +85,12 @@
           <a class="nav-item nav-item--compact" id="new-item" tabindex="0" role="button" data-vault-op="new" data-action="new"
             aria-haspopup="menu">
             <svg class="icon"><use href="#i-add" /></svg>
-            <span data-t="sidebar.new"></span><kbd data-t="kbd.ctrl_n"></kbd>
+            <span data-t="sidebar.new"></span><kbd data-shortcut="new"></kbd>
+          </a>
+          <!-- Go to (features/palette.js) -->
+          <a class="nav-item nav-item--compact" id="goto-item" tabindex="0" role="button" aria-haspopup="dialog" data-t-title="palette.title">
+            <svg class="icon"><use href="#i-arrow-right" /></svg>
+            <span data-t="palette.name"></span><kbd data-shortcut="palette"></kbd>
           </a>
 
           <div class="nav-section label" tabindex="0" role="button"><svg class="icon disclosure"><use href="#i-chevron-down" /></svg><span data-t="sidebar.projects"></span>
@@ -104,7 +110,7 @@
           <div id="projects"></div>
 
           <div class="nav-section label" tabindex="0" role="button"><svg class="icon disclosure"><use href="#i-chevron-down" /></svg><span data-t="sidebar.workspace"></span></div>
-          <a class="nav-item nav-item--compact" tabindex="0" role="button" data-vault-op="trash"><svg class="icon"><use href="#i-delete" /></svg><span data-t="workspace.trash"></span></a>
+          <a class="nav-item nav-item--compact" tabindex="0" role="button" data-vault-op="trash" data-t-data-also="workspace.trash_also"><svg class="icon"><use href="#i-delete" /></svg><span data-t="workspace.trash"></span></a>
         </div>
 
         <div class="jobs" id="jobs"></div>
@@ -216,6 +222,22 @@
     <footer class="statusbar"></footer>
     <div class="visually-hidden" id="statusbar-said" role="status"></div>
   </div>
+
+  <!-- Go to: places, commands and keys by name (features/palette.js). -->
+  <dialog id="palette" class="dialog palette" data-t-aria-label="palette.name">
+    <div class="palette__box">
+      <svg class="icon"><use href="#i-arrow-right" /></svg>
+      <input class="palette__input" id="palette-input" role="combobox" aria-expanded="true" aria-controls="palette-list"
+        aria-autocomplete="list" autocomplete="off" spellcheck="false" data-t-aria-label="palette.title">
+      <span class="seg palette__narrow" id="palette-narrow" role="group" data-t-aria-label="palette.narrow">
+        <button type="button" data-narrow="" tabindex="-1" data-t="palette.all"></button>
+        <button type="button" data-narrow="&gt;" tabindex="-1"><span data-t="palette.commands"></span><kbd>&gt;</kbd></button>
+        <button type="button" data-narrow="keys" tabindex="-1" data-t="palette.keys"></button>
+      </span>
+    </div>
+    <div class="palette__list" id="palette-list" role="listbox" data-t-aria-label="palette.found"></div>
+    <div class="palette__foot label" id="palette-foot"></div>
+  </dialog>
 
   <!-- A file changed outside the app (features/conflict.js, saving.md#the-dialog). -->
   <dialog id="conflict-dialog" class="dialog" role="alertdialog" tabindex="-1" aria-labelledby="conflict-title"

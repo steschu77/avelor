@@ -209,9 +209,16 @@ store.subscribe(state => state.vault_expanded, vault_expanded => {
 // open their page.
 const vaultOpNavs = sidebar.querySelectorAll("[data-vault-op]");
 for (const nav of vaultOpNavs) {
+  const { vaultOp: op, action } = nav.dataset;
   nav.addEventListener('click', () => {
-    if (nav.dataset.action) runAction(nav.dataset.action, nav);
-    else openVaultOp(nav.dataset.vaultOp);
+    if (action) runAction(action, nav);
+    else openVaultOp(op);
+  });
+  if (action) continue;
+  registerAction({
+    id: `workspace.${op}`, group: 'go', title: nav.textContent.trim(), icon: nav.querySelector('use').getAttribute('href'),
+    also: nav.dataset.also, page: true, place: 'page', end: () => t('palette.page'),
+    run: () => openVaultOp(op),
   });
 }
 store.subscribe([state => state.vault_op, state => state.vault_expanded], ([vault_op, vault_expanded]) => {
@@ -234,10 +241,24 @@ for (const btn of sidebar.querySelectorAll(".nav-section__add")) {
   btn.addEventListener('click', e => e.stopPropagation());
 }
 
-btnClose.addEventListener('click', () => store.setState({ panel_size: "closed" }));
+function closePanel() {
+  store.setState({ panel_size: "closed" });
+}
+btnClose.addEventListener('click', closePanel);
 
-btnExpand.addEventListener('click', () => {
+function toggleFullWidth() {
   store.setState({ panel_size: store.getState().panel_size === "expanded" ? "normal" : "expanded" });
+}
+btnExpand.addEventListener('click', toggleFullWidth);
+
+registerAction({
+  id: 'panel.close', group: 'window', title: t('panel.close_panel'), icon: '#i-panel-right-contract',
+  when: () => store.getState().panel_size !== "closed", run: closePanel,
+});
+registerAction({
+  id: 'panel.full_width', group: 'window', icon: '#i-panel-right-expand',
+  title: () => (store.getState().panel_size === "expanded" ? t('panel.restore') : t('panel.full_width')),
+  run: toggleFullWidth,
 });
 
 // The layout follows `panel_size`; the expand button shows and says what it
@@ -264,5 +285,11 @@ function focusArea(step) {
     ?? stops.find(el => el.matches('[aria-selected="true"]')) ?? stops[0];
   stop?.focus();
 }
-registerAction({ id: 'layout.next_area', title: t('layout.next_area'), shortcut: 'F6', run: () => focusArea(1) });
-registerAction({ id: 'layout.previous_area', title: t('layout.previous_area'), shortcut: 'Shift+F6', run: () => focusArea(-1) });
+registerAction({
+  id: 'layout.next_area', group: 'go', title: t('layout.next_area'), icon: '#i-arrow-right', also: t('layout.area_also'),
+  shortcut: 'F6', run: () => focusArea(1),
+});
+registerAction({
+  id: 'layout.previous_area', group: 'go', title: t('layout.previous_area'), icon: '#i-arrow-right', also: t('layout.area_also'),
+  shortcut: 'Shift+F6', run: () => focusArea(-1),
+});

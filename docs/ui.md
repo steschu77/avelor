@@ -1,7 +1,7 @@
 # Avelor — User interface
 
 > The main window: its layout, the vault panel with its filters, the
-> lenses, the status bar, the jobs panel, page keys, New and the
+> lenses, the status bar, the jobs panel, page keys, Go to, New and the
 > preferences.
 
 ## Layout
@@ -34,6 +34,8 @@ Filtering is entirely on the page: all metadata
 arrives with the indexing (`renderSidebar`, `features/sidebar.js`;
 `matchesFilter`, `model/entities.js`). The counts per project are derived on
 the page, once per frame (`panel.md#host-pushes`).
+
+- **Go to**: under New, places, commands and keys by name (`ui.md#go-to`).
 
 - **Marked** is a row while it narrows the list (`aria-current`): a
   project, No project, a source. "All Projects" and "All Sources", the
@@ -182,9 +184,11 @@ when it has a summary. How jobs run on the host: `architecture.md#jobs`.
 
 ## Keys and actions <a id="keys-and-actions"></a>
 
-What a key, a menu or a button starts is a registered action
-(`architecture.md#actions`). The page keys:
+What a key, a menu, a button or Go to starts is a registered action
+(`architecture.md#actions`). Go to lists the keys by where they work
+(`ui.md#go-to`). The page keys, none of which acts behind an open dialog:
 
+- **Ctrl+Shift+P** opens Go to (`ui.md#go-to`).
 - **Esc** closes an open menu, else the page in the expanded vault area
   (New); in an editor it leaves edit mode.
 - **Ctrl+Enter** runs the open page's main action (Create).
@@ -195,6 +199,48 @@ What a key, a menu or a button starts is a registered action
 
 The host switches off the browser's accelerator keys so they reach the page
 (`sys/win32/webview.rs`).
+
+## Go to <a id="go-to"></a>
+
+Ctrl+Shift+P, or the Go to item under New, opens a dialog over the app that
+finds places, commands and keys by name (`features/palette.js`, the blocks
+of rows `features/palette-found.js`). With nothing typed it lists the
+commands: the actions that have a group and apply now
+(`architecture.md#actions`), under their groups: New, Go to (the lenses, the
+Workspace pages, the next and the previous area), Window, Vault and Help.
+
+- **What is typed** is looked for in the names and in the other words one is
+  found by: every word, in any order, case and accents aside (`fit`,
+  `core/match.js`). The words are marked, and a row found by another word
+  says which ("Explorer", Show the vault in its folder). What has a name is
+  collected as the dialog opens (`collect`), each name folded once.
+- **What is found** stands in blocks, the one with the best fit first, and
+  of two alike in this order; within a block the best fit first
+  (`foundBlocks`):
+  - **Go to**: the places: the lenses and the Workspace pages, All Projects,
+    No project, each project (an archived one after the others), with its
+    entries counted. A project is the filter then, as a press on its row in
+    the vault panel, and the lens stays.
+  - **Commands**: those that are no place.
+  - **Keys**: those that are no command, at most two, by a word of theirs
+    begun.
+- **Narrowed** to the commands, only those are listed, by their groups: by a
+  press on Commands beside the box, by `>` typed first, or with **Tab** and
+  **Shift+Tab**, which go round what it can be narrowed to. **Backspace** in
+  the empty box is back at All, and **Ctrl+Shift+P** too, the box emptied.
+- **Narrowed to Keys**, by a press, Tab or its command Keyboard shortcuts,
+  it lists the keys by where they work: anywhere, in a text being edited, in
+  a menu or at a divider, in Go to itself (`KEY_GROUPS`, `features/keys.js`,
+  with the commands'). One is found by what it does or by its keys, in the
+  run's language or in English ("ctrl e"). Enter runs a command that applies
+  now; of any other key the foot says where it works.
+- **Its keys** stand at a command's end, each drawn as a key and named in
+  the run's language (`shortcutKeys`, `core/actions.js`).
+- **Up** and **Down** move the highlight, round the ends of the list, and
+  **PageUp** and **PageDown** go over several rows; **Enter**, or a press
+  on a row, acts on it, once the dialog is closed and the focus is
+  back where it was. The foot says what Enter does. **Esc** or a
+  press beside the dialog closes it.
 
 ## New
 

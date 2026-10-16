@@ -1,0 +1,189 @@
+/* Go to (features/palette.js): a modal dialog on paper as a menu is, its
+   box on card. From the top, so it grows downwards only. */
+.palette {
+  width: var(--w-palette);
+  max-height: calc(100% - 2 * var(--o-palette));
+  margin: var(--o-palette) auto auto;
+  background: var(--c-paper);
+}
+
+.palette__box {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--h-palette-box);
+  padding: 0 12px 0 var(--p-pane);
+  background: var(--c-card);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.palette__box>.icon {
+  color: var(--c-ink-mute);
+}
+
+.palette__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font: 400 var(--fs-doc-title)/1 var(--f-serif);
+  color: var(--c-ink);
+}
+
+.palette__input::placeholder {
+  color: var(--c-label);
+}
+
+/* what it is narrowed to, each with the character that does it */
+.palette__narrow {
+  flex: none;
+}
+
+.palette__narrow kbd {
+  margin-left: 5px;
+  color: var(--c-ink-mute);
+}
+
+.palette__list {
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: 2px 0 10px;
+  overflow: auto;
+  scroll-padding: 32px 0 10px;
+}
+
+.palette__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px var(--p-pane) 5px;
+  white-space: nowrap;
+}
+
+.palette__head>* {
+  line-height: 15px;
+}
+
+.palette__row {
+  display: grid;
+  grid-template-columns: var(--h-icon) minmax(0, 1fr) auto;
+  gap: 0 10px;
+  align-items: center;
+  height: var(--h-row);
+  padding: 0 var(--p-pane);
+  cursor: pointer;
+}
+
+.palette__row>.icon {
+  width: 14px;
+  height: 14px;
+  color: var(--c-ink-mute);
+}
+
+/* where Enter acts: a table row's selection */
+.palette__row[aria-selected="true"] {
+  background: var(--c-card);
+  box-shadow: inset 2px 0 0 var(--c-accent-line);
+}
+
+/* a row's name, as a menu's; then the words it was found by when the name
+   hasn't them */
+.palette__name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.palette__name>.row-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.palette__name>.row-title--ui {
+  font-family: var(--f-chrome);
+}
+
+.palette__hit {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: italic 400 var(--fs-small)/1.3 var(--f-serif);
+  color: var(--c-label);
+}
+
+.palette__end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.palette__end>.meta {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* a shortcut, each key drawn as one */
+.keys {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.keys>.meta {
+  margin: 0 3px;
+}
+
+.key {
+  min-width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--c-line);
+  border-bottom-color: var(--c-ink-faint);
+  background: var(--c-card);
+  font: 400 var(--fs-meta)/1 var(--f-chrome);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--c-ink);
+}
+
+.palette__none {
+  padding: 14px var(--p-pane) 4px;
+  font: italic 400 var(--fs-body)/1.4 var(--f-serif);
+  color: var(--c-label);
+}
+
+/* what the keys do here */
+.palette__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 34px;
+  padding: 0 var(--p-pane);
+  border-top: 1px solid var(--c-line);
+  background: var(--c-shade);
+  white-space: nowrap;
+}
+
+.palette__does {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.palette__foot>:last-child {
+  margin-left: auto;
+}

@@ -11,9 +11,9 @@
 import { $, accEl } from '../core/dom.js';
 import { rpcCall, rpcOn } from '../core/rpc.js';
 import { isoInstant, localDay, parseDate, relativeDay } from '../core/format.js';
-import { registerAction } from '../core/actions.js';
+import { registerAction, shortcutText } from '../core/actions.js';
 import { t } from '../core/text.js';
-import { store } from '../model/state.js';
+import { store, vaultOpen } from '../model/state.js';
 import { projectScope, projectsFor } from '../model/entities.js';
 import { getDocIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
@@ -33,32 +33,32 @@ import {
 } from './panel/panel.js';
 import { watchFormGrid } from './workspace/folders.js';
 
-// The types New makes: their derived kind, the folder the host writes
-// them into (shown only; av-vault's `schema::layout` decides), and how
-// their title is asked for.
+// The types New makes: their derived kind, what Go to calls it (`command`,
+// `also`), the folder the host writes them into (shown only; av-vault's
+// `schema::layout` decides), and how their title is asked for.
 const NEW_TYPES = [
   {
-    kind: 'document', name: t('kind.document'), folder: 'Documents', label: t('new.label.title'), hint: t('new.label.title'),
+    kind: 'document', name: t('kind.document'), command: t('new.document'), also: t('new.document_also'), folder: 'Documents', label: t('new.label.title'), hint: t('new.label.title'),
     missing: t('new.enter_title'), create: t('new.create.document'), createTitle: t('new.create_title.document'),
   },
   {
-    kind: 'task', name: t('kind.task'), folder: 'Tasks', label: t('new.label.title'), hint: t('new.hint.task'),
+    kind: 'task', name: t('kind.task'), command: t('new.task'), folder: 'Tasks', label: t('new.label.title'), hint: t('new.hint.task'),
     missing: t('new.enter_title'), create: t('new.create.task'), createTitle: t('new.create_title.task'),
   },
   {
-    kind: 'event', name: t('kind.event'), folder: 'Calendar\\Created Here', label: t('new.label.title'), hint: t('new.label.title'),
+    kind: 'event', name: t('kind.event'), command: t('day.new_event'), folder: 'Calendar\\Created Here', label: t('new.label.title'), hint: t('new.label.title'),
     missing: t('new.enter_title'), create: t('new.create.event'), createTitle: t('new.create_title.event'),
   },
   {
-    kind: 'contact', name: t('kind.contact'), folder: 'Contacts', label: t('docs.name'), hint: t('docs.name'),
+    kind: 'contact', name: t('kind.contact'), command: t('new.contact'), also: t('new.contact_also'), folder: 'Contacts', label: t('docs.name'), hint: t('docs.name'),
     missing: t('new.enter_name'), create: t('new.create.contact'), createTitle: t('new.create_title.contact'),
   },
   {
-    kind: 'list', name: t('kind.list'), folder: 'Lists', label: t('new.label.title'), hint: t('new.hint.list'),
+    kind: 'list', name: t('kind.list'), command: t('new.list'), folder: 'Lists', label: t('new.label.title'), hint: t('new.hint.list'),
     missing: t('new.enter_title'), create: t('new.create.list'), createTitle: t('new.create_title.list'),
   },
   {
-    kind: 'record', name: t('kind.record'), folder: 'Records', label: t('new.label.title'), hint: t('new.label.title'),
+    kind: 'record', name: t('kind.record'), command: t('new.record'), folder: 'Records', label: t('new.label.title'), hint: t('new.label.title'),
     missing: t('new.enter_title'), create: t('new.create.record'), createTitle: t('new.create_title.record'),
   },
 ];
@@ -112,10 +112,17 @@ function newDraft(kind, { page = false, linked = null, projects = [], scope = nu
 let newPage = null; // the New page's draft
 
 registerAction({
-  id: 'new', title: t('new.menu'), shortcut: 'Ctrl+N',
-  when: () => store.getState().vault_state !== 'none',
+  id: 'new', group: 'new', title: t('new.menu'), icon: '#i-add', shortcut: 'Ctrl+N',
+  when: vaultOpen,
   run: anchor => showNewMenu(anchor ?? $('new-item')),
 });
+for (const type of NEW_TYPES) {
+  registerAction({
+    id: `new.a_${type.kind}`, group: 'new', title: type.command, icon: newTypeIcon(type), also: type.also,
+    when: vaultOpen,
+    run: () => openNew(type.kind),
+  });
+}
 
 // The types, at `anchor`.
 function showNewMenu(anchor) {
@@ -530,12 +537,12 @@ function renderNewFoot(d) {
   create.disabled = !!blocked || d.busy;
   create.title = blocked || d.type.createTitle;
   create.addEventListener('click', () => createNew(d));
-  d.els.foot.replaceChildren(create, accEl('span', 'meta', t('key.ctrl_enter')));
+  d.els.foot.replaceChildren(create, accEl('span', 'meta', shortcutText('Ctrl+Enter')));
   if (d.page) {
     const cancel = accEl('button', 'btn btn--ghost push', t('field.cancel'));
     cancel.type = 'button';
     cancel.addEventListener('click', closeVaultArea);
-    d.els.foot.append(cancel, accEl('span', 'meta', t('key.esc')));
+    d.els.foot.append(cancel, accEl('span', 'meta', shortcutText('Escape')));
   }
   d.els.error.textContent = d.error ?? '';
   d.els.error.hidden = !d.error;

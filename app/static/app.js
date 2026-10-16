@@ -29,13 +29,14 @@ import './features/conflict.js';
 import './features/workspace/trash.js';
 import './features/new.js';
 import './features/linked.js';
-import './features/layout.js';
 import './features/undo.js';
+import './features/layout.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
 import { initDocumentsLens } from './features/lenses/documents.js';
 import { revealInDocuments } from './features/lenses/documents.js';
 import { getDocRows } from './features/lenses/documents.js';
 import { restoreSelection } from './features/selection.js';
+import './features/palette.js';
 
 initDocumentsLens();
 restoreLens();

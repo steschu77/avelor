@@ -348,7 +348,7 @@ nothing imports `app.js`.
 | `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`, `typing`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `addDays`, `sameDay`, `weekStartOf`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page |
 | `core/text.js` | the page's texts: `t`, a text of the run's catalog, `textOf`, one the host sent, and the run's `locale` (`localization.md`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
-| `core/actions.js` | the action registry and the one global key handler |
+| `core/actions.js`, `core/match.js` | the action registry, the commands and the keys Go to lists (`listedActions`, `keyedActions`), the one global key handler and the keys' names (`shortcutKeys`, `shortcutText`); names found by words typed (`fit`) |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`, which makes its parts for each editor (`editor/selection.js`, `editor/blocks.js`, `editor/tables.js`, `editor/shortcuts.js`, `editor/paste.js`); `isLink` (`editor/links.js`); the tags both read (`editor/tags.js`); `serializeMarkdown` |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `setNotice`, `showError` |
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the conversations with an AI); the selection published minus what is gone (`commitExistingSelection`) |
@@ -370,6 +370,9 @@ nothing imports `app.js`.
 | `features/workspace/trash.js` | Workspace pages: the trash |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
+| `features/palette.js` | Go to (`ui.md#go-to`): the dialog; the hints naming a key |
+| `features/palette-found.js` | what Go to finds: the places, the commands and the keys, as blocks of rows |
+| `features/keys.js` | the keys that are no command, by where they work (Go to's Keys) |
 | `features/undo.js` | Ctrl+Z and Ctrl+Y as the actions `undo` and `redo` |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
 | `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
@@ -407,14 +410,22 @@ A render never sends a change to the host.
 
 ### Actions <a id="actions"></a>
 
-What a key, a menu or a button starts is registered once
-(`registerAction({id, title, shortcut, when, run})`, `runAction(id,
-…args)`, `core/actions.js`). One `keydown` handler runs the first action
-with the key's shortcut whose `when` holds; a key something else already
-handled (`defaultPrevented`, Ctrl+I as italic in an editor) is left
-alone. The pages of the expanded vault area register what Esc and
-Ctrl+Enter do on them (`registerVaultPage`, `ui/page.js`). The keys
-in use: `ui.md#keys-and-actions`.
+What a key, a menu, a button or Go to (`ui.md#go-to`) starts is registered
+once (`registerAction({id, title, shortcut, outsideFields, when, run, group,
+place, icon, also, page, end, archived})`, `runAction(id, …args)`,
+`core/actions.js`). One `keydown` handler runs the first action with the
+key's shortcut, or one of its shortcuts, whose `when` holds; a key something
+else already handled (`defaultPrevented`, Ctrl+I as italic in an editor) is
+left alone, so is one of an action `outsideFields` while a field or an
+editor has the focus, and none acts behind an open dialog. An action with a
+`group` is a command Go to lists by its `title`, found by `also` too, while
+its `when` holds; one with a `place` is a place it goes to, with `end()` at
+its row's end. Its list of keys has the commands with a shortcut, those that
+don't apply now too. The places the vault has, a project each, come from
+functions asked each time it opens (`registerActions(list)`). A global
+command is registered beside what it runs. The pages of the expanded vault
+area register what Esc and Ctrl+Enter do on them (`registerVaultPage`,
+`ui/page.js`). The keys in use: `ui.md#keys-and-actions`.
 
 ### CSS <a id="css"></a>
 
@@ -429,7 +440,7 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
 | `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `input`, `menu`, `list-row`, `section-head`, the forms, `pane-head`, the dialogs, the vault area's `page`, … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), header (the lens header, the titles edited in place) |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), header (the lens header, the titles edited in place), palette (Go to) |
 
 Conventions the page keeps:
 

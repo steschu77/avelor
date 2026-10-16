@@ -8,13 +8,15 @@ import { $ } from '../core/dom.js';
 import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
 import { titled } from '../core/dom.js';
+import { registerAction, registerActions } from '../core/actions.js';
 import { t } from '../core/text.js';
-import { store } from '../model/state.js';
+import { store, vaultOpen } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
 import { projects } from '../model/entities.js';
 import { structureCall } from '../model/structure.js';
 import { joinProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
+import { KIND_ICONS } from '../ui/icons.js';
 import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
@@ -206,6 +208,12 @@ function addProject() {
 
 $('add-project-btn').addEventListener('click', addProject);
 
+registerAction({
+  id: 'project.new', group: 'new', title: t('sidebar.new_project'), icon: KIND_ICONS.project.icon,
+  when: vaultOpen,
+  run: addProject,
+});
+
 // Dropping an entity (a table row, which drags its doc_id as text/plain; see
 // features/lenses/documents.js) on a project pill adds it to that project. The
 // listeners sit on the container, since `renderSidebar` replaces a renamed
@@ -241,6 +249,24 @@ function toggleArchived() {
   archivedUnfolded = !archivedUnfolded;
   scheduleRenderSidebar();
 }
+
+// The vault panel's rows as places Go to finds: each filters by its project,
+// the lens shown stays.
+function projectPlace({ id, name, starred, archived }) {
+  const n = () => [...entities.values()].filter(doc => doc.projects?.includes(id)).length;
+  return {
+    id: `place.${id}`, place: 'project', archived, title: name || t('untitled'),
+    icon: starred ? '#i-star-filled' : KIND_ICONS.project.icon,
+    end: () => (archived ? t('palette.archived_n', { n: n() }) : t('palette.project_n', { n: n() })),
+    run: () => selectFilter({ selected_project: id }),
+  };
+}
+
+registerActions(() => [
+  { id: 'place.all_projects', place: 'project', title: t('sidebar.all_projects'), icon: '#i-layer', run: () => selectFilter({ selected_project: null }) },
+  { id: 'place.no_project', place: 'project', title: t('sidebar.no_project'), icon: KIND_ICONS.project.icon, run: () => selectFilter({ selected_project: NO_PROJECT }) },
+  ...projectsInOrder().map(projectPlace),
+].map(place => ({ ...place, when: vaultOpen })));
 
 // ----------------------------------------------------------------------------
 store.subscribe(state => state.vault_name,

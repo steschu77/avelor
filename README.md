@@ -32,7 +32,7 @@ It is a personal project, not a commercial product or a claim to have solved per
 - **Projects, threads, and links.** Documents are grouped into projects and threads, linked to each other (a task to its letter), and labeled.
 - **A WYSIWYG editor.** Lists, tables, code blocks, links, and images, written back to Markdown; a change made to a file outside the app is taken in without losing yours.
 - **In your language.** English, German, and Spanish: the system's language or the one set in `config.yaml`, informal by default and formal on request. A new language is a catalog of texts, checked by a script.
-- **Light or dark, by mouse or keyboard.** Avelor follows the system's light or dark theme, on Windows its title bar too; every control is in the keyboard's reach, with a visible focus.
+- **Light or dark, by mouse or keyboard.** Avelor follows the system's light or dark theme, on Windows its title bar too; every control is in the keyboard's reach, with a visible focus, and every place and command is found by its name (Ctrl+Shift+P).
 
 ## How It Compares
 

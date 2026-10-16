@@ -5,6 +5,7 @@
 
 import { oncePerFrame } from '../../core/dom.js';
 import { registerAction } from '../../core/actions.js';
+import { t } from '../../core/text.js';
 import { savePrefs, store } from '../../model/state.js';
 import { selectLens } from '../selection.js';
 
@@ -64,6 +65,7 @@ for (const tabEl of document.querySelectorAll('.tabs > [data-lens]')) {
 
 // Ctrl+1, Ctrl+2, ... show the lenses in the tabs' order.
 [...document.querySelectorAll('.tabs > [data-lens]')].forEach((tabEl, i) => registerAction({
-  id: `lens.${tabEl.dataset.lens}`, title: tabEl.textContent, shortcut: `Ctrl+${i + 1}`,
+  id: `lens.${tabEl.dataset.lens}`, group: 'go', title: tabEl.textContent, icon: '#i-arrow-right',
+  place: 'lens', end: () => t('palette.lens'), shortcut: `Ctrl+${i + 1}`,
   run: () => selectLens(tabEl.dataset.lens),
 }));

@@ -436,11 +436,13 @@ supplies its own markup and the editor doesn't hardcode a layout.
   which button is "active" from the element structure (is the caret inside
   a `<strong>`? inside a `<blockquote>`?), not from computed style, so a
   bold heading doesn't make the Bold button light up.
-- **Keyboard bindings**: Ctrl+B/I bold/italic, Ctrl+E inline code, Ctrl+K
-  link, Ctrl+Shift+X strikethrough, Ctrl+Shift+7/8/9 numbered list/bullet
-  list/quote. Deliberately no Ctrl+Alt combination anywhere: on many
-  keyboard layouts AltGr reports as Ctrl+Alt and is how those layouts type
-  ordinary characters (e.g. AltGr+7 types `{` on a German layout).
+- **Keyboard bindings** (`EDITOR_KEYS`, which the toolbar's tooltips and Go
+  to's list of keys name too): Ctrl+B/I bold/italic, Ctrl+E inline code,
+  Ctrl+K link, Ctrl+Shift+X strikethrough, Ctrl+Shift+7/8/9 numbered
+  list/bullet list/quote, a digit by its place in the number row.
+  Deliberately no Ctrl+Alt combination anywhere: on many keyboard layouts
+  AltGr reports as Ctrl+Alt and is how those layouts type ordinary
+  characters (e.g. AltGr+7 types `{` on a German layout).
 
 | State | Input | Result |
 |---|---|---|
