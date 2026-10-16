@@ -356,6 +356,9 @@ documents — that belong together, such as an exchange with an authority.
 * **Order**: members are ordered by their `date`, ties broken by `id`
   (UUIDv7). There is exactly one path through a thread: no parent/child
   links, no siblings, no active branch.
+* **Presentation**: the thread manages its members, which are separate
+  entities; the Documents lens folds them under the thread's row
+  (`ui.md#documents`). The thread's `title` describes the thread itself.
 * **Projects**: a thread has none of its own; its projects are its
   members' `projects`.
 
@@ -625,5 +628,5 @@ the files read so far.
 A scan starts only when a vault opens, so `vault` (scanning) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 
-- the entities and projects;
+- the entities, projects and threads;
 - the filter.

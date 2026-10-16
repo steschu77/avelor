@@ -48,10 +48,17 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   `.docs__projects`). After the last project, a gap and a rule, then the
   entities in no project of the vault, without a group row. With a
   project or No project selected, the list is flat.
+- **Threads**: within a group, a thread's members fold under the
+  thread's row: its title, "5 of 6 · 14/08 – 23/09" (its members shown
+  here of all of them, their days; "2 · …" when all are here), dated and
+  sorted by its newest member here. A member in several threads shows
+  under each. Unfolded, the members sort like the rows.
 - **Folds**: a project's group folded or open is kept across restarts in
   the preferences (`doc_folded`), not in the vault (`vault.md#principles`);
-  before the first fold, the archived projects are folded.
-- **Keyed rows** (by group and entity) stay built while filtered
+  before the first fold, the archived projects are folded. Threads fold while
+  the app runs: folded at first, a thread unfolded shows unfolded in every
+  group.
+- **Keyed rows** (by group, thread and entity) stay built while filtered
   out or folded, so a scan only adds rows.
 
 ## Status bar <a id="status-bar"></a>
@@ -97,4 +104,4 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, counts re-render |
 | F1 | Sort in Documents | header click (`onSortClick`, `features/lenses/documents.js`) | — | multi-key sort in `sort_state` |
-| F6 | Fold in Documents | a group row (`toggleGroup`); Open → `selected_project` | `set_prefs {prefs}` (`doc_folded`) | rows folded or shown; the projects' folds kept across restarts |
+| F6 | Fold in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selected_project` | `set_prefs {prefs}` (`doc_folded`) | rows folded or shown; the projects' folds kept across restarts |

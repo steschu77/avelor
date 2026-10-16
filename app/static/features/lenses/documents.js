@@ -1,16 +1,19 @@
 // The Documents lens (ui.md#documents): the entities in the vault panel's
 // filter as rows -- under All Projects in a group per project, then those
-// in no project -- each group folding (the projects folded kept in the
-// `doc_folded` preference). This file owns the rows, the folds and the
-// sort-state UI, model/entities.js the entities.
+// in no project; a thread's members under the thread's row -- each group
+// and thread folding (the projects folded kept in the `doc_folded`
+// preference). This file owns the rows, the folds and the sort-state UI,
+// model/entities.js the entities.
 
 import { $, accEl, oncePerFrame, placeChildren } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
+import { shortDate } from '../../core/format.js';
 import { store } from '../../model/state.js';
 import { savePrefs } from '../../model/state.js';
 import { entities } from '../../model/entities.js';
 import { matchesFilter } from '../../model/entities.js';
 import { projects, projectsInOrder, projectsOf } from '../../model/entities.js';
+import { knownThreads, threads } from '../../model/entities.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
 
@@ -33,7 +36,7 @@ const SORT_COMPARATORS = {
   },
 };
 
-// Entities (`title`, `kind`, `date`).
+// Entities and threads' items alike (`title`, `kind`, `date`).
 function sortItems(items) {
   const sortState = store.getState().sort_state;
   return items.sort((a, b) => {
@@ -66,11 +69,39 @@ function groupsOf(docs, selected_project) {
   ].filter(group => group.docs.length);
 }
 
+// A group's items, sorted: its entities in no thread, and an item per
+// thread of its members (`knownThreads`, a member in several threads in
+// each), dated by its newest member here.
+function itemsOf(docs) {
+  const items = [];
+  const byThread = new Map();
+  for (const doc of docs) {
+    const ids = knownThreads(doc);
+    if (!ids.length) items.push(doc);
+    for (const thread_id of ids) {
+      let item = byThread.get(thread_id);
+      if (!item) {
+        item = { thread_id, title: threads.get(thread_id).title ?? '', kind: 'thread', date: undefined, members: [] };
+        byThread.set(thread_id, item);
+        items.push(item);
+      }
+      item.members.push(doc);
+      if (doc.date && (!item.date || doc.date > item.date)) item.date = doc.date;
+    }
+  }
+  for (const item of byThread.values()) sortItems(item.members);
+  return sortItems(items);
+}
+
 // ----------------------------------------------------------------------------
 // The folds. A project's group is folded while its id is in the
 // `doc_folded` preference (the ids joined by commas; before the first
 // fold, the archived projects' are), so the folds outlast a restart
-// without changing the vault (vault.md#principles).
+// without changing the vault (vault.md#principles). The threads unfolded,
+// by id -- one unfolded shows in every group -- are kept while the app
+// runs.
+const unfoldedThreads = new Set();
+
 function foldedProjects() {
   const saved = store.getState().prefs.doc_folded;
   if (saved === undefined) return new Set([...projects.values()].filter(p => p.archived).map(p => p.id));
@@ -89,22 +120,30 @@ function toggleGroup(key) {
   scheduleRenderDocuments();
 }
 
+function toggleThread(thread_id) {
+  if (!unfoldedThreads.delete(thread_id)) unfoldedThreads.add(thread_id);
+  scheduleRenderDocuments();
+}
+
 // ----------------------------------------------------------------------------
-// The rows by key -- `g`roup or `d`ocument, with the group and the entity
-// they are for -- kept across renders (also while filtered out or folded),
-// so a scan only adds rows instead of rebuilding the lens every frame.
+// The rows by key -- `g`roup, `t`hread or `d`ocument, with the group, the
+// thread and the entity they are for -- kept across renders (also while
+// filtered out or folded), so a scan only adds rows instead of rebuilding
+// the lens every frame.
 const rows = new Map();
-const rowFor = new WeakMap(); // row element -> { group, doc_id }
+const rowFor = new WeakMap(); // row element -> { group, thread_id, doc_id }
 const rowDocs = new WeakMap(); // a document's row -> the entity it was filled from
 
 const groupKey = key => `g\n${key}`;
-const docKey = (group, doc_id) => `d\n${group}\n${doc_id}`;
+const threadKey = (group, thread_id) => `t\n${group}\n${thread_id}`;
+const docKey = (group, thread_id, doc_id) => `d\n${group}\n${thread_id ?? ''}\n${doc_id}`;
 
 // Rows of what left the vault are dropped.
 function pruneRows() {
   for (const [key, el] of rows) {
-    const { group, doc_id } = rowFor.get(el);
-    const gone = (group && !projects.has(group)) || (doc_id && !entities.has(doc_id));
+    const { group, thread_id, doc_id } = rowFor.get(el);
+    const gone = (group && !projects.has(group))
+      || (thread_id && !threads.has(thread_id)) || (doc_id && !entities.has(doc_id));
     if (gone) rows.delete(key);
   }
 }
@@ -125,9 +164,10 @@ function nameCell(depth) {
   return cell;
 }
 
-// A fold's chevron: a group row folds as a whole.
-function foldEl() {
-  const fold = accEl('span', 'docs__fold');
+// A fold's chevron: a thread's is a button, a group row folds as a whole.
+function foldEl(tag) {
+  const fold = accEl(tag, 'docs__fold');
+  if (tag === 'button') fold.type = 'button';
   fold.append(iconEl('#i-chevron-down', 'disclosure'));
   return fold;
 }
@@ -144,7 +184,7 @@ function groupRow(group) {
     const count = accEl('span', 'meta');
     const open = accEl('button', 'tool label group-row__open', 'Open');
     open.type = 'button';
-    cell.append(foldEl(), icon, name, count, open);
+    cell.append(foldEl('span'), icon, name, count, open);
     row.append(cell, accEl('span'));
     return row;
   });
@@ -162,20 +202,59 @@ function groupRow(group) {
 // project after them; its end is the separator between the two.
 const projectsEl = accEl('div', 'docs__projects');
 
-// An entity's row: created on first use, refilled when `entities` holds a
-// new object for it (`onDocMeta` always stores a fresh one).
-function docRow(group, doc, depth) {
-  const el = cachedRow(docKey(group, doc.doc_id), { group, doc_id: doc.doc_id }, () => {
+// A thread's row: its fold, icon, title, "5 of 6, 14/08 - 23/09" (its
+// members shown here of all of them, and their days) and its newest
+// member's date.
+function threadRow(group, item, depth, total) {
+  const key = threadKey(group, item.thread_id);
+  const el = cachedRow(key, { group, thread_id: item.thread_id }, () => {
+    const row = accEl('div', 'list-row table__row');
+    row.dataset.thread = item.thread_id;
+    const cell = nameCell(depth);
+    const icon = iconEl(KIND_ICONS.thread.icon, 'table__icon');
+    const title = accEl('span', 'row-title');
+    const members = accEl('span', 'meta docs__members');
+    cell.append(foldEl('button'), icon, title, members);
+    const date = accEl('span', 'row-title docs__date');
+    row.append(cell, date);
+    return row;
+  });
+  const [fold, , title, members] = el.firstChild.children;
+  const unfolded = unfoldedThreads.has(item.thread_id);
+  fold.setAttribute('aria-expanded', String(unfolded));
+  fold.title = unfolded ? 'Fold the thread' : 'Unfold the thread';
+  title.textContent = item.title;
+  const count = item.members.length === total ? `${total}` : `${item.members.length} of ${total}`;
+  const days = memberDays(item.members);
+  members.textContent = days ? `${count} \u00b7 ${days}` : count;
+  el.lastChild.textContent = item.date ? DATE_FORMAT.format(item.date) : '\u2014';
+  return el;
+}
+
+// The days of a thread's `members` here: "14/08 - 23/09", one day alone.
+function memberDays(members) {
+  const dates = members.map(doc => doc.date).filter(Boolean).sort((a, b) => a - b);
+  if (!dates.length) return '';
+  const [first, last] = [shortDate(dates[0]), shortDate(dates.at(-1))];
+  return first === last ? first : `${first} \u2013 ${last}`;
+}
+
+// An entity's row, in the thread `thread_id` (or none): created on first
+// use, refilled when `entities` holds a new object for it (`onDocMeta`
+// always stores a fresh one).
+function docRow(group, thread_id, doc, depth) {
+  const el = cachedRow(docKey(group, thread_id, doc.doc_id), { group, thread_id, doc_id: doc.doc_id }, () => {
     const row = accEl('div', 'list-row table__row');
     row.dataset.id = doc.doc_id;
     const cell = nameCell(depth);
-    cell.append(iconEl('', 'table__icon'), accEl('span', 'row-title'));
+    const gap = accEl('span', 'docs__gap');
+    cell.append(gap, iconEl('', 'table__icon'), accEl('span', 'row-title'));
     const date = accEl('span', 'row-title docs__date');
     row.append(cell, date);
     return row;
   });
   if (rowDocs.get(el) !== doc) {
-    const [icon, title] = el.firstChild.children;
+    const [, icon, title] = el.firstChild.children;
     icon.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.genre));
     title.textContent = doc.title;
     el.lastChild.textContent = doc.date ? DATE_FORMAT.format(doc.date) : '\u2014';
@@ -190,6 +269,10 @@ function renderDocuments() {
   for (const doc of entities.values()) {
     if (matchesFilter(doc, state)) listed.push(doc);
   }
+  const memberTotals = new Map(); // thread id -> its members in the vault
+  for (const doc of entities.values()) {
+    for (const thread_id of knownThreads(doc)) memberTotals.set(thread_id, (memberTotals.get(thread_id) ?? 0) + 1);
+  }
 
   pruneRows();
   const groups = groupsOf(listed, state.selected_project);
@@ -203,7 +286,15 @@ function renderDocuments() {
       into.push(groupRow(group));
       if (groupFolded(group.key)) continue;
     }
-    for (const doc of sortItems(group.docs)) into.push(docRow(group.key, doc, depth));
+    for (const item of itemsOf(group.docs)) {
+      if (!item.members) {
+        into.push(docRow(group.key, null, item, depth));
+        continue;
+      }
+      into.push(threadRow(group.key, item, depth, memberTotals.get(item.thread_id)));
+      if (!unfoldedThreads.has(item.thread_id)) continue;
+      for (const doc of item.members) into.push(docRow(group.key, item.thread_id, doc, depth + 1));
+    }
   }
   placeChildren(projectsEl, projectNodes);
   placeChildren(rowsEl, projectNodes.length ? [projectsEl, ...nodes] : nodes);
@@ -214,13 +305,16 @@ function renderDocuments() {
 export const scheduleRenderDocuments = oncePerFrame(renderDocuments);
 
 // ----------------------------------------------------------------------------
-// A click: Open makes the group's project the filter, a group row folds.
+// A click: a fold folds, Open makes the group's project the filter, a group
+// row folds.
 rowsEl.addEventListener('click', ev => {
   const row = ev.target.closest('.list-row');
   if (!row) return;
   if (row.dataset.group !== undefined) {
     if (ev.target.closest('.group-row__open')) store.setState({ selected_project: row.dataset.group });
     else toggleGroup(row.dataset.group);
+  } else if (ev.target.closest('.docs__fold')) {
+    toggleThread(row.dataset.thread);
   }
 });
 

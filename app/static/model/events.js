@@ -9,6 +9,7 @@ import { parseDate } from '../core/format.js';
 import { store } from './state.js';
 import { entities } from './entities.js';
 import { projects } from './entities.js';
+import { threads } from './entities.js';
 
 // ----------------------------------------------------------------------------
 function onProject(id, meta) {
@@ -18,11 +19,19 @@ function onProject(id, meta) {
 }
 
 // ----------------------------------------------------------------------------
+// A thread as it is now.
+function onThread(thread_id, meta) {
+  threads.set(thread_id, { id: thread_id, ...meta });
+  store.setState({ entities_rev: store.getState().entities_rev + 1 });
+}
+
+// ----------------------------------------------------------------------------
 // The entity events (api.md#events): an entity as it is on disk
 // now, one shape for every kind.
 rpcOn('entity', meta => {
   if (meta.kind === 'project') onProject(meta.id, meta);
-  else if (meta.kind !== 'thread') onDocMeta(meta.id, meta);
+  else if (meta.kind === 'thread') onThread(meta.id, meta);
+  else onDocMeta(meta.id, meta);
 });
 
 // ----------------------------------------------------------------------------
@@ -41,6 +50,7 @@ function onDocMeta(doc_id, meta) {
 function forgetVault() {
   entities.clear();
   projects.clear();
+  threads.clear();
 
   const { projects_rev, entities_rev } = store.getState();
   store.setState({

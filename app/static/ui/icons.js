@@ -11,6 +11,7 @@ export const KIND_ICONS = {
   message: { icon: '#i-chat' },
   email: { icon: '#i-mention' },
   conversation: { icon: '#i-chat' },
+  thread: { icon: '#i-chat' },
   project: { icon: '#i-folder' },
   transactions: { icon: '#i-payment' },
   'bank-account': { icon: '#i-payment' },

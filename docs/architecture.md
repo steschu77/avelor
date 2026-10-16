@@ -287,11 +287,11 @@ nothing imports `app.js`.
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
 | `model/state.js` | the store and its schema (the vault's state, the filters, the counters, `notices`, the preferences); `savePrefs`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`) |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectsInOrder`, `knownThreads`) |
 | `model/events.js` | the host's events into the model (`entity`, `vault`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc |
 | `ui/statusbar.js` | the snackbar of the store's notices, failed calls nobody handled among them |
-| `features/lenses/documents.js` | lenses; Documents groups its rows by project |
+| `features/lenses/documents.js` | lenses; Documents groups its rows by project and thread |
 | `features/close.js` | closing the app: the `close` event answered `close_ready` |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/sidebar.js` | the vault panel: projects, No project with their counts, the filter, the vault menu |
@@ -310,7 +310,7 @@ A page is drawn by what it must keep while it changes:
 
 The store (`model/state.js`) holds UI state and the notices, plus revision counters
 (`projects_rev`, `entities_rev`). The domain data lives
-in Maps outside it (`entities`, `projects`, in `model/entities.js`), changed in place. Only the host's
+in Maps outside it (`entities`, `projects`, `threads`, in `model/entities.js`), changed in place. Only the host's
 events write them, in `model/events.js`, each followed by a counter's
 bump; a vault being opened clears them (`forgetVault`).
 
