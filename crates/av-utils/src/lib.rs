@@ -1,3 +1,4 @@
+pub mod base64;
 pub mod cancel;
 pub mod datetime;
 pub mod error;
@@ -6,3 +7,4 @@ pub mod id;
 pub mod logger;
 pub mod random;
 pub mod text;
+pub mod url;

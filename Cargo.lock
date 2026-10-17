@@ -37,6 +37,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "av-http"
+version = "0.1.0"
+dependencies = [
+ "av-utils",
+ "gio",
+ "glib",
+ "log",
+ "serde",
+ "serde_json",
+ "soup3",
+ "windows",
+]
+
+[[package]]
 name = "av-utils"
 version = "0.1.0"
 dependencies = [

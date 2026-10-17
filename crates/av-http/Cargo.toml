@@ -1,0 +1,21 @@
+[package]
+name = "av-http"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = { workspace = true }
+av-utils = { path = "../av-utils" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Networking_WinHttp", "Win32_System_Diagnostics_Debug", "Win32_System_LibraryLoader"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = { workspace = true }
+glib = { workspace = true }
+soup3 = { workspace = true }
+
+[lints]
+workspace = true
