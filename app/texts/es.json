@@ -342,6 +342,7 @@
   "panel.unlink": "Quitar el enlace",
   "props.assignee": "Responsable",
   "props.calendar": "Calendario",
+  "props.date": "Fecha",
   "props.done": "Hecha",
   "props.due": "Vence",
   "props.ends": "Termina",

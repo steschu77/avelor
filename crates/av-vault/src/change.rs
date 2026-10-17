@@ -24,6 +24,9 @@ pub enum Change {
     DocType(Option<String>),
     /// One of a task's fields (vault.md#task).
     Task(TaskChange),
+    /// An entity's date (vault.md#metadata), not an event's: its date is
+    /// its start.
+    Date(DateTime),
 }
 
 // ----------------------------------------------------------------------------
@@ -58,6 +61,7 @@ impl Change {
         match self {
             Change::DocType(_) => kind == DocumentType::Document,
             Change::Task(_) => kind == DocumentType::Task,
+            Change::Date(_) => kind != DocumentType::Event,
         }
     }
 
@@ -76,6 +80,7 @@ impl Change {
             Change::Task(TaskChange::Assignee(assignee)) => {
                 doc.set_task_assignee(text(assignee).map(ContactRef::parse))
             }
+            Change::Date(date) => doc.set_date(*date),
         }
     }
 }

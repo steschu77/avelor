@@ -36,10 +36,11 @@ export function dueTag(text) {
 // What a card shows of its entity (features/panel/panel.js): `row`, a `.props`
 // grid, filled with its kinds' rows in this order: an event's (`eventFields`,
 // `occurrence`'s times on a day card), a task's (`taskFields`, or `taskText`
-// while the host can't write it), an email's (`emailFields`), and a document's
-// type. A task's fields and a document's type are editable while the host
-// can write the entity (`taskFields`, `docTypeField`). Rows without a value are
-// left out; hidden for an entity with none of them.
+// while the host can't write it), an email's (`emailFields`), its date (any
+// entity's but an event's, whose start it is: `dateField`), and a document's
+// type. A task's fields, the date and a document's type are editable while
+// the host can write the entity (`taskFields`, `docTypeField`). Rows without a
+// value are left out; hidden for an entity with none of them.
 //
 // Drawn again on every entity change: while one of its fields has the focus,
 // that waits until the block is left, so what is typed stays (as a title
@@ -58,6 +59,7 @@ export function renderCardDetails(row, doc, occurrence = null) {
     if (doc?.task && doc.writable) taskFields(doc, add);
     else if (doc?.task) taskText(doc, add);
     if (doc?.email) emailFields(doc, add);
+    if (doc && !doc.event && !isNaN(doc.date)) add(t('props.date'), doc.writable ? dateField(doc) : DATE_FORMAT.format(doc.date));
     if (doc?.kind === 'document' && doc.writable) add(t('props.type'), docTypeField(doc));
     else if (doc?.kind === 'document' && doc.type) add(t('props.type'), doc.type);
     row.replaceChildren(...parts);
@@ -157,10 +159,26 @@ function taskFields(doc, add) {
 // due date has, if it has one.
 function dueOn(day, doc) {
     if (doc.task.due?.length === 10 || isNaN(doc.due)) return day;
+    return sameTimeOn(day, doc.due);
+}
+
+// The instant on `day` (yyyy-mm-dd) at the time of day `date` has.
+function sameTimeOn(day, date) {
     const [y, m, d] = day.split('-').map(Number);
-    const at = new Date(doc.due);
+    const at = new Date(date);
     at.setFullYear(y, m - 1, d);
     return isoInstant(at);
+}
+
+// ----------------------------------------------------------------------------
+// An entity's date (vault.md#metadata), its day typed in: a scan's or a
+// mail's wrong date corrected; its time of day, if it has one, kept.
+function dateField(doc) {
+    const input = fieldInput('date', 'date', doc.date ? localDay(doc.date) : '', 'form-input props__date');
+    editField(input, day => {
+        if (day) editEntityLocal(doc.doc_id, { date: doc.all_day || !doc.date ? day : sameTimeOn(day, doc.date) });
+    });
+    return input;
 }
 
 // ----------------------------------------------------------------------------

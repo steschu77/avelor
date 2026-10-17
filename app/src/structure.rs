@@ -720,6 +720,19 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn a_documents_date_is_set_by_its_card() {
+        let (mut h, ids) = notes("edit-date", 1);
+        let change = json!({ "date": "2026-09-30" });
+        let sent = h.call(
+            "edit_entities",
+            json!({ "ids": [ids[0]], "change": change }),
+        );
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["date"], "2026-09-30");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn a_tasks_due_date_and_assignee_are_set_and_removed() {
         let (mut h, _) = notes("edit-task", 1);
         let task = new_task(&mut h, "Call the landlord");

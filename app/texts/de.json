@@ -330,6 +330,7 @@
   "panel.unlink": "Die Verknüpfung entfernen",
   "props.assignee": "Zuständig",
   "props.calendar": "Kalender",
+  "props.date": "Datum",
   "props.done": "Erledigt",
   "props.due": "Fällig",
   "props.ends": "Endet",

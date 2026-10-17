@@ -335,6 +335,7 @@
   "panel.unlink": "Remove the link",
   "props.assignee": "Assignee",
   "props.calendar": "Calendar",
+  "props.date": "Date",
   "props.done": "Done",
   "props.due": "Due",
   "props.ends": "Ends",
