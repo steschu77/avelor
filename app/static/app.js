@@ -26,6 +26,7 @@ import './features/close.js';
 import './features/jobs.js';
 import './features/header.js';
 import './features/conflict.js';
+import './features/workspace/accounts.js';
 import './features/workspace/trash.js';
 import './features/new.js';
 import './features/linked.js';
