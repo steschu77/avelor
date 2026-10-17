@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="css/areas/dashboard.css">
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/timeline.css">
+  <link rel="stylesheet" href="css/areas/calendar.css">
   <link rel="stylesheet" href="css/areas/panel.css">
   <link rel="stylesheet" href="css/areas/editor.css">
   <link rel="stylesheet" href="css/areas/assistant.css">
@@ -72,6 +73,7 @@
         <button type="button" data-lens="dashboard" aria-selected="true" data-t="lens.dashboard"></button>
         <button type="button" data-lens="documents" aria-selected="false" data-t="lens.documents"></button>
         <button type="button" data-lens="timeline" aria-selected="false" data-t="lens.timeline"></button>
+        <button type="button" data-lens="calendar" aria-selected="false" data-t="lens.calendar"></button>
       </nav>
     </header>
 
@@ -190,6 +192,21 @@
           </div>
         </div>
       </div>
+
+      <!-- Calendar View -->
+      <div class="stack" id="lens-calendar" hidden>
+        <div class="stack">
+          <div class="cal__nav">
+            <button type="button" class="icon-btn icon-btn--square" id="cal-prev" data-t-title="cal.previous_month"><svg class="icon"><use href="#i-chevron-left" /></svg></button>
+            <button type="button" class="icon-btn icon-btn--square" id="cal-next" data-t-title="cal.next_month"><svg class="icon"><use href="#i-chevron-right" /></svg></button>
+            <span class="doc-title" id="cal-title"></span>
+            <button type="button" class="tool" id="cal-today" data-t="cal.today"></button>
+          </div>
+          <div class="cal__week cal__head label" id="calendar-headrow"></div>
+          <div class="cal__weeks" id="calendar-weeks"></div>
+        </div>
+      </div>
+
     </main>
 
     <aside class="panel" id="panel" data-t-aria-label="shell.panel">
@@ -221,6 +238,14 @@
             </div>
           </div>
           <div id="thread-messages" class="msg-list msg-list--thread"></div>
+        </div>
+        <!-- Day View: the selected day's events as cards (features/panel/panel.js) -->
+        <div class="stack" id="panel-day-view" hidden>
+          <div class="pane-section pane-section--ruled doc-head doc-head--thread">
+            <div class="doc-head__sub label" id="day-weekday"></div>
+            <div class="doc-head__title doc-title" id="day-title"></div>
+          </div>
+          <div id="day-cards" class="msg-list msg-list--day"></div>
         </div>
       </div>
       <div class="panel__context">

@@ -8,6 +8,7 @@
 import { $, accEl } from '../core/dom.js';
 import { t } from '../core/text.js';
 import { expandPanel, panelMode, selectDocument } from './selection.js';
+import { dayShows } from './selection.js';
 
 const contextTabsEl = $('context-tabs');
 const contextTabs = []; // { id, title, el, show, button }, in the strip's order
@@ -35,9 +36,11 @@ export function registerContextTab(tab) {
 }
 
 // What the Task and Linked tabs are about: the selected card (a thread's
-// focused one, the document shown), else the thread shown; '' for nothing.
+// or a day's focused one, the document shown), else the thread shown; ''
+// for nothing.
 export function contextTarget(state) {
   const mode = panelMode(state);
+  if (mode === 'day') return dayShows(state.selected_entity) ? state.selected_entity : '';
   if (mode !== 'document' && mode !== 'thread') return '';
   return state.selected_entity ?? state.selected_thread ?? '';
 }
