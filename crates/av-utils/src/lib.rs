@@ -1,3 +1,4 @@
+pub mod base64;
 pub mod cancel;
 pub mod datetime;
 pub mod error;
