@@ -37,8 +37,8 @@ events from Google Calendar, scanned pictures read by OCR.
 
 | Constraint | Consequence |
 |---|---|
-| Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
-| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `pulldown-cmark`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. UUIDv7, dates are hand-written |
+| Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM, WinHTTP (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
+| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `pulldown-cmark`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4`, `webkit6`, `soup3`, `gio`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. UUIDv7, dates are hand-written |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 | The vault is the source of truth | No database, no drafts; every edit is written to the file; the index is rebuilt by an indexing |
@@ -213,11 +213,12 @@ temporary vault and its events and reply asserted (`testing.rs`:
 `Harness::call`, `notes`); work on a worker is waited for
 (`wait_indexed`).
 
-## Crates
+## Crates <a id="crates"></a>
 
 | Crate | Owns | Notes |
 |---|---|---|
 | av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), logger, random (BCrypt), url (the link schemes, `is_link`), text normalization and unique names (`text`), a file's stamp and atomic writes (`fs`: `FileStamp`, `write_atomic`), cross-thread `Cancel` | |
+| av-http | blocking `Client` / `Request` / `Response`; the process's one session (`Client::shared`); `Request::send_logged`, the one way the APIs are called: logged as `METHOD host/path`, timed, a non-2xx status as `Error::Http` with the reason the caller's parser reads from the body | WinHTTP; libsoup 3 on Linux, one session per worker thread; WinHTTP's IPv6 fast fallback on (a network whose IPv6 goes nowhere cost 21 s per new connection); a streamed read takes what has arrived (`WinHttpQueryDataAvailable`) |
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops, `Changes` and their steps undone and redone (`vault.rs`, its parts in `vault/`: `indexing.rs`, `create.rs`, `structure.rs`, `properties.rs`, `trash.rs`, the tests in `vault/tests.rs`), the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the indexing (`index_vault`, events applied by `Index::apply`), filenames, `to_html` | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
@@ -285,6 +286,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | Theme | Windows' theme for apps (`AppsUseLightTheme`): the title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the web view's ground before the page paints (`SetDefaultBackgroundColor`), again on `WM_SETTINGCHANGE`; WebView2's `prefers-color-scheme` follows the same setting | `sys/win32/window.rs`, `sys/win32/webview.rs` | GTK's theme: the window's, and through it WebKitGTK's color scheme |
 | Language | the display languages (`GetUserPreferredUILanguages`); WebView2's `Language` | `sys/*.rs` (`languages`), `sys/*/webview.rs` | the languages GLib reads from the environment (`language_names`); the web context's preferred languages |
 | Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `gtk::UriLauncher` and `FileLauncher` (they use the XDG desktop portal where there is one) |
+| HTTP | WinHTTP; cancelling closes the handles | `av-http/src/win32.rs`, `linux.rs` | libsoup 3 (`soup3`): it comes with WebKitGTK as WinHTTP comes with Windows; a session per worker thread and timeout, since a libsoup session stays on the thread that made it; cancelled through a `gio::Cancellable` |
 | Random | BCrypt | `av-utils/random.rs` | `getrandom` |
 | File permissions | `readonly()`, `set_readonly(false)` before deleting from the trash | av-vault `vault/trash.rs` | a Unix form for each: `readonly()` is true only when no one may write; `set_readonly(false)` makes a file world-writable (`delete_trashed`) |
 | Editor | developed against WebView2 (Chromium): `contenteditable`, the selection | `editor/editor.js` | WebKitGTK's `contenteditable` and selection differ; `markdown.selftest.html` runs in both (`markdown.md#testing`) |
@@ -332,6 +334,11 @@ bridge defines `window.host.post(text)` and calls
 posts to `webkit.messageHandlers.host`, and a reply is
 `evaluate_javascript` of `host.receive(…)` with the text as a JSON string
 literal.
+
+**The crates.** av-http's `client.rs` is portable (the builder, logging,
+multipart, `send_logged`), with a backend module per platform behind the
+same `Client` / `Request` / `Response`; a `Response` isn't
+`Send` on either. av-utils picks its `random` per platform.
 
 ## Page <a id="page"></a>
 
@@ -572,6 +579,7 @@ abort. Where the bundle lands and how to measure the size:
 | Part | Owns | Must not |
 |---|---|---|
 | av-utils | primitives with no domain (dates, ids, atomic writes) | know about vaults, Google, LLMs; carry network types |
+| av-http | transport, cancellation | know any API |
 | av-vault | the vault's schema, files, index, rules | do network or UI; start threads (the app decides where indexing runs) |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
 | page | rendering, user input, the page's copy of the data | resolve filenames, conflicts or structural rules |

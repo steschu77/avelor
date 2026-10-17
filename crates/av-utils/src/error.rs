@@ -10,6 +10,8 @@ pub enum Error {
     // Generic errors
     Logging,
     NotInitialized,
+    /// A deadline passed: a network request.
+    Timeout,
     Cancelled,
     BadRequest {
         msg: String,
@@ -59,6 +61,18 @@ pub enum Error {
     FromUtf16 {
         err: std::string::FromUtf16Error,
     },
+    /// The request never got an HTTP answer (connection, TLS, transport).
+    Network {
+        msg: String,
+    },
+    /// The server answered with a non-success status.
+    Http {
+        status: u16,
+        /// Machine-readable error code from the response body (e.g. Google's
+        /// `ErrorInfo.reason`, or OAuth's `error`); empty if there is none.
+        reason: String,
+        msg: String,
+    },
     Serde {
         line: usize,
         column: usize,
@@ -80,6 +94,7 @@ impl Error {
         match self {
             Error::Logging => "logging",
             Error::NotInitialized => "not_initialized",
+            Error::Timeout => "timeout",
             Error::Cancelled => "cancelled",
             Error::BadRequest { .. } => "bad_request",
             Error::InvalidArgument { .. } => "invalid_argument",
@@ -97,6 +112,8 @@ impl Error {
             Error::FileIo { .. } => "file_io",
             Error::FromUtf8 { .. } => "from_utf8",
             Error::FromUtf16 { .. } => "from_utf16",
+            Error::Network { .. } => "network",
+            Error::Http { .. } => "http",
             Error::Serde { .. } => "serde",
             Error::Win32 { .. } => "win32",
             Error::Gtk { .. } => "gtk",
