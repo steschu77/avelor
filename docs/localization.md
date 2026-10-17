@@ -123,5 +123,6 @@ A language comes as a pull request with its catalog:
 ## Not localized
 
 The vault's format (`Contacts/` stays `Contacts/`, the label
-`conflict`), the docs, the code's names and comments, the log, and the
-messages only a developer sees ("There is no host.").
+`conflict`), the docs, the code's names and comments, the models'
+instructions, the log, and the messages only a developer sees ("There is
+no host.").

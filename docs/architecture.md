@@ -218,6 +218,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes` (`vault.rs`, its parts in `vault/`: `indexing.rs`, `create.rs`, `structure.rs`, `properties.rs`, `trash.rs`, the tests in `vault/tests.rs`), the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the indexing (`index_vault`, events applied by `Index::apply`), filenames, `to_html` | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
+| av-llm | `Client` over Anthropic, OpenAI, Mistral, Gemini, Ollama; the providers' facts in one table (`ProviderSpec`, `PROVIDERS`: names, alias, default URL, key, uploads, auth) and one request builder from it (`Client::request`); price table; the providers' error bodies | sends through `send_logged`; dispatch by macro, no trait |
 
 ### av-vault's core
 
@@ -565,5 +566,6 @@ abort. Where the bundle lands and how to measure the size:
 | av-utils | primitives with no domain (dates, ids, encodings, DPAPI, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | av-http | transport, cancellation | know any API |
 | av-vault | the vault's schema, files, index, rules | do network or UI; start threads (the app decides where indexing runs) |
+| av-llm | their remote APIs, pricing logic | touch the vault or the page's presets |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
 | page | rendering, user input, the page's copy of the data | resolve filenames, conflicts or structural rules |
