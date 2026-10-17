@@ -12,6 +12,7 @@
 // cards' dirty dots, and features/header.js leaves edit mode; autosave lives
 // in model/documents.js and covers every editor in edit mode.
 
+import { runAction } from '../../core/actions.js';
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { placeChildren } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
@@ -73,6 +74,8 @@ const threadProjectEl = $('thread-project');
 const threadMessagesEl = $('thread-messages');
 const docContentEl = $('doc-content');
 const dayWeekdayEl = $('day-weekday');
+// New event on the day shown (`new.event`, features/new.js)
+$('day-new-event').addEventListener('click', () => runAction('new.event', renderedDay));
 const dayTitleEl = $('day-title');
 const dayCardsEl = $('day-cards');
 const panelDocViewEl = $('panel-doc-view');

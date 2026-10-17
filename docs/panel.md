@@ -222,7 +222,8 @@ the cards.
 
 Under the calendar lens (`ui.md#calendar`) the panel shows the selected
 day, `selected_day`: today when the app starts, and a selected today moves
-on at midnight.
+on at midnight. Its head's New event opens New (`features/new.js`) with the
+day set (`new.event`).
 
 - **Events** come first: a stack of the day's event cards by start time, a
   recurring event as its occurrence on the day. Each card has its description,

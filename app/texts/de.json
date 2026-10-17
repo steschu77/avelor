@@ -81,6 +81,7 @@
   "dash.week_starts": "Woche beginnt",
   "dash.week_today_hint": "die nächsten 7 Tage",
   "day.new_event": "Neuer Termin",
+  "day.new_event_title": "Ein neuer Termin an diesem Tag",
   "docs.date": "Datum",
   "docs.fold_thread": "Verlauf zuklappen",
   "docs.hidden_count": "{n} ausgeblendet",

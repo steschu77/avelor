@@ -124,6 +124,13 @@ for (const type of NEW_TYPES) {
   });
 }
 
+// New event on the day `day` (the day view's, features/panel/panel.js).
+registerAction({
+  id: 'new.event',
+  when: vaultOpen,
+  run: day => openNew('event', { start: localDay(day), end: localDay(day) }),
+});
+
 // The types, at `anchor`.
 function showNewMenu(anchor) {
   const items = NEW_TYPES.map(type => ({

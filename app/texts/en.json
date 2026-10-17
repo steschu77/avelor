@@ -81,6 +81,7 @@
   "dash.week_starts": "Week starts",
   "dash.week_today_hint": "the next 7 days",
   "day.new_event": "New event",
+  "day.new_event_title": "A new event on this day",
   "docs.date": "Date",
   "docs.fold_thread": "Fold the thread",
   "docs.hidden_count": "{n} hidden",

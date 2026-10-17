@@ -90,6 +90,7 @@
   "dash.week_starts": "La semana empieza",
   "dash.week_today_hint": "los próximos 7 días",
   "day.new_event": "Nuevo evento",
+  "day.new_event_title": "Un evento nuevo en este día",
   "docs.date": "Fecha",
   "docs.fold_thread": "Plegar el hilo",
   "docs.hidden_count": {
