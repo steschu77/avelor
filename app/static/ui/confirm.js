@@ -2,10 +2,12 @@
 // (`data-armed`, filled red; `armedText` as its label, or as its title on
 // an icon button), a second one runs `run`. It disarms after 3 s, when the
 // pointer leaves it, or once it has run; while aria-disabled it does
-// nothing. One button is armed at a time, page-wide. The card's delete and
-// the project header's, the trash's.
+// nothing. One button is armed at a time, page-wide. A page rebuilt on
+// every change names the button by `key`: the one rebuilt with the armed
+// button's key comes back armed. The card's delete and the project
+// header's, the trash's, the Workspace pages' Disconnect and Remove.
 
-let armed = null; // { button, restore, timer } of the armed button
+let armed = null; // { key, button, restore, timer } of the armed button
 
 function disarm() {
   if (!armed) return;
@@ -30,6 +32,10 @@ export function armedButton(button, armedText, run, key = null) {
     if (!icon) button.textContent = shown.text;
   };
 
+  if (key !== null && armed?.key === key) {
+    arm();
+    Object.assign(armed, { button, restore });
+  }
   button.addEventListener('mouseleave', () => {
     if (armed?.button === button) disarm();
   });
@@ -42,6 +48,6 @@ export function armedButton(button, armedText, run, key = null) {
     }
     disarm();
     arm();
-    armed = { button, restore, timer: setTimeout(disarm, 3000) };
+    armed = { key, button, restore, timer: setTimeout(disarm, 3000) };
   });
 }

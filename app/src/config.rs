@@ -6,9 +6,12 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use av_utils::error::{Error, Result};
-use av_utils::fs::write_atomic;
 use av_utils::is_false;
 use serde::{Deserialize, Serialize};
+
+use crate::config::files::write_yaml;
+
+pub(crate) mod files;
 
 const CONFIG_FILE: &str = "config.yaml";
 const BROKEN_FILE: &str = "config.yaml.broken";
@@ -75,6 +78,12 @@ impl ConfigStore {
     }
 
     // ------------------------------------------------------------------------
+    /// The folder holding config.yaml.
+    pub fn dir(&self) -> &Path {
+        self.path.parent().unwrap_or(Path::new(""))
+    }
+
+    // ------------------------------------------------------------------------
     /// The vault to open: the command line's, else the last session's.
     pub fn vault(&self) -> Option<&Path> {
         self.session_vault
@@ -136,11 +145,7 @@ impl ConfigStore {
 
     // ------------------------------------------------------------------------
     fn save(&self) -> Result<()> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let text = serde_yaml_ng::to_string(&self.config)?;
-        write_atomic(&self.path, text.as_bytes())
+        write_yaml(&self.path, &self.config)
     }
 }
 

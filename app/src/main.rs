@@ -2,6 +2,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod accounts;
+mod ai;
 mod api;
 mod app;
 mod close;
