@@ -4,10 +4,16 @@
     "one": "{n} movimiento",
     "other": "{n} movimientos"
   },
+  "cal.next_month": "Mes siguiente",
   "cal.overdue_n": {
     "one": "{n} vencida",
     "other": "{n} vencidas"
   },
+  "cal.overdue_tasks": {
+    "one": "{n} tarea vencida",
+    "other": "{n} tareas vencidas"
+  },
+  "cal.previous_month": "Mes anterior",
   "cal.today": "Hoy",
   "card.delete": "Eliminar documento",
   "card.edit": "Editar documento",
@@ -197,6 +203,7 @@
   "layout.resize_context": "Ancho de la columna de contexto",
   "layout.resize_panel": "Ancho de los detalles",
   "layout.resize_sidebar": "Ancho del panel de la bóveda",
+  "lens.calendar": "Calendario",
   "lens.dashboard": "Resumen",
   "lens.documents": "Documentos",
   "lens.timeline": "Cronología",
@@ -310,12 +317,15 @@
   "panel.edit_message": "Editar mensaje",
   "panel.expand": "Mostrar a todo el ancho",
   "panel.filter_or_label": "Filtrar, o una etiqueta nueva",
+  "panel.from_earlier": "de días anteriores",
   "panel.full_width": "Panel lateral a todo el ancho",
   "panel.labels": "Etiquetas",
   "panel.linked_from": "Enlazado desde «{title}»",
   "panel.links_to": "Enlaza con «{title}»",
   "panel.new_label": "Nueva etiqueta «{label}»",
+  "panel.no_events": "Sin eventos",
   "panel.none_selected": "Ningún documento seleccionado",
+  "panel.nothing_today": "No hay nada en el calendario este día.",
   "panel.read_only": "Solo lectura",
   "panel.remove_label": "Quitar la etiqueta {label}",
   "panel.remove_project": "Quitar del proyecto",
@@ -396,6 +406,7 @@
   "structure.save_failed": "No se pudo guardar el cambio en «{title}»: {reason}.",
   "task.done": "Hecha",
   "task.in_progress": "En curso",
+  "task.overdue": "Vencida",
   "task.todo": "Por hacer",
   "task.waiting": "En espera",
   "thread.project": "Proyecto",

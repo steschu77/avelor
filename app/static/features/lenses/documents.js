@@ -40,10 +40,11 @@ const hiddenEl = $('doc-hidden');
 const hiddenTextEl = $('doc-hidden-text');
 
 // ----------------------------------------------------------------------------
-// The type selection (features/lenses/types.js): every type shown at
-// first.
+// The type selection (features/lenses/types.js): every type shown at first
+// but events, which have a lens of their own.
 const docTypes = typeBar({
   lens: 'documents', el: $('doc-types'), pref: 'doc_hidden', barPref: 'doc_types_bar',
+  hiddenAtFirst: ['events'],
 });
 
 $('doc-show-all').addEventListener('click', docTypes.showAll);

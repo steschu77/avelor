@@ -1,7 +1,9 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import { addDays, dayStart, isoInstant, localDay, parseDate } from '../../static/core/format.js';
-import { eventsBetween, eventsOnDay, getDueTasks, getEvents, isOverdue } from '../../static/model/calendar.js';
+import {
+  calendarDayOf, dayOccurrences, dayTasks, eventsBetween, eventsOnDay, getDueTasks, getEvents, isOverdue,
+} from '../../static/model/calendar.js';
 import { entities } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -80,6 +82,12 @@ test('an occurrence moved into the days asked for is there, from before and from
   equal(occurrences('2027-07-13', '2027-07-17').map(([from]) => from), ['2027-07-14', '2027-07-15']);
 });
 
+test("a day's stack has an event once, a recurring one as its first occurrence there", () => {
+  vault(timed('nightly', new Date(2027, 6, 5, 22), new Date(2027, 6, 6, 2), { schedule: ['RRULE:FREQ=DAILY'] }));
+  const stack = dayOccurrences(parseDate('2027-07-08'));
+  equal([stack.length, stack[0].date.getTime()], [1, new Date(2027, 6, 7, 22).getTime()]);
+});
+
 test('the open tasks with a due day, by the day, then by title', () => {
   vault(
     task('b', '2027-07-09'), task('a', '2027-07-09'), task('first', '2027-07-08'), task('done', '2027-07-08', { status: 'done' }),
@@ -95,6 +103,25 @@ test('a task due today is not overdue, whatever its time', () => {
     task('done', localDay(addDays(today, -1)), { status: 'done' }),
   );
   equal([...entities.values()].map(doc => isOverdue(doc)), [true, false, false, false]);
+});
+
+test("today's stack has the tasks due today and those overdue, another day's only its own", () => {
+  const today = dayStart(new Date());
+  vault(task('old', localDay(addDays(today, -9))), task('today', localDay(today)), task('tomorrow', localDay(addDays(today, 1))));
+  const stack = day => Object.fromEntries(Object.entries(dayTasks(day)).map(([name, tasks]) => [name, ids(tasks)]));
+  equal(stack(today), { due: ['today'], overdue: ['old'] });
+  equal(stack(addDays(today, 1)), { due: ['tomorrow'], overdue: [] });
+  equal(stack(addDays(today, -9)), { due: ['old'], overdue: [] });
+});
+
+test('the day the calendar shows an entity on', () => {
+  vault(
+    timed('event', new Date(2027, 6, 8, 22)), task('task', '2027-07-09T08:00:00Z'), task('done', '2027-07-09', { status: 'done' }),
+    { id: 'letter', kind: 'document', title: '', date: '2027-07-08' },
+  );
+  equal(calendarDayOf(entities.get('event')), new Date(2027, 6, 8));
+  equal(calendarDayOf(entities.get('task')), dayStart(new Date('2027-07-09T08:00:00Z')));
+  equal([calendarDayOf(entities.get('done')), calendarDayOf(entities.get('letter'))], [null, null]);
 });
 
 test('an occurrence is not expanded again', () => {

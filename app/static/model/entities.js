@@ -26,7 +26,7 @@ export function knownThreads(doc) {
 }
 
 // ----------------------------------------------------------------------------
-function getMeta(doc_id) {
+export function getMeta(doc_id) {
   return entities.get(doc_id);
 }
 

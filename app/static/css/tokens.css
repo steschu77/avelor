@@ -24,17 +24,18 @@
   --c-ink-soft: light-dark(#232329, oklch(0.87 0.007 80));
   /* icons */
   --c-ink-mute: light-dark(#565660, oklch(0.72 0.012 285));
+  /* disabled controls, days outside the month */
   --c-ink-faint: light-dark(#9a9aa3, oklch(0.55 0.01 285));
   --c-label: light-dark(rgba(22, 22, 26, 0.55), oklch(0.935 0.008 80 / 0.55));
   --c-line: light-dark(rgba(10, 10, 11, 0.16), oklch(0.935 0.008 80 / 0.13));
-  /* selection */
+  /* primary action, selection */
   --c-accent: #8fd0d6;
   /* the accent where it draws a line of 2px or less (a selection's ring,
      a drop target, the focus), 3:1 on the shade */
   --c-accent-line: light-dark(#4f8f95, #8fd0d6);
   /* text or an icon on an accent or danger fill, dark in both themes */
   --c-on-accent: #16161a;
-  /* tags */
+  /* pressed tools, tags */
   --c-accent-soft: light-dark(rgba(143, 208, 214, 0.22), rgba(143, 208, 214, 0.18));
   /* a word typed in Go to, marked in its list */
   --c-hit: light-dark(rgba(143, 208, 214, 0.5), rgba(143, 208, 214, 0.3));
@@ -97,7 +98,7 @@
   --w-tl-date: 112px;
   --w-tl-date-narrow: 64px;
 
-  /* sidebar inset */
+  /* sidebar and table inset */
   --p-gutter: 12px;
   /* x inset of content panes: the right panel */
   --p-pane: 20px;

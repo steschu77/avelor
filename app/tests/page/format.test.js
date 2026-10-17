@@ -1,5 +1,7 @@
 import { equal, test } from './harness.js';
-import { addDays, isoInstant, localDay, parseDate, relativeDay } from '../../static/core/format.js';
+import {
+  addDays, dayStart, isoInstant, localDay, monthEndOf, monthStartOf, parseDate, relativeDay, sameDay, weekStartOf,
+} from '../../static/core/format.js';
 
 test("a day is the local day's start, not UTC's", () => {
   const day = parseDate('2027-03-28');
@@ -9,6 +11,13 @@ test("a day is the local day's start, not UTC's", () => {
 test('a date-time is the instant it names, nothing is none', () => {
   equal(parseDate('2027-07-08T23:05:00Z').getTime(), Date.UTC(2027, 6, 8, 23, 5));
   equal([parseDate(''), parseDate(null)], [undefined, undefined]);
+});
+
+test('where a day, a week and a month start and end', () => {
+  equal(dayStart(new Date(2027, 2, 28, 13, 45)), new Date(2027, 2, 28));
+  equal([sameDay(new Date(2027, 2, 28, 1), new Date(2027, 2, 28, 23)), sameDay(new Date(2027, 2, 28), new Date(2026, 2, 28))], [true, false]);
+  equal([weekStartOf(new Date(2027, 2, 28)), weekStartOf(new Date(2027, 2, 22))], [new Date(2027, 2, 22), new Date(2027, 2, 22)]);
+  equal([monthStartOf(new Date(2028, 1, 10)), monthEndOf(new Date(2028, 1, 10))], [new Date(2028, 1, 1), new Date(2028, 1, 29)]);
 });
 
 test('a local day as a date input has it', () => {
