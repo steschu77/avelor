@@ -6,5 +6,6 @@ pub mod fs;
 pub mod id;
 pub mod logger;
 pub mod random;
+pub mod secret;
 pub mod text;
 pub mod url;

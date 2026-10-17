@@ -14,9 +14,29 @@ use crate::error::{Error, Result};
 /// A failure is `Error::FileWrite` with `path`. On Linux the new file keeps
 /// the old one's mode.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    replace(path, bytes, false)
+}
+
+// ----------------------------------------------------------------------------
+/// `write_atomic` for a secret: on Linux the new file is the user's alone
+/// (0600) from its first byte on, whatever mode the old one had. On Windows
+/// the folder decides, as for `write_atomic`.
+pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
+    replace(path, bytes, true)
+}
+
+// ----------------------------------------------------------------------------
+/// `write_atomic`'s steps; `private` as `write_private`.
+fn replace(path: &Path, bytes: &[u8], private: bool) -> Result<()> {
     let temp = temp_path(path)?;
-    let written = write_synced(&temp, bytes, false)
-        .and_then(|()| keep_mode(path, &temp))
+    let written = write_synced(&temp, bytes, private)
+        .and_then(|()| {
+            if private {
+                Ok(())
+            } else {
+                keep_mode(path, &temp)
+            }
+        })
         .and_then(|()| fs::rename(&temp, path));
     if let Err(err) = written {
         let _ = fs::remove_file(&temp); // best effort: it may not exist
@@ -38,10 +58,34 @@ fn temp_path(path: &Path) -> Result<PathBuf> {
 }
 
 // ----------------------------------------------------------------------------
-fn write_synced(path: &Path, bytes: &[u8], _private: bool) -> std::io::Result<()> {
-    let mut file = fs::File::create(path)?;
+fn write_synced(path: &Path, bytes: &[u8], private: bool) -> std::io::Result<()> {
+    let mut file = if private {
+        create_private(path)?
+    } else {
+        fs::File::create(path)?
+    };
     file.write_all(bytes)?;
     file.sync_all()
+}
+
+// ----------------------------------------------------------------------------
+/// A new file at `path` only the user can read and write (0600). A file
+/// left there is removed first: it would keep its mode.
+#[cfg(unix)]
+fn create_private(path: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let _ = fs::remove_file(path); // best effort: it may not exist
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+}
+
+// ----------------------------------------------------------------------------
+#[cfg(not(unix))]
+fn create_private(path: &Path) -> std::io::Result<fs::File> {
+    fs::File::create(path)
 }
 
 // ----------------------------------------------------------------------------
@@ -105,6 +149,30 @@ mod tests {
         write_atomic(&path, b"second").unwrap();
         let mode = fs::metadata(&path).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o640);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_private_is_the_users_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("write-private");
+        let path = dir.join("key");
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        write_private(&path, b"first").unwrap();
+        let created = mode(&path);
+
+        // Neither the old file's mode nor a temporary file left behind
+        // loosens it.
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        let left = dir.join(".key.tmp");
+        fs::write(&left, b"left").unwrap();
+        fs::set_permissions(&left, fs::Permissions::from_mode(0o644)).unwrap();
+        write_private(&path, b"second").unwrap();
+
+        assert_eq!(created, 0o600);
+        assert_eq!(mode(&path), 0o600);
+        assert_eq!(fs::read(&path).unwrap(), b"second");
         fs::remove_dir_all(&dir).unwrap();
     }
 
