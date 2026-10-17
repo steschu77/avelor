@@ -1,8 +1,11 @@
 // What the calendar shows: the dated events in the vault panel's filter,
 // each recurring event expanded into its occurrences (the RFC 5545 lines Google
-// keeps, with their exceptions), and the open tasks on their due day.
+// keeps, with their exceptions), and the open tasks on their due day --
+// for the grid (features/lenses/calendar.js), the panel's day view
+// (features/panel/panel.js) and the selection (`calendarDayOf`,
+// features/selection.js).
 
-import { addDays, dayStart, parseDate } from '../core/format.js';
+import { addDays, dayStart, parseDate, sameDay } from '../core/format.js';
 import { entities, matchesFilter } from './entities.js';
 import { dayKey, scheduleStarts } from './schedule.js';
 
@@ -50,6 +53,34 @@ export function isOverdue(doc, today = dayStart(new Date())) {
 }
 
 // ----------------------------------------------------------------------------
+// The tasks the day stack lists for `day`: those due on it, and on today
+// also those due before it, still open.
+export function dayTasks(day) {
+    const tasks = getDueTasks();
+    const today = dayStart(new Date());
+    return {
+        due: tasks.filter(task => sameDay(task.due, day)),
+        overdue: sameDay(day, today) ? tasks.filter(task => task.due < today) : [],
+    };
+}
+
+// ----------------------------------------------------------------------------
+// The day the calendar shows `doc` on: an event's (first) start, an open
+// task's due day; null where it shows nowhere.
+export function calendarDayOf(doc) {
+    if (shownInCalendar(doc)) return dayStart(doc.date);
+    if (dueInCalendar(doc)) return dayStart(doc.due);
+    return null;
+}
+
+// ----------------------------------------------------------------------------
+// The events on `day` as the panel's day stack shows them: each entity once
+// (a recurring event as its occurrence there, the first if two overlap the day), by
+// start.
+export function dayOccurrences(day) {
+    const seen = new Set();
+    return eventsOnDay(day, getEvents()).filter(ev => !seen.has(ev.doc_id) && seen.add(ev.doc_id));
+}
 
 // ----------------------------------------------------------------------------
 // Event helpers

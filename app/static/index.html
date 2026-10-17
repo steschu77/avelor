@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="css/areas/dashboard.css">
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/timeline.css">
+  <link rel="stylesheet" href="css/areas/calendar.css">
   <link rel="stylesheet" href="css/areas/panel.css">
   <link rel="stylesheet" href="css/areas/editor.css">
   <link rel="stylesheet" href="css/areas/assistant.css">
@@ -72,6 +73,7 @@
         <span data-lens="dashboard" aria-selected="true" data-t="lens.dashboard"></span>
         <span data-lens="documents" aria-selected="false" data-t="lens.documents"></span>
         <span data-lens="timeline" aria-selected="false" data-t="lens.timeline"></span>
+        <span data-lens="calendar" aria-selected="false" data-t="lens.calendar"></span>
       </nav>
     </header>
 
@@ -190,6 +192,21 @@
           </div>
         </div>
       </div>
+
+      <!-- Calendar View -->
+      <div class="stack" id="lens-calendar" hidden>
+        <div class="stack">
+          <div class="cal__nav">
+            <span class="icon-btn icon-btn--square" id="cal-prev"><svg class="icon"><use href="#i-chevron-left" /></svg></span>
+            <span class="icon-btn icon-btn--square" id="cal-next"><svg class="icon"><use href="#i-chevron-right" /></svg></span>
+            <span class="doc-title" id="cal-title"></span>
+            <span class="tool" id="cal-today" data-t="cal.today"></span>
+          </div>
+          <div class="cal__week cal__head label" id="calendar-headrow"></div>
+          <div class="cal__weeks" id="calendar-weeks"></div>
+        </div>
+      </div>
+
     </main>
 
     <aside class="panel" id="panel">
@@ -221,6 +238,14 @@
             </div>
           </div>
           <div id="thread-messages" class="msg-list msg-list--thread"></div>
+        </div>
+        <!-- Day View: the selected day's events as cards (features/panel/panel.js) -->
+        <div class="stack" id="panel-day-view" hidden>
+          <div class="pane-section pane-section--ruled doc-head doc-head--thread">
+            <div class="doc-head__sub label" id="day-weekday"></div>
+            <div class="doc-head__title doc-title" id="day-title"></div>
+          </div>
+          <div id="day-cards" class="msg-list msg-list--day"></div>
         </div>
       </div>
       <div class="panel__context">

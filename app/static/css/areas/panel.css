@@ -35,7 +35,7 @@
   border-bottom: 1px solid var(--c-line);
 }
 
-/* the views (document, thread) swap inside; [hidden] hides them */
+/* the views (document, thread, day) swap inside; [hidden] hides them */
 .panel__body {
   grid-area: body;
   display: flex;
@@ -148,7 +148,7 @@
 }
 
 /* Messages (#doc-content, #thread-messages): one card per message on the
- * root-to-active path, each with its own head/editor. A lone
+ * root-to-active path, each with its own head/tags/toolbar/editor. A lone
  * document is a borderless white sheet. */
 .msg-list {
   flex: 1;
@@ -165,20 +165,37 @@
   background: var(--c-card);
 }
 
-/* a thread's cards sit white on paper, the selected one ringed */
-.msg-list--thread {
+/* a thread's or a day's cards sit white on paper, the selected one ringed */
+.msg-list--thread,
+.msg-list--day {
   padding: 12px;
   gap: 12px;
   background: var(--c-paper);
 }
 
-.msg-list--thread .msg {
+.msg-list--thread .msg,
+.msg-list--day .msg {
   border-color: var(--c-line);
   box-shadow: var(--shadow-card);
 }
 
-.msg-list--thread .msg[aria-selected="true"] {
+.msg-list--thread .msg[aria-selected="true"],
+.msg-list--day .msg[aria-selected="true"] {
   border-color: var(--c-accent);
+}
+
+/* a task the day lists (features/panel/panel.js): its tag, title and meta; a click
+   opens it into its card */
+.due-row {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.due-row>.row-title {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Drag-and-drop: dragging a row from the table onto a card panel
