@@ -17,6 +17,7 @@ import { entities, projects, threads } from '../model/entities.js';
 import { overwriteDocContent } from '../model/documents.js';
 import { reloadEntity } from '../model/structure.js';
 import { KIND_ICONS } from '../ui/icons.js';
+import { getDocIcon } from '../ui/icons.js';
 
 const conflictDialogEl = $('conflict-dialog');
 const conflictTheirsEl = $('conflict-theirs');
@@ -59,7 +60,9 @@ function renderConflict(conflicts) {
   const kind = entity?.kind ?? (projects.has(id) ? 'project' : 'thread');
   const outside = changed ? 'changed outside the app' : 'deleted outside the app';
 
-  $('conflict-icon').firstChild.setAttribute('href', KIND_ICONS[kind]?.icon ?? '');
+  $('conflict-icon').firstChild.setAttribute('href', entity
+    ? getDocIcon(entity.kind, entity.genre)
+    : KIND_ICONS[kind]?.icon ?? '');
   $('conflict-kind').textContent = kind;
   $('conflict-title').textContent = `${meta?.title || meta?.name || 'Untitled'} was ${outside}`;
   const pathEl = $('conflict-path');

@@ -1,9 +1,9 @@
 // The structural edits (panel.md#saving-structure, api.md#structure):
-// threads, projects, titles, labels, links, a task's fields, deletes and
-// reloads, each a host round trip that ends in a published selection
-// (`commitExistingSelection`, model/entities.js); joining and leaving
-// threads and projects, labels, links and the entity edits as requests of
-// their own (`joinThreadLocal`, ..., `editEntityLocal`).
+// threads, projects, titles, labels, links, a genre and a task's fields,
+// deletes and reloads, each a host round trip that ends in a published
+// selection (`commitExistingSelection`, model/entities.js); joining and
+// leaving threads and projects, labels, links and the entity edits as
+// requests of their own (`joinThreadLocal`, ..., `editEntityLocal`).
 // The panel's drops and buttons (features/panel/panel.js), the table, the
 // sidebar and the project header (features/sidebar.js, features/header.js)
 // and the Linked tab send them.
@@ -28,13 +28,13 @@ import { isDirty, startReload, trySave } from './documents.js';
 // conflict the selection stays. Each is applied minus anything that no
 // longer exists; publishing it rebuilds the panel's cards (`threads_rev`).
 // Without `select`, nothing is published: an entity's own fields, which the
-// cards follow from its push (features/panel/panel.js's `refreshCardChips`).
-// A conflict (a file changed outside the app, nothing written) opens the
-// conflict dialog; unsaved edits of it are sent first, so their own
-// conflict offers Use ours too. `edit_entities` names the entities it
-// skipped instead: one changed outside the app is such a conflict, any
-// other is reported. A failure shows in the status bar, in the host's words
-// (core/rpc.js).
+// cards follow from its push (features/panel/panel.js's `refreshCardChips`),
+// so a field keeps the focus. A conflict (a file changed outside the app,
+// nothing written) opens the conflict dialog; unsaved edits of it are sent
+// first, so their own conflict offers Use ours too. `edit_entities` names
+// the entities it skipped instead: one changed outside the app is such a
+// conflict, any other is reported. A failure shows in the status bar, in
+// the host's words (core/rpc.js).
 export function structureCall(cmd, args, select = null) {
   rpcCall(cmd, args).then(reply => {
     const skipped = reply?.skipped ?? [];
@@ -170,8 +170,9 @@ export function setLinkLocal(id, to) {
 }
 
 // Write `change` to the entity `id` (`edit_entities`, api.md#structure): a
-// task's `{task: {status}}`. The host pushes the entity back, which the
-// cards, the lenses and the dashboard follow; the selection stays as it is.
+// document's `{genre}`, or a task's `{task: {status | due | assignee}}`,
+// null removing it. The host pushes the entity back, which the cards, the
+// lenses and the dashboard follow; the selection stays as it is.
 export function editEntityLocal(id, change) {
   structureCall('edit_entities', { ids: [id], change });
 }

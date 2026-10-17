@@ -47,6 +47,16 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
   (`panel.md#titles`), date, path, and for an entity in
   several threads a line of them (`panel.md#thread-switch`); in a thread,
   the header is the card's drag handle (`panel.md#structural-edits`);
+- for an event its details — when (a day card's occurrence, and where
+  Google moved it from), how it repeats in words, where, the guests, its
+  calendar, a status other than confirmed — for a task its status, its
+  due date as seen from today (tagged when overdue), its assignee and when
+  it was done (`task.done`), for a mail its sender, followed by its kind
+  when the mail analysis found one ("Stadtwerke · Request"),
+  and for a document its genre (`renderCardDetails`,
+  `features/panel/details.js`). A task's fields and a document's genre are
+  editable in place while the host can write the entity
+  (`panel.md#field-edits`); the rest is read-only;
 - its project and label chips on one line, with the "+" menu that adds
   either (`panel.md#labels`, `panel.md#projects`), and its link chips
   (`panel.md#links`);
@@ -75,8 +85,9 @@ out and whose remove-from-thread applies; `selectable` — a click selects
 its entity (`panel.md#selection`), in a thread and in a day,
 but not for a lone document, with nothing else on screen to select;
 `occurrence` — a day card's occurrence of its event, whose date the head
-shows. A card's head (title, date) follows its entity in place on
-`entities_rev`, with its links and threads lines (`refreshCardChips`).
+and whose times the details show. A card's head (title, date) and details
+follow its entity in place on `entities_rev`, with its links and threads
+lines (`refreshCardChips`).
 
 Two `<template>` elements in `index.html` hold the markup each card
 clones from, via `createEditorToolbar()`/`createDocPreviewToolbar()`
@@ -225,8 +236,8 @@ day, `selected_day`: today when the app starts, and a selected today moves
 on at midnight.
 
 - **Events** come first: a stack of the day's event cards by start time, a
-  series as its occurrence on the day. Each card has its description,
-  edited like any document's body.
+  series as its occurrence on the day. Each card has the event's details
+  and its description, edited like any document's body.
 - **Tasks** follow: the open tasks due that day under "Due" and, on today,
   those still open from earlier days under "Overdue" (`dayTasks`), each as
   a row with its title and assignee (`dueRow`) until the task is selected,
@@ -234,7 +245,7 @@ on at midnight.
   day with nothing shows "No events".
 - `refreshDay()` keeps the cards by id while entities change: a card that
   stays keeps its editor and its place in the DOM and takes its
-  occurrence's head, a new one is built, one gone is torn down
+  occurrence's head and details, a new one is built, one gone is torn down
   (an edit in it saved first). `renderPanel` rebuilds the day only for
   another day; a `threads_rev` bump re-keys it (`refreshDay`), as the
   calendar lens's render does once per frame after entity and filter
@@ -250,8 +261,9 @@ on at midnight.
   day lists (`dayShows`: a card or a task's row), selects the (first) day
   of any other event of the calendar and the due day of an open task it
   shows; anything else — another kind of entity, a thread (`selectById`,
-  `switchThread`) — is shown in the Documents lens. So a link chip or a link
-  in a body always shows something.
+  `switchThread`) — is shown in the Documents lens. So a link chip, a link in a
+  body, or a guest, calendar or assignee in a card's details always shows
+  something.
 - The context column's tabs (`contextTarget`) are about the focused day
   card.
 
@@ -446,6 +458,40 @@ Both drop targets of the card panels are wired through the same
 `attachDropZone(containerEl, onDrop)`; while dragging, the panel's last
 card is highlighted (`.is-drop-after`) as the drop target.
 
+## A task's fields and a document's genre <a id="field-edits"></a>
+
+A card's details block edits them in place while the entity is `writable`
+(`taskFields`, `genreField`, `features/panel/details.js`); a read-only
+one shows them as text:
+
+- **Status**: the segmented buttons of `TASK_STATUSES` (To do, In
+  progress, Waiting, Done); a status the page doesn't know presses none
+  and shows as text after them. A click writes it.
+- **Due**: a date input, then when that is from today (with the time of a
+  due date that has one), the Overdue tag and an × that removes it. A new
+  date keeps the time of day of the old one.
+- **Assignee**: typed in, "Nobody" while there is none; a contact of the
+  vault (`@id`) shows its name and stays the contact until the text is
+  changed. Empty removes it.
+- **Done**: when the task was marked done (`task.done`), shown only.
+- **Genre** (a document): typed in, with the genres the vault's documents
+  use offered (`#genre-list`); empty removes it. The card's icon follows.
+
+A field writes when Enter is pressed or it is left, if its value changed;
+Esc puts back what it held (`onEditEnd`, `ui/field.js`). A date input's
+change fires for every digit typed, so it isn't what writes. Each edit is
+one `edit_entities` for the one entity (`editEntityLocal`,
+`model/structure.js`). It publishes no selection, so the cards aren't
+rebuilt: they follow the entity's push (`refreshCardChips`). While one of
+the block's fields has the focus, that refresh waits until the block is
+left, so what is typed stays; a button that had the focus gets it back.
+An entity the host skipped because its file changed outside the app opens
+the conflict dialog (`saving.md#the-dialog`); any other skip is reported
+in the status bar.
+
+The dashboard's Tasks card sets a task's status the same way, by dragging
+it to another column (`ui.md#dashboard`).
+
 ## Saving structural edits <a id="saving-structure"></a>
 
 Structural edits are saved the way content is (`saving.md`): the vault
@@ -460,7 +506,7 @@ applies the edit:
 | The host answers | `ok {source, html}` with the saved source | `entity` / `entity_deleted` per changed entity, then the command's answer |
 | Stale-reply guard | `edit_seq`, kept with the call on the page | none needed: nothing is applied optimistically; the answer only says how to select |
 | On failure | an error answer, shown in the status bar; the document stays dirty, the next poll retries | an error answer, shown in the status bar; the page shows whatever the host pushed, so it never shows unsaved structure |
-| File changed outside the app | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs / Use ours | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs, after which the user makes the edit again |
+| File changed outside the app | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs / Use ours | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs, after which the user makes the edit again. `edit_entities` names the entity among those it `skipped` instead, and writes the others |
 
 - **The host owns the rules.** Edits span files (a dissolve rewrites another
   member and removes the thread's file), so the rules live in av-vault where
@@ -518,6 +564,8 @@ and save their bodies at once.
 | D10 | Unlink | × on a link chip or a Linked tab row → `setLinkLocal(id, null)` on the entity holding the link | `set_link {id, to: null}` → `entity` | the key removed |
 | D11 | Follow a link | a link chip, a Linked tab row, or an `id:` link in a preview (`openLink`) → `selectById` | — | the entity, thread or project selected |
 | D12 | Rename | the pen in a card's head or the thread header → `renameEntity` → `editTextInPlace`; Enter or blur | `set_title` → `entity` | the card's head, the thread header, chips and links follow; the file keeps its name |
+| D13 | A task's field | a Status button; the Due input or the Assignee typed in, Enter or blur; the Due × → `editEntityLocal(id, {task: {…}})` | `edit_entities {ids: [id], change}` → `Index::edit_entities` (done also writes `task.done`) → `entity`, `ok {changed, skipped}` | the card, the lenses and the dashboard follow; the field keeps the focus; a skip as `changed_outside` opens the conflict dialog |
+| D14 | Genre | the Genre typed in, Enter or blur → `editEntityLocal(id, {genre})` | `edit_entities` → `entity` | the card's icon and the rows' follow |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |
 | E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |

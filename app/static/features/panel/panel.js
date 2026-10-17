@@ -8,9 +8,11 @@
 // Structural edits (drops, the remove-from-thread and delete buttons) are host
 // round trips (`structureCall`, model/structure.js) that end in a published
 // selection, never in a direct render call; the requests (`joinThreadLocal`,
-// ...) are model/structure.js's. app.js reaches into `msgControllers` for the
-// cards' dirty dots, and features/header.js leaves edit mode; autosave lives
-// in model/documents.js and covers every editor in edit mode.
+// ...) are model/structure.js's. What a card shows of an event, a task or a
+// mail is features/panel/details.js's (`renderCardDetails`, `taskTag`,
+// `parseContact`). app.js reaches into `msgControllers` for the cards' dirty
+// dots, and features/header.js leaves edit mode; autosave lives in
+// model/documents.js and covers every editor in edit mode.
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { placeChildren } from '../../core/dom.js';
@@ -48,6 +50,7 @@ import { documentsIfCalendar, setDayListed } from '../selection.js';
 import { openLinkedTab } from '../context.js';
 import { openTaskTab } from '../context.js';
 import { parseContact, taskTag } from './details.js';
+import { renderCardDetails } from './details.js';
 
 export const msgControllers = new Map(); // doc_id -> controller
 let activeEditId = null; // the one card currently in edit mode, or null
@@ -304,23 +307,26 @@ function renderCardLinks(doc_id, row) {
   row.hidden = !chips.length;
 }
 
-// The cards' heads, links and threads lines follow every entity change --
-// a task made for the card, a title changed, a thread restored -- without
-// rebuilding the cards (and their editors); subscribed below.
+// The cards' heads, event details, links and threads lines follow every
+// entity change -- a task made for the card, a title changed, a thread
+// restored -- without rebuilding the cards (and their editors); subscribed
+// below.
 const refreshCardChips = oncePerFrame(() => {
   renderThreadProjects();
   for (const controller of msgControllers.values()) {
     renderCardHead(controller);
+    renderCardDetails(controller.detailsEl, entities.get(controller.doc_id), controller.occurrence);
     renderCardLinks(controller.doc_id, controller.linksEl);
     renderCardThreads(controller.doc_id, controller.threadsEl);
   }
 });
 
-// A card's icon, title and date as its entity has them now; a day card's
-// date is its occurrence's, and so is its title if Google gave it another.
-// A title being renamed keeps what is typed. The pen is hidden for an
-// entity the host can't write, and for an occurrence's own title, which
-// isn't the series' to rename.
+// A card's icon, title and date as its entity has them now (a document's
+// icon is its genre's); a day card's date is its occurrence's, and so is
+// its title if Google gave it another. A
+// title being renamed keeps what is typed. The pen is hidden for an entity
+// the host can't write, and for an occurrence's own title, which isn't
+// the series' to rename.
 function renderCardHead(controller) {
   const doc = entities.get(controller.doc_id);
   if (!doc) return;
@@ -542,7 +548,7 @@ function renderDay(day) {
 // those still open from earlier days under "Overdue" -- all keyed by id. A
 // task is a row until it is selected; then it opens into its card, which
 // stays while the day is shown. A card that stays keeps its editor (and
-// its place in the DOM) and takes its occurrence's head; a new
+// its place in the DOM) and takes its occurrence's head and details; a new
 // one is built; one gone is torn down, an edit in it saved first. A day
 // without anything shows a note. Called once per frame while the calendar
 // lens shows (`renderCalendarLens`), by renderPanel after a structural
@@ -567,6 +573,7 @@ export function refreshDay() {
     }
     controller.occurrence = ev;
     renderCardHead(controller);
+    renderCardDetails(controller.detailsEl, entities.get(ev.doc_id), ev);
     return controller.card;
   });
 
@@ -659,11 +666,11 @@ function renderDocument(doc) {
 }
 
 // ----------------------------------------------------------------------------
-// One card: header, chips, toolbars, and its own editor. `thread`: a
-// member of the thread shown -- its head drags it out of the thread, and
-// remove-from-thread applies; `selectable`: a click selects its entity,
-// which only makes sense with other cards on screen (a thread, a day);
-// `occurrence`: a day card's occurrence of its event (`date`, `end`).
+// One card: header, event details, chips, toolbars, and its own editor.
+// `thread`: a member of the thread shown -- its head drags it out of the
+// thread, and remove-from-thread applies; `selectable`: a click selects its
+// entity, which only makes sense with other cards on screen (a thread, a
+// day); `occurrence`: a day card's occurrence of its event (`date`, `end`).
 function createMessageController(msg, { selectable = false, thread = false, occurrence = null } = {}) {
   const doc_id = msg.doc_id;
 
@@ -705,6 +712,12 @@ function createMessageController(msg, { selectable = false, thread = false, occu
   renderCardThreads(doc_id, threadsEl);
   head.appendChild(threadsEl);
   card.appendChild(head);
+
+  // An event's details (features/panel/details.js), refreshed with the
+  // chips.
+  const detailsEl = accEl('div', 'pane-section props');
+  renderCardDetails(detailsEl, msg, occurrence);
+  card.appendChild(detailsEl);
 
   // In a thread, the head drags the card: dropped on the Documents lens it
   // leaves the thread (features/lenses/documents.js); like a row there, on
@@ -779,7 +792,7 @@ function createMessageController(msg, { selectable = false, thread = false, occu
 
   const controller = {
     doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
-    dateEl, linksEl, threadsEl, occurrence, unsubscribeContent,
+    dateEl, detailsEl, linksEl, threadsEl, occurrence, unsubscribeContent,
   };
   msgControllers.set(doc_id, controller);
   renderCardHead(controller);
@@ -848,8 +861,8 @@ store.subscribe([
   state => state.selected_thread, state => state.threads_rev,
 ], (_values, state) => renderPanel(state));
 
-// The cards' heads, links and threads lines show the entities and threads
-// as they are now.
+// The cards' heads, event details, links and threads lines show the
+// entities and threads as they are now.
 store.subscribe(state => state.entities_rev, refreshCardChips);
 
 // A project was added or renamed: only its chips show its name, so they

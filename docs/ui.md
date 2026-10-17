@@ -84,7 +84,8 @@ selected one is marked, every occurrence of a series (`markSelection`).
   date after them, the newest first), three of them, the rest behind "N
   more". The head counts the open and the overdue ones. A task the host
   can write drags to another column, which sets its status
-  (`edit_entities`): the card dims while dragged, the column it
+  (`edit_entities`, as the card's Status buttons do,
+  `panel.md#field-edits`): the card dims while dragged, the column it
   would go to is marked, and its own column takes no drop. The drag
   carries the task as a type only the columns take, and as text too, so
   a project pill in the vault panel takes it like an entity's row in

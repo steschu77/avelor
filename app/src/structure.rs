@@ -5,8 +5,8 @@
 //! `App::edit`, which pushes every entity it wrote (`entity`,
 //! `entity_deleted`) before the answer: `ok {id}`, `ok {conflict: {id, changed}}` if a file changed
 //! outside the app (nothing is written), or an error. `edit_entities` --
-//! a task's field -- answers with the entities it wrote and those it
-//! skipped instead.
+//! a genre, a task's field -- answers with the entities it wrote and those
+//! it skipped instead.
 
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
@@ -560,41 +560,61 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn a_tasks_due_date_and_assignee_are_set_and_removed() {
+        let (mut h, _) = notes("edit-task", 1);
+        let task = new_task(&mut h, "Call the landlord");
+        let mut edit = |change| {
+            let sent = h.call("edit_entities", json!({ "ids": [task], "change": change }));
+            assert_eq!(shape(&sent), ["entity", "reply"]);
+            sent[0]["data"]["task"].clone()
+        };
+        let due = edit(json!({ "task": { "due": "2026-10-20" } }));
+        assert_eq!(due["due"], "2026-10-20");
+        let assigned = edit(json!({ "task": { "assignee": " Jane Doe " } }));
+        assert_eq!(assigned["assignee"], "Jane Doe");
+        let cleared = edit(json!({ "task": { "due": null } }));
+        assert_eq!(
+            (&cleared["due"], &cleared["assignee"]),
+            (&json!(null), &json!("Jane Doe"))
+        );
+        let unassigned = edit(json!({ "task": { "assignee": "" } }));
+        assert_eq!(unassigned["assignee"], json!(null));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn a_change_an_entity_cannot_take_is_skipped_and_nothing_pushed() {
-        let (mut h, ids) = notes("edit-skipped", 1);
-        let args = json!({ "ids": [ids[0]], "change": { "task": { "status": "done" } } });
+        let (mut h, _) = notes("edit-skipped", 1);
+        let task = new_task(&mut h, "Pay the bill");
+        let args = json!({ "ids": [task], "change": { "genre": "bill" } });
         let sent = h.call("edit_entities", args);
         assert_eq!(shape(&sent), ["reply"]);
-        let skipped = json!([{ "id": ids[0], "reason": "invalid_argument" }]);
+        let skipped = json!([{ "id": task, "reason": "invalid_argument" }]);
         assert_eq!(sent[0]["ok"], json!({ "changed": [], "skipped": skipped }));
     }
 
     // ------------------------------------------------------------------------
     #[test]
     fn an_entity_changed_outside_is_skipped_while_the_others_are_written() {
-        let (mut h, _) = notes("edit-conflict", 0);
-        let tasks = [new_task(&mut h, "First"), new_task(&mut h, "Second")];
-        let path = fs::read_dir(h.vault().join("Tasks"))
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .find(|path| fs::read_to_string(path).unwrap().contains(&tasks[0]))
-            .unwrap();
-        let theirs = fs::read_to_string(&path)
-            .unwrap()
-            .replace("title: First", "title: Theirs, longer");
+        let (mut h, ids) = notes("edit-conflict", 2);
+        let path = h.vault().join("Notes/n0.md");
+        let theirs = format!(
+            "---\nid: {}\ntitle: Theirs, longer\ndocument: {{}}\n---\nBody\n",
+            ids[0]
+        );
         fs::write(&path, &theirs).unwrap();
 
-        let args = json!({ "ids": tasks, "change": { "task": { "status": "done" } } });
+        let args = json!({ "ids": ids, "change": { "genre": "bill" } });
         let sent = h.call("edit_entities", args);
         assert_eq!(shape(&sent), ["entity", "reply"]);
-        assert_eq!(sent[0]["data"]["id"], tasks[1]);
-        assert_eq!(sent[0]["data"]["task"]["status"], "done");
+        assert_eq!(sent[0]["data"]["id"], ids[1].to_string());
+        assert_eq!(sent[0]["data"]["genre"], "bill");
         let answer = &sent[1]["ok"];
-        assert_eq!(answer["changed"], json!([tasks[1]]));
+        assert_eq!(answer["changed"], json!([ids[1]]));
         let skipped = &answer["skipped"][0];
         assert_eq!(
             (&skipped["id"], &skipped["reason"]),
-            (&json!(tasks[0]), &json!("changed_outside"))
+            (&json!(ids[0]), &json!("changed_outside"))
         );
         assert!(!skipped["changed"].as_str().unwrap().is_empty());
         assert_eq!(fs::read_to_string(&path).unwrap(), theirs);
