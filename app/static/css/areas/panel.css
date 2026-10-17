@@ -147,6 +147,18 @@
   flex-wrap: wrap;
 }
 
+/* a task's fields on its card (features/panel/details.js): the due date as
+   wide as the New dialog's, the meta and the x beside it */
+.props>dd:has(>.props__date) {
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.props__date {
+  flex: none;
+  width: var(--w-new-date);
+}
+
 /* Messages (#doc-content, #thread-messages): one card per message on the
  * root-to-active path, each with its own head/tags/toolbar/editor. A lone
  * document is a borderless white sheet. */
