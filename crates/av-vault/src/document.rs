@@ -8,6 +8,7 @@
 use crate::envelope::Message;
 use crate::envelope::Task;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
+use crate::shared::{ContactRef, DocType};
 use av_utils::datetime::DateTime;
 use av_utils::error::Result;
 use av_utils::fs::FileStamp;
@@ -345,6 +346,30 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// Set the type of the `document` role; `None` removes it. A document
+    /// without roles (a plain markdown file) gets the role for a type. Only
+    /// a document has a type: for any other entity nothing changes and
+    /// `false` is returned.
+    pub fn set_doc_type(&mut self, doc_type: Option<DocType>) -> bool {
+        if self.kind() != DocumentType::Document {
+            return false;
+        }
+        let role = self
+            .envelope
+            .as_mut()
+            .and_then(|e| e.roles.document.as_mut());
+        match (role, doc_type) {
+            (Some(document), doc_type) => document.doc_type = doc_type,
+            (None, Some(doc_type)) => {
+                let roles = &mut self.envelope_mut().roles;
+                roles.document.get_or_insert_with(Default::default).doc_type = Some(doc_type);
+            }
+            (None, None) => {}
+        }
+        true
+    }
+
+    // ------------------------------------------------------------------------
     /// Set a task's `status` (vault.md#task): becoming `done` writes when
     /// (`done`, `now`), any other status removes it. Nothing changes for an
     /// entity that isn't a task, or a done task set to done again.
@@ -358,6 +383,24 @@ impl Document {
             task.done = Some(now);
         }
         task.status = Some(status);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set a task's `due` date; `None` removes it. Nothing changes for an
+    /// entity that isn't a task.
+    pub fn set_task_due(&mut self, due: Option<DateTime>) {
+        if let Some(task) = self.task_mut() {
+            task.due = due;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set a task's `assignee`; `None` removes it. Nothing changes for an
+    /// entity that isn't a task.
+    pub fn set_task_assignee(&mut self, assignee: Option<ContactRef>) {
+        if let Some(task) = self.task_mut() {
+            task.assignee = assignee;
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -639,6 +682,29 @@ mod tests {
     }
 
     #[test]
+    fn set_type_requires_a_document() {
+        let mut doc = Document::load("---\ntask: {}\n---\n".into(), FileFormat::Markdown);
+        assert!(!doc.set_doc_type(Some(DocType::Letter)));
+
+        let mut doc = Document::load("---\ndocument: {}\n---\n".into(), FileFormat::Markdown);
+        assert!(doc.set_doc_type(Some(DocType::Letter)));
+        assert!(doc.save().contains("type: letter"));
+        assert!(doc.set_doc_type(None));
+        assert!(doc.save().contains("document: {}"), "{}", doc.save());
+    }
+
+    #[test]
+    fn a_plain_document_gets_the_role_for_a_type_only() {
+        let text = "---\ntitle: Plain\n---\nBody\n";
+        let mut doc = Document::load(text.into(), FileFormat::Markdown);
+        assert!(doc.set_doc_type(None));
+        assert!(!doc.is_dirty(), "no role for no type");
+        assert!(doc.set_doc_type(Some(DocType::Bill)));
+        assert_eq!(doc.kind(), DocumentType::Document);
+        assert!(doc.save().contains("type: bill"), "{}", doc.save());
+    }
+
+    #[test]
     fn done_is_written_with_the_status_done_and_removed_with_another() {
         let mut doc = Document::load(
             "---\ntask:\n  status: todo\n---\n".into(),
@@ -667,6 +733,8 @@ mod tests {
         let mut doc = Document::load("---\ndocument: {}\n---\n".into(), FileFormat::Markdown);
         let now = DateTime::from_iso8601("2026-10-12").unwrap();
         doc.set_task_status("done".into(), now);
+        doc.set_task_due(Some(now));
+        doc.set_task_assignee(Some(ContactRef::Name("Jane".into())));
         assert!(!doc.is_dirty());
     }
 

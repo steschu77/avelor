@@ -439,7 +439,7 @@ The entity keeps all its other roles.
 If the entity also carries the `email` role, the email's `from` / `to`
 fields are authoritative and `sender` / `recipient` are omitted.
 
-### Email
+### Email <a id="email"></a>
 
 Block: `email:`
 

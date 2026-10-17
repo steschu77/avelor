@@ -20,3 +20,12 @@ export function accSeg(options, current, onPick, disabled = false) {
   }
   return seg;
 }
+
+// ----------------------------------------------------------------------------
+// The segmented control `seg` of `options` (as `accSeg` took them), its
+// buttons found again by `<key>:<value>` once their block is drawn anew
+// (`keepingFocus`, ui/field.js).
+export function keyedSeg(seg, options, key) {
+  [...seg.children].forEach((option, i) => { option.dataset.focusKey = `${key}:${options[i][0]}`; });
+  return seg;
+}
