@@ -1,18 +1,18 @@
 # Avelor — Side panel and structural edits
 
 > The side panel and what the user organizes in it: the card every entity
-> is shown as, a thread's members, the context column, links, labels,
-> projects, and the structural edits (threads, projects, titles, labels,
-> links, deletes) with how they are saved. The lenses and the vault panel
-> are `ui.md`; the editor inside each card, `editor.md`; saving its
-> content, `saving.md`.
+> is shown as, a thread's members, the calendar's day view, the context
+> column, links, labels, projects, and the structural edits (threads,
+> projects, titles, labels, links, deletes) with how they are saved. The
+> lenses and the vault panel are `ui.md`; the editor inside each card,
+> `editor.md`; saving its content, `saving.md`.
 
 ## Overview
 
 The panel on the right shows what is selected: one card for an entity
-outside any thread, or all members of a thread as a stack of individually
-editable cards. It can
-be closed, expanded to full width and resized (`panel_size` in the store;
+outside any thread, all members of a thread as a stack of individually
+editable cards, or — under the calendar lens — the selected day. It can be
+closed, expanded to full width and resized (`panel_size` in the store;
 the widths are preferences, `ui.md#preferences`); expanded, it has the
 context column (`panel.md#context-column`).
 
@@ -40,7 +40,7 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
 
 ## Cards <a id="cards"></a>
 
-`createMessageController(doc, { selectable })`
+`createMessageController(doc, { selectable, thread, occurrence })`
 (`app/static/features/panel/panel.js`) builds a `.msg` card:
 
 - a header: icon, title, dirty dot, a pen that renames it
@@ -50,29 +50,33 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
 - its project and label chips on one line, with the "+" menu that adds
   either (`panel.md#labels`, `panel.md#projects`), and its link chips
   (`panel.md#links`);
-- an action toolbar (edit, cloned from
+- an action toolbar (edit/link/task/thread/delete, cloned from
   `#preview-toolbar-template`), an editing toolbar (cloned from
   `#editor-toolbar-template`), and its own `createEditor()` instance.
 
-It is used from exactly two places:
+It is used from exactly three places:
 
 - **`renderDocument(doc)`** — an entity outside any thread: one card
   appended into `#doc-content` (inside `#panel-doc-view`).
 - **`renderMembers(thread_id, members)`** — every member of a thread, in
   thread order, appended into `#thread-messages` (inside
   `#panel-thread-view`).
+- **`renderDay(day)`** — the cards of the calendar's day
+  (`panel.md#the-day-view`), appended into `#day-cards` (inside
+  `#panel-day-view`, under the day's head).
 
-The two containers share the CSS class `.msg-list` — `flex: 1;
+The three containers share the CSS class `.msg-list` — `flex: 1;
 min-height: 0; overflow: auto; display: flex; flex-direction: column` —
 the single scrollable container; each card is a normal, non-scrolling flex
 child of it.
 
 Its options: `thread` — a member of the thread shown, whose head drags it
 out and whose remove-from-thread applies; `selectable` — a click selects
-its entity (`panel.md#selection`), in a thread,
-but not for a lone document, with nothing else on screen to select. A
-card's head (title, date) follows its entity in place on `entities_rev`,
-with its links and threads lines (`refreshCardChips`).
+its entity (`panel.md#selection`), in a thread and in a day,
+but not for a lone document, with nothing else on screen to select;
+`occurrence` — a day card's occurrence of its event, whose date the head
+shows. A card's head (title, date) follows its entity in place on
+`entities_rev`, with its links and threads lines (`refreshCardChips`).
 
 Two `<template>` elements in `index.html` hold the markup each card
 clones from, via `createEditorToolbar()`/`createDocPreviewToolbar()`
@@ -98,17 +102,19 @@ Three store keys decide what the panel shows:
   are rebuilt even when neither selection changes (e.g. a member was
   added).
 
-`features/panel/panel.js` registers one subscriber over all of them, and
-it calls `renderPanel(state)` — the only code that renders the panel.
+`features/panel/panel.js` registers one subscriber over all of them (plus
+`selected_lens` and, for the day view, `selected_day`), and it calls
+`renderPanel(state)` — the only code that renders the panel.
 `panelMode(state)` decides:
 
 | Mode | When | Shows |
 |---|---|---|
+| `day` | `selected_lens === 'calendar'` | `#panel-day-view`, its events, tasks |
 | `thread` | `selected_thread` exists and `selected_entity` (if any) is one of its members | `#panel-thread-view`, all members |
 | `document` | `selected_entity` is a known entity | `#panel-doc-view`, one standalone card |
 | `none` | nothing selected, or the selected entity was deleted | `#panel-doc-view`, empty preview |
 
-`renderPanel` sets the two panels' `hidden` **first** and only then
+`renderPanel` sets the three panels' `hidden` **first** and only then
 renders, so a panel is never still `hidden` (`display: none`) when a
 scroll call runs against it — scrolling inside a hidden ancestor is a
 silent no-op with no layout box to scroll against. It is idempotent: it
@@ -140,7 +146,8 @@ members — so clicking a card never jumps to another thread for an entity in
 several — and otherwise uses the entity's first thread in the vault
 (`threadOf`), or `null` for a standalone entity. A thread the entity still
 names but that isn't in the vault — dissolved while the entity was in the
-trash — is skipped.
+trash — is skipped. Under the calendar lens it does more
+(`panel.md#the-day-view`).
 
 Three related but independent things happen when an entity becomes "the
 one in view":
@@ -210,6 +217,43 @@ every member in several threads switches on its own. Like the link chips,
 it is refreshed in place on `entities_rev` (`refreshCardChips`): a thread
 that comes back from the trash, or is renamed, shows without rebuilding
 the cards.
+
+## The day view <a id="the-day-view"></a>
+
+Under the calendar lens (`ui.md#calendar`) the panel shows the selected
+day, `selected_day`: today when the app starts, and a selected today moves
+on at midnight.
+
+- **Events** come first: a stack of the day's event cards by start time, a
+  series as its occurrence on the day. Each card has its description,
+  edited like any document's body.
+- **Tasks** follow: the open tasks due that day under "Due" and, on today,
+  those still open from earlier days under "Overdue" (`dayTasks`), each as
+  a row with its title and assignee (`dueRow`) until the task is selected,
+  then its card, built here too, which stays while the day is shown. A
+  day with nothing shows "No events".
+- `refreshDay()` keeps the cards by id while entities change: a card that
+  stays keeps its editor and its place in the DOM and takes its
+  occurrence's head, a new one is built, one gone is torn down
+  (an edit in it saved first). `renderPanel` rebuilds the day only for
+  another day; a `threads_rev` bump re-keys it (`refreshDay`), as the
+  calendar lens's render does once per frame after entity and filter
+  changes.
+- A click on an event or a task in the month grid selects its day and the
+  entity in one go (`selectDay(day, doc_id)`), so its card is focused and
+  scrolled to; a click on the day itself only selects the day, and today's
+  overdue count selects today and scrolls to its overdue tasks
+  (`scrollToOverdue`). Selecting a task the day lists as a row opens it:
+  `renderPanel` re-keys the day, which builds the task's card in the row's
+  place.
+- While the calendar lens is shown, `selectDocument` focuses an entity the
+  day lists (`dayShows`: a card or a task's row), selects the (first) day
+  of any other event of the calendar and the due day of an open task it
+  shows; anything else — another kind of entity, a thread (`selectById`,
+  `switchThread`) — is shown in the Documents lens. So a link chip or a link
+  in a body always shows something.
+- The context column's tabs (`contextTarget`) are about the focused day
+  card.
 
 ## Context column <a id="context-column"></a>
 
@@ -285,7 +329,8 @@ an empty title removes the `title` key, and the file keeps its name
   one space), Esc cancels. The pushed `entity` renames the card, the thread
   header, and the chips and links that show the entity.
 - The pen is hidden for an entity or thread the host can't write
-  (`renderCardHead`, `renderThread`).
+  (`renderCardHead`, `renderThread`), and on a day card whose occurrence
+  has its own title from Google, which isn't the series' to rename.
 - While a title is edited, nothing overwrites it (`renderCardHead`,
   `renderThread`, the project header), and a thread card's head doesn't
   drag, so the mouse selects text.

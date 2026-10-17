@@ -14,7 +14,8 @@ Three panels:
 - the **main view** with the lenses (`ui.md#lenses`), and above them the vault
   header (the selected project's name, description and toolbar,
   `panel.md#projects`);
-- the **side panel** on the right.
+- the **side panel** on the right, for the selected entity, thread or day
+  (`panel.md`).
 
 Both side panels can be extended to full width for focused work and have
 grips to resize them; the widths are remembered across restarts
@@ -53,7 +54,7 @@ several shows the entities carrying all of them.
 
 ## Lenses <a id="lenses"></a>
 
-The main view's tabs are Dashboard, Documents and Timeline; each
+The main view's tabs are Dashboard, Documents, Timeline and Calendar; each
 lens registers itself (`registerLens`, `features/lenses/registry.js`), a
 tab selects it (`selectLens`), and the visible lens is rendered again if
 it is stale. The lens shown last comes back on the next start
@@ -200,6 +201,25 @@ day — a series on its first start, a task on its own date — but calendars
 - **Kept parts**: rows by entity, day blocks by day, month headings by
   month, so a scan only adds.
 
+### Calendar <a id="calendar"></a>
+
+`features/lenses/calendar.js`: a month grid with previous, next and
+today; series
+expanded on the page from their RRULE and EXDATE lines, with Google's
+exceptions (`occurrencesOf`, matched by the occurrence's day); cancelled
+events hidden.
+
+- Open tasks with a due date show on their due day, tagged "Due"; once that
+  day has passed and a task is still open, its tag reads "Overdue",
+  filled, and today's cell counts the overdue tasks (a click on the count
+  shows them). Done tasks aren't shown.
+- A click on an event or a task selects its day with its card focused; a
+  click on a day selects the day. At midnight, today moves on.
+- The selected entity's chips are marked, every occurrence of a series
+  (`markSelection`, `features/selection.js`, as on the Dashboard's Week
+  card).
+- The side panel shows the selected day (`panel.md#the-day-view`).
+
 ## Status bar <a id="status-bar"></a>
 
 The status bar is a snackbar (`ui/statusbar.js`): it floats over the
@@ -274,7 +294,7 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
-| B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the next start shows it again (`restoreLens`) |
+| B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | D7 | New | New item or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
@@ -284,3 +304,4 @@ The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
 | F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selectFilter`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |
 | F8 | Timeline | a drag or click across the scrubber's track (`pointerdown` … `pointerup`, `features/lenses/timeline.js`); Clear; Today; a type toggle, Show all types, Types; a row → `selectDocument`; a card's head dropped on the lens → `leaveThreadLocal` | `set_prefs {prefs}` (`tl_types`, `tl_types_bar`); `leave_thread` | the feed kept to the weeks picked, or to all; scrolled to today; the types and the bar kept across restarts; the entity in the panel; the card out of its thread |
+| F2 | Calendar month and day | prev/next/today (`features/lenses/calendar.js`); day click → `selectDay`; event or task click → `selectDay(day, id)`; today's overdue count → `selectDay(today)`, `scrollToOverdue` | — | the day's events as cards, then its tasks due (today: also the overdue ones) as rows; the clicked one focused, a task opened into its card |

@@ -18,12 +18,13 @@
   --c-ink-soft: #232329;
   /* icons */
   --c-ink-mute: #565660;
+  /* disabled controls, days outside the month */
   --c-ink-faint: #9a9aa3;
   --c-label: rgba(22, 22, 26, 0.55);
   --c-line: rgba(10, 10, 11, 0.16);
-  /* selection */
+  /* primary action, selection */
   --c-accent: #8fd0d6;
-  /* tags */
+  /* pressed tools, tags */
   --c-accent-soft: rgba(143, 208, 214, 0.22);
   --c-danger: #de9193;
   /* a filled warning: an overdue task's chip */
@@ -78,7 +79,7 @@
   --w-tl-date: 112px;
   --w-tl-date-narrow: 64px;
 
-  /* sidebar inset */
+  /* sidebar and table inset */
   --p-gutter: 12px;
   /* x inset of content panes: the right panel */
   --p-pane: 20px;

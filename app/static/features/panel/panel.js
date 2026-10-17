@@ -1,22 +1,28 @@
 // The side panel: `renderPanel` is the one place that decides what it shows --
-// a thread (all members of `selected_thread` as a flat, date-ordered card list
+// the day view (the events of `selected_day` as cards in #day-cards, then its
+// tasks due as rows that open into cards, kept by id while entities change), a
+// thread (all members of `selected_thread` as a flat, date-ordered card list
 // in #panel-thread-view, vault.md#thread), or a standalone entity (one card in
-// #doc-content) -- driven only by store state (`selected_entity`,
-// `selected_thread`, `threads_rev`). Structural edits (drops, the
-// remove-from-thread and delete buttons) are host round trips
-// (`structureCall`, model/structure.js) that end in a published selection,
-// never in a direct render call; the requests (`joinThreadLocal`, ...) are
-// model/structure.js's. app.js reaches into `msgControllers` for the cards'
-// dirty dots, and features/header.js leaves edit mode; autosave lives in
-// model/documents.js and covers every editor in edit mode.
+// #doc-content) -- driven only by store state (`selected_lens`,
+// `selected_day`, `selected_entity`, `selected_thread`, `threads_rev`).
+// Structural edits (drops, the remove-from-thread and delete buttons) are host
+// round trips (`structureCall`, model/structure.js) that end in a published
+// selection, never in a direct render call; the requests (`joinThreadLocal`,
+// ...) are model/structure.js's. app.js reaches into `msgControllers` for the
+// cards' dirty dots, and features/header.js leaves edit mode; autosave lives
+// in model/documents.js and covers every editor in edit mode.
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
+import { placeChildren } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
 import { parseDate } from '../../core/format.js';
+import { DAY_LONG_MONTH_YEAR, WEEKDAY_LONG, dayStart, relativeDay } from '../../core/format.js';
 import { createEditor } from '../../editor/editor.js';
 import { store } from '../../model/state.js';
 import { entities, knownThreads, threadMembers, threads } from '../../model/entities.js';
 import { projects, projectsInOrder, threadProjects } from '../../model/entities.js';
+import { getMeta } from '../../model/entities.js';
+import { dayOccurrences, dayTasks } from '../../model/calendar.js';
 import { bindDocContent } from '../../model/documents.js';
 import { editorRoots, isDirty, onEdited, trySave } from '../../model/documents.js';
 import { structureCall } from '../../model/structure.js';
@@ -38,8 +44,10 @@ import {
 } from '../../ui/dropzone.js';
 import { openLink, panelMode, selectDocument } from '../selection.js';
 import { selectById } from '../selection.js';
+import { documentsIfCalendar, setDayListed } from '../selection.js';
 import { openLinkedTab } from '../context.js';
 import { openTaskTab } from '../context.js';
+import { parseContact, taskTag } from './details.js';
 
 export const msgControllers = new Map(); // doc_id -> controller
 let activeEditId = null; // the one card currently in edit mode, or null
@@ -47,6 +55,9 @@ let activeEditId = null; // the one card currently in edit mode, or null
 let renderedThreadId = null;
 let renderedMembers = []; // entities entries, in thread order, as currently rendered
 let renderedDocId = null; // the standalone entity shown in #doc-content, or null
+let renderedDay = null; // the day shown in the day view, or null
+let renderedDayIds = []; // the entities it lists (cards and rows), in order
+const dayRows = new Map(); // doc_id -> the row of a task it lists, not opened
 let renderedRev = -1; // the `threads_rev` the current cards were built for
 let focusedDocId = null; // the card currently marked aria-selected
 
@@ -57,8 +68,15 @@ const threadRenameBtn = $('thread-rename-btn');
 const threadProjectEl = $('thread-project');
 const threadMessagesEl = $('thread-messages');
 const docContentEl = $('doc-content');
+const dayWeekdayEl = $('day-weekday');
+const dayTitleEl = $('day-title');
+const dayCardsEl = $('day-cards');
 const panelDocViewEl = $('panel-doc-view');
+const panelDayViewEl = $('panel-day-view');
 const panelThreadViewEl = $('panel-thread-view');
+let dayEmptyEl = null; // the day view's note for a day without anything, built once
+let dayDueHeadEl = null; // the heads of its tasks due, and of today's overdue ones
+let dayOverdueHeadEl = null;
 
 // ----------------------------------------------------------------------------
 // Drag-and-drop (ui/dropzone.js): a row dragged out of the table lens
@@ -298,18 +316,22 @@ const refreshCardChips = oncePerFrame(() => {
   }
 });
 
-// A card's icon, title and date as its entity has them now. A title being
-// renamed keeps what is typed. The pen is hidden for an entity the host
-// can't write.
+// A card's icon, title and date as its entity has them now; a day card's
+// date is its occurrence's, and so is its title if Google gave it another.
+// A title being renamed keeps what is typed. The pen is hidden for an
+// entity the host can't write, and for an occurrence's own title, which
+// isn't the series' to rename.
 function renderCardHead(controller) {
   const doc = entities.get(controller.doc_id);
   if (!doc) return;
+  const date = (controller.occurrence ?? doc).date;
+  const ownTitle = controller.occurrence?.exception?.title;
   if (!controller.titleEl.hasAttribute('contenteditable')) {
-    controller.titleEl.textContent = doc.title ?? '';
+    controller.titleEl.textContent = ownTitle ?? doc.title ?? '';
   }
-  controller.dateEl.textContent = doc.date ? DATE_FORMAT.format(doc.date) : '';
+  controller.dateEl.textContent = date ? DATE_FORMAT.format(date) : '';
   controller.iconEl.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.genre));
-  controller.renameBtn.hidden = !doc.writable;
+  controller.renameBtn.hidden = !doc.writable || ownTitle !== undefined;
 }
 
 // Rename `id` -- a card's entity, or the thread shown -- in place in
@@ -360,26 +382,42 @@ function threadChip(doc_id, thread_id) {
 }
 
 // Show `doc_id` in its thread `thread_id`: `renderPanel` rebuilds the panel
-// for that thread, with the card focused and scrolled to.
+// for that thread, with the card focused and scrolled to -- in the
+// Documents lens, if the calendar showed it in its day.
 function switchThread(doc_id, thread_id) {
-  store.setState({ selected_entity: doc_id, selected_thread: thread_id });
+  store.setState({ ...documentsIfCalendar(), selected_entity: doc_id, selected_thread: thread_id });
 }
 
 // ----------------------------------------------------------------------------
 // The one panel renderer (subscribed below). Visibility is resolved
 // first, so a panel is never still `hidden` (display:none) when a scroll
 // below runs against it -- scrolling inside a hidden ancestor is a silent
-// no-op. Cards are only rebuilt when the shown thread/entity or
+// no-op. Cards are only rebuilt when the shown day/thread/entity or
 // `threads_rev` changed; otherwise a new `selected_entity` within the shown
-// thread just moves the focus, keeping editors and scroll position.
+// thread or day just moves the focus, keeping editors and scroll position.
+// The day's cards are re-keyed rather than rebuilt (`refreshDay`).
 function renderPanel(state) {
   const mode = panelMode(state);
+  panelDayViewEl.hidden = mode !== 'day';
   panelThreadViewEl.hidden = mode !== 'thread';
-  panelDocViewEl.hidden = mode === 'thread';
+  panelDocViewEl.hidden = mode === 'day' || mode === 'thread';
 
   const stale = state.threads_rev !== renderedRev;
 
-  if (mode === 'thread') {
+  if (mode === 'day') {
+    const day = state.selected_day ?? dayStart(new Date());
+    if (renderedDay?.getTime() !== day.getTime()) {
+      renderedRev = state.threads_rev;
+      renderDay(day);
+    } else if (stale) {
+      renderedRev = state.threads_rev;
+      refreshDay();
+    } else if (dayRows.has(state.selected_entity)) {
+      refreshDay(); // a task's row selected: it opens into its card
+    } else if (state.selected_entity !== focusedDocId) {
+      focusMessage(state.selected_entity);
+    }
+  } else if (mode === 'thread') {
     if (stale || state.selected_thread !== renderedThreadId) {
       renderedRev = state.threads_rev;
       renderThread(state.selected_thread, state.selected_entity);
@@ -405,13 +443,19 @@ function renderPanel(state) {
 function destroyRenderedCards() {
   for (const doc of renderedMembers) destroyMessageController(doc.doc_id);
   if (renderedDocId) destroyMessageController(renderedDocId);
+  for (const doc_id of renderedDayIds) destroyMessageController(doc_id);
   docContentEl.replaceChildren();
   threadMessagesEl.replaceChildren();
+  dayCardsEl.replaceChildren();
   focusedDocId = null;
 
   renderedThreadId = null;
   renderedMembers = [];
   renderedDocId = null;
+  renderedDay = null;
+  renderedDayIds = [];
+  setDayListed([]);
+  dayRows.clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -478,6 +522,107 @@ function renderMembers(thread_id, members) {
 }
 
 // ----------------------------------------------------------------------------
+// Rebuilds the day view for `day`: its head, then its events' cards and
+// its tasks (`refreshDay`), the selected one focused and scrolled to. Only
+// called by renderPanel.
+function renderDay(day) {
+  destroyRenderedCards();
+  renderedDay = day;
+
+  dayWeekdayEl.textContent = WEEKDAY_LONG.format(day);
+  dayTitleEl.textContent = DAY_LONG_MONTH_YEAR.format(day);
+
+  refreshDay();
+  scrollIntoView(focusedDocId);
+}
+
+// ----------------------------------------------------------------------------
+// The day view follows the entities and the filter: a card per event on
+// the day, by start, then the tasks due on it under "Due" and, on today,
+// those still open from earlier days under "Overdue" -- all keyed by id. A
+// task is a row until it is selected; then it opens into its card, which
+// stays while the day is shown. A card that stays keeps its editor (and
+// its place in the DOM) and takes its occurrence's head; a new
+// one is built; one gone is torn down, an edit in it saved first. A day
+// without anything shows a note. Called once per frame while the calendar
+// lens shows (`renderCalendarLens`), by renderPanel after a structural
+// edit, and when a row is selected.
+export function refreshDay() {
+  if (!renderedDay) return;
+  const occurrences = dayOccurrences(renderedDay);
+  const { due, overdue } = dayTasks(renderedDay);
+  const ids = [...occurrences, ...due, ...overdue].map(entry => entry.doc_id);
+  for (const doc_id of renderedDayIds) {
+    if (ids.includes(doc_id)) continue;
+    destroyMessageController(doc_id);
+    dayRows.delete(doc_id);
+  }
+  renderedDayIds = ids;
+  setDayListed(ids);
+
+  const cards = occurrences.map(ev => {
+    const controller = msgControllers.get(ev.doc_id);
+    if (!controller) {
+      return createMessageController(entities.get(ev.doc_id), { selectable: true, occurrence: ev }).card;
+    }
+    controller.occurrence = ev;
+    renderCardHead(controller);
+    return controller.card;
+  });
+
+  const { selected_entity } = store.getState();
+  const taskEntry = (doc, inOverdue) => {
+    if (msgControllers.has(doc.doc_id)) return msgControllers.get(doc.doc_id).card;
+    if (doc.doc_id !== selected_entity) return dueRow(doc, inOverdue);
+    dayRows.delete(doc.doc_id);
+    return createMessageController(doc, { selectable: true }).card;
+  };
+  dayDueHeadEl ??= dayHead('Due');
+  dayOverdueHeadEl ??= dayHead('Overdue', 'from earlier days');
+  const entries = [
+    ...cards,
+    ...(due.length ? [dayDueHeadEl, ...due.map(doc => taskEntry(doc, false))] : []),
+    ...(overdue.length ? [dayOverdueHeadEl, ...overdue.map(doc => taskEntry(doc, true))] : []),
+  ];
+  dayEmptyEl ??= emptyNote(KIND_ICONS.event.icon, 'No events', 'Nothing in the calendar on this day.');
+  placeChildren(dayCardsEl, entries.length ? entries : [dayEmptyEl]);
+  focusMessage(selected_entity);
+}
+
+// A head over the day's tasks, with an optional note.
+function dayHead(title, note) {
+  const head = accEl('div', 'section-head', title);
+  if (note) head.append(accEl('span', 'section-head__note', note));
+  return head;
+}
+
+// The row of a task the day lists: its tag, title and, as meta, how long
+// ago it was due (under "Overdue") and its assignee. Kept by id, filled
+// again on every refresh; a click selects the task, which opens it.
+function dueRow(doc, inOverdue) {
+  let row = dayRows.get(doc.doc_id);
+  if (!row) {
+    row = accEl('button', 'tile due-row');
+    row.type = 'button';
+    const doc_id = doc.doc_id;
+    row.addEventListener('click', () => selectDocument(doc_id));
+    dayRows.set(doc_id, row);
+  }
+  const meta = [
+    inOverdue ? relativeDay(doc.due) : '',
+    doc.task.assignee ? parseContact(doc.task.assignee).name : '',
+  ].filter(Boolean).join(' \u00b7 ');
+  row.replaceChildren(taskTag(doc), accEl('span', 'row-title', doc.title || 'Untitled'));
+  if (meta) row.append(accEl('span', 'meta', meta));
+  return row;
+}
+
+// Scrolls the day view to today's overdue tasks (the grid's count).
+export function scrollToOverdue() {
+  if (dayOverdueHeadEl?.isConnected) dayOverdueHeadEl.scrollIntoView({ block: 'start', behavior: 'instant' });
+}
+
+// ----------------------------------------------------------------------------
 // Marks `doc_id`'s card as the selected one, mirroring the table row's own
 // [aria-selected]. Scrolling is a separate, explicit action (see call
 // sites) -- not every focus should also move the viewport. One-shot/
@@ -499,7 +644,7 @@ function focusMessage(doc_id) {
 }
 
 // ----------------------------------------------------------------------------
-function scrollIntoView(doc_id) {
+export function scrollIntoView(doc_id) {
   const card = msgControllers.get(doc_id)?.card;
   card?.scrollIntoView({ block: 'center', behavior: 'instant' });
 }
@@ -517,8 +662,9 @@ function renderDocument(doc) {
 // One card: header, chips, toolbars, and its own editor. `thread`: a
 // member of the thread shown -- its head drags it out of the thread, and
 // remove-from-thread applies; `selectable`: a click selects its entity,
-// which only makes sense with other cards on screen (a thread).
-function createMessageController(msg, { selectable = false, thread = false } = {}) {
+// which only makes sense with other cards on screen (a thread, a day);
+// `occurrence`: a day card's occurrence of its event (`date`, `end`).
+function createMessageController(msg, { selectable = false, thread = false, occurrence = null } = {}) {
   const doc_id = msg.doc_id;
 
   const card = accEl('div', 'msg');
@@ -598,7 +744,7 @@ function createMessageController(msg, { selectable = false, thread = false } = {
 
   editorRoots.set(doc_id, editorRoot);
 
-  const editable = Boolean(entities.get(doc_id)?.editable);
+  const editable = Boolean(getMeta(doc_id)?.editable);
   const editBtn = previewToolbar.querySelector('button[data-cmd="edit"]');
   editBtn.setAttribute('aria-disabled', String(!editable));
   editBtn.title = editable ? 'Edit message' : 'Read-only';
@@ -627,13 +773,13 @@ function createMessageController(msg, { selectable = false, thread = false } = {
 
   // Delete: two clicks, no dialog (`armedButton`).
   const deleteBtn = previewToolbar.querySelector('button[data-cmd="delete"]');
-  deleteBtn.setAttribute('aria-disabled', String(!entities.get(doc_id)?.deletable));
+  deleteBtn.setAttribute('aria-disabled', String(!getMeta(doc_id)?.deletable));
   armedButton(deleteBtn, 'Click again to delete',
     () => deleteEntityLocal(doc_id, thread ? renderedThreadId : null));
 
   const controller = {
     doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
-    dateEl, linksEl, threadsEl, unsubscribeContent,
+    dateEl, linksEl, threadsEl, occurrence, unsubscribeContent,
   };
   msgControllers.set(doc_id, controller);
   renderCardHead(controller);
@@ -694,11 +840,12 @@ export function leaveCardEditMode() {
 }
 
 // ----------------------------------------------------------------------------
-// The side panel (thread, or standalone entity) is rendered in exactly one
-// place, `renderPanel` (above), from a single subscription over everything
-// it depends on.
+// The side panel (day view, thread, or standalone entity) is rendered in
+// exactly one place, `renderPanel` (above), from a single
+// subscription over everything it depends on.
 store.subscribe([
-  state => state.selected_entity, state => state.selected_thread, state => state.threads_rev,
+  state => state.selected_lens, state => state.selected_day?.getTime(), state => state.selected_entity,
+  state => state.selected_thread, state => state.threads_rev,
 ], (_values, state) => renderPanel(state));
 
 // The cards' heads, links and threads lines show the entities and threads

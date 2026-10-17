@@ -36,8 +36,10 @@ import { revealInDocuments } from './features/lenses/documents.js';
 import { getDocRows } from './features/lenses/documents.js';
 import { restoreSelection } from './features/selection.js';
 import './features/lenses/timeline.js';
+import { initCalendarLens } from './features/lenses/calendar.js';
 
 initDocumentsLens();
+initCalendarLens();
 restoreLens();
 restoreSelection(revealInDocuments);
 

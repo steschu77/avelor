@@ -3,6 +3,7 @@
 import { $ } from '../core/dom.js';
 import { createStore } from '../core/store.js';
 import { rpcCall } from '../core/rpc.js';
+import { dayStart } from '../core/format.js';
 
 export const store = createStore({
   vault_name: '', // the open vault's folder name and path (the `vault` event)
@@ -32,6 +33,7 @@ export const store = createStore({
   selected_labels: [], // label (tag) filter: a doc must carry all of them; always replaced, never mutated
   selected_entity: null,
   selected_thread: null, // the thread shown in the panel, see renderPanel
+  selected_day: dayStart(new Date()), // the day the calendar's panel shows (features/lenses/calendar.js)
   selected_lens: 'dashboard', // the lens shown; the one shown last comes back on start (`restoreLens`)
   files_total: 0,
   // the Documents lens's order; `kind` is the last tiebreak, no column sorts by it

@@ -1,0 +1,152 @@
+/* The Calendar lens (features/lenses/calendar.js). */
+
+/* Month grid. Only two dates place a document: event start and due date. In-month cells are white on the paper ground;
+   spill days from adjacent months keep the ground. Today is a ring, never a fill. */
+.cal__nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px var(--p-gutter) 8px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.cal__head>* {
+  padding: 6px 8px;
+}
+
+.cal__head>.is-weekend {
+  color: var(--c-ink-faint);
+}
+
+.cal__weeks {
+  flex: 1;
+  min-height: 240px;
+  display: grid;
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.cal__week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-bottom: 1px solid var(--c-line);
+  min-height: 0;
+}
+
+.cal__day {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px 6px 4px;
+  border-right: 1px solid var(--c-line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--c-card);
+}
+
+.cal__day:last-child {
+  border-right: none;
+}
+
+.cal__day--out {
+  background: transparent;
+}
+
+.cal__day[aria-selected="true"] {
+  box-shadow: inset 0 0 0 1px var(--c-ink);
+}
+
+.cal__day:hover {
+  background: var(--c-hover);
+}
+
+.cal__num {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+
+.cal__num>b {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  font: 400 var(--fs-meta)/1 var(--f-chrome);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-label);
+}
+
+.cal__day--out .cal__num>b {
+  color: var(--c-ink-faint);
+}
+
+.cal__day--today .cal__num>b {
+  background: var(--c-ink);
+  color: var(--c-card);
+}
+
+/* an event: a click selects it, its card focused in the day's stack */
+.cal__event {
+  flex: none;
+  min-height: 1.2em;
+  line-height: 1.2em;
+  padding: 1px 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  overflow: hidden;
+  font: 400 var(--fs-meta)/1.2 var(--f-chrome);
+  color: var(--c-ink);
+  container-type: inline-size;
+  cursor: pointer;
+}
+
+/* over the hovered day's own hover */
+.cal__event:hover {
+  background: var(--c-hover);
+}
+
+/* the selected entity's chips, every occurrence of a series, as on the
+   dashboard's Week card */
+.cal__event[aria-selected="true"] {
+  background: var(--c-accent-soft);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+.cal__event-icon {
+  flex: none;
+  font-size: var(--fs-label);
+  color: var(--c-ink-mute);
+}
+
+.cal__event-icon.icon {
+  width: var(--fs-label);
+  height: var(--fs-label);
+}
+
+.cal__event-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.cal__event-time {
+  display: none;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-label);
+}
+
+@container (min-width: 90px) {
+  .cal__event-time {
+    display: inline;
+  }
+}

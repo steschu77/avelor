@@ -36,8 +36,8 @@ function onThread(thread_id, meta) {
 // The entity events (api.md#events): an entity as it is on disk
 // now, one shape for every kind; one that left the vault; a body sent
 // unasked (`load_doc_content` answers with the same `source` and `html`).
-// One new after the scan -- restored from the trash -- is one more file;
-// the scan's are counted by its start.
+// One new after the scan -- made with New, restored from the trash -- is
+// one more file; the scan's are counted by its start.
 rpcOn('entity', meta => {
   const known = entities.has(meta.id) || threads.has(meta.id) || projects.has(meta.id);
   const { vault_state, files_total } = store.getState();
@@ -91,9 +91,9 @@ function onEntityDeleted(id) {
 // ----------------------------------------------------------------------------
 // A vault opens (at the start, or after a switch): the page forgets the one
 // shown before, so the scan fills an empty page (vault.md#opening).
-// The lens and the panel's size stay. The documents are forgotten first, so
-// the cards torn down by the selection's reset save nothing
-// (`forgetDocuments`). A page about the old vault closes (app.js).
+// The lens, the calendar's day and the panel's size stay. The documents
+// are forgotten first, so the cards torn down by the selection's reset save
+// nothing (`forgetDocuments`). A page about the old vault closes (app.js).
 function forgetVault() {
   forgetDocuments();
 

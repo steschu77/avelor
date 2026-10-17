@@ -1,7 +1,7 @@
 /* Components: the parts several areas share (buttons, tools, the
-   segmented control, chips, inputs, menus, grips, list rows, section
-   heads, forms, pane heads, dialogs, the vault area's page, ...). They come
-   before the areas, so an area's rule can override them. */
+   segmented control, chips, inputs, menus, grips, tiles, list rows,
+   section heads, forms, pane heads, dialogs, the vault area's page, ...).
+   They come before the areas, so an area's rule can override them. */
 
 /* Buttons: bordered and set like a label; --primary fills with the accent,
    --ghost drops the border. */
@@ -74,7 +74,8 @@
   color: var(--c-card);
 }
 
-/* A round icon button; --quiet shows its ring only on hover. */
+/* Round icon buttons; --quiet shows the ring only on hover, --square is a
+   larger square one. */
 .icon-btn {
   flex: none;
   width: var(--h-control-sm);
@@ -103,6 +104,17 @@
 .icon-btn--quiet:hover {
   border-color: var(--c-line);
   color: var(--c-ink);
+}
+
+.icon-btn--square {
+  width: var(--h-control);
+  height: var(--h-control);
+  border-radius: 0;
+}
+
+.icon-btn--square>.icon {
+  width: var(--fs-small);
+  height: var(--fs-small);
 }
 
 /* Segmented control: one pressed segment. */
@@ -336,6 +348,20 @@
 
 .grip:hover::before {
   border-color: var(--c-ink);
+}
+
+/* A clickable bordered item: a day's tasks. */
+.tile {
+  padding: 10px 12px;
+  border: 1px solid var(--c-line);
+  background: transparent;
+  color: var(--c-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile:hover {
+  background: var(--c-hover);
 }
 
 /* A row of a list with columns; --cols is its grid template. */

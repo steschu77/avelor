@@ -1,8 +1,25 @@
+import { accEl } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
 import { entities } from '../../model/entities.js';
 import {
     byDay, icalDate, parseRecurrence, ruleSupported,
 } from '../../model/calendar.js';
+import { isOverdue } from '../../model/calendar.js';
+import { iconEl } from '../../ui/icons.js';
+
+// ----------------------------------------------------------------------------
+// A task's tag: "Due", or "Overdue" and filled -- the only emphasis the grid
+// uses.
+export function taskTag(doc) {
+    const overdue = isOverdue(doc);
+    return iconEl(overdue ? '#i-warning-filled' : '#i-warning', 'cal__event-icon');
+}
+
+// ----------------------------------------------------------------------------
+export function dueTag(text) {
+    const tag = accEl('span', 'cal__event-icon', text);
+    return tag;
+}
 
 // ----------------------------------------------------------------------------
 // A task's statuses, as the vault keeps them and in words.

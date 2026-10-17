@@ -61,12 +61,14 @@ export const DAY_MONTH = format({ day: '2-digit', month: '2-digit' }); // 10/14
 // A time of day, wherever the page shows one: 9:05 AM.
 export const TIME_FORMAT = format({ hour: 'numeric', minute: '2-digit' });
 export const WEEKDAY = format({ weekday: 'short' });                    // Tue
+export const WEEKDAY_LONG = format({ weekday: 'long' });                // Tuesday
 export const MONTH = format({ month: 'short' });                        // Oct
 export const MONTH_YEAR = format({ month: 'long', year: 'numeric' });   // October 2026
 export const SHORT_MONTH_YEAR = format({ month: 'short', year: 'numeric' }); // Oct 2026
 export const DAY_SHORT_MONTH = format({ day: 'numeric', month: 'short' });   // Oct 14
 export const DAY_LONG_MONTH = format({ day: 'numeric', month: 'long' });     // October 14
 export const DAY_MONTH_YEAR = format({ day: 'numeric', month: 'short', year: 'numeric' }); // Oct 14, 2026
+export const DAY_LONG_MONTH_YEAR = format({ day: 'numeric', month: 'long', year: 'numeric' }); // October 14, 2026
 export const LONG_DAY = format({ weekday: 'long', day: 'numeric', month: 'long' }); // Tuesday, October 14
 export const LONG_DATE = format({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); // Tuesday, October 14, 2026
 
