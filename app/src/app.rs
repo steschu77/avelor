@@ -1,12 +1,14 @@
 //! `App`, the host's one coordinator (`architecture.md#principles`,
 //! principle 7).
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use crate::ai_accounts::AiAccounts;
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
 use crate::documents::DocumentState;
@@ -166,8 +168,15 @@ pub struct App {
     pub vault: Vault,
     ui: Arc<UiQueue>,
 
+    /// The open vault's AI accounts (`accounts::open`).
+    pub ai: AiAccounts,
+
     /// The vault scan running (`vault_scan`); a new one replaces it.
     pub scan: VaultScan,
+
+    /// Per channel, the latest request of `run_superseding` and its task, to
+    /// abort when a newer one arrives.
+    superseding: HashMap<&'static str, (String, Task)>,
 
     /// The long operations running (`jobs`).
     pub jobs: Jobs,
@@ -190,7 +199,9 @@ impl App {
             config,
             vault: Vault::default(),
             ui,
+            ai: AiAccounts::default(),
             scan: VaultScan::default(),
+            superseding: HashMap::new(),
             jobs: Jobs::default(),
             documents: DocumentState::default(),
             close: CloseState::default(),
@@ -314,6 +325,36 @@ impl App {
     /// The UI queue, for what must run after the current task.
     pub(crate) fn ui(&self) -> &UiQueue {
         &self.ui
+    }
+
+    // ------------------------------------------------------------------------
+    /// Run `work` like `run`, as the request `req_id` on `channel`, where
+    /// only the latest request counts (a preview while the user types): it
+    /// aborts the channel's previous work, and `apply` only runs while
+    /// `req_id` is still the channel's latest -- so a superseded reply is
+    /// never applied, whatever order the network answers in.
+    pub fn run_superseding<T: Send + 'static>(
+        &mut self,
+        channel: &'static str,
+        req_id: &str,
+        work: impl FnOnce(&Cancel) -> T + Send + 'static,
+        apply: impl FnOnce(&mut App, T) + Send + 'static,
+    ) {
+        let latest = req_id.to_string();
+        let task = self.run(work, move |app, out| {
+            let current = app.superseding.get(channel);
+            if current.is_some_and(|(req_id, _)| *req_id == latest) {
+                app.superseding.remove(channel);
+                apply(app, out);
+            }
+        });
+        // `apply` runs on this (the UI) thread, so it can't look before
+        // this insert.
+        let previous = self.superseding.insert(channel, (req_id.to_string(), task));
+        if let Some((old, task)) = previous {
+            log::debug!("{channel}: {req_id} supersedes {old}");
+            task.abort();
+        }
     }
 
     // ------------------------------------------------------------------------

@@ -42,7 +42,7 @@ impl FromStr for Provider {
 
     // ------------------------------------------------------------------------
     /// A provider's key or one of its aliases, in any case (`claude` is
-    /// Anthropic).
+    /// Anthropic, the account kind in accounts.md#ai-account-file).
     fn from_str(s: &str) -> Result<Self> {
         let s = s.to_ascii_lowercase();
         PROVIDERS

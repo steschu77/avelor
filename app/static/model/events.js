@@ -1,10 +1,13 @@
 // The host's events into the model (api.md#events): the entities as they
 // are on disk, those that left the vault, their content sent unasked, the
-// vault being opened, and the window active again. Each
-// handler writes the Maps (model/entities.js) and the documents' state
-// (model/documents.js) and bumps the store's counters; the renders follow
-// the counters (app.js), the model calls none of them. Only this module
-// writes the Maps.
+// open vault's accounts, the vault being opened, and the window active
+// again. Each handler writes the Maps (model/entities.js) and the
+// documents' state (model/documents.js) and bumps the store's counters; the
+// renders follow the counters (app.js), the model calls none of them. Only
+// this module writes the Maps. A page that keeps its own state about an
+// account listens to the same events (features/workspace/accounts.js); its
+// listener runs after this module's, which app.js imports before every
+// feature.
 
 import { rpcOn } from '../core/rpc.js';
 import { parseDate } from '../core/format.js';
@@ -12,6 +15,7 @@ import { store } from './state.js';
 import { entities } from './entities.js';
 import { projects } from './entities.js';
 import { threads } from './entities.js';
+import { accounts } from './entities.js';
 import { forgetDocument, forgetDocuments } from './documents.js';
 import { onDocContent } from './documents.js';
 import { onActivated } from './documents.js';
@@ -89,9 +93,30 @@ function onEntityDeleted(id) {
 }
 
 // ----------------------------------------------------------------------------
+// The open vault's accounts (api.md#events): the opened vault's replace the
+// ones known; one connected or changed; one removed.
+rpcOn('accounts', ({ items }) => {
+  const ids = new Set(items.map(item => item.id));
+  for (const id of [...accounts.keys()]) {
+    if (!ids.has(id)) accounts.delete(id);
+  }
+  for (const item of items) accounts.set(item.id, item);
+  store.setState({ accounts_rev: store.getState().accounts_rev + 1 });
+});
+rpcOn('account', meta => {
+  accounts.set(meta.id, meta);
+  store.setState({ accounts_rev: store.getState().accounts_rev + 1 });
+});
+rpcOn('account_removed', ({ id }) => {
+  accounts.delete(id);
+  store.setState({ accounts_rev: store.getState().accounts_rev + 1 });
+});
+
+// ----------------------------------------------------------------------------
 // A vault opens (at the start, or after a switch): the page forgets the one
 // shown before, so the scan fills an empty page (vault.md#opening).
-// The lens, the calendar's day and the panel's size stay. The documents
+// Its accounts came as the new vault's already (`accounts`); the lens, the
+// calendar's day and the panel's size stay. The documents
 // are forgotten first, so the cards torn down by the selection's reset save
 // nothing (`forgetDocuments`). A page about the old vault closes (app.js).
 function forgetVault() {

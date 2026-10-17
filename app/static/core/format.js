@@ -79,6 +79,14 @@ export function shortDate(date) {
 }
 
 // ----------------------------------------------------------------------------
+// A date of the Workspace pages (`iso`: an account connected), like "Oct 3,
+// 2026"; "Never" without one.
+export function pageDate(iso, withTime) {
+  if (!iso) return 'Never';
+  return DAY_MONTH_YEAR.format(new Date(iso));
+}
+
+// ----------------------------------------------------------------------------
 // A count with its noun, "1 file", "3 files"; `many` for a plural that
 // isn't `one` + "s".
 export function plural(n, one, many = `${one}s`) {

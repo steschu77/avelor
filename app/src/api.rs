@@ -1,9 +1,10 @@
 //! The app's own commands (`api.md#the-page-side`): `ready`, switching and
 //! revealing the vault, opening a link, and the page's preferences; and
-//! opening a vault (`open_vault`).
+//! opening a vault with its accounts (`open_vault`).
 
 use std::path::{Path, PathBuf};
 
+use crate::accounts;
 use crate::app::App;
 use crate::app::Prefs;
 use crate::documents;
@@ -16,7 +17,7 @@ use serde_json::json;
 /// `ready`: the page is loaded and listens. A config that couldn't be read
 /// at start, and was set aside (`config::load_config`, which logs why), is
 /// told now, in the status bar. Opens the vault of the last session (or the
-/// command line's, `ConfigStore::vault`); answers `null`.
+/// command line's, `ConfigStore::vault`), with its accounts; answers `null`.
 pub fn ready(app: &mut App, req: Req) {
     if app.config.take_error().is_some() {
         app.notice(CONFIG_UNREAD);
@@ -62,13 +63,14 @@ pub(crate) fn switch_to(app: &mut App, root: PathBuf) {
 }
 
 // ----------------------------------------------------------------------------
-/// Make `root` the open vault, then kick off a scan that streams progress
-/// and results back via `on_scan_event`. A save of the old vault still held
-/// for the conflict dialog is kept as a conflict copy there first
-/// (`documents::keep_held`).
+/// Make `root` the open vault with its accounts, then kick off a scan that
+/// streams progress and results back via `on_scan_event`. A save of the old
+/// vault still held for the conflict dialog is kept as a conflict copy
+/// there first (`documents::keep_held`).
 pub(crate) fn open_vault(app: &mut App, root: &Path) {
     documents::keep_held(app);
     app.vault.begin_open(root);
+    accounts::open(app, root);
     app.run_scan(root.to_path_buf());
 }
 

@@ -37,9 +37,9 @@ which answers through a `Req`.
   current when the reply arrives.
 - **Error codes** are the names of `av_utils::Error`'s variants in
   snake_case (`Error::code()`): `bad_request`, `invalid_argument`,
-  `cancelled`, `not_found` (no entity with that id), `wrong_kind` (the id
+  `cancelled`, `not_found` (no entity or account with that id), `wrong_kind` (the id
   names something of another kind than the command takes), `not_writable`,
-  `file_not_found`, `file_write`, `file_exists`, `win32`, `gtk`, …. `Req::fail` answers in the host's own
+  `file_not_found`, `file_write`, `file_exists`, `win32`, `gtk`, `http`, …. `Req::fail` answers in the host's own
   words where the page shows the message.
 - The page sends **strings** (`JSON.stringify`), since the host reads with
   `TryGetWebMessageAsString`.
@@ -80,7 +80,7 @@ Host modules: `api.rs`, `vault_scan.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one: the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `null` once the scan has started. |
+| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one: its accounts (`accounts`), then the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `null` once the scan has started. |
 | `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and scanned as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. The page sends its unsaved edits first. |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
 | `reveal_vault` | — | Open the vault's folder in Explorer (on Linux the file manager) once the handler has returned. `null`; `invalid_path` ("No vault is open."), or the shell's error ("Could not show the vault's folder."). |
@@ -143,6 +143,18 @@ Host module: `trash.rs`. `vault.md#trash`.
 | `delete_trashed` | `{ path }` | Delete the trashed file for good: `ok {}`; the errors as for `restore_entity` ("Could not delete … for good."). |
 | `empty_trash` | — | Delete every file `list_trash` lists for good, and the folders this leaves empty: `ok {}`. |
 
+### AI account commands <a id="ai"></a>
+
+Host module: `ai.rs`, `accounts.rs`. `accounts.md`.
+
+| Command | Args | Reply and pushes |
+|---|---|---|
+| `connect_ai` | `{ account?, provider?, key?, address? }` | Check and store a key or an address: for a new account of `provider` (`anthropic`, `openai`, `mistral`, `gemini`, `ollama`; no `account`), or for `account`; what is left out stays. The check lists the provider's models with the new values; only if it works is the account created or updated. Pushes `account`, then `ok {id, models}`, the models as for `list_ai_models`. A failed check answers its error (`http`, `network`, `timeout`, …) with a `message` worded for the page ("The key was rejected: …", "Ollama isn't reachable at … Is it running?"), with nothing stored. A newer `connect_ai` supersedes a running one, which answers `cancelled` (channel `connect_ai`), and so does opening another vault. Else `invalid_argument` (no provider for a new account, no key for a key provider), `not_found`, `invalid_path` (no vault is open to keep it in). |
+| `list_ai_models` | `{ account }` | `ok {models: [{id, name, context_window, price: {input, output} \| null}]}`, the price in USD per million tokens (0 for a local Ollama, null if unknown). Pushes `account` first: an Ollama account's status follows the listing. A failed listing answers as a failed `connect_ai` check; `not_connected` for a key provider without its key, `not_found`. |
+| `set_ai_settings` | `{ account, offered?, spend_limit? }` | Only the fields given change: `offered` replaces the models offered in the pickers, `spend_limit: null` removes the limit. Pushes `account`, then `null`; `invalid_argument` for a limit that isn't above 0, `not_found`. |
+| `disconnect_account` | `{ account }` | An AI account's key deleted; the account file stays, marked `disconnected` (`accounts.md#connection`). Pushes `account`, then `null`. |
+| `remove_account` | `{ account }` | Forget an account that isn't connected (`disconnected` or `reconnect`; an Ollama account in any state): its file and secret are deleted. Pushes `account_removed`, then `null`; `unsupported` for a connected account. |
+
 ## Events <a id="events"></a>
 
 What the host pushes; the page listens with `rpcOn`.
@@ -157,4 +169,7 @@ What the host pushes; the page listens with `rpcOn`.
 | `entity` | `{ id, kind, title, path, source, genre, date, projects, tags, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during a vault scan, and for every entity an edit created or rewrote, whatever the edit (a structural command, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
 | `entity_deleted` | `{ id }` | The entity left the vault: its file was moved to `.trash` (a delete, a dissolved thread) or is gone. |
 | `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: its file was read again. `load_doc_content` answers with the same `source` and `html`. |
+| `accounts` | `{ items: [account…] }` | A vault opened: its accounts, from `.avelor/accounts/`, replacing the ones the page has. Each item is an `account`'s data. |
+| `account` | `{ id, kind: "anthropic"\|"openai"\|"mistral"\|"gemini"\|"ollama", key, address, status, connected, offered, spend_limit }` | An account was connected, changed or disconnected. `status` is `connected`, `disconnected` or `reconnect`, an Ollama account's `running`/`not running`/`unknown` (`accounts.md#connection`). `key` is only the key's ends (`sk-…4f2a`) or null. |
+| `account_removed` | `{ id }` | The account was removed (`remove_account`); its files are gone. |
 | `notice` | `{ level: "error", message }` | `error`: the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), or `config.yaml` couldn't be read at start (on `ready`). A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |

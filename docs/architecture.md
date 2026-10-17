@@ -58,6 +58,7 @@ read by OCR.
 | `editor.md` | the WYSIWYG editor |
 | `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
+| `accounts.md` | AI accounts: files, secrets, states, the Accounts page |
 
 ## Doc conventions
 
@@ -76,7 +77,8 @@ read by OCR.
   `app/static/`, crate files under `crates/<crate>/src/` (written
   `av-vault/vault.rs:201`).
 - **Flows** have ids by area (A vault, B navigation, C projects, D
-  documents and cards, E threads, F lenses): trigger
+  documents and cards, E threads, F lenses, H Google
+  accounts, I AI accounts): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
@@ -88,7 +90,9 @@ The rules the code follows, and every change to it:
 1. **Keep the stack, add no dependency.** Rust + WebView2 (WebKitGTK on
    Linux), hand-written utilities, no npm, no third-party bundler, no async
    runtime.
-2. **One way to do each thing.** One message format and one way to answer.
+2. **One way to do each thing.** One message format and one way to answer,
+   one job helper, one account persistence, one confirm widget, one place
+   that turns vault changes into page updates.
 3. **Boundaries by types and rules, not by layers of folders.** The host
    doesn't need `services/` and
    `repositories/`; it needs state that can only be changed through its own
@@ -123,9 +127,9 @@ The rules the code follows, and every change to it:
 
 ### The run family
 
-Two variants: plain (`run`), with ordered progress callbacks
-(`run_with_progress`); continuations are `FnOnce(&mut
-App, T)`. `Task(Cancel)` aborts (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
+Three variants: plain (`run`), with ordered progress callbacks
+(`run_with_progress`), and superseding per channel (`run_superseding`;
+channels `connect_ai`); continuations are `FnOnce(&mut App, T)`. `Task(Cancel)` aborts (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
 dropping a `Task` leaves its work running. Continuations re-check identity themselves
 (batch ids), because an already queued `apply`
 still runs, and so does progress queued before the abort.
@@ -258,11 +262,14 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
-| `api.rs` | `ready`, vault open, switch and reveal, `set_prefs`, `open_url` |
+| `api.rs` | `ready`, vault open (with its accounts), switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
+| `accounts.rs` | the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
+| `config_files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
+| `ai_accounts.rs`, `ai.rs` | AI account files and key, the `AiAccounts` sub-state; the AI commands (connect, models, settings) |
 
 ## Platforms <a id="platforms"></a>
 
@@ -342,19 +349,17 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page, and counts with their noun (`plural`) |
+| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page (`TIME_FORMAT`, `MONTH_YEAR`, …, `shortDate`, `pageDate`), and counts with their noun (`plural`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`; `serializeMarkdown` |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`, `threads`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the chats with an AI); the selection published minus what is gone (`commitExistingSelection`) |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the chats with an AI); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/calendar.js` | what the calendar shows: the events in the filter with their series expanded (RFC 5545 lines), the tasks due, the day an entity shows on (`calendarDayOf`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts (`editorRoots`) |
-| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinThreadLocal`, …, `editEntityLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
-| `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc; the two-click confirm (`armedButton`: one armed button page-wide); the editors' toolbars |
-| `ui/field.js` | editing in place (`editTextInPlace`) |
-| `ui/page.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages: their Esc and Ctrl+Enter (`registerVaultPage`), `replaceVaultPage`, which keeps the focus |
-| `ui/segmented.js` | the segmented control (`accSeg`) |
+| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinThreadLocal`, …, `editEntityLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, the accounts, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
+| `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc; the two-click confirm (`armedButton`: one armed button page-wide, which a page rebuilt on every change names by a key); the editors' toolbars |
+| `ui/page.js`, `ui/field.js`, `ui/segmented.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages: their Esc and Ctrl+Enter (`registerVaultPage`), `replaceVaultPage`, which keeps the focus; the parts of a list + detail page (`listDetailPage`, `pageList`, `itemCard`, `addTile`, `detailPane`, `detailHead`, `stats`, `notice`, `failedRetry`, `detailFooter`) and the changes a page shows until the host has them (`sentDrafts`); editing in place (`editTextInPlace`) and the Workspace pages' editable field (`renderEditField`); the segmented control (`accSeg`) |
 | `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
 | `features/selection.js`, `features/context.js` | the selection (`selectDocument`, `selectById`, `selectDay`, the filter, `openLink`, `panelMode`, the day view's listing, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`); the context column's tabs and the card's buttons that open them |
 | `features/lenses/registry.js` | the lens registry: the tabs, the lenses' elements and renders (`registerLens`), at most one render per frame of the shown lens (`invalidateLenses`), the lens shown last on start (`restoreLens`) |
@@ -362,7 +367,8 @@ nothing imports `app.js`.
 | `features/dashboard/dashboard.js`, `features/dashboard/cards.js` | the Dashboard lens: its cards' order and the closed ones, the Cards menu, dragging a card; the cards Week, Tasks (a task dragged to another column), Upcoming, Recent files and Recent chats |
 | `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
-| `features/workspace/trash.js` | Workspace pages: the trash |
+| `features/workspace/models.js` | the models features pick: the AI providers |
+| `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts; the trash |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
@@ -385,10 +391,15 @@ A page is drawn by what it must keep while it changes:
 
 The store (`model/state.js`) holds selection and UI state, the documents
 with unsaved edits, the conflicts and the notices, plus revision counters
-(`projects_rev`, `entities_rev`). The domain data lives
-in Maps outside it (`entities`, `projects`, `threads`, in `model/entities.js`), changed in place. Only the host's
+(`projects_rev`, `threads_rev`, `accounts_rev`, …). The domain data lives
+in Maps outside it (`entities`, `projects`, `threads`, `accounts`,
+in `model/entities.js`), changed in place. Only the host's
 events write them, in `model/events.js`, each followed by a counter's
-bump; a vault being opened clears them (`forgetVault`).
+bump; a vault being opened clears them (`forgetVault`). A page that keeps
+its own state about an account (its drafts, what it shows
+selected) listens to the same events, and its listener runs after the
+model's: `rpcOn` calls the listeners in the order they came, and `app.js`
+imports `model/events.js` before every feature.
 
 The model calls no render. The renders subscribe to the store (`app.js`,
 the features): the lenses and the sidebar to the counters, the dirty dots
@@ -397,7 +408,9 @@ to `dirty_docs`, the conflict dialog to `conflicts`, the status bar to
 of selectors (`store.subscribe([s => s.selected_project, s =>
 s.projects_rev], …)`), called when any of them changed.
 
-A render never sends a change to the host.
+A render never sends a change to the host. It may ask once for data it
+shows and the page doesn't hold, guarded by a cache that marks it as
+loading: an account's models (`features/workspace/accounts.js`).
 
 ### Actions <a id="actions"></a>
 
@@ -422,14 +435,17 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/tokens.css` | the colors, fonts, sizes, insets, heights, radii, shadows and layers |
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
-| `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `input`, `menu`, `tile`, `list-row`, `section-head`, the forms, `pane-head`, the dialogs, the vault area's `page`, … |
+| `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `check`, `input`, `menu`, `tile`, `list-row`, `section-head`, the forms, `pane-head`, the dialogs, the vault area's `page`, the list + detail page (`ui/page.js`), … |
 | `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, timeline, calendar, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 
 - Tokens for sizes, insets and heights (`--fs-*`, `--p-*`, `--h-*`);
-  shared components (`tool`, …) and type roles (`meta`, …) come before the
-  areas' files, so a block
+  shared components (`btn`, `tool`, `icon-btn`, `seg`, `chip`, `input`,
+  `list-row`, `pane-section`, `page`, the list + detail page's
+  `list-detail`, `item-card`, `add-tile`, `detail-head`, `stats`,
+  `notice`, `detail-footer`, `edit-field`, …) and type roles (`label`, `meta`,
+  `row-title`, `page-title`, …) come before the areas' files, so a block
   rule can override a component; values that must change together live in
   one token or class; BEM without prefix; states as ARIA attributes where
   one fits, `is-*` otherwise; every class used is defined and nothing
@@ -460,6 +476,7 @@ The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
 - `config.yaml`: the vault of the last session (`vault`), the window's
   size and maximized state, and the page's preferences (`prefs`,
   `ui.md#preferences`);
+- the accounts' DPAPI secrets, `<id>.key` (`accounts.md#secrets`);
 - the WebView2 profile in `…\Avelor\WebView2`;
 - the log files, one per run, in `…\Avelor\log`
   (`development.md#diagnosis`).

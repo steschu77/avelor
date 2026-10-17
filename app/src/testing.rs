@@ -3,6 +3,8 @@
 //! the test runs its UI queue.
 
 use std::cell::RefCell;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -108,11 +110,39 @@ impl Harness {
     }
 
     // ------------------------------------------------------------------------
+    /// Run the queue until what the page got satisfies `done` -- workers post
+    /// from their own threads -- and return it; at most 5 seconds.
+    pub fn wait_for(&mut self, done: impl Fn(&[String]) -> bool) -> Vec<String> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut sent = Vec::new();
+        loop {
+            self.run_queue();
+            sent.extend(self.take());
+            if done(&sent) {
+                return sent;
+            }
+            assert!(Instant::now() < deadline, "timed out, got {sent:?}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    // ------------------------------------------------------------------------
     /// Send `cmd` with `args` as the typed request 1; what the page got
     /// back, parsed.
     pub fn call(&mut self, cmd: &str, args: Value) -> Vec<Value> {
         let request = json!({ "id": 1, "cmd": cmd, "args": args });
         parse(&self.send(&request.to_string()))
+    }
+
+    // ------------------------------------------------------------------------
+    /// `call`, for a command answered from a worker: run the queue until the
+    /// reply came (`wait_for`).
+    pub fn call_waiting(&mut self, cmd: &str, args: Value) -> Vec<Value> {
+        let request = json!({ "id": 1, "cmd": cmd, "args": args });
+        self.app.on_web_message(request.to_string());
+        let is_reply =
+            |m: &String| serde_json::from_str::<Value>(m).is_ok_and(|m| m.get("re").is_some());
+        parse(&self.wait_for(|sent| sent.iter().any(is_reply)))
     }
 
     // ------------------------------------------------------------------------
@@ -166,4 +196,67 @@ pub fn notes(name: &str, n: usize) -> (Harness, Vec<Id>) {
         })
         .collect();
     (Harness::with_vault(name, &files), ids)
+}
+
+// ----------------------------------------------------------------------------
+/// A fake Ollama on this computer, for the AI commands: `GET /api/tags`
+/// lists its models.
+pub struct FakeOllama {
+    models: Vec<String>,
+}
+
+impl FakeOllama {
+    // ------------------------------------------------------------------------
+    pub fn new(models: &[&str]) -> Self {
+        Self {
+            models: models.iter().map(|m| m.to_string()).collect(),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Listen on a free port, answering each connection on a thread of its
+    /// own; its address.
+    pub fn start(self) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let fake = Arc::new(self);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let fake = Arc::clone(&fake);
+                std::thread::spawn(move || fake.answer(stream));
+            }
+        });
+        address
+    }
+
+    // ------------------------------------------------------------------------
+    /// Read the request, then answer it.
+    fn answer(&self, mut stream: TcpStream) {
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if !reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                break;
+            }
+        }
+        let models: Vec<Value> = self
+            .models
+            .iter()
+            .map(|name| json!({ "name": name, "details": {} }))
+            .collect();
+        write_json(&mut stream, &json!({ "models": models }))
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Answer with `body` as one JSON document, and close.
+fn write_json(stream: &mut TcpStream, body: &Value) {
+    let body = body.to_string();
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let _ = stream.write_all(head.as_bytes());
+    let _ = stream.write_all(body.as_bytes());
 }

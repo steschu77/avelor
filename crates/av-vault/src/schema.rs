@@ -22,4 +22,8 @@ pub mod layout {
     /// Deleted entities, kept at their vault-relative path; the scan skips
     /// it like every dot-folder.
     pub const TRASH: &str = ".trash";
+    /// The vault's accounts (AI providers), one YAML file each; no
+    /// entities, and skipped by the scan like every dot-folder. Their
+    /// secrets stay with the app.
+    pub const ACCOUNTS: &str = ".avelor/accounts";
 }

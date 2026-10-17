@@ -12,7 +12,10 @@ use crate::close;
 use crate::documents;
 use crate::structure;
 use crate::trash;
+use crate::{accounts, ai};
+use av_llm::Provider;
 use av_utils::error::Error;
+use av_utils::error::Result;
 use av_utils::id::Id;
 use av_vault::change::Change;
 use av_vault::vault::Index;
@@ -71,6 +74,13 @@ enum Command {
     RestoreEntity(TrashPath),
     DeleteTrashed(TrashPath),
     EmptyTrash,
+    // Accounts (`accounts`).
+    DisconnectAccount(OfAccount),
+    RemoveAccount(OfAccount),
+    // AI accounts (`ai`).
+    ConnectAi(ConnectAi),
+    ListAiModels(OfAccount),
+    SetAiSettings(ai::SettingsChange),
 }
 
 /// `{path?}`: no `path` shows the folder picker.
@@ -189,6 +199,26 @@ struct Archive {
     archived: bool,
 }
 
+/// `{account?, provider?, key?, address?}`: no `account` connects a new
+/// one of `provider`.
+#[derive(Deserialize)]
+struct ConnectAi {
+    #[serde(default)]
+    account: Option<Id>,
+    #[serde(default)]
+    provider: Option<Provider>,
+    #[serde(default)]
+    key: Option<String>,
+    #[serde(default)]
+    address: Option<String>,
+}
+
+/// `{account}`
+#[derive(Deserialize)]
+struct OfAccount {
+    account: Id,
+}
+
 impl Command {
     // ------------------------------------------------------------------------
     /// The command `cmd` with its `args`.
@@ -223,6 +253,11 @@ impl Command {
             "restore_entity" => Command::RestoreEntity(from_value(args)?),
             "delete_trashed" => Command::DeleteTrashed(from_value(args)?),
             "empty_trash" => Command::EmptyTrash,
+            "disconnect_account" => Command::DisconnectAccount(from_value(args)?),
+            "remove_account" => Command::RemoveAccount(from_value(args)?),
+            "connect_ai" => Command::ConnectAi(from_value(args)?),
+            "list_ai_models" => Command::ListAiModels(from_value(args)?),
+            "set_ai_settings" => Command::SetAiSettings(from_value(args)?),
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
                 return Err(serde::de::Error::custom(unknown));
@@ -284,13 +319,19 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::RestoreEntity(a) => trash::restore_entity(app, req, a.path),
         Command::DeleteTrashed(a) => trash::delete_trashed(app, req, a.path),
         Command::EmptyTrash => trash::empty_trash(app, req),
+        Command::DisconnectAccount(a) => accounts::disconnect_account(app, req, a.account),
+        Command::RemoveAccount(a) => accounts::remove_account(app, req, a.account),
+        Command::ConnectAi(a) => ai::connect_ai(app, req, a.account, a.provider, a.key, a.address),
+        Command::ListAiModels(a) => ai::list_ai_models(app, req, a.account),
+        Command::SetAiSettings(a) => ai::set_ai_settings(app, req, a),
     }
 }
 
 // ----------------------------------------------------------------------------
-/// The answer to the page's request `id`, given exactly once: `ok`, `err`
-/// and `fail` consume it. Dropped unanswered -- a branch that forgot it -- it
-/// answers `cancelled`, so every call on the page settles. It is `Send`: it
+/// The answer to the page's request `id`, given exactly once: `ok`, `err`,
+/// `fail` and `answer` consume it. Dropped unanswered -- its task aborted, a
+/// branch that forgot it -- it answers `cancelled`, so every call on the
+/// page settles. It is `Send`, to move into a worker's continuation: it
 /// holds the UI queue, never the web view, and its reply is posted on the
 /// UI thread, after the events its handler posted.
 pub struct Req {
@@ -328,12 +369,21 @@ impl Req {
 
     // ------------------------------------------------------------------------
     /// Answer with `error`, but with `message` to show instead of the
-    /// error's own text: the host words what went wrong, the page still
-    /// sees its code.
+    /// error's own text: the host words what went wrong (e.g. "The key was
+    /// rejected: ..."), the page still sees its code.
     pub fn fail(mut self, error: Error, message: impl Into<String>) {
         let err = json!({ "code": error.code(), "message": message.into() });
         let reply = json!({ "re": self.id, "err": err });
         self.send(reply);
+    }
+
+    // ------------------------------------------------------------------------
+    /// Answer with `result`: its value (`ok`), or its error (`err`).
+    pub fn answer<T: Serialize>(self, result: Result<T>) {
+        match result {
+            Ok(data) => self.ok(data),
+            Err(error) => self.err(error),
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -445,7 +495,7 @@ mod tests {
     fn a_req_answers_once_and_cancelled_when_dropped_anywhere() {
         let mut h = Harness::new("req");
         h.app.req(1).ok(json!({ "a": 1 }));
-        h.app.req(2).ok(());
+        h.app.req(2).answer(Ok(()));
         let req = h.app.req(3);
         std::thread::spawn(move || drop(req)).join().unwrap();
         h.run_queue();

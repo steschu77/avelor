@@ -26,7 +26,8 @@ function closeMenu() {
 // { head } -- `hint` is the small label on the right, `icon` an icon before
 // the label (`#i-<name>`), `checked` shows a check column, `separator` draws
 // a line above the item; `head` labels a section, the items up to the next
-// head. `options.head` is a label over the items. `options.filter`
+// head. `options.head` is a label over the items; `options.matchWidth`
+// makes the menu at least as wide as `anchor`. `options.filter`
 // ({ placeholder, extra(text) }) puts a text box over the items, focused:
 // typing keeps the items whose label contains the text (a head while an
 // item of its section stays) and adds `extra(text)`'s; up and down move the
@@ -130,6 +131,7 @@ export function showMenu(anchor, items, options = {}) {
   }
 
   const r = anchor.getBoundingClientRect();
+  if (options.matchWidth) menu.style.minWidth = `${Math.round(r.width)}px`;
   document.body.appendChild(menu);
   const width = menu.offsetWidth;
   const height = menu.offsetHeight;

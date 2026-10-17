@@ -25,11 +25,18 @@ pub enum Error {
         path: PathBuf,
     },
     InvalidFileType,
-    /// No entity has the id: it never did, or it is gone.
+    /// No entity or account has the id: it never did, or it is gone.
     NotFound,
     /// The id names something of another kind than the command takes (a
     /// task where a project is expected).
     WrongKind,
+    /// The service doesn't offer this.
+    Unsupported {
+        what: String,
+    },
+    /// The account has no usable credential: disconnected, or its secret is
+    /// missing or can't be decrypted here.
+    NotConnected,
     /// The entity was created in the app and has no file yet.
     Unsaved,
     /// The entity's file can't be written: read-only, or its frontmatter
@@ -104,6 +111,8 @@ impl Error {
             Error::InvalidFileType => "invalid_file_type",
             Error::NotFound => "not_found",
             Error::WrongKind => "wrong_kind",
+            Error::Unsupported { .. } => "unsupported",
+            Error::NotConnected => "not_connected",
             Error::Unsaved => "unsaved",
             Error::NotWritable { .. } => "not_writable",
             Error::FileNotFound { .. } => "file_not_found",
@@ -136,6 +145,13 @@ impl std::error::Error for Error {}
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Error::FileIo { err }
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(err: std::string::FromUtf8Error) -> Self {
+        Error::FromUtf8 { err }
     }
 }
 

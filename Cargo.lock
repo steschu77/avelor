@@ -89,6 +89,7 @@ name = "avelor"
 version = "0.1.0"
 dependencies = [
  "av-bundle",
+ "av-llm",
  "av-utils",
  "av-vault",
  "embed-resource",

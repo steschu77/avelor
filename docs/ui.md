@@ -2,7 +2,8 @@
 
 > The main window: its layout, the vault panel with its filters, the
 > lenses, the status bar, the jobs panel, page keys, New and the
-> preferences.
+> preferences. The side panel is `panel.md`; the Workspace pages belong to
+> their features (`accounts.md`, `vault.md`).
 
 ## Layout
 
@@ -21,7 +22,7 @@ Both side panels can be extended to full width for focused work and have
 grips to resize them; the widths are remembered across restarts
 (`ui.md#preferences`). Opening a panel never moves the main view's
 layout. The expanded vault area hosts the
-pages of the vault panel: the Workspace pages (Trash) and New. It is
+pages of the vault panel: the Workspace pages (Accounts, Trash) and New. It is
 expanded only while one of them is shown: a page opens it (`openVaultOp`,
 `ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
 or a click on a filter closes it (`closeVaultArea`). Menus are popups
@@ -42,7 +43,7 @@ the page, once per frame (`panel.md#host-pushes`).
   folded under an "Archived" row at the end, still selectable
   (`projectsInOrder`). Creating and editing projects, and dropping rows on
   them, is `panel.md#projects`.
-- **Workspace**: Trash.
+- **Workspace**: Accounts, Trash.
 
 **Labels** filter from the lens head, for every lens: after the project's
 name the active labels, each a label chip whose × takes it out of the

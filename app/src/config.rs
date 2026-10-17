@@ -74,6 +74,12 @@ impl ConfigStore {
     }
 
     // ------------------------------------------------------------------------
+    /// The folder holding config.yaml.
+    pub fn dir(&self) -> &Path {
+        self.path.parent().unwrap_or(Path::new(""))
+    }
+
+    // ------------------------------------------------------------------------
     /// The vault to open: the command line's, else the last session's.
     pub fn vault(&self) -> Option<&Path> {
         self.session_vault

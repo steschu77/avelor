@@ -2,7 +2,9 @@
 
 > The vault's file format and its life cycle: what an entity file holds,
 > identity, roles, types and sources, file names, the layout; opening,
-> switching and scanning a vault, the trash.
+> switching and scanning a vault, the trash. The account files in `.avelor/`
+> are described in `accounts.md`, how an edited document reaches its file
+> in `saving.md`.
 
 ## Principles <a id="principles"></a>
 
@@ -662,6 +664,8 @@ not by location:
 
 ```
 Vault/
+  .avelor/                 # vault config
+    accounts/          # *.yaml per account (AI providers), without secrets
   Projects/            # *.md / *.yaml project descriptors
   Documents/           # *.md notes made with New
   Contacts/            # *.md per contact
@@ -714,6 +718,8 @@ sequenceDiagram
     participant S as App (UI thread)
     participant W as worker (av-vault scan)
     P->>S: ready
+    S->>S: accounts::open (.avelor/accounts/)
+    S-->>P: accounts
     S->>W: run_scan(root)
     W->>W: walk the tree
     W->>S: [Start]
@@ -757,3 +763,6 @@ page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 - the selection and the filter;
 - a page about the old vault: New and the Task tab's drafts
   (`features/new.js`).
+
+The accounts arrive before the scan as the new vault's (`accounts`), so
+they aren't touched.
