@@ -1,6 +1,6 @@
 // Dates and counts as the page shows them.
 
-import { locale } from './text.js';
+import { locale, t } from './text.js';
 
 // ----------------------------------------------------------------------------
 // A host date: `YYYY-MM-DD` as that local day's start (not UTC midnight,
@@ -91,4 +91,12 @@ export const LONG_DATE = format({ weekday: 'long', day: 'numeric', month: 'long'
 // dashboard's cards, a thread's days in the Documents lens).
 export function shortDate(date) {
   return date.getFullYear() === new Date().getFullYear() ? DAY_MONTH.format(date) : DATE_FORMAT.format(date);
+}
+
+// ----------------------------------------------------------------------------
+// A date of the Workspace pages (`iso`: an account connected), like "Oct 3,
+// 2026"; "Never" without one.
+export function pageDate(iso, withTime) {
+  if (!iso) return t('date.never');
+  return DAY_MONTH_YEAR.format(new Date(iso));
 }

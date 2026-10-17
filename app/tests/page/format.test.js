@@ -1,6 +1,6 @@
 import { equal, test } from './harness.js';
 import {
-  addDays, dayStart, isoInstant, localDay, monthEndOf, monthStartOf, parseDate, relativeDay, sameDay, weekStartOf,
+  addDays, dayStart, isoInstant, localDay, monthEndOf, monthStartOf, pageDate, parseDate, relativeDay, sameDay, weekStartOf,
 } from '../../static/core/format.js';
 
 test("a day is the local day's start, not UTC's", () => {
@@ -32,4 +32,8 @@ test('a day as seen from today', () => {
   const today = new Date();
   equal([0, 1, -1, 3, -3].map(n => relativeDay(addDays(today, n))), ['today', 'tomorrow', 'yesterday', 'in 3 days', '3 days ago']);
   equal([relativeDay(undefined), relativeDay(new Date(NaN))], ['', '']);
+});
+
+test('no date is never', () => {
+  equal(pageDate(null), 'date.never');
 });

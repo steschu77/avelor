@@ -1,6 +1,6 @@
 /* The pages of the expanded vault area: New (features/new.js) and the
-   Workspace pages (features/workspace/: trash). The page itself is a
-   component. */
+   Workspace pages (features/workspace/: accounts, trash). The page itself
+   and the list + detail page are components. */
 
 /* New (features/new.js): the sheet of the entity being
    made, raised on the card layer */
@@ -130,6 +130,54 @@
   align-items: center;
   gap: 8px;
   border-top: 1px solid var(--c-line);
+}
+
+/* AI providers (features/workspace/accounts.js) */
+.ai-models {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-models__head {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.ai-models__head>.btn {
+  margin-left: auto;
+}
+
+.ai-models__title {
+  white-space: nowrap;
+}
+
+.ai-models__row {
+  --cols: 18px minmax(150px, 1fr) 120px;
+  min-height: 42px;
+  color: var(--c-ink);
+}
+
+.ai-models__row--head {
+  min-height: 28px;
+}
+
+.ai-models__row--off {
+  color: var(--c-label);
+}
+
+.ai-models__id {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ai-models__price {
+  color: var(--c-label);
+  white-space: nowrap;
 }
 
 /* Trash (Workspace -> Trash, features/workspace/trash.js): the files in the vault's trash,

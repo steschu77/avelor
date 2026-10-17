@@ -54,6 +54,11 @@
   text-overflow: ellipsis;
 }
 
+.subtitle {
+  font: 500 var(--fs-sub)/1.25 var(--f-serif);
+  color: var(--c-ink);
+}
+
 .doc-title {
   font: 500 var(--fs-doc-title)/1.25 var(--f-serif);
 }
