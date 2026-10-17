@@ -1,0 +1,13 @@
+[package]
+name = "av-llm"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+av-http = { path = "../av-http" }
+av-utils = { path = "../av-utils" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

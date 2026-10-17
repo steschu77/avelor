@@ -15,6 +15,10 @@
 - `cargo clippy --workspace`.
 - `markdown.selftest.html` for the editor's markdown: the build's copy in
   `OUT_DIR`, opened from disk (`markdown.md#testing`).
+- What every AI provider is sent (method, URL, headers, with and without
+  a key) is a golden table in `av-llm/client.rs`
+  (`requests_of_every_provider`); a change to the request builder or to
+  `ProviderSpec` keeps it, or changes it on purpose.
 - The user tests new flows by hand against `data/forged`.
 
 ## The bundled page <a id="the-bundled-page"></a>

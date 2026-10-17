@@ -51,6 +51,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "av-llm"
+version = "0.1.0"
+dependencies = [
+ "av-http",
+ "av-utils",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "av-utils"
 version = "0.1.0"
 dependencies = [
