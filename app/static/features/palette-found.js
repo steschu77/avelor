@@ -10,6 +10,7 @@ import { KEY_GROUPS } from './keys.js';
 // The commands' groups in the list's order.
 const GROUPS = [
   ['new', t('new.head')],
+  ['assistant', t('palette.assistant')],
   ['go', t('palette.name')],
   ['window', t('palette.window')],
   ['vault', t('workspace.vault')],

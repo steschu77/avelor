@@ -1,8 +1,8 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import {
-  NO_PROJECT, entities, knownThreads, matchesFilter, projectNames, projectScope, projectsFor, projectsInOrder, projectsOf,
-  threadMatchesFilter, threadMembers, threadOf, threadProjects, threads,
+  NO_PROJECT, assistantConversations, entities, knownThreads, matchesFilter, projectNames, projectScope, projectsFor,
+  projectsInOrder, projectsOf, threadMatchesFilter, threadMembers, threadOf, threadProjects, threads,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -96,4 +96,13 @@ test("the names of an entity's projects, while none is the filter", () => {
   vault(project('p'), project('q'));
   equal(projectNames({ projects: ['p', 'q', 'deleted'] }, { selected_project: null }), 'p \u00b7 q');
   equal(projectNames({ projects: ['p'] }, { selected_project: 'p' }), '');
+});
+
+test('the conversations with an AI on an entity, the newest first', () => {
+  const chat = (id, date, more = {}) => ({ id, kind: 'conversation', date, source: { ai: {} }, linked_to: 'letter', ...more });
+  vault(
+    chat('1', '2027-07-08'), chat('3', '2027-07-09'), chat('2', '2027-07-09'), chat('4', '2027-07-10', { source: { import: {} } }),
+    chat('5', '2027-07-10', { linked_to: null }),
+  );
+  equal([ids(assistantConversations('letter')), ids(assistantConversations(null))], [['3', '2', '1'], ['5']]);
 });

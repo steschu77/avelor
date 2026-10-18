@@ -1,9 +1,9 @@
 // The panel's context column, expanded (index.html, .panel__context,
-// `panel_size`): tabs about what the panel shows -- Task (features/new.js) and
-// Linked (features/linked.js). One tab shows at a time, the one picked last
-// while the app runs. A tab registers itself, in the order the strip shows
-// them, which is the order app.js imports their files in; a card's buttons
-// open them.
+// `panel_size`): tabs about what the panel shows -- Conversation
+// (features/assistant/assistant.js), Task (features/new.js) and Linked
+// (features/linked.js). One tab shows at a time, the one picked last while the
+// app runs. A tab registers itself, in the order the strip shows them, which
+// is the order app.js imports their files in; a card's buttons open them.
 
 import { $, accEl } from '../core/dom.js';
 import { t } from '../core/text.js';
@@ -46,7 +46,7 @@ export function contextTarget(state) {
 }
 
 // Show the tab `id`; `focus`: the user asked for it.
-function selectContextTab(id, focus = false) {
+export function selectContextTab(id, focus = false) {
   contextTab = id;
   for (const tab of contextTabs) {
     const shown = tab.id === id;

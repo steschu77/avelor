@@ -60,10 +60,10 @@ system's region, which the web view would take.
 The host gives the page a text as its key and what its placeholders are
 given, `{key, args}` (`texts::Text`): a notice, an error's reply (the
 host's words, or the code's own text), a job's label and its summary (a
-list of parts), and the words in its events (a trashed file that can't
-be read). An argument is a string, a number or a text itself, which the
-page writes as its locale does (`textOf`); a count's form follows the
-language's rules, a contributed language's too.
+list of parts), and the words in its events (a reply that failed, a
+trashed file that can't be read). An argument is a string, a number or a
+text itself, which the page writes as its locale does (`textOf`); a
+count's form follows the language's rules, a contributed language's too.
 
 What the host shows or writes itself it takes from the same catalogs,
 plain texts only: the failed start's box and the folder picker's title

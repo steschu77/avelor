@@ -268,8 +268,9 @@ Ctrl+Shift+P, or the Go to item under New, opens a dialog over the app that
 finds places, commands and keys by name (`features/palette.js`, the blocks
 of rows `features/palette-found.js`). With nothing typed it lists the
 commands: the actions that have a group and apply now
-(`architecture.md#actions`), under their groups: New, Go to (the lenses, the
-Workspace pages, the next and the previous area), Window, Vault and Help.
+(`architecture.md#actions`), under their groups: New, Assistant, Go to (the
+lenses, the Workspace pages, the next and the previous area), Window, Vault
+and Help.
 
 - **What is typed** is looked for in the names and in the other words one is
   found by: every word, in any order, case and accents aside (`fit`,
