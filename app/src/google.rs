@@ -4,6 +4,8 @@
 //! `google_accounts`.
 
 use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::path::PathBuf;
 
 use av_google::auth::{self, PendingConsent};
@@ -20,6 +22,10 @@ use crate::app::App;
 use crate::google_accounts::{self, Account, CalendarSource, Level};
 use crate::protocol::Req;
 use crate::sys;
+
+// ----------------------------------------------------------------------------
+/// How often an auto-sync runs (an account's mail, a calendar), in seconds.
+pub const SYNC_EVERY: i64 = 15 * 60;
 
 // ----------------------------------------------------------------------------
 /// Send `account` to the page: the `account` event.
@@ -60,6 +66,23 @@ pub fn finish_sync(app: &mut App, id: Id, record: impl FnOnce(&mut Account)) {
         Ok(_) => post(app, id),
         Err(e) => log::warn!("Saving the last sync of {id} failed: {e}"),
     }
+}
+
+// ----------------------------------------------------------------------------
+pub fn later(at: DateTime, seconds: i64) -> DateTime {
+    DateTime::from_unix_millis((at.as_unix() + seconds) * 1000)
+}
+
+// ----------------------------------------------------------------------------
+/// The first of `keys` whose auto-sync is due at `now`, by `next` (when
+/// each may run next; none: at once).
+pub fn first_due<K: Eq + Hash>(
+    keys: impl IntoIterator<Item = K>,
+    next: &HashMap<K, DateTime>,
+    now: DateTime,
+) -> Option<K> {
+    keys.into_iter()
+        .find(|key| next.get(key).is_none_or(|at| *at <= now))
 }
 
 // ----------------------------------------------------------------------------
@@ -342,5 +365,26 @@ fn revoke(cancel: &Cancel, id: Id, token: Option<String>) {
     match auth::revoke(cancel, &token) {
         Ok(()) => log::info!("Revoked the token of account {id}"),
         Err(e) => log::warn!("Revoking the token of account {id} failed: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_first_due_is_one_never_run_or_whose_time_has_come() {
+        let (a, b) = (Id::generate(), Id::generate());
+        let now = DateTime::from_unix_millis(1_790_000_000_000);
+        let mut next = HashMap::new();
+        assert_eq!(first_due([a, b], &next, now), Some(a), "never run: due");
+        next.insert(a, later(now, SYNC_EVERY));
+        assert_eq!(first_due([a, b], &next, now), Some(b));
+        next.insert(b, now);
+        assert_eq!(first_due([a, b], &next, now), Some(b), "due at its time");
+        next.insert(b, later(now, 1));
+        assert_eq!(first_due([a, b], &next, now), None);
+        assert_eq!(later(now, 60).as_unix(), now.as_unix() + 60);
     }
 }

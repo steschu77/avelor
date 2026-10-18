@@ -83,6 +83,12 @@ Every account file has:
       edited (default) or only on request
     * `last-fetch`: when the last fetch without failures started; the
       "Since last time" preset
+    * `auto-sync`: the account's mail auto-sync (`mail.md#mail-auto-sync`),
+      absent until it is first switched on: `enabled`; `filter`, its own
+      filter, apart from the one above and without dates; `since`, from when
+      mail is fetched: when it was switched on, then the start of the last
+      complete run
+
 
 ```yaml
 id: 01a0e1cc-a24c-7490-82fe-e75669985b24
@@ -105,6 +111,12 @@ google:
       after: 2026-09-20T22:00:00Z
     auto-update: true
     last-fetch: 2026-09-22T12:10:00Z
+    auto-sync:
+      enabled: true
+      filter:
+        labels: [Rechnungen]
+        from: [stadtwerke-springfield.example]
+      since: 2026-09-27T08:00:00Z
 last-sync: 2026-09-27T10:30:00Z
 ```
 
@@ -180,7 +192,8 @@ accounts with a detail pane.
   `disconnected`, so connecting the same Google account again keeps the
   account's `id` (and with it every document's `remote:` link). Removing
   a disconnected account deletes its file. The pane lists the account's
-  calendars; a checked one becomes a source.
+  calendars; a checked one becomes a source; the Mail row has its own Auto-sync check and
+  filter (`mail.md#mail-auto-sync`).
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
   and Gemini with an API key, and Ollama by its address. A key or an address
   is checked by listing the provider's models before it is stored; until

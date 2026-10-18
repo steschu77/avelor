@@ -49,7 +49,11 @@ the page, once per frame (`panel.md#host-pushes`).
 - **Sources**: "Created Here" (with a "+" that opens New); per
   connected Google account a Mail source (unless its access is off), one
   source per checked calendar. A source
-  counts and filters the entities that came through it (`sourceKeyOf`).
+  counts and filters the entities that came through it (`sourceKeyOf`);
+  its sync button syncs it: Mail
+  opens Fetch mail (`mail.md`). While auto-sync
+  is on, the sync button stays shown, pressed, in the count's place
+  (`.nav-item__action[aria-pressed]`).
 - **Workspace**: Accounts, Trash.
 
 **Labels** filter from the lens head, for every lens: after the project's

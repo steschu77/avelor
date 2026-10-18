@@ -25,7 +25,7 @@
   flex-direction: column;
 }
 
-/* the filter form, on Fetch mail */
+/* the filter form, on Fetch mail and under an account's auto-sync */
 .mail__filter {
   display: flex;
   flex-direction: column;

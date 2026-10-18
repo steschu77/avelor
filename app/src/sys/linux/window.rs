@@ -9,6 +9,9 @@ use webkit6::prelude::WebViewExt;
 use crate::config::WindowState;
 use crate::shell::{Shell, TITLE};
 
+/// The clock's period: `App::on_clock` once a minute.
+const CLOCK_SECONDS: u32 = 60;
+
 thread_local! {
     /// The shell whose queue `UiSignal::wake` runs, on the UI thread.
     static SHELL: RefCell<Weak<Shell>> = const { RefCell::new(Weak::new()) };
@@ -121,6 +124,13 @@ pub fn create(
         if window.is_active() && !loading.is_loading() {
             activating.on_activated();
         }
+    });
+
+    // The clock: what the app does on its own (mail auto-sync).
+    let ticking = Rc::clone(shell);
+    glib::timeout_add_seconds_local(CLOCK_SECONDS, move || {
+        ticking.on_clock();
+        glib::ControlFlow::Continue
     });
 
     window.present();

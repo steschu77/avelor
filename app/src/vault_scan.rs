@@ -8,12 +8,14 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use av_utils::cancel::Cancel;
+use av_utils::datetime::DateTime;
 use av_utils::id::Id;
 use av_vault::vault::{self, ScanControl, ScanEvent};
 use serde::Serialize;
 
 use crate::app::{App, Progress, Task};
 use crate::jobs::JobKind;
+use crate::mail;
 
 /// A batch holds at most this many events ...
 const BATCH_SIZE: usize = 100;
@@ -69,7 +71,6 @@ impl App {
     // ------------------------------------------------------------------------
     /// Whether the vault scan still runs: until it ends, the index doesn't
     /// know every entity.
-    #[cfg(test)]
     pub fn scanning(&self) -> bool {
         self.scan.running.is_some()
     }
@@ -178,12 +179,15 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// The scan `id` read every file.
+    /// The scan `id` read every file: the vault knows its mails now, so
+    /// the auto-syncs may run.
     fn end_scan(&mut self, id: Id) {
         if !self.scan.is_running(id) {
             return;
         }
         self.scan.running = None;
+        let now = DateTime::now();
+        mail::auto_sync(self, now);
     }
 }
 

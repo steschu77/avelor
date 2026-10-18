@@ -783,7 +783,8 @@ one. The UI thread puts each batch into the index and tells the page, so
 a file that is slow to read (a network share, an online-only file of a
 cloud folder) never blocks the window. The page gets one `entity` per
 file, as from any edit. When it ends, the log says how many files the
-scan read in how many milliseconds.
+scan read in how many milliseconds, and the auto-syncs that are due
+start.
 
 A vault scan can't be stopped; a new one replaces it (a vault switch). A
 scan is named by an id: the one replaced is aborted, and the batches and
@@ -792,7 +793,7 @@ may write a file the walk then finds too (New, a restore): `Index::apply`
 skips an entry whose id the index already has, since the app's own entry
 is the newer one. Until the scan ends (`App::scanning`), the index holds
 the files read so far: a command for an entity not read yet answers
-`not_found`.
+`not_found`, and the auto-syncs wait.
 
 A scan starts only when a vault opens, so `vault` (scanning) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:

@@ -5,7 +5,8 @@
 // address checks out. A required field (the key, Ollama's address) stays an
 // input until the host has checked it; then it shows as text with a pencil.
 // A model picker's way here is the `accounts.open` action
-// (`openAccountsPage`). The sidebar follows `accounts_rev` (app.js).
+// (`openAccountsPage`). The Mail row's auto-sync is Fetch mail's
+// (`renderMailSync`). The sidebar follows `accounts_rev` (app.js).
 
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
@@ -27,6 +28,7 @@ import { accSeg } from '../../ui/segmented.js';
 import { AI_PROVIDERS, aiHost, aiProvider, aiTitle, aiUsd } from './models.js';
 import { aiLimitReached } from './models.js';
 import { isAiAccount } from './models.js';
+import { renderMailSync } from '../import/mail.js';
 
 // The access rows shown; `tasks` stays in the account (and in every
 // reconnect request) without a row.
@@ -284,9 +286,14 @@ function renderAccessRows(account) {
     row.append(label, seg);
     rows.append(row);
 
-    // A connected account's calendars can each become a source.
+    // A connected account's mail can sync on its own
+    // (features/import/mail.js), and its calendars can each become a
+    // source.
     const granted = accounts.get(account);
     const connected = granted?.status === 'connected';
+    if (key === 'email' && connected && (granted.scope?.email ?? 'off') !== 'off') {
+      rows.append(renderMailSync(granted, scheduleRenderAccounts));
+    }
     if (key === 'calendar' && connected && granted.scope?.calendar !== 'off') {
       rows.append(renderCalendarSources(account));
     }

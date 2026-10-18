@@ -202,6 +202,18 @@
   display: none;
 }
 
+/* a source that syncs on its own (mail auto-sync): its button stays shown,
+   pressed, in the count's place */
+.nav-item__action[aria-pressed="true"] {
+  display: flex;
+  background: var(--c-paper);
+  border: 1px solid var(--c-card);
+}
+
+.nav-item:has(.nav-item__action[aria-pressed="true"]) .nav-item__count {
+  display: none;
+}
+
 /* a row's name being renamed in place: the input takes the whole row, its
    round ends concentric with the pill's like .nav-item__action */
 .nav-item__edit {

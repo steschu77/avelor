@@ -15,6 +15,7 @@ use crate::config::{ConfigStore, WindowState};
 use crate::documents::DocumentState;
 use crate::google_accounts::GoogleAccounts;
 use crate::jobs::Jobs;
+use crate::mail;
 use crate::mail::MailState;
 use crate::protocol::{self, Req};
 use crate::sys::Owner;
@@ -464,6 +465,14 @@ impl App {
             log::warn!("Could not save the settings: {e}");
             self.notice("Could not save the settings.");
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The clock ticked (the window's timer, every minute): start what the
+    /// app does on its own -- the mail auto-syncs that are due.
+    pub fn on_clock(&mut self) {
+        let now = DateTime::now();
+        mail::auto_sync(self, now);
     }
 
     // ------------------------------------------------------------------------

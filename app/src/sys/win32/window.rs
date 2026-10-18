@@ -24,6 +24,9 @@ const WM_TASK: u32 = WM_USER + 1;
 /// The app's close, once the page is ready (`UiSignal::close`).
 const WM_CLOSE_NOW: u32 = WM_USER + 2;
 const WINDOW_CLASS: PCWSTR = w!("Avelor");
+/// The clock's timer (`WM_TIMER`): `App::on_clock` once a minute.
+const TIMER_CLOCK: usize = 1;
+const CLOCK_MS: u32 = 60_000;
 
 // ----------------------------------------------------------------------------
 /// Wakes the app's queue from any thread: `WM_TASK`, posted to the main
@@ -154,6 +157,10 @@ impl WindowProc {
             SW_SHOW
         };
         let _ = unsafe { ShowWindow(hwnd, show) };
+        // The clock: what the app does on its own (mail auto-sync).
+        if unsafe { SetTimer(Some(hwnd), TIMER_CLOCK, CLOCK_MS, None) } == 0 {
+            log::warn!("Could not start the clock: auto-sync won't run");
+        }
 
         Ok(window)
     }
@@ -258,6 +265,7 @@ impl WindowProc {
             WM_ACTIVATE => self.on_activate(loword(wparam.0 as u32) != WA_INACTIVE as i32),
             WM_EXITSIZEMOVE => self.on_exit_size_move(),
             WM_TASK => self.on_task(),
+            WM_TIMER if wparam.0 == TIMER_CLOCK => self.on_clock(),
             _ => unsafe { DefWindowProcW(self.hwnd(), msg, wparam, lparam) },
         }
     }
@@ -375,6 +383,13 @@ impl WindowProc {
         if active {
             self.shell.on_activated();
         }
+        LRESULT(0)
+    }
+
+    /// The clock ticked: the app starts what is due, from the UI queue
+    /// like every other way in.
+    fn on_clock(&self) -> LRESULT {
+        self.shell.on_clock();
         LRESULT(0)
     }
 

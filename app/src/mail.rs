@@ -9,9 +9,15 @@
 //! Every mail written carries `remote: {account, remote: [{message-id},
 //! {gmail-id}]}` (vault.md#remote), which is how a later preview tells the
 //! mails already in the vault from the new ones.
+//!
+//! An account's auto-sync fetches the new mail that matches its own filter
+//! every 15 minutes, started by the clock (`App::on_clock`): a quiet search
+//! first, then -- only if there is new mail -- a fetch job like the page's.
 
+use std::collections::HashMap;
 use std::collections::{HashSet, VecDeque};
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
@@ -31,6 +37,8 @@ use serde_json::json;
 
 use crate::app::App;
 use crate::google;
+use crate::google::{SYNC_EVERY, first_due, later};
+use crate::google_accounts::AutoSync;
 use crate::google_accounts::MailSettings;
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
@@ -55,10 +63,26 @@ const FETCH_PARALLEL: usize = 4;
 
 // ----------------------------------------------------------------------------
 /// What the app keeps for the mail import: the fetch in progress (one at
-/// a time).
+/// a time), and the auto-sync's schedule.
 #[derive(Default)]
 pub struct MailState {
     fetch: Option<MailFetch>,
+    /// Per account, when its auto-sync may run next; none: at the next
+    /// chance. Cleared when a vault opens.
+    next_sync: HashMap<Id, DateTime>,
+    /// The account whose auto-sync search is in flight.
+    syncing: Option<Id>,
+    /// The accounts whose last auto-sync failed: only the first failure is
+    /// shown.
+    failing: HashSet<Id>,
+}
+
+// ----------------------------------------------------------------------------
+/// Why a fetch runs: the page's Fetch, or an account's auto-sync.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Origin {
+    Manual,
+    AutoSync,
 }
 
 // ----------------------------------------------------------------------------
@@ -76,7 +100,9 @@ struct MailFetch {
     total: usize,
     done: usize,
     counts: FetchCounts,
-    /// When the fetch started: what it fetched covers the mail up to then.
+    origin: Origin,
+    /// When the fetch (an auto-sync: its search) started: what it fetched
+    /// covers the mail up to then.
     started: DateTime,
 }
 
@@ -88,6 +114,7 @@ struct FetchPlan {
     queue: VecDeque<String>,
     skipped: usize,
     replace: HashSet<String>,
+    origin: Origin,
     started: DateTime,
 }
 
@@ -394,6 +421,7 @@ pub fn mail_fetch(app: &mut App, req: Req, request: FetchRequest) {
         queue,
         skipped,
         replace,
+        origin: Origin::Manual,
         started: DateTime::now(),
     };
     let job_id = start_fetch(app, format!("Fetching mail · {email}"), plan);
@@ -413,7 +441,10 @@ fn start_fetch(app: &mut App, label: String, plan: FetchPlan) -> Id {
     let (skipped, account) = (plan.skipped, plan.account);
     let total = plan.queue.len() + skipped;
     let job_id = app.start_job(JobKind::MailFetch, label, total);
-    log::info!("Mail fetch {job_id}: {total} mails from {account}, {skipped} in the vault already");
+    log::info!(
+        "Mail fetch {job_id} ({:?}): {total} mails from {account}, {skipped} in the vault already",
+        plan.origin
+    );
     app.mail.fetch = Some(MailFetch {
         job_id,
         account,
@@ -427,6 +458,7 @@ fn start_fetch(app: &mut App, label: String, plan: FetchPlan) -> Id {
             skipped,
             ..FetchCounts::default()
         },
+        origin: plan.origin,
         started: plan.started,
     });
     if skipped > 0 {
@@ -732,21 +764,26 @@ pub fn stop(app: &mut App) {
 
 // ----------------------------------------------------------------------------
 /// The fetch is done or stopped: finish the account's sync -- remembering
-/// when it started (the page's "Since last time") only if it fetched all
-/// and nothing failed, so the next one still covers what it didn't write --
-/// and end the job with its summary.
+/// when it started (the page's "Since last time", or where the next
+/// auto-sync starts) only if it fetched all and nothing failed, so the next
+/// one still covers what it didn't write -- and end the job with its
+/// summary.
 fn finish(app: &mut App) {
     let Some(fetch) = app.mail.fetch.take() else {
         return;
     };
     let stopped = app.job_stopping(fetch.job_id);
     let complete = fetch.counts.failed == 0 && !stopped;
-    let started = fetch.started;
+    let (started, origin) = (fetch.started, fetch.origin);
     google::finish_sync(app, fetch.account, |account| {
         let Some(mail) = account.file.google.mail.as_mut().filter(|_| complete) else {
             return;
         };
-        mail.last_fetch = Some(started);
+        match (origin, &mut mail.auto_sync) {
+            (Origin::Manual, _) => mail.last_fetch = Some(started),
+            (Origin::AutoSync, Some(sync)) => sync.since = started,
+            (Origin::AutoSync, None) => {}
+        }
     });
 
     let counts = &fetch.counts;
@@ -758,9 +795,194 @@ fn finish(app: &mut App) {
     app.end_job(fetch.job_id, &note);
 }
 
+// ----------------------------------------------------------------------------
+/// `set_mail_sync`'s args: the fields that change.
+#[derive(Deserialize)]
+pub(crate) struct SyncChange {
+    account: Id,
+    #[serde(default)]
+    enabled: Option<bool>,
+    #[serde(default)]
+    filter: Option<MailFilter>,
+}
+
+// ----------------------------------------------------------------------------
+/// `set_mail_sync {account, enabled?, filter?}`: change the
+/// account's auto-sync. Its filter drops the dates (the host sets them);
+/// switching it on starts it from now -- only mail that arrives from then on
+/// is fetched -- and switching it off keeps the filter. Answered after the
+/// `account` event.
+pub fn set_mail_sync(app: &mut App, req: Req, change: SyncChange) {
+    let now = DateTime::now();
+    let updated = app.google.update(change.account, |account| {
+        let mail = account
+            .file
+            .google
+            .mail
+            .get_or_insert_with(MailSettings::default);
+        let sync = mail.auto_sync.get_or_insert_with(|| AutoSync::new(now));
+        if let Some(filter) = change.filter {
+            sync.filter = without_dates(filter);
+        }
+        if let Some(enabled) = change.enabled {
+            if enabled && !sync.enabled {
+                sync.since = now;
+            }
+            sync.enabled = enabled;
+        }
+        true
+    });
+    match updated {
+        Ok(_) => {
+            google::post(app, change.account);
+            req.ok(());
+        }
+        Err(Error::NotFound) => req.err(Error::NotFound),
+        Err(e) => {
+            log::warn!("Could not save the account: {e}");
+            req.fail(e, "Could not save the account.");
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// `filter` without its date conditions.
+fn without_dates(mut filter: MailFilter) -> MailFilter {
+    filter.since = None;
+    filter.after = None;
+    filter.before = None;
+    filter
+}
+
+// ----------------------------------------------------------------------------
+/// The Gmail query of an auto-sync: `filter`, for the mail that arrived
+/// since `since`.
+fn sync_query(filter: &MailFilter, since: DateTime) -> String {
+    let mut filter = without_dates(filter.clone());
+    filter.after = Some(since);
+    filter.to_query()
+}
+
+// ----------------------------------------------------------------------------
+/// A vault opened: its accounts' auto-syncs are due as soon as its scan
+/// has ended.
+pub(crate) fn vault_opened(app: &mut App) {
+    app.mail.next_sync.clear();
+    app.mail.failing.clear();
+}
+
+// ----------------------------------------------------------------------------
+/// The clock ticked, or the vault scan ended (`App::on_clock`): start
+/// the auto-sync of the first account that is due -- one with auto-sync on
+/// and a connection, whose last run is 15 minutes ago -- unless the scan, a
+/// fetch or another auto-sync still runs. One run at a time; the next tick
+/// takes the next account.
+pub fn auto_sync(app: &mut App, now: DateTime) {
+    let mail = &app.mail;
+    if app.scanning() || mail.fetch.is_some() || mail.syncing.is_some() {
+        return;
+    }
+    let candidates: Vec<(Id, Arc<Client>, MailFilter, DateTime)> = app
+        .google
+        .iter()
+        .filter_map(|account| {
+            let sync = account.file.google.mail.as_ref()?.auto_sync.as_ref()?;
+            let client = account.client.clone()?;
+            sync.enabled
+                .then(|| (account.id(), client, sync.filter.clone(), sync.since))
+        })
+        .collect();
+    let ids = candidates.iter().map(|(id, ..)| *id);
+    let Some(account) = first_due(ids, &mail.next_sync, now) else {
+        return;
+    };
+    let Some((_, client, filter, since)) = candidates.into_iter().find(|(id, ..)| *id == account)
+    else {
+        return;
+    };
+
+    app.mail.next_sync.insert(account, later(now, SYNC_EVERY));
+    app.mail.syncing = Some(account);
+    let root = app.vault.root().map(Path::to_path_buf);
+    let query = sync_query(&filter, since);
+    let started = DateTime::now();
+    log::info!("Mail auto-sync of {account}: searching `{query}`");
+    app.run(
+        move |cancel| gmail::list_message_ids(&client, cancel, &query, MATCH_CAP),
+        move |app, result| {
+            let ids = result.map(|(ids, _truncated)| ids);
+            on_sync_listed(app, account, root, started, ids);
+        },
+    );
+}
+
+// ----------------------------------------------------------------------------
+/// An auto-sync's search answered: fetch the new mails as a job -- or do
+/// nothing, if there are none (no job, no write). Dropped if another vault
+/// opened or auto-sync was switched off meanwhile.
+fn on_sync_listed(
+    app: &mut App,
+    account: Id,
+    root: Option<PathBuf>,
+    started: DateTime,
+    result: Result<Vec<String>>,
+) {
+    app.mail.syncing = None;
+    let sync = app
+        .google
+        .get(account)
+        .ok()
+        .and_then(|a| a.file.google.mail.as_ref()?.auto_sync.as_ref())
+        .filter(|sync| sync.enabled);
+    if app.vault.root() != root.as_deref() || sync.is_none() {
+        return log::info!("Mail auto-sync of {account}: dropped, the vault or setting changed");
+    }
+    let ids = match result {
+        Ok(ids) => {
+            app.mail.failing.remove(&account);
+            ids
+        }
+        Err(e) => {
+            log::warn!("Mail auto-sync of {account} failed: {e}");
+            // Shown once, not every 15 minutes while offline.
+            if app.mail.failing.insert(account) {
+                let email = find_account_email(app, account);
+                app.notice(&format!("Mail auto-sync of {email} failed."));
+            }
+            return;
+        }
+    };
+    let known = app.vault.index().remote_values(Some(&account), GMAIL_ID);
+    let (queue, _) = plan_fetch(ids, &HashSet::new(), &known);
+    if queue.is_empty() {
+        return log::info!("Mail auto-sync of {account}: nothing new");
+    }
+    if app.mail.fetch.is_some() {
+        // A fetch started meanwhile: again at the next tick.
+        app.mail.next_sync.insert(account, DateTime::now());
+        return;
+    }
+    let Ok(client) = app.google.connected(account) else {
+        return;
+    };
+    let email = find_account_email(app, account);
+    let plan = FetchPlan {
+        account,
+        client,
+        queue,
+        skipped: 0,
+        replace: HashSet::new(),
+        origin: Origin::AutoSync,
+        started,
+    };
+    start_fetch(app, format!("Syncing mail · {email}"), plan);
+    pump(app);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::Harness;
     use crate::testing::{CONNECTED, DISCONNECTED, parse, shape, with_google};
     use serde_json::Value;
     use std::fs;
@@ -967,5 +1189,225 @@ Content-Type: text/html; charset=utf-8\r\n\
             "{text}"
         );
         assert_eq!(account["mail"]["auto_update"], Value::Bool(false));
+    }
+
+    // ------------------------------------------------------------------------
+    fn connected_id() -> Id {
+        Id::parse(CONNECTED).unwrap()
+    }
+
+    // ------------------------------------------------------------------------
+    /// Switch the connected account's auto-sync on, with `filter`.
+    fn switch_on(h: &mut Harness, filter: Value) {
+        let args = json!({ "account": CONNECTED, "enabled": true, "filter": filter });
+        let sent = h.call("set_mail_sync", args);
+        assert_eq!(sent.last().unwrap()["ok"], Value::Null, "{sent:?}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_auto_sync_asks_for_the_mail_since() {
+        let since = DateTime::from_unix_millis(1_790_000_000_000);
+        let filter = MailFilter {
+            labels: vec!["Umzug".into()],
+            starred: true,
+            since: Some("week".into()),
+            after: Some(DateTime::from_unix_millis(1_700_000_000_000)),
+            before: Some(DateTime::from_unix_millis(1_800_000_000_000)),
+            ..MailFilter::default()
+        };
+        let expected = MailFilter {
+            labels: vec!["Umzug".into()],
+            starred: true,
+            after: Some(since),
+            ..MailFilter::default()
+        };
+        assert_eq!(sync_query(&filter, since), expected.to_query());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn auto_sync_starts_from_now_and_switched_off_keeps_its_filter() {
+        let mut h = with_google("mail-sync-set", MAIL, &[]);
+        let before = DateTime::from_unix_millis(DateTime::now().as_unix() * 1000);
+        let filter =
+            json!({ "labels": ["Umzug"], "since": "week", "after": "2026-01-01T00:00:00Z" });
+        let args = json!({ "account": CONNECTED, "enabled": true, "filter": filter });
+        let sent = h.call("set_mail_sync", args);
+        assert_eq!(shape(&sent), ["account", "reply"]);
+        let on = sent[0]["data"]["mail"]["auto_sync"].clone();
+        assert_eq!(on["enabled"], true);
+        assert_eq!(on["filter"], json!({ "labels": ["Umzug"] }), "no dates");
+        let since = DateTime::from_iso8601(on["since"].as_str().unwrap()).unwrap();
+        assert!(since >= before, "from now: {since:?}");
+        let file = h.vault().join(".avelor/accounts/google_a.yaml");
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(
+            text.contains("auto-sync:") && text.contains("enabled: true"),
+            "{text}"
+        );
+
+        let args = json!({ "account": CONNECTED, "enabled": false });
+        let sent = h.call("set_mail_sync", args);
+        let off = &sent[0]["data"]["mail"]["auto_sync"];
+        assert_eq!(off["enabled"], false);
+        assert_eq!(
+            (&off["filter"], &off["since"]),
+            (&on["filter"], &on["since"])
+        );
+
+        let old = DateTime::from_unix_millis(1_700_000_000_000);
+        h.app
+            .google
+            .update(connected_id(), |account| {
+                let mail = account.file.google.mail.as_mut().unwrap();
+                mail.auto_sync.as_mut().unwrap().since = old;
+                true
+            })
+            .unwrap();
+        let sent = h.call(
+            "set_mail_sync",
+            json!({ "account": CONNECTED, "enabled": true }),
+        );
+        let again = &sent[0]["data"]["mail"]["auto_sync"]["since"];
+        let again = DateTime::from_iso8601(again.as_str().unwrap()).unwrap();
+        assert!(again >= before, "switched on again: from now");
+
+        let unknown = json!({ "account": Id::generate(), "enabled": true });
+        assert_eq!(
+            h.call("set_mail_sync", unknown)[0]["err"]["code"],
+            "not_found"
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn auto_sync_waits_for_its_time_a_fetch_and_the_vault_scan() {
+        let mut h = with_google("mail-sync-wait", MAIL, &[]);
+        let now = DateTime::now();
+        auto_sync(&mut h.app, now);
+        assert!(h.app.mail.syncing.is_none(), "not switched on");
+
+        switch_on(&mut h, json!({}));
+        let account = connected_id();
+        h.app.mail.next_sync.insert(account, later(now, 60));
+        auto_sync(&mut h.app, now);
+        assert!(h.app.mail.syncing.is_none(), "not due yet");
+
+        h.app.mail.next_sync.clear();
+        let client = h.app.google.connected(account).unwrap();
+        let plan = FetchPlan {
+            account,
+            client,
+            queue: VecDeque::new(),
+            skipped: 0,
+            replace: HashSet::new(),
+            origin: Origin::Manual,
+            started: now,
+        };
+        start_fetch(&mut h.app, "Fetching".into(), plan);
+        auto_sync(&mut h.app, now);
+        assert!(h.app.mail.syncing.is_none(), "a fetch runs");
+        finish(&mut h.app);
+
+        // Opening the vault again: the scan runs first.
+        let root = h.vault();
+        crate::api::switch_to(&mut h.app, root.clone());
+        assert!(h.app.scanning());
+        auto_sync(&mut h.app, now);
+        assert!(h.app.mail.syncing.is_none(), "the vault scan runs");
+        // Not due when the scan ends, so no search goes out in this test.
+        h.app.mail.next_sync.insert(account, later(now, 60));
+        h.wait_scanned();
+        assert!(!h.app.scanning() && h.app.mail.syncing.is_none());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_listing_with_nothing_new_leaves_no_trace_and_a_failure_shows_once() {
+        let known = format!(
+            "---\nid: 01a0e1cc-a24c-7490-82fe-e75669985b31\ntitle: Known\nremote:\n  account: {CONNECTED}\n  remote:\n  - gmail-id: g1\nemail: {{}}\n---\nBody\n"
+        );
+        let mut h = with_google("mail-sync-listed", MAIL, &[("Mail/known.md", known)]);
+        switch_on(&mut h, json!({}));
+        h.take();
+        let account = connected_id();
+        let root = Some(h.vault());
+        let now = DateTime::now();
+
+        on_sync_listed(
+            &mut h.app,
+            account,
+            root.clone(),
+            now,
+            Ok(vec!["g1".into()]),
+        );
+        h.run_queue();
+        assert!(h.take().is_empty(), "nothing new: no job, no write");
+        assert!(h.app.mail.fetch.is_none());
+
+        let other = Some(h.vault().with_file_name("other"));
+        on_sync_listed(&mut h.app, account, other, now, Ok(vec!["g2".into()]));
+        assert!(h.app.mail.fetch.is_none(), "another vault: dropped");
+
+        let error = || {
+            Err(Error::Network {
+                msg: "offline".into(),
+            })
+        };
+        on_sync_listed(&mut h.app, account, root.clone(), now, error());
+        on_sync_listed(&mut h.app, account, root.clone(), now, error());
+        let sent = parse(&h.take());
+        assert_eq!(shape(&sent), ["notice"], "shown once: {sent:?}");
+
+        let client = h.app.google.connected(account).unwrap();
+        let plan = FetchPlan {
+            account,
+            client,
+            queue: VecDeque::new(),
+            skipped: 0,
+            replace: HashSet::new(),
+            origin: Origin::Manual,
+            started: now,
+        };
+        let manual = start_fetch(&mut h.app, "Fetching".into(), plan);
+        on_sync_listed(&mut h.app, account, root, now, Ok(vec!["g2".into()]));
+        let fetch = h.app.mail.fetch.as_ref().unwrap();
+        assert_eq!(fetch.job_id, manual, "the manual fetch goes on");
+        let next = h.app.mail.next_sync[&account];
+        assert!(next <= DateTime::now(), "again at the next tick");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_complete_auto_sync_moves_its_start_on() {
+        let mut h = with_google("mail-sync-finish", MAIL, &[]);
+        switch_on(&mut h, json!({ "starred": true }));
+        h.take();
+        let account = connected_id();
+        let started = DateTime::from_unix_millis(1_790_000_000_000);
+        let client = h.app.google.connected(account).unwrap();
+        let plan = FetchPlan {
+            account,
+            client,
+            queue: VecDeque::new(),
+            skipped: 0,
+            replace: HashSet::new(),
+            origin: Origin::AutoSync,
+            started,
+        };
+        start_fetch(&mut h.app, "Syncing mail".into(), plan);
+        finish(&mut h.app);
+        h.run_queue();
+        let sent = parse(&h.take());
+        assert_eq!(shape(&sent), ["job", "account", "job"], "{sent:?}");
+        let account = &sent[1]["data"];
+        assert_eq!(account["mail"]["auto_sync"]["since"], started.as_iso8601());
+        assert_eq!(
+            account["mail"]["last_fetch"],
+            Value::Null,
+            "the page's stays"
+        );
+        assert!(account["last_sync"].is_string());
     }
 }

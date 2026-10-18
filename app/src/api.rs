@@ -8,6 +8,7 @@ use crate::accounts;
 use crate::app::App;
 use crate::app::Prefs;
 use crate::documents;
+use crate::mail;
 use crate::protocol::Req;
 use crate::sys;
 use crate::vault_settings;
@@ -75,6 +76,7 @@ pub(crate) fn open_vault(app: &mut App, root: &Path) {
     app.vault.begin_open(root);
     accounts::open(app, root);
     vault_settings::open(app, root);
+    mail::vault_opened(app);
     app.run_scan(root.to_path_buf());
 }
 

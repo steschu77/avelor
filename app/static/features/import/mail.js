@@ -1,8 +1,9 @@
 // Fetch mail (mail.md#fetch-mail, `mail_*`): the email import of a Google
 // account, opened from the sync button of its Mail source (`syncSource`,
 // features/sidebar.js) and rendered into the expanded vault area while its op
-// is "mail". On the page, Esc closes it and Ctrl+Enter fetches
-// (`registerVaultPage`).
+// is "mail". Also the account's auto-sync under the Mail row of its pane
+// (called by features/workspace/accounts.js), with the same filter form. On
+// the page, Esc closes it and Ctrl+Enter fetches (`registerVaultPage`).
 //
 // The filter form is built once per opening and never re-rendered on Fetch
 // mail, so its inputs keep focus while typing; only its chips and the matches
@@ -16,6 +17,7 @@ import { rpcCall, rpcOn } from '../../core/rpc.js';
 import {
   isoInstant, localDay, plural, shortMonthDate,
 } from '../../core/format.js';
+import { pageDate } from '../../core/format.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
@@ -81,7 +83,7 @@ export function openMailFetch(account_id) {
   // The filter form edits `mail.filter` and `mail.custom` in place.
   mail.form = {
     account: account_id, filter: mail.filter, custom: mail.custom, text: {},
-    focusKey: 'mail', onChange: mailFilterChanged, els: {},
+    withDate: true, focusKey: 'mail', onChange: mailFilterChanged, els: {},
   };
   mailLabelCache.delete(account_id); // its labels as they are now
   mailLabels(account_id);
@@ -394,12 +396,12 @@ function renderMailSubtitle() {
 }
 
 // ----------------------------------------------------------------------------
-// the filter form, of Fetch mail
+// the filter form, of Fetch mail and of an account's auto-sync
 //
 // `form`: { account (whose labels the "+" menu offers), filter (edited in
 // place), custom ({ from, to } of a custom date range), text (the text
 // inputs as typed, by key, so a rebuilt form shows them as they were),
-// focusKey (prefix of the inputs'
+// withDate (the Date row), focusKey (prefix of the inputs'
 // data-focus-key), onChange (called after every edit), els (filled in
 // here) }. The rows' chips and the date re-render in place, so the inputs
 // keep focus while typing.
@@ -449,7 +451,7 @@ function renderMailFilterForm(form) {
   textRow('to', 'To', 'anyone', true);
   textRow('words', 'Words', 'in subject or body', false);
 
-  els.date = row('Date', accEl('div', 'form-field form-field--wrap'));
+  if (form.withDate) els.date = row('Date', accEl('div', 'form-field form-field--wrap'));
   box.append(rows);
 
   renderMailLabels(form);
@@ -501,9 +503,11 @@ function renderMailLabels(form) {
   }
 }
 
-// The date preset menu, and the range inputs of a custom range.
+// The date preset menu, and the range inputs of a custom range; nothing
+// without the Date row.
 function renderMailDate(form) {
   const field = form.els.date;
+  if (!field) return;
   field.replaceChildren();
   const hint = key => {
     const [after] = key === 'custom' ? [] : mailDateBounds(key, form.account, form.custom);
@@ -551,6 +555,88 @@ function renderMailDate(form) {
     range.append(accEl('span', 'meta', 'both optional'));
     field.append(range);
   }
+}
+
+// ----------------------------------------------------------------------------
+// auto-sync (mail.md#mail-auto-sync): an account's own filter, apart from
+// the one Fetch mail remembers, set up under the Mail row of its pane
+// (features/workspace/accounts.js) with the form above; the host fetches what is new every 15
+// minutes (`set_mail_sync`)
+
+const mailSyncForms = new Map(); // account id -> the form of its auto-sync filter
+
+// A vault opened: its accounts' forms start from what they keep.
+rpcOn('accounts', () => mailSyncForms.clear());
+
+// The Mail row's auto-sync: a check, and while it is on, the filter form of
+// what it fetches; `rerender`: the Accounts page's scheduler, for a
+// refused change's note (`mailSetSync`).
+export function renderMailSync(account, rerender) {
+  const sync = account.mail?.auto_sync;
+  const on = !!sync?.enabled;
+  const form = mailSyncForm(account);
+  form.rerender = rerender;
+  const box = accEl('div', 'accounts__sub');
+  const head = accEl('div', 'accounts__sync');
+  const check = accEl('button', 'check', on ? '\u2713' : '');
+  check.type = 'button';
+  check.setAttribute('aria-pressed', String(on));
+  check.title = on ? 'Stop the auto-sync' : 'Fetch new mail on its own';
+  check.addEventListener('click', () => mailSetSync(account.id, { enabled: !on }));
+  head.append(check, accEl('span', 'subtitle', 'Auto-sync'), accEl('span', 'note', on
+    ? `New mail that matches the filter below, every 15 minutes, since ${pageDate(sync.since, true)}.`
+    : 'Fetch new mail that matches a filter every 15 minutes.'));
+  box.append(head);
+  if (on) {
+    box.append(renderMailFilterForm(form));
+  }
+  if (form.error) box.append(accEl('div', 'error-note', form.error));
+  return box;
+}
+
+// The form of `account`'s auto-sync filter: made once from the filter it
+// keeps, then edited here, so a re-render of the pane keeps what is typed.
+// An edit is saved once typing pauses.
+function mailSyncForm(account) {
+  let form = mailSyncForms.get(account.id);
+  if (form) return form;
+  const saved = account.mail?.auto_sync?.filter ?? {};
+  form = {
+    account: account.id,
+    filter: { labels: [], from: [], to: [], words: '', ...structuredClone(saved) },
+    custom: { from: '', to: '' },
+    text: {},
+    withDate: false,
+    focusKey: `mail-sync-${account.id}`,
+    timer: null,
+    error: null,
+    els: {},
+  };
+  form.onChange = () => {
+    clearTimeout(form.timer);
+    form.timer = setTimeout(() => {
+      form.timer = null;
+      mailSetSync(form.account, { filter: form.filter });
+    }, MAIL_DEBOUNCE_MS);
+  };
+  mailSyncForms.set(account.id, form);
+  mailLabels(account.id); // for the "+" menu
+  return form;
+}
+
+// Change `account`'s auto-sync; the `account` event shows it, a refusal
+// shows under it.
+function mailSetSync(account, change) {
+  const form = mailSyncForms.get(account);
+  rpcCall('set_mail_sync', { account, ...change }).then(() => {
+    if (form?.error) {
+      form.error = null;
+      form.rerender();
+    }
+  }, e => {
+    if (form) form.error = e.message;
+    form?.rerender();
+  });
 }
 
 // ----------------------------------------------------------------------------
