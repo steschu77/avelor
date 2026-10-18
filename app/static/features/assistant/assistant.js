@@ -334,7 +334,8 @@ function assistantSaveReply(node) {
 // The title of a document made of `markdown`: its first line that gives
 // one, by the host's rule for a chat's title (`markdown::plain_title`) --
 // without its block marker and inline marks, cut at a word to at most 80
-// characters and an ellipsis. '' if no line gives one.
+// characters and an ellipsis (as long as a scanned document's). '' if no
+// line gives one.
 function assistantTitleOf(markdown, max = 80) {
   for (const raw of markdown.split('\n')) {
     const line = raw.trim().replace(/^[#>*+\- ]+/, '').replace(/^\d+\. /, '').replace(/[*_`]/g, '').trim();

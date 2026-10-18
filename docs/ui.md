@@ -266,7 +266,8 @@ What a key, a menu or a button starts is a registered action
 
 - **Esc** closes an open menu, else the page in the expanded vault area
   (Fetch mail, Import scans, New); in an editor it leaves edit mode.
-- **Ctrl+Enter** runs the open page's main action (Fetch, Create).
+- **Ctrl+Enter** runs the open page's main action (Fetch, Import all,
+  Create).
 - **Ctrl+N** opens New.
 - A key the editor already handled (Ctrl+I as italic) is left alone.
 

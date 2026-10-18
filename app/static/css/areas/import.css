@@ -1,6 +1,8 @@
 /* The import pages (features/import/): Import scans and Fetch mail. */
 
-/* Import scans (the Import button, features/import/scans.js): the files */
+/* Import scans (the Import button, features/import/scans.js): the
+   files not read yet, then the documents ready for import, their pages
+   arranged by drag and drop */
 .scans__where {
   color: var(--c-label);
 }
@@ -84,17 +86,160 @@
   text-overflow: ellipsis;
 }
 
-/* A page's preview: striped until its image came */
+.import__docs {
+  display: flex;
+  flex-direction: column;
+}
+
+.import__doc {
+  --cols: 14px minmax(0, 1fr);
+  gap: 0 14px;
+  align-items: start;
+  padding: 14px 0;
+}
+
+.import__doc>.check {
+  margin-top: 6px;
+}
+
+.import__doc-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* dropping a page on a document's head appends it there */
+.import__doc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+}
+
+.import__doc-head.is-drop-target {
+  box-shadow: inset 0 0 0 1px var(--c-accent);
+}
+
+.import__doc-title {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* the title, editable in place: a box only while hovered or edited */
+.import__title {
+  display: block;
+  width: calc(100% + 10px);
+  margin: 0 -5px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  background: none;
+  font: 400 var(--fs-sub)/1.25 var(--f-serif);
+  color: var(--c-ink);
+  text-overflow: ellipsis;
+}
+
+.import__title:hover {
+  border-color: var(--c-line);
+}
+
+.import__title:focus {
+  border-color: var(--c-ink);
+  background: var(--c-card);
+  outline: none;
+}
+
+.import__acts {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+
+.import__acts .icon {
+  width: var(--fs-ui);
+  height: var(--fs-ui);
+}
+
+/* the pages, framed; each row closes the frame below it */
+/* a document's page strip beside its page rows */
+.import__doc-body {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.import__pages {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-line);
+  border-bottom: none;
+  background: var(--c-card);
+}
+
+.import__page {
+  --cols: 18px minmax(0, 1fr) minmax(0, 150px) var(--h-control-sm) var(--h-control-sm);
+  min-height: 28px;
+  padding: 0 3px 0 8px;
+  cursor: grab;
+}
+
+.import__page:hover {
+  background: var(--c-hover);
+}
+
+.import__page[aria-current="true"] {
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+/* a page dropped here goes before it */
+.import__page.is-drop-target {
+  box-shadow: inset 0 2px 0 var(--c-accent);
+}
+
+.import__page.is-dragged {
+  opacity: .5;
+}
+
+.import__page-no {
+  color: var(--c-label);
+  text-align: right;
+}
+
+.import__page>.meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A page's preview: striped until its image came; the current page's is
+   ringed in the accent */
 .scan-preview {
+  position: relative;
   flex: none;
   display: block;
+  width: var(--w-preview);
+  height: var(--h-preview);
+  padding: 0;
   border: 1px solid var(--c-line);
   background: repeating-linear-gradient(135deg, var(--c-hover) 0 3px, transparent 3px 6px), var(--c-card);
+  cursor: pointer;
 }
 
 .scan-preview--large {
   width: var(--w-preview-lg);
   height: var(--h-preview-lg);
+  cursor: default;
+}
+
+.scan-preview[aria-current="true"] {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px var(--c-accent);
 }
 
 .scan-preview__img {
@@ -105,7 +250,40 @@
   background: var(--c-card);
 }
 
-/* narrow: the large preview over the files */
+/* the page number, on the thumbnail's corner */
+.scan-preview__no {
+  position: absolute;
+  left: -1px;
+  bottom: -1px;
+  padding: 1px 4px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  font: 400 var(--fs-meta)/1.3 var(--f-mono);
+  color: var(--c-ink-mute);
+}
+
+/* three thumbnails, and arrows to the others */
+.scan-strip {
+  flex: none;
+  width: calc(3 * var(--w-preview) + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scan-strip__pages {
+  display: flex;
+  gap: 4px;
+}
+
+.scan-strip__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+/* narrow: the large preview over the files, the strip over the rows */
 @container (max-width: 560px) {
   .scans__unread {
     grid-template-columns: minmax(0, 1fr);
@@ -114,6 +292,32 @@
   .scans__preview {
     order: -1;
   }
+}
+
+@container (max-width: 640px) {
+  .import__doc-body {
+    flex-direction: column;
+  }
+}
+
+/* shown while a page is dragged: a drop makes it a document of its own */
+.scans__newdoc {
+  display: none;
+  margin: 6px 0 2px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--c-line);
+}
+
+.import__docs.is-dragging .scans__newdoc {
+  display: flex;
+}
+
+.scans__newdoc.is-drop-target {
+  border: 1px solid var(--c-accent);
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
 }
 
 /* Fetch mail (sync button of a Mail source, features/import/mail.js): the filter form, then

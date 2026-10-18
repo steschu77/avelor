@@ -8,6 +8,19 @@
 
 A folder watch names a folder on this PC, the files to take from it
 (patterns, subfolders) and how to read them (its type).
+Importing turns those files into vault entities:
+
+1. **List**: the files in the folder that match the watch, with what is
+   known about each (date, size), and whether it is already in the vault.
+2. **Read**: turn each file into text. Images need OCR.
+3. **Arrange**: group the read files into documents (several scanned pages
+   are one letter), order their pages, and give each a title.
+4. **Import**: write the documents into the vault, each with a source block
+   naming the watch and its files, so a later listing knows them.
+
+Nothing is imported without the user pressing Import; reading may cost money
+(an AI provider) or time (a local model), so it only runs on the files the
+user chose.
 
 ## Folder watches <a id="folder-watches"></a>
 
@@ -94,8 +107,11 @@ The Import button of an images watch opens Import scans
   the vault and says when the folder was listed; the folder can be listed
   again.
 - **Previews**: the selected file of "Files in folder" (a click on its row
-  selects it; the first one at first) is shown large beside the list. A
-  double-click on a preview opens the file
+  selects it; the first one at first) is shown large beside the list, and
+  each document in "Ready for import" has a strip of its pages' thumbnails
+  (three at a time, with arrows to the others) beside its page rows. A
+  click on a thumbnail or a page row makes that page the document's
+  current one, marked in both. A double-click on a preview opens the file
   in its default app (the image viewer). Previews are upright by the
   image's EXIF orientation; a file Windows (on Linux gdk-pixbuf) can't
   decode keeps a striped box ("no preview").
@@ -107,10 +123,30 @@ The Import button of an images watch opens Import scans
   each file as queued, then the words read so far. A file that fails shows
   why, and can be read again. Only JPEG, PNG, GIF and WebP images are read.
   What a file read to is kept while the app runs, as long as the file
-  doesn't change.
+  doesn't change; reading it again replaces it.
+- **Ready for import** groups the read pages into documents: with the
+  watch's Collect "taken within 2 min", a page joins the document with a
+  page taken within two minutes of it, in the order they were taken; with
+  "one per image", every page is a document of its own. Documents go by
+  their first page. The user arranges them: drag a page before another
+  one, onto a document's head (to its end), or onto "Drop here to make it a
+  document of its own"; the arrows move a document's first page to the
+  document before, its last page to the document after; Split makes a
+  document of every page. Each document's title is proposed from its first
+  page's text (its first heading, else its first line), and can be edited.
+  Read reads a document's pages again.
+- **Import** (per document, or Import all for the ticked ones, also
+  Ctrl+Enter) writes each document to `Scans/` in the vault: a `document`
+  whose text is its pages' text in order, a blank line between them, dated
+  by its first page, with the source `scan: { watch, origin: [files] }`; an
+  empty title takes the first page's, else the first file's name. A
+  document whose pages aren't read (or changed since), are no longer in the
+  folder or are in the vault already, isn't written and shows why.
+  Imported documents leave the page; their files count as in the vault
+  from then on.
 
 Escape closes the page; opening it again for the same watch lists the
-folder again.
+folder again and keeps the documents as arranged.
 
 ## Flows
 
@@ -120,8 +156,10 @@ folder again.
 | J2 | Edit | name, folder, subfolders, patterns, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
 | J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |
 | K1 | Open Import scans | the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files, job}`; `scan_previews` → `scan_preview` per file | file list, large preview |
-| K2 | Read (OCR) | per file or Read all → `scanRead` | `scan_read {watch, files}` → the host checks the watch's OCR model → `ok {job}`; one file after another on workers → `scan_page` queued / reading (words) / read (words, title) / failed; job events; `account` | text per page |
+| K2 | Read (OCR) | per file or Read all → `scanRead` | `scan_read {watch, files, again}` → the host checks the watch's OCR model → `ok {job}`; one file after another on workers → `scan_page` queued / reading (words) / read (words, title) / failed; job events; `account` | text per page |
 | K3 | Stop reading | Stop (or the job card's Stop) | `cancel_job {id: job}` → remaining pages `stopped`, job ends | — |
+| K4 | Arrange | drag pages, merge with previous/next, split, edit titles, tick | page only (`scanPlace`, `features/import/scans.js`) | documents as arranged |
+| K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}` | documents in `Scans/` |
 | K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
 
 ## Design <a id="design"></a>
@@ -136,7 +174,7 @@ folder again.
   `sys/linux/images.rs`): decoded, turned upright by its EXIF orientation,
   scaled down to fit 360 x 508 (twice the large preview, sharp on a high-DPI
   screen), encoded as JPEG (about 80 KB for a scanned page) and sent as a
-  `data:` URL. Previews are made on a
+  `data:` URL. One preview serves both sizes. Previews are made on a
   worker, the file shown large first, and kept per file while it doesn't
   change (size and modified time), like the read text; a newer request
   stops what is left of the one before. The page keeps one `<img>` per
@@ -150,3 +188,8 @@ folder again.
   context of 16,384 tokens (`ai::CONTEXT_TOKENS`, shared with the mail
   analysis, so the model isn't loaded anew between them): a scanned page
   alone came to 4,118 tokens, which its default of 4,096 refuses.
+- **Importing**: `scans::gather_pages` gathers the pages (the plan), and
+  `scans::scan_document` turns pages into a document — a pure function
+  with tests — written through the vault edit. The import has no run step:
+  its pages are read (OCR) before the import, which leaves nothing for a
+  worker to do. The import stays on the UI thread.

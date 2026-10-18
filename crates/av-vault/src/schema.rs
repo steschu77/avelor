@@ -50,6 +50,8 @@ pub mod layout {
     pub const CALENDAR: &str = "Calendar";
     /// Conversations with the assistant.
     pub const CONVERSATIONS: &str = "Conversations";
+    /// Documents imported from a folder watch's scans.
+    pub const SCANS: &str = "Scans";
     /// Deleted entities, kept at their vault-relative path; the scan skips
     /// it like every dot-folder.
     pub const TRASH: &str = ".trash";

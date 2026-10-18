@@ -1,10 +1,13 @@
 //! Import scans (import.md#import-scans): the files of an images folder watch,
-//! read by an AI account's OCR model.
+//! read by an AI account's OCR model and imported as documents into `Scans/`.
 //!
 //! The page lists the files, has the ticked ones read (a job reading one file
-//! after the other, which `cancel_job` stops); the commands of the typed
-//! protocol (api.md#scans). What a file read to is kept in memory while the
-//! app runs.
+//! after the other, which `cancel_job` stops), arranges the pages into
+//! documents and imports them; the commands of the typed protocol
+//! (api.md#scans). What a file read to is kept in memory while the app runs.
+//! Every document written carries `scan: {watch, origin: [files]}`, which is
+//! how a later listing tells the files already in the vault
+//! (`Index::scan_origins`).
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
@@ -21,6 +24,10 @@ use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::id::Id;
+use av_vault::document::{Document, FileFormat};
+use av_vault::envelope::{Document as DocumentRole, Roles, Scan, Source};
+use av_vault::schema::layout;
+use av_vault::shared::OneOrMany;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
@@ -46,7 +53,7 @@ page in the image as Markdown: keep its headings, paragraphs, lists and tables, 
 in reading order. Write only the page's text: no comments, no code fence.";
 const OCR_REQUEST: &str = "Transcribe this page.";
 /// The previews' size: twice the page's large preview (180 x 254), so they
-/// stay sharp on a high-DPI screen.
+/// stay sharp on a high-DPI screen; thumbnails show them smaller.
 const PREVIEW_W: u32 = 360;
 const PREVIEW_H: u32 = 508;
 
@@ -129,10 +136,11 @@ impl Stamp {
 }
 
 // ----------------------------------------------------------------------------
-/// What a file read to.
+/// A file's text, as the OCR model read it.
 struct Ocr {
     /// The file as it was read.
     stamp: Stamp,
+    text: String,
     words: usize,
     title: String,
 }
@@ -255,6 +263,9 @@ struct PageEvent<'a> {
 pub(crate) struct ReadRequest {
     watch: Id,
     files: Vec<String>,
+    /// Read files that were read before too.
+    #[serde(default)]
+    again: bool,
 }
 
 // ----------------------------------------------------------------------------
@@ -271,6 +282,42 @@ pub(crate) struct PreviewRequest {
 pub(crate) struct OpenRequest {
     watch: Id,
     file: String,
+}
+
+// ----------------------------------------------------------------------------
+/// `scan_import`'s args: the documents, each its pages in order.
+#[derive(Deserialize)]
+pub(crate) struct ImportRequest {
+    watch: Id,
+    docs: Vec<NewDocument>,
+}
+
+#[derive(Deserialize)]
+struct NewDocument {
+    /// Empty: the first page's proposed title.
+    #[serde(default)]
+    title: String,
+    files: Vec<String>,
+}
+
+// ----------------------------------------------------------------------------
+/// `scan_import`'s answer.
+#[derive(Default, Serialize)]
+struct ImportReply<'a> {
+    imported: Vec<Imported<'a>>,
+    failed: Vec<NotImported<'a>>,
+}
+
+#[derive(Serialize)]
+struct Imported<'a> {
+    files: &'a [String],
+    id: Id,
+}
+
+#[derive(Serialize)]
+struct NotImported<'a> {
+    files: &'a [String],
+    error: String,
 }
 
 // ----------------------------------------------------------------------------
@@ -355,10 +402,10 @@ fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> 
 }
 
 // ----------------------------------------------------------------------------
-/// `scan_read {watch, files}`: read the files with the model the
+/// `scan_read {watch, files, again?}`: read the files with the model the
 /// watch picked for OCR (`AiAccounts::choose`), as a job: a `scan_page` event per
 /// file as it is queued, read and done. Files read before (and unchanged)
-/// are answered at once. One read at a time: a request for
+/// are answered at once, unless `again`. One read at a time: a request for
 /// the watch being read adds to it. Answers `{job}`, the read of this watch
 /// (null if there is none: every file was read before). Before each file
 /// the account's spend limit is checked; reached, the read stops.
@@ -395,7 +442,7 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         let file = FolderFile::read(&root, &name).ok();
         let cached = file.as_ref().and_then(|f| app.scans.cached(f));
         match cached {
-            Some(ocr) => {
+            Some(ocr) if !request.again => {
                 let (words, title) = (ocr.words, ocr.title.as_str());
                 post_page(app, watch, &name, &PageStatus::Read { words, title });
             }
@@ -588,6 +635,7 @@ fn page_of(file: FolderFile, response: ChatResponse) -> Result<(PathBuf, Ocr), S
         stamp: Stamp::of(&file),
         words: word_count(&text),
         title: title_of(&text),
+        text,
     };
     Ok((file.path, ocr))
 }
@@ -647,6 +695,131 @@ fn finish(app: &mut App) {
     log::info!("Scan read {}: {note}", read.job);
     app.end_job(read.job, &note);
     ai::account_used(app, read.account);
+}
+
+// ----------------------------------------------------------------------------
+/// `scan_import {watch, docs}`: import each document into `Scans/` from its
+/// pages' text (`scan_document`). Answers `{imported, failed}` after an
+/// `entity` event per document written.
+pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
+    let (watch, root) = match app.watches.get(request.watch) {
+        Ok(watch) => (watch.id(), watch.settings().root()),
+        Err(e) => return req.err(e),
+    };
+    let mut reply = ImportReply::default();
+    for doc in &request.docs {
+        match write_document(app, watch, &root, doc) {
+            Ok(id) => reply.imported.push(Imported {
+                files: &doc.files,
+                id,
+            }),
+            Err(error) => {
+                log::info!("Scan import: {:?} not imported: {error}", doc.files);
+                reply.failed.push(NotImported {
+                    files: &doc.files,
+                    error,
+                });
+            }
+        }
+    }
+    let (imported, not) = (reply.imported.len(), reply.failed.len());
+    log::info!("Scan import of {watch}: {imported} imported, {not} failed");
+    req.ok(reply);
+}
+
+// ----------------------------------------------------------------------------
+/// Write the document of `doc`'s pages; or say why not.
+fn write_document(app: &mut App, watch: Id, root: &Path, doc: &NewDocument) -> Result<Id, String> {
+    let document = {
+        let pages = gather_pages(app, watch, root, doc)?;
+        scan_document(watch, &doc.title, &pages)
+    };
+    let folder = Path::new(layout::SCANS);
+    app.edit(|index, changes| index.create(document, folder, changes))
+        .map_err(|e| {
+            log::warn!("Scan import: could not write the document: {e}");
+            "Could not write the document.".to_string()
+        })
+}
+
+// ----------------------------------------------------------------------------
+/// A page of a document to import: its file, read.
+struct ScanPage<'a> {
+    /// The file, relative to the watch's folder.
+    file: &'a str,
+    /// When the file was made (`FolderFile::taken`).
+    taken: DateTime,
+    text: &'a str,
+    /// The title proposed from its text.
+    title: &'a str,
+}
+
+// ----------------------------------------------------------------------------
+/// The pages of `doc`: each not in the vault yet, still in the folder, and
+/// read as it is now; or why the document can't be imported.
+fn gather_pages<'a>(
+    app: &'a App,
+    watch: Id,
+    root: &Path,
+    doc: &'a NewDocument,
+) -> Result<Vec<ScanPage<'a>>, String> {
+    if doc.files.is_empty() {
+        return Err("A document needs a page.".to_string());
+    }
+    let imported = app.vault.index().scan_origins(&watch);
+    let page = |name: &'a String| {
+        if imported.contains_key(name) {
+            return Err(format!("{name} is in the vault already."));
+        }
+        let file = FolderFile::read(root, name)
+            .map_err(|_| format!("{name} is no longer in the folder."))?;
+        let Some(ocr) = app.scans.cached(&file) else {
+            return Err(format!(
+                "{name} isn't read, or changed since; read it again."
+            ));
+        };
+        Ok(ScanPage {
+            file: name,
+            taken: file.taken,
+            text: &ocr.text,
+            title: &ocr.title,
+        })
+    };
+    doc.files.iter().map(page).collect()
+}
+
+// ----------------------------------------------------------------------------
+/// The document of `pages`, in order, imported from the watch `watch`:
+/// titled `title`, else as its first page proposes, else after its first
+/// file; dated by its first page; its text the pages' text, a blank line
+/// between them; its source `scan: {watch, origin: [files]}`.
+fn scan_document(watch: Id, title: &str, pages: &[ScanPage]) -> Document {
+    let first = pages.first();
+    let stem = first
+        .and_then(|page| Path::new(page.file).file_stem())
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let title = [title.trim(), first.map_or("", |page| page.title)]
+        .into_iter()
+        .find(|title| !title.is_empty())
+        .map_or(stem, str::to_string);
+
+    let roles = Roles {
+        document: Some(DocumentRole::default()),
+        ..Default::default()
+    };
+    let files = pages.iter().map(|page| page.file.to_string()).collect();
+    let source = Source::Scan(Scan {
+        watch: Some(watch),
+        origin: OneOrMany::from_vec(files),
+    });
+    let mut document = Document::create(roles, source, title, Vec::new(), FileFormat::Markdown);
+    if let Some(first) = first {
+        document.set_date(first.taken);
+    }
+    let texts: Vec<&str> = pages.iter().map(|page| page.text).collect();
+    document.set_content(format!("{}\n", texts.join("\n\n")));
+    document
 }
 
 // ----------------------------------------------------------------------------
@@ -823,6 +996,7 @@ mod tests {
     use serde_json::Value;
     use std::fs;
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     const WATCH_ID: &str = "01a0e1cc-a24c-7490-82fe-e75669985b40";
     const IMPORTED_ID: &str = "01a0e1cc-a24c-7490-82fe-e75669985b41";
@@ -876,8 +1050,106 @@ mod tests {
             stamp: Stamp::of(&file),
             words: word_count(text),
             title: title_of(text),
+            text: text.to_string(),
         };
         h.app.scans.cache.insert(file.path, ocr);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn pages_become_one_document() {
+        let watch = Id::generate();
+        let first =
+            DateTime::from_system_time(SystemTime::UNIX_EPOCH + Duration::from_secs(1 << 30));
+        let later =
+            DateTime::from_system_time(SystemTime::UNIX_EPOCH + Duration::from_secs(1 << 31));
+        let sub = Path::new("2026")
+            .join("scan_0806.jpg")
+            .to_string_lossy()
+            .into_owned();
+        let page = |title| ScanPage {
+            file: &sub,
+            taken: first,
+            text: "# Bill",
+            title,
+        };
+        let second = ScanPage {
+            file: "scan_0807.jpg",
+            taken: later,
+            text: "Page two",
+            title: "Page two",
+        };
+        let pages = [page("Bill"), second];
+
+        let doc = scan_document(watch, "  ", &pages);
+        assert_eq!(doc.title(), "Bill", "the first page's title");
+        assert_eq!(doc.date(), Some(first));
+        assert_eq!(doc.content(), "# Bill\n\nPage two\n");
+        assert!(doc.roles().document.is_some());
+        let Some(Source::Scan(scan)) = doc.source() else {
+            panic!("{:?}", doc.source());
+        };
+        assert_eq!(scan.watch, Some(watch));
+        assert_eq!(
+            scan.origin.as_slice(),
+            [sub.clone(), "scan_0807.jpg".into()]
+        );
+
+        let doc = scan_document(watch, " Taxes ", &pages);
+        assert_eq!(doc.title(), "Taxes", "the title given, trimmed");
+        let doc = scan_document(watch, "", &[page("")]);
+        assert_eq!(doc.title(), "scan_0806", "the first file's name");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn import_writes_read_pages_and_says_why_not_the_others() {
+        let (mut h, folder) = with_scans("scan-import");
+        read_page(&mut h, &folder, "a.jpg", "# Bill 4711\n\nPay now.");
+        read_page(&mut h, &folder, "c.jpg", "# Old");
+        let docs = json!([
+            { "title": "", "files": ["a.jpg"] },
+            { "title": "B", "files": ["b.jpg"] },
+            { "files": ["c.jpg"] },
+            { "files": [] },
+        ]);
+        let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        let entity = &sent[0]["data"];
+        assert_eq!(entity["title"], "Bill 4711");
+        let reply = &sent[1]["ok"];
+        assert_eq!(
+            reply["imported"],
+            json!([{ "files": ["a.jpg"], "id": entity["id"] }])
+        );
+        let failed: Vec<&str> = reply["failed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["error"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            failed,
+            [
+                "b.jpg isn't read, or changed since; read it again.",
+                "c.jpg is in the vault already.",
+                "A document needs a page.",
+            ]
+        );
+        let path = h.vault().join(entity["path"].as_str().unwrap());
+        let text = fs::read_to_string(path).unwrap();
+        assert!(
+            text.contains(&format!("watch: {WATCH_ID}")) && text.contains("origin: a.jpg"),
+            "{text}"
+        );
+        assert!(text.ends_with("# Bill 4711\n\nPay now.\n"), "{text}");
+
+        let again = json!({ "watch": WATCH_ID, "docs": [{ "files": ["a.jpg"] }] });
+        let sent = h.call("scan_import", again);
+        assert_eq!(
+            sent[0]["ok"]["failed"][0]["error"],
+            "a.jpg is in the vault already."
+        );
     }
 
     // ------------------------------------------------------------------------
@@ -958,6 +1230,7 @@ mod tests {
             ("scan_read", json!({ "watch": unknown, "files": [] })),
             ("scan_previews", json!({ "watch": unknown, "files": [] })),
             ("scan_open", json!({ "watch": unknown, "file": "a.jpg" })),
+            ("scan_import", json!({ "watch": unknown, "docs": [] })),
         ];
         for (cmd, args) in requests {
             let sent = h.call(cmd, args);

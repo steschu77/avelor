@@ -729,6 +729,7 @@ Vault/
   Calendar/            # *.yaml calendar descriptors + subfolders of *.md events each
     Created Here/      # *.md events made with New, in no calendar
   Mail/                # *.md emails fetched from an account
+  Scans/               # *.md documents imported from a folder watch's scans
   .trash/              # deleted entities, at their vault-relative path (§ Trash)
   …any user folders for notes, letters, tasks…
 ```
