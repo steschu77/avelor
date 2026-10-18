@@ -175,12 +175,12 @@ fn a_key_not_written_out_fails() {
 fn the_host_uses_the_keys_it_looks_up_and_those_it_gives_the_page() {
     let rust = "let text = texts::text(\"start.failed\");\n\
                 // texts::text(\"in.a.comment\")\n\
-                show(texts::text(\"a.b\"));\n\
+                show(texts::text(\"a.b\"), texts::filled(\"c.d\", &[]));\n\
                 app.notice(Text::new(\"e.f\").arg(\"n\", 2));";
     let used = host_keys(rust);
     assert_eq!(
         used.host.into_iter().collect::<Vec<_>>(),
-        ["a.b", "start.failed"]
+        ["a.b", "c.d", "start.failed"]
     );
     assert_eq!(used.page.into_iter().collect::<Vec<_>>(), ["e.f"]);
 }

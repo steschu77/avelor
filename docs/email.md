@@ -29,7 +29,7 @@ the expanded vault area, filled with the account's last filter
   that. The fetch is a job (`ui.md#jobs-panel`); the page closes, and
   Fetch email reads its matches again when the job ends. Esc closes the
   page.
-- **Analysis** (section 2): Off or Lite, with the model it runs
+- **Analysis** (section 2): Off, Lite or Medium, with the model it runs
   with; the new emails are analysed after the fetch (`email.md#analysis`).
 
 ## Email auto-sync <a id="email-auto-sync"></a>
@@ -65,8 +65,8 @@ A filter can have its new email analysed: Fetch email's (section 2,
 Analysis, remembered with the filter as `fetch-email.analysis`) and each
 auto-sync's (under its filter, `fetch-email.auto-sync.analysis`;
 `accounts.md#google-file`). It is off by default. A filter's analysis has
-a level, Off or Lite, and the model it runs with, picked as every feature
-picks its model (`accounts.md#model-choice`).
+a level, Off, Lite or Medium, and the model it runs with, picked as every
+feature picks its model (`accounts.md#model-choice`).
 
 - **Explicit picks**: with the analysis on, Fetch waits for a pick that
   works; the page says why, and the host refuses `email_fetch` too, before
@@ -76,7 +76,8 @@ picks its model (`accounts.md#model-choice`).
   created go to "Analysing email · <email>", one email after another; Stop
   ends it, and so does a vault switch. The spend limit is checked before
   each email; once it is reached, the rest is left and a notice says so.
-  The summary: "18 analysed · 1 failed".
+  The summary counts the conversations Medium wrote: "18 analysed · 4 conversations · 1
+  failed".
 - **Lite**: one request per email (`analysis::request::request_for`). It lists the
   labels in use (the 100 used most) and the active projects (the first
   50), then the email: its subject as it came (`email.subject` once the
@@ -92,12 +93,23 @@ picks its model (`accounts.md#model-choice`).
   is turned off (`think: false`; sorting an email needs none), and Ollama
   runs it with a context of 16,384 tokens (`ai::CONTEXT_TOKENS`): its default of 4,096 left a long email no room for
   the answer, the reasoning filling the rest.
+- **Medium** asks in the same request for three more fields: `check`, up
+  to three points a closer look should check (an amount, a deadline, a
+  claim, a condition), one sentence each; `reply`, a short reply ready to
+  send, in the email's language, without a signature or placeholders, only
+  when the email expects an answer from its recipient; `questions`, one to
+  three questions the recipient might ask about the email. The points and
+  the questions are in the email's language, as the title is.
 - **The answer** is read by a pure parser (`analysis::answer::parse`): the JSON
   object in it (code fences and text around it ignored); the title trimmed
   and cut at 120 characters, no change if it is empty or the email's own;
   the kind one of the five in any case, anything else left out; labels and
   projects matched to the lists in any case and kept in the vault's
-  spelling, unknown ones and repeats dropped. An answer without
+  spelling, unknown ones and repeats dropped. Medium's points and
+  questions are trimmed, cut at 300 characters and three at most, the
+  reply cut at 4,000; a newsletter keeps none of them, a notification no
+  reply, and an email left with neither a reply nor a point gets no conversation
+  (questions alone don't make one). An answer without
   such an object is asked again, the answer sent back with a reminder of
   the object asked for (an empty one just again), three times in all;
   then the email counts as failed ("… (asked 3 times)"). An answer that was
@@ -112,8 +124,19 @@ picks its model (`accounts.md#model-choice`).
   `panel.md#cards`); the labels added to the email's own, the projects
   joined. A title the user changed meanwhile stays. A wrong label or
   project is removed on the card like any other.
+- **Medium's conversation** (`analysis::apply::medium_messages`, written by `chat::create`
+  after the email): an AI conversation in `Conversations/`, `linked-to` the
+  email, titled "Email analysis · <the email's title>". Its first message
+  lists the points to check, the second is the quick reply on its own, so
+  Save as document keeps just the reply; either is left out when there
+  is none. Both are
+  the model's replies (`model`, `account`). The questions are the last
+  message's `suggestions` (`vault.md#conversation`): chips that ask them
+  (`assistant.md#conversations`). The email's card marks its chat button
+  while a conversation is linked to it; talking on in the conversation sends the points
+  and the reply along (`assistant.md#context`).
 - **Failures** (the provider's error, an unreadable answer, a failed
-  write of the email) are counted in the job's summary and
+  write of the email or of its conversation) are counted in the job's summary and
   told in one notice at its end:
   "Email analysis · jan@gmail.com: 2 of 20 emails couldn't be analysed;
   “<title>”: <the first error>".
@@ -126,7 +149,7 @@ picks its model (`accounts.md#model-choice`).
 |---|---|---|---|---|
 | G3 | Fetch email | Email source sync button → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; the analysis's level and model; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `account`; the job's end reads the matches again | emails in `Email/`; filter remembered |
 | G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its analysis | `set_email_sync {account, enabled?, filter?, analysis?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email, `account` | emails in `Email/` on their own |
-| G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their kind kept; `email.subject` kept |
+| G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit, Medium's conversation through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their kind kept; `email.subject` kept; Medium: a chat linked to the email |
 
 ## Design <a id="design"></a>
 
@@ -163,8 +186,10 @@ The analysis (`analysis.rs`) is plan → run → apply as well: the plan picks
 the model and gathers the vault's context and each email's text on the UI
 thread; the run is one request at a time under the job's `Cancel`
 (streamed like the assistant's, the pieces unused); the apply reads the
-answer and writes it through the vault edit. Each analysis is its own
-job in `AnalysisState`, so a fetch's and an auto-sync's can run side by side.
+answer and writes it through the vault edit, Medium's conversation through
+`chat::create`, which also starts the assistant's conversations. Each analysis is
+its own job in `AnalysisState`, so a fetch's and an auto-sync's can run
+side by side.
 
 `KnownEmails` (`email.rs`) tells which emails are in the vault: by `gmail-id`
 from the same account, or by Message-ID from any source. The preview's

@@ -97,6 +97,16 @@ pub fn of(key: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// `text`'s text of `key` with its placeholders filled in from `args`.
+pub fn filled(key: &'static str, args: &[(&str, &str)]) -> String {
+    let mut text = text(key).to_string();
+    for (name, value) in args {
+        text = text.replace(&format!("{{{name}}}"), value);
+    }
+    text
+}
+
+// ----------------------------------------------------------------------------
 /// `amount` in `currency`, an ISO code, for a text's placeholder: the page
 /// writes it as the locale writes money.
 pub fn money(amount: f64, currency: &str) -> Value {

@@ -209,12 +209,14 @@ impl Default for FetchEmail {
 }
 
 // ----------------------------------------------------------------------------
-/// How closely new email is analysed (email.md#analysis): Lite sorts it.
+/// How closely new email is analysed (email.md#analysis): Lite sorts it,
+/// Medium also drafts a reply and what to check, as a chat.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AnalysisLevel {
     Off,
     Lite,
+    Medium,
 }
 
 // ----------------------------------------------------------------------------

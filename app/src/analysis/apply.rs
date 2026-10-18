@@ -1,9 +1,12 @@
 //! The answers applied to an entity: its kind, title, date, labels and
 //! projects, Medium's messages.
 
+use av_utils::datetime::DateTime;
+use av_utils::id::Id;
 use av_vault::document::Document;
+use av_vault::envelope::ConversationMessage;
 
-use super::answer::Lite;
+use super::answer::{Lite, Medium};
 use super::same;
 
 // ----------------------------------------------------------------------------
@@ -39,4 +42,35 @@ pub fn apply_lite(doc: &mut Document, lite: &Lite) {
     for project in &lite.projects {
         doc.join_project(*project);
     }
+}
+
+// ----------------------------------------------------------------------------
+/// The messages of Medium's conversation about an email: the points to check as a
+/// list, then the quick reply as a message of its own, each following the
+/// one before; the questions are offered under the last. Written by `model`
+/// through `account` at `now`.
+pub fn medium_messages(
+    medium: &Medium,
+    model: &str,
+    account: Id,
+    now: DateTime,
+) -> Vec<ConversationMessage> {
+    let points = medium.check.iter().map(|p| format!("- {p}"));
+    let points = Some(points.collect::<Vec<_>>().join("\n")).filter(|p| !p.is_empty());
+    let mut messages: Vec<ConversationMessage> = Vec::new();
+    for content in [points, medium.reply.clone()].into_iter().flatten() {
+        messages.push(ConversationMessage {
+            id: Some(Id::generate()),
+            parent: messages.last().and_then(|m| m.id),
+            model: Some(model.to_string()),
+            account: Some(account),
+            date: Some(now),
+            content: Some(content),
+            ..Default::default()
+        });
+    }
+    if let Some(last) = messages.last_mut() {
+        last.suggestions = medium.questions.clone();
+    }
+    messages
 }
