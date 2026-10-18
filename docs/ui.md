@@ -25,11 +25,11 @@ button puts the assistant beside the card, over the main view, as the full
 width does (`assistant.md#conversations`). Opening a panel never moves the
 main view's layout. The expanded vault area hosts the pages of the vault
 panel: the Workspace pages (Accounts, Folders, Vault, Trash), Settings
-(`ui.md#settings`), Fetch email and New. It is expanded only while one of
-them is shown: a page opens it (`openVaultOp`, `ui/page.js`); its ×, Esc on
-a page that registers it (`registerVaultPage`) or a click on a filter closes
-it (`closeVaultArea`). Menus are popups (`showMenu`, `ui/menu.js`), which
-mark their anchor `aria-expanded`.
+(`ui.md#settings`), Fetch email, Import scans and New. It is expanded only
+while one of them is shown: a page opens it (`openVaultOp`, `ui/page.js`);
+its ×, Esc on a page that registers it (`registerVaultPage`) or a click on a
+filter closes it (`closeVaultArea`). Menus are popups (`showMenu`,
+`ui/menu.js`), which mark their anchor `aria-expanded`.
 
 ## Vault panel <a id="vault-panel"></a>
 
@@ -282,7 +282,8 @@ What a key, a menu, a button or Go to starts is a registered action
 - **Ctrl+Shift+P** opens Go to (`ui.md#go-to`).
 - **Ctrl+,** opens Settings (`ui.md#settings`).
 - **Esc** closes an open menu, else the page in the expanded vault area
-  (Settings, Fetch email, New); in an editor it leaves edit mode.
+  (Settings, Fetch email, Import scans, New); in an editor it leaves edit
+  mode.
 - **Ctrl+Enter** runs the open page's main action (Fetch, Create).
 - **Ctrl+N** opens New.
 - **Ctrl+Z** undoes the last edit, **Ctrl+Y** or **Ctrl+Shift+Z** does it
@@ -302,7 +303,8 @@ commands: the actions that have a group and apply now
 in, Go to (the lenses, the Workspace pages, Settings, the next and the
 previous area), Window, Vault, Settings (a row of the page each, which it
 opens with the focus there) and Help. What the vault has brings its own: an
-account's Email its Fetch email, a checked calendar its sync.
+enabled folder watch its import, an account's Email its Fetch email, a
+checked calendar its sync.
 
 - **What is typed** is looked for in the names and in the other words one is
   found by: every word, in any order, case and accents aside (`fit`,

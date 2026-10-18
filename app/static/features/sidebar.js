@@ -21,6 +21,7 @@ import { structureCall } from '../model/structure.js';
 import { joinProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
 import { KIND_ICONS } from '../ui/icons.js';
+import { IMPORT_ICON } from '../ui/icons.js';
 import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
@@ -320,7 +321,7 @@ registerActions(() => [
   { id: 'place.all_projects', place: 'project', title: t('sidebar.all_projects'), icon: '#i-layer', run: () => selectFilter({ selected_project: null }) },
   { id: 'place.no_project', place: 'project', title: t('sidebar.no_project'), icon: KIND_ICONS.project.icon, run: () => selectFilter({ selected_project: NO_PROJECT }) },
   ...projectsInOrder().map(projectPlace),
-  { id: 'place.all_sources', place: 'source', title: t('sidebar.all_sources'), icon: '#i-arrow-import', run: () => selectFilter({ selected_source: null }) },
+  { id: 'place.all_sources', place: 'source', title: t('sidebar.all_sources'), icon: IMPORT_ICON, run: () => selectFilter({ selected_source: null }) },
   ...vaultSources().map(({ key, name, icon, also }) => ({
     id: `place.source.${key}`, place: 'source', title: name, icon, also,
     end: () => t('palette.source_n', { n: [...entities.values()].filter(doc => sourceKeyOf(doc) === key).length }),
@@ -366,7 +367,7 @@ function syncSource(source) {
 registerActions(() => [...accounts.values()].flatMap(accountSources).map(source => ({
   id: `sync.${source.key}`, group: 'get', also: source.also,
   ...(source.kind === 'email'
-    ? { title: t('sidebar.fetch_email_for', { name: source.name }), icon: '#i-arrow-import', page: true }
+    ? { title: t('sidebar.fetch_email_for', { name: source.name }), icon: IMPORT_ICON, page: true }
     : { title: t('sidebar.sync_now', { name: source.name }), icon: '#i-arrow-sync' }),
   run: () => syncSource(source),
 })));

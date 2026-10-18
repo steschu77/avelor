@@ -3,7 +3,7 @@ use super::*;
 use crate::change::Change;
 use crate::envelope::Conversation;
 use crate::envelope::DocumentType;
-use crate::envelope::{Bare, Roles, Source};
+use crate::envelope::{Bare, Roles};
 use crate::schema::layout;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
@@ -1204,6 +1204,61 @@ fn remote_properties_find_imported_entities() {
     let text = fs::read_to_string(root.join(&index.entry(&id).unwrap().local)).unwrap();
     assert!(text.ends_with("New body\n") && text.contains("gmail-id: g1"));
     fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn scan_origins_name_the_files_imported_from_a_watch() {
+    use crate::envelope::{Document as DocumentRole, Scan};
+    use crate::shared::OneOrMany;
+    let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
+    let mut index = Index::default();
+    index.begin(&root);
+    let (watch, other) = (Id::generate(), Id::generate());
+    let mut create = |watch: Option<Id>, origin: &[&str]| {
+        let scan = Scan {
+            watch,
+            origin: OneOrMany::from_vec(origin.iter().map(|o| o.to_string()).collect()),
+            ..Scan::default()
+        };
+        let roles = Roles {
+            document: Some(DocumentRole::default()),
+            ..Default::default()
+        };
+        let doc = Document::create(
+            roles,
+            Source::Scan(scan),
+            "Letter".into(),
+            Vec::new(),
+            FileFormat::Markdown,
+        );
+        index
+            .create(doc, Path::new("Scans"), &mut Changes::default())
+            .unwrap()
+    };
+    let letter = create(Some(watch), &["p1.jpg", "sub\\p2.jpg"]);
+    let receipt = create(Some(watch), &["r.png"]);
+    create(Some(other), &["x.jpg"]);
+    create(None, &["y.jpg"]);
+
+    let text = fs::read_to_string(root.join(&index.entry(&letter).unwrap().local)).unwrap();
+    let reindexed = Index::build(&root);
+    fs::remove_dir_all(&root).unwrap();
+
+    assert!(
+        text.contains(&format!("scan:\n  watch: {watch}\n  origin:\n  - p1.jpg\n")),
+        "{text}"
+    );
+    let expected = HashMap::from([
+        ("p1.jpg".to_string(), letter),
+        ("sub\\p2.jpg".to_string(), letter),
+        ("r.png".to_string(), receipt),
+    ]);
+    assert_eq!(index.scan_origins(&watch), expected);
+    assert_eq!(
+        reindexed.scan_origins(&watch),
+        expected,
+        "read back from the files"
+    );
 }
 
 #[test]

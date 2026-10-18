@@ -3,17 +3,22 @@
 // PC. The page follows Workspace -> Accounts: a card per watch, a menu of
 // the watch types, and a new watch's pane that asks for its folder first.
 // Once the host has found the folder, the watch is saved with its type's
-// file types, and its full pane shows.
+// file types, and its full pane shows. Import, here, opens the import page
+// of its type (images: features/import/scans.js, through the
+// `watch.import` action).
 
 import { accEl } from '../../core/dom.js';
 import { oncePerFrame } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { pageDate } from '../../core/format.js';
+import { registerActions, runAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { watches } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
+import { iconEl } from '../../ui/icons.js';
+import { IMPORT_ICON } from '../../ui/icons.js';
 import {
   addTile, detailFooter, detailHead, detailPane, draftKind, itemCard, listDetailPage, listSection,
   notice, pageList, replaceVaultPage, sentDrafts, setPageFocus,
@@ -32,7 +37,8 @@ export const WATCH_READ_STEP = 'read';
 // watch suggests the user's pictures, on Linux under `~`.
 const WATCH_TYPES = [
   {
-    type: 'images', name: t('watch.type.images'), hint: 'OCR', kind: t('watch.kind.images'), icon: '#i-image',
+    type: 'images', command: name => t('watch.import_scans', { name }), also: t('watch.scans_also'),
+    name: t('watch.type.images'), hint: 'OCR', kind: t('watch.kind.images'), icon: '#i-image',
     files: t('watch.files.images'),
     folder: navigator.platform.startsWith('Win') ? '%USERPROFILE%\\Pictures' : '~/Pictures',
     patterns: ['*.jpg', '*.jpeg', '*.png', '*.webp'],
@@ -56,6 +62,15 @@ function watchType(type) {
 function watchSettings(id) {
   return { ...watches.get(id), ...watchDrafts.get(id) };
 }
+
+registerActions(() => [...watches.values()].filter(watch => watch.enabled && watch.folder).map(watch => {
+  const type = watchType(watch.type);
+  return {
+    id: `import.${watch.id}`, group: 'get', title: type.command(watch.name), icon: IMPORT_ICON,
+    also: type.also, page: true,
+    run: () => runAction('watch.import', watch.id),
+  };
+}));
 
 // ----------------------------------------------------------------------------
 // host events: the page's own state about the watches, after the model
@@ -295,8 +310,13 @@ function renderWatchPane(watch) {
   const settings = watchSettings(id);
   const pane = detailPane();
 
+  const importButton = accEl('button', 'btn');
+  importButton.type = 'button';
+  importButton.title = t('watch.import_files');
+  importButton.append(iconEl(IMPORT_ICON), t('watch.import'));
+  importButton.addEventListener('click', () => runAction('watch.import', id));
   pane.append(detailHead(t('watch.head', { kind: type.kind, date: pageDate(watch.added) }),
-    { icon: type.icon }));
+    { icon: type.icon, button: importButton }));
 
   const [name, nameNote] = renderEditField(id, 'name', {
     saved: settings.name,

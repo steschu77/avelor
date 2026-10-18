@@ -15,6 +15,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::document::{Document, FileFormat};
+use crate::envelope::Source;
 use crate::envelope::{DocumentType, Envelope};
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -771,6 +772,24 @@ impl Index {
             .flat_map(|e| remote_values(&e.doc, account, key))
             .map(str::to_string)
             .collect()
+    }
+
+    // ------------------------------------------------------------------------
+    /// The files imported from the folder watch `watch` (the `origin`s of
+    /// every `scan:` block naming it), each with the entity it went into.
+    pub fn scan_origins(&self, watch: &Id) -> HashMap<String, Id> {
+        let mut origins = HashMap::new();
+        for entry in &self.documents {
+            let Some(Source::Scan(scan)) = entry.doc.source() else {
+                continue;
+            };
+            if scan.watch.as_ref() == Some(watch) {
+                for origin in scan.origin.as_slice() {
+                    origins.insert(origin.clone(), entry.doc.id());
+                }
+            }
+        }
+        origins
     }
 
     // ------------------------------------------------------------------------

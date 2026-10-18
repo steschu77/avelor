@@ -27,6 +27,7 @@ import './features/jobs.js';
 import './features/header.js';
 import './features/conflict.js';
 import './features/workspace/folders.js';
+import './features/import/scans.js';
 import './features/import/email.js';
 import './features/workspace/accounts.js';
 import './features/workspace/trash.js';
@@ -88,7 +89,7 @@ store.subscribe(
   });
 
 // Another vault opens (`forgetVault`, model/events.js): a page about the
-// old one (New, Fetch email) closes.
+// old one (New, Fetch email, Import scans) closes.
 rpcOn('vault', ({ state }) => {
   const page = shownVaultPage();
   if (state === 'indexing' && page && page.ofVault !== false) page.close();
