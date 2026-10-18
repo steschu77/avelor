@@ -378,7 +378,8 @@ impl WindowProc {
 
     /// The window became active (or inactive). Back from another program,
     /// the page looks at the files it shows: one may have been changed
-    /// there (`saving.md#held-saves`, `App::on_activated`).
+    /// there (`saving.md#held-saves`); so may a calendar in Google
+    /// (`App::on_activated`).
     fn on_activate(&self, active: bool) -> LRESULT {
         if active {
             self.shell.on_activated();

@@ -142,6 +142,14 @@ impl<K: Eq + Hash + Clone> AutoSyncs<K> {
     }
 
     // ------------------------------------------------------------------------
+    /// Those of `keys` whose next run was set before `stale` are due at
+    /// once.
+    pub fn due_if_older(&mut self, keys: &[K], stale: DateTime) {
+        self.next
+            .retain(|key, at| !keys.contains(key) || *at > stale);
+    }
+
+    // ------------------------------------------------------------------------
     /// The auto-sync of `key` failed; whether that is new, to be said.
     pub fn failed(&mut self, key: K) -> bool {
         self.failing.insert(key)

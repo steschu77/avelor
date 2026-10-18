@@ -84,6 +84,7 @@ pub(crate) fn open_vault(app: &mut App, root: &Path) {
     }
     documents::keep_held(app);
     app.vault.begin_open(root);
+    documents::vault_opened(app);
     accounts::open(app, root);
     vault_settings::open(app, root);
     email::vault_opened(app);
