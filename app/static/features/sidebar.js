@@ -1,20 +1,24 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
-// archived folded) after No project, with their counts, each a filter;
-// renaming, adding, starring and dropping onto projects; the vault's name and menu. It renders at most once per frame
-// (`scheduleRenderSidebar`), following the model (app.js).
+// archived folded) after No project, and the sources, with their counts,
+// each a filter; renaming, adding, starring and dropping onto projects;
+// the vault's name and menu. It renders at most
+// once per frame (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
 import { $ } from '../core/dom.js';
 import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
 import { titled } from '../core/dom.js';
+import { runAction } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
 import { projects } from '../model/entities.js';
+import { accounts, sourceKeyOf } from '../model/entities.js';
 import { structureCall } from '../model/structure.js';
 import { joinProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
+import { KIND_ICONS } from '../ui/icons.js';
 import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
@@ -22,8 +26,10 @@ import { selectFilter } from './selection.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
 const projectsContainer = $('projects');
+const sourcesContainer = $('sources');
 const allProjectsEl = $('all-projects');
 const noProjectEl = $('no-project');
+const allSourcesEl = $('all-sources');
 
 // ----------------------------------------------------------------------------
 // The sidebar's per-project counts are derived, never sent (vault.md#thread:
@@ -34,7 +40,8 @@ export const scheduleRenderSidebar = oncePerFrame(renderSidebar);
 
 // A sidebar row without its count and highlight, which `updateNavItem` sets.
 // `action` ({ icon, title, onClick }) becomes a circular icon button at the
-// row's right end, shown while the row is hovered; `onClick` gets the row.
+// row's right end, shown while the row is hovered or has the focus;
+// `onClick` gets the row and the button.
 function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
   const el = pressable(accEl('a', className));
   const elName = accEl('span', 'nav-item__name', name);
@@ -50,7 +57,7 @@ function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
     btn.append(iconEl(action.icon));
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      action.onClick(el);
+      action.onClick(el, btn);
     });
     el.appendChild(btn);
   }
@@ -58,8 +65,8 @@ function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
   return el;
 }
 
-// `current`: the row is the selected project; `starred`: a project is
-// starred.
+// `current`: the row is the selected project or source; `starred`: a
+// project is starred.
 function updateNavItem(row, count, current, starred) {
   const countEl = row.querySelector('.nav-item__count');
   if (countEl.textContent !== String(count)) countEl.textContent = count;
@@ -93,9 +100,9 @@ function editSidebarName(row, name, commit) {
   input.select();
 }
 
-// The sidebar's rows by key (`project:<id>`), kept across renders:
-// `renderSidebar` patches counts and highlights in place and rebuilds a row
-// only when its name changed. A scan re-renders the sidebar every frame,
+// The sidebar's rows by key (`project:<id>`, `source:<key>`), kept across
+// renders: `renderSidebar` patches counts and highlights in place and
+// rebuilds a row only when its name changed. A scan re-renders the sidebar every frame,
 // and a replaced row would lose its hover (flickering its action button)
 // and its drop-target highlight.
 let sidebarRows = new Map();
@@ -104,12 +111,19 @@ function renderSidebar() {
   if (sidebarEditing) return;
   const projectCounts = new Map();
   let noProjectCount = 0;
+  const sourceCounts = new Map();
+  let sourceTotal = 0;
   for (const doc of entities.values()) {
     for (const id of doc.projects ?? []) projectCounts.set(id, (projectCounts.get(id) ?? 0) + 1);
     if (!projectsOf(doc).length) noProjectCount++;
+    const key = sourceKeyOf(doc);
+    if (key) {
+      sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
+      sourceTotal++;
+    }
   }
 
-  const { selected_project } = store.getState();
+  const { selected_project, selected_source } = store.getState();
 
   // The row for `key`: the last render's if it was built for `name`,
   // otherwise a new one from `build`. Rows not asked for are dropped.
@@ -163,19 +177,48 @@ function renderSidebar() {
     editProject(editRow.dataset.id, editRow);
   }
 
+  const sourceRows = [];
+
+  // The entities created in the app; its button opens the New menu.
+  const createdRow = rowFor('source:created', t('sidebar.created_here'), () =>
+    sidebarNavItem('nav-item nav-item--compact', t('sidebar.created_here'), 'nav-item__icon', '#i-home', () => selectSource('created'),
+      { icon: '#i-add', title: t('sidebar.new_title'), onClick: (_row, button) => runAction('new', button) }));
+  updateNavItem(createdRow, sourceCounts.get('created') ?? 0, selected_source === 'created');
+  sourceRows.push(createdRow);
+
+  // Per connected account, under its email: email, the checked calendars. A
+  // row click filters by it.
+  for (const account of accounts.values()) {
+    for (const source of accountSources(account)) {
+      const row = rowFor(`source:${source.key}`, source.name, () =>
+        sidebarNavItem('nav-item nav-item--compact', source.name, 'nav-item__icon', source.icon, () => selectSource(source.key)));
+      updateNavItem(row, sourceCounts.get(source.key) ?? 0, source.key === selected_source);
+      sourceRows.push(row);
+    }
+  }
+
+  placeChildren(sourcesContainer, sourceRows);
+
   sidebarRows = rows;
 
   setAria(allProjectsEl, 'aria-current', !selected_project);
   updateNavItem(noProjectEl, noProjectCount, selected_project === NO_PROJECT);
+  updateNavItem(allSourcesEl, sourceTotal, !selected_source);
 }
 
-// Filter actions: one project, No project or all (clicking the selected one
-// again, or its "All" row, selects all). Every filter row is a non-page
-// item: a click on it closes the open vault page (`selectFilter`,
-// features/selection.js), even if the filter stays the same.
+// Filter actions: one project, No project or all, one source or all
+// (clicking the selected one again, or its "All" row, selects all). Every
+// filter row is a non-page item: a click on it closes the open vault page
+// (`selectFilter`, features/selection.js), even if the filter stays the
+// same.
 function selectProject(project_id) {
   const current = store.getState().selected_project;
   selectFilter({ selected_project: project_id === current ? null : project_id });
+}
+
+function selectSource(key) {
+  const current = store.getState().selected_source;
+  selectFilter({ selected_source: key === current ? null : key });
 }
 
 // Rename a project in place; the host writes the new title (an empty one
@@ -220,6 +263,7 @@ dropTarget(projectsContainer, {
 
 allProjectsEl.addEventListener('click', () => selectFilter({ selected_project: null }));
 noProjectEl.addEventListener('click', () => selectProject(NO_PROJECT));
+allSourcesEl.addEventListener('click', () => selectFilter({ selected_source: null }));
 
 // The star on a project pill: the host writes `starred` (unstarring removes
 // it) and pushes the project back as `entity`, which re-sorts the pills.
@@ -236,6 +280,24 @@ let archivedUnfolded = false;
 function toggleArchived() {
   archivedUnfolded = !archivedUnfolded;
   scheduleRenderSidebar();
+}
+
+// Sources: what a connected account feeds into the vault. Email follows the
+// granted access; calendars are the ones checked on the Accounts page
+// (`account.calendars`).
+function accountSources(account) {
+  if (account.kind !== 'google' || account.status !== 'connected') return [];
+  const { id, scope = {}, email = t('sidebar.email') } = account;
+  const sources = [];
+  if (scope.email && scope.email !== 'off') {
+    sources.push({ key: `${id}\nemail`, name: email, icon: KIND_ICONS.email.icon });
+  }
+  if (scope.calendar && scope.calendar !== 'off') {
+    for (const calendar of account.calendars ?? []) {
+      sources.push({ key: `${id}\ncalendar\n${calendar.id}`, name: calendar.name, icon: KIND_ICONS.calendar.icon });
+    }
+  }
+  return sources;
 }
 
 // ----------------------------------------------------------------------------
