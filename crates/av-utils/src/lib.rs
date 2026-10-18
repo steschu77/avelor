@@ -1,5 +1,6 @@
 pub mod base64;
 pub mod cancel;
+pub mod charsets;
 pub mod datetime;
 pub mod error;
 pub mod fs;
