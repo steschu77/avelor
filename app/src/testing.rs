@@ -190,6 +190,11 @@ pub fn shown(text: &Value) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// A job's summary, its parts (`jobs::count_summary`), as it reads in
+/// English.
+pub fn words(summary: &[crate::texts::Text]) -> String {
+    shown(&serde_json::to_value(summary).unwrap_or_default())
+}
 
 // ----------------------------------------------------------------------------
 /// The reply among `sent` (`call`): the message with `re`, not the last one,
