@@ -408,7 +408,7 @@ nothing imports `app.js`.
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`, which makes its parts for each editor (`editor/selection.js`, `editor/blocks.js`, `editor/tables.js`, `editor/shortcuts.js`, `editor/paste.js`); `isLink` (`editor/links.js`); the tags both read (`editor/tags.js`); `serializeMarkdown` |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the conversations with an AI); the selection published minus what is gone (`commitExistingSelection`) |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `sourceKeyOf`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the conversations with an AI); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/calendar.js` | what the calendar shows: the events in the filter with their recurring events expanded (RFC 5545 lines), the tasks due, the day an entity shows on (`calendarDayOf`) |
 | `model/schedule.js` | the schedules, an event's: their RFC 5545 lines read (`parseSchedule`, `ruleSupported`) and expanded from a first start (`scheduleStarts`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts (`editorRoots`) |
@@ -426,7 +426,7 @@ nothing imports `app.js`.
 | `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts, Google and AI; the trash |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
-| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
+| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |
 | `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
 | `features/assistant/tree.js`, `features/assistant/assistant.js` | conversation tree helpers; the assistant |
