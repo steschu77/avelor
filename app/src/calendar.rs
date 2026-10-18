@@ -10,7 +10,9 @@
 //! A calendar's auto-sync syncs it every 15 minutes, started by the clock
 //! (`App::on_clock`): a quiet list of Google's changes first, then -- only if
 //! there is something to pull or push -- a sync job like the sidebar's, with
-//! what was listed.
+//! what was listed. It also syncs sooner: when one of its events waits to be
+//! pushed -- one being edited once it leaves edit mode -- and when the window
+//! is active again. While one of its events is in edit mode, it waits.
 //!
 //! A two-way sync deletes in Google the calendar's events deleted in the vault
 //! (their files in the trash), and marks each trashed file cancelled; one that
@@ -49,7 +51,7 @@ mod auto_sync;
 mod mapping;
 mod plan;
 
-pub(crate) use auto_sync::auto_sync;
+pub(crate) use auto_sync::{activated, auto_sync, changed, deleted, waiting_delete};
 
 // ----------------------------------------------------------------------------
 /// The status of an event deleted in Google.
