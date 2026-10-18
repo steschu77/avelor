@@ -28,7 +28,7 @@ It is a personal project, not a commercial product or a claim to have solved per
 
 ## Features
 
-- **A vault of plain files.** Documents, notes, tasks, events, contacts, lists, and records are Markdown and YAML files in a folder you own. Edits are saved straight to the file; deleted entities move to a trash folder inside the vault.
+- **A vault of plain files.** Documents, emails, notes, tasks, events, contacts, lists, and records are Markdown and YAML files in a folder you own. Edits are saved straight to the file; deleted entities move to a trash folder inside the vault.
 - **Lenses on your data.** A dashboard of cards (the week, tasks, upcoming events, recent files), a document list, a timeline, and a calendar, each following one filter by project or source.
 - **Projects, threads, and links.** Documents are grouped into projects and threads, linked to each other (a task to its letter), and labeled.
 - **A WYSIWYG editor.** Lists, tables, code blocks, links, and images, written back to Markdown; a change made to a file outside the app is taken in without losing yours.

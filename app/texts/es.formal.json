@@ -36,6 +36,14 @@
   "conflict.deleted_editing": "El archivo se eliminó fuera de la aplicación mientras lo editaba aquí. Elija si conservar su versión.",
   "conflict.deleted_unsaved": "El archivo se eliminó fuera de la aplicación, así que su cambio no se guardó.",
   "dash.drag": "Arrastre para mover",
+  "email.intro": "Para contar las coincidencias solo se leen los encabezados. Los cuerpos se descargan y convierten cuando pulsa Recoger.",
+  "email.press_update": "Pulse Actualizar para leer las coincidencias.",
+  "email.replace_again": {
+    "one": "Haga clic de nuevo para sustituir {n} cuerpo",
+    "other": "Haga clic de nuevo para sustituir {n} cuerpos"
+  },
+  "email.truncated": "Solo se listan los {n} más recientes; acote el filtro para ver el resto.",
+  "email.updates_as_you_edit": "se actualiza mientras edita",
   "google.page.connected_line": "Puede cerrar esta pestaña.",
   "google.page.failed_line": "Vuelva a Avelor e inténtelo de nuevo.",
   "google.page.outdated_line": "Hay uno más reciente esperando: termínelo en su propia pestaña o empiece de nuevo en Avelor.",

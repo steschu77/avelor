@@ -67,7 +67,8 @@ a contributed language's too.
 
 What the host shows or writes itself it takes from the same catalogs,
 plain texts only: the failed start's box, the folder picker's title and
-the sign-in pages (`texts::text`).
+the sign-in pages (`texts::text`), and what it writes into the vault, in
+the run's language (`Text::render`): an email's "No subject".
 
 ## The language <a id="language"></a>
 

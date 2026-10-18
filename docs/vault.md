@@ -310,6 +310,8 @@ fields:
 distinction with no effect on which fields are valid — easy to change at
 any time, only available for entities with the `document` role.
 
+Emails can be imported directly from a Google account.
+
 ### Record
 
 Block: `record:`
@@ -576,10 +578,12 @@ Block: `remote:`
 * `account`: UUIDv7, ID of the account the entity was synchronized from,
 * `remote`: list of properties to identify the entity inside the account.
 
-Well-known properties:
+Well-known properties (named in `av_vault::schema::remote`):
 
 * `message-id`: an email's RFC 5322 Message-ID (e.g. `"<abc@example.com>"`),
 * `gmail-id`: an email's id in the Gmail account (e.g. `"18c2f0e4a1b2c3d4"`),
+  so the import recognizes emails it already fetched without reading their
+  headers,
 * `calendar-id`: on a calendar entity, the Google calendar it syncs with;
   its events belong to that source. On an event, the Google calendar it was
   last synced with,
@@ -667,10 +671,10 @@ What the vault's entities name by id is kept in the vault, in `.avelor/`, which
 the indexing skips like every dot-folder:
 
 - `.avelor/accounts/` (`av_vault::schema::layout::ACCOUNTS`): one YAML file per
-  AI account, and beside an AI account its monthly spending. An assistant
-  reply names the AI account it came through. The
-  secrets stay with the app and never enter the vault.
-  `accounts.md#account-files`.
+  Google or AI account, and beside an AI account its monthly spending. An
+  entity names the account it arrived from in its `remote:` block, an
+  assistant reply the AI account it came through. The secrets stay with the
+  app and never enter the vault. `accounts.md#account-files`.
 - `.avelor/vault.yaml` (`av_vault::schema::layout::VAULT_SETTINGS`): the
   vault's own settings, read when it opens (`vault_settings.rs`; changed
   with `set_vault_settings`, pushed as `vault_settings`). `chat-model`, the model the assistant answers with, `{account, model}`
@@ -701,7 +705,7 @@ not by location:
 ```
 Vault/
   .avelor/                 # vault config
-    accounts/          # *.yaml per account (AI providers), without secrets;
+    accounts/          # *.yaml per account (Google, AI providers), without secrets;
                        # *.spend.yaml: an AI account's spending per month
     vault.yaml         # the vault's own settings (the chat model)
   Projects/            # *.md / *.yaml project descriptors
@@ -713,6 +717,7 @@ Vault/
   Lists/               # *.yaml
   Calendar/
     Created Here/      # *.md events made with New, in no calendar
+  Email/                # *.md emails fetched from an account
   .trash/              # deleted entities, at their vault-relative path (§ Trash)
   …any user folders for notes, letters, tasks…
 ```
@@ -747,6 +752,7 @@ These are the ID card thread's entities; the whole vault has every type.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its settings (`vault_settings`), then the indexing: `vault` (indexing), the indexing's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a summary if files failed); answered `{google}` once the indexing has started | sidebar, lens and counts fill while scanning |
+| A2 | Switch vault | vault menu → "Switch vault…" → `switchVault`: every editor leaves edit mode (`leaveEditModes`), `save_doc_content` per unsaved edit, then `switch_vault` (no path) | modal folder picker (cancel: `path: null`, nothing else happens); the old vault's jobs and the assistant's replies stopped, the new vault opened once they have ended (`architecture.md#jobs`); `config.vault` saved; new indexing as A1 | `vault` (indexing) → `forgetVault`: the page forgets the old vault, the indexing fills it with the new one; the next start opens the new vault |
 | A3 | Show in folder | vault menu → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
 | E6 | Restore | Workspace > Trash, Restore → `restore_entity` | `Index::restore` moves the file back → `entity` | the restored entity selected; a thread the delete dissolved stays dissolved |
 
@@ -803,8 +809,8 @@ page's vault over (`forgetVault`, `model/events.js`). The page forgets:
   (`switchVault`).
 - the conflicts;
 - the selection and the filter;
-- a page about the old vault: New and the Task tab's drafts
-  (`features/new.js`).
+- a page about the old vault: New, Fetch email, and the Task tab's
+  drafts (`features/new.js`).
 
 The accounts arrive before the indexing as the new vault's (`accounts`), so
 they aren't touched.

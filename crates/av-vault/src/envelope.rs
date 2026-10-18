@@ -462,6 +462,14 @@ impl Remote {
     }
 
     // ------------------------------------------------------------------------
+    /// The first value of the property `key`.
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.remote
+            .iter()
+            .find_map(|property| property.get(key)?.as_str())
+    }
+
+    // ------------------------------------------------------------------------
     /// Set the property `key` to `value`: the first `{key: …}` entry is
     /// replaced, or a new one appended.
     pub fn set(&mut self, key: &str, value: &str) {
