@@ -9,6 +9,8 @@ use crate::google::accounts::AnalysisLevel;
 /// The JSON object each level asks for.
 pub(super) const LITE_SHAPE: &str =
     "{\"kind\": \"...\", \"title\": \"...\", \"labels\": [\"...\"], \"projects\": [\"...\"]}";
+pub(super) const MEDIUM_SHAPE: &str = "{\"kind\": \"...\", \"title\": \"...\", \"labels\": [\"...\"], \
+\"projects\": [\"...\"], \"check\": [\"...\"], \"reply\": \"...\", \"questions\": [\"...\"]}";
 
 const LITE_RULES: &str = "
 - kind: what the email is: \"request\" (it asks its recipient to do, answer, pay or decide \
@@ -21,6 +23,16 @@ name.
 - labels: up to 3 labels from the list of labels that clearly fit the email; none if unsure.
 - projects: up to 2 projects from the list of projects the email clearly belongs to; none if \
 unsure.";
+
+const MEDIUM_RULES: &str = "
+- check: up to 3 points a closer look at the email should check, one sentence each: an amount, a \
+deadline, a claim, a condition; none if there is nothing to check, and none for a newsletter.
+- reply: a short reply to the email in its language, ready to send, without a signature or \
+placeholders; only if the email expects an answer from its recipient, else null; never for a \
+notification or a newsletter.
+- questions: 1 to 3 short questions the recipient might ask about this email; none for a \
+newsletter.
+Write the points and the questions in the email's language too.";
 
 const LISTS_ONLY: &str = "\nUse only labels and projects from the lists, spelled as given.";
 
@@ -44,10 +56,17 @@ pub fn request_for(
         "Labels:\n{labels}\nProjects:\n{projects}\nThe email:\nSubject: {}\nFrom: {}\nTo: {}\nDate: {date}\n\n{}",
         email.subject, email.from, email.to, email.body
     );
-    let task = "You sort incoming email.";
+    let medium = level == AnalysisLevel::Medium;
+    let task = match medium {
+        true => "You sort incoming email and prepare it for its recipient.",
+        false => "You sort incoming email.",
+    };
     let shape = shape(level);
     let mut system =
         format!("{task} Answer with one JSON object and nothing else: {shape}.{LITE_RULES}");
+    if medium {
+        system.push_str(MEDIUM_RULES);
+    }
     system.push_str(LISTS_ONLY);
     ChatRequest::new(model)
         .system(system)
@@ -60,8 +79,11 @@ pub fn request_for(
 
 // ----------------------------------------------------------------------------
 /// The JSON object the analysis at `level` asks for.
-fn shape(_level: AnalysisLevel) -> &'static str {
-    LITE_SHAPE
+fn shape(level: AnalysisLevel) -> &'static str {
+    match level {
+        AnalysisLevel::Medium => MEDIUM_SHAPE,
+        _ => LITE_SHAPE,
+    }
 }
 
 // ----------------------------------------------------------------------------

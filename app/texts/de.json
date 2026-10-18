@@ -172,6 +172,8 @@
     "one": "{error} (einmal gefragt)",
     "other": "{error} ({n}-mal gefragt)"
   },
+  "analysis.chat_title.email": "E-Mail-Analyse · {title}",
+  "analysis.chat_write_failed": "die Unterhaltung konnte nicht geschrieben werden.",
   "analysis.cut_off": "Dem Modell ging der Platz aus, bevor es seine Antwort beendet hatte (sein Kontextfenster oder sein Ausgabelimit).",
   "analysis.label.email": "E-Mails werden analysiert · {email}",
   "analysis.not_json": "Die Antwort war nicht das angefragte JSON-Objekt.",
@@ -213,6 +215,7 @@
   "card.link": "Mit einem anderen Eintrag verknüpfen",
   "card.task": "Neue Aufgabe dazu",
   "chat.ask_anything": "Frag irgendwas …",
+  "chat.ask_this": "Das fragen",
   "chat.assistant_at": "Assistent · {time}",
   "chat.assistant_reply": "Antwort des Assistenten",
   "chat.branch_failed": "Der Zweig konnte nicht gespeichert werden.",
@@ -284,6 +287,10 @@
   "count.conflicts": {
     "one": "{n} Konflikt",
     "other": "{n} Konflikte"
+  },
+  "count.conversations": {
+    "one": "{n} Unterhaltung",
+    "other": "{n} Unterhaltungen"
   },
   "count.deleted": "{n} gelöscht",
   "count.entities": {
@@ -390,6 +397,7 @@
   "email.all_of": "alle davon",
   "email.analysis_blocked": "Die Analyse ist an: Wähle ein Modell, das dafür funktioniert, oder schalte sie aus.",
   "email.analysis_lite": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor.",
+  "email.analysis_medium": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor; und für eine E-Mail, die danach fragt, eine kurze Antwort, Prüfpunkte und Fragen als mit der E-Mail verknüpfte Unterhaltung.",
   "email.analysis_off": "Neue E-Mails behalten ihren Betreff als Titel; nichts wird an eine KI gesendet.",
   "email.any_of": "eines davon",
   "email.attachments": "Anhänge",
@@ -868,6 +876,7 @@
   "vault_op.trash": "Papierkorb",
   "vault_op.vault": "Tresor",
   "watch.level.lite": "Leicht",
+  "watch.level.medium": "Mittel",
   "watch.off": "Aus",
   "watch.step.analysis": "Analyse",
   "week.of": "Woche vom {day} · {what}",

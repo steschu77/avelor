@@ -172,6 +172,8 @@
     "one": "{error} (preguntado una vez)",
     "other": "{error} (preguntado {n} veces)"
   },
+  "analysis.chat_title.email": "Análisis de correo · {title}",
+  "analysis.chat_write_failed": "no se pudo escribir la conversación.",
   "analysis.cut_off": "Al modelo se le acabó el espacio antes de terminar su respuesta (su ventana de contexto o su límite de salida).",
   "analysis.label.email": "Analizando correo · {email}",
   "analysis.not_json": "La respuesta no era el objeto JSON pedido.",
@@ -216,6 +218,7 @@
   "card.link": "Enlazar con otro elemento",
   "card.task": "Nueva tarea para esto",
   "chat.ask_anything": "Pregunta lo que quieras…",
+  "chat.ask_this": "Preguntar esto",
   "chat.assistant_at": "Asistente · {time}",
   "chat.assistant_reply": "Respuesta del asistente",
   "chat.branch_failed": "No se pudo guardar la rama.",
@@ -290,6 +293,10 @@
   "count.conflicts": {
     "one": "{n} conflicto",
     "other": "{n} conflictos"
+  },
+  "count.conversations": {
+    "one": "{n} conversación",
+    "other": "{n} conversaciones"
   },
   "count.deleted": {
     "one": "{n} eliminado",
@@ -435,6 +442,7 @@
   "email.all_of": "todas",
   "email.analysis_blocked": "El análisis está activado: elige un modelo que funcione para él o desactívalo.",
   "email.analysis_lite": "Envía cada correo nuevo a {picker} para su tipo, un título limpio, y etiquetas y proyectos de esta bóveda.",
+  "email.analysis_medium": "Envía cada correo nuevo a {picker} para su tipo, un título limpio, y etiquetas y proyectos de esta bóveda; y, para un correo que lo pide, una respuesta rápida, puntos que revisar y preguntas, como una conversación enlazada con el correo.",
   "email.analysis_off": "Los correos nuevos conservan su asunto como título; no se envía nada a una IA.",
   "email.any_of": "cualquiera de",
   "email.attachments": "Adjuntos",
@@ -916,6 +924,7 @@
   "vault_op.trash": "Papelera",
   "vault_op.vault": "Bóveda",
   "watch.level.lite": "Ligero",
+  "watch.level.medium": "Medio",
   "watch.off": "No",
   "watch.step.analysis": "Análisis",
   "week.of": "Semana del {day} · {what}",

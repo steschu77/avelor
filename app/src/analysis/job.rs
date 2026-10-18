@@ -8,8 +8,8 @@ use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_vault::vault::SaveOutcome;
 
-use super::answer::{Lite, parse};
-use super::apply::apply_lite;
+use super::answer::{Lite, Medium, parse};
+use super::apply::{apply_lite, medium_messages};
 use super::context::{Context, EmailText, context};
 use super::email_analysis;
 use super::request::{again, request_for};
@@ -17,11 +17,15 @@ use crate::ai;
 use crate::ai::accounts::Resolved;
 use crate::ai::queue::AiQueue;
 use crate::app::App;
+use crate::chat;
 use crate::google::accounts::{Analysis, AnalysisLevel};
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
-use crate::texts::Text;
+use crate::texts::{self, Text};
+use av_vault::markdown::plain_title;
 
+/// A longer title of Medium's conversation is cut.
+const CHAT_TITLE_CHARS: usize = 60;
 /// How often an email is asked about at most while the answer isn't the JSON
 /// object asked for.
 const LITE_ATTEMPTS: u32 = 3;
@@ -53,6 +57,8 @@ struct Ask {
 struct Counts {
     /// Emails written with what was found.
     analysed: usize,
+    /// Medium's conversations written.
+    pub(super) conversations: usize,
     /// Emails the answer had nothing new for, or gone meanwhile.
     unchanged: usize,
 }
@@ -64,6 +70,7 @@ impl Counts {
     fn summary(&self, queue: &AiQueue<Ask>) -> Vec<Text> {
         let counts = vec![
             (self.analysed, Text::new("count.analysed")),
+            (self.conversations, Text::new("count.conversations")),
             (self.unchanged, Text::new("count.unchanged")),
             (queue.failed(), Text::new("count.failed")),
             (queue.left(), Text::new("count.left")),
@@ -198,15 +205,22 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
         Err(e) => Err(ai::chat_error(run.ai.provider, &run.ai.address, &e)),
     };
     let email = ask.email;
-    let written = found.and_then(|lite| write(app, &email, lite));
+    let by = (run.ai.model.clone(), account);
+    let written = found.and_then(|(lite, medium)| write(app, &email, lite, medium, by));
 
     let Some(run) = app.analysis.runs.get_mut(&job) else {
         return;
     };
     let counts = &mut run.counts;
     match written {
-        Ok(Written { email: false }) => counts.unchanged += 1,
-        Ok(Written { .. }) => counts.analysed += 1,
+        Ok(Written {
+            email: false,
+            chat: false,
+        }) => counts.unchanged += 1,
+        Ok(Written { chat, .. }) => {
+            counts.analysed += 1;
+            counts.conversations += usize::from(chat);
+        }
         Err(error) => {
             log::info!("Email analysis {job}: {} failed: {error}", email.id);
             run.queue.fail(&email.title, error);
@@ -220,16 +234,29 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
 }
 
 // ----------------------------------------------------------------------------
-/// What writing an answer changed: the email.
+/// What writing an answer changed: the email, and whether Medium's conversation was
+/// written.
 struct Written {
     pub(super) email: bool,
+    pub(super) chat: bool,
 }
 
 // ----------------------------------------------------------------------------
-/// Write `lite` into `email`. A title the user changed since the plan stays;
-/// an email gone meanwhile gets nothing. A failed write is logged.
-fn write(app: &mut App, email: &EmailText, mut lite: Lite) -> std::result::Result<Written, Text> {
-    let gone = Written { email: false };
+/// Write `lite` into `email`, then `medium` as a conversation linked to it, by the
+/// model and account `by`, titled "Email analysis · <the email's title>". A
+/// title the user changed since the plan stays; an email gone meanwhile gets
+/// nothing. A failed write is logged.
+fn write(
+    app: &mut App,
+    email: &EmailText,
+    mut lite: Lite,
+    medium: Option<Medium>,
+    by: (String, Id),
+) -> std::result::Result<Written, Text> {
+    let gone = Written {
+        email: false,
+        chat: false,
+    };
     let Some(entry) = app.vault.index().entry(&email.id) else {
         return Ok(gone);
     };
@@ -252,7 +279,28 @@ fn write(app: &mut App, email: &EmailText, mut lite: Lite) -> std::result::Resul
         },
         Err(e) => return Err(failed(e)),
     };
-    Ok(Written { email: changed })
+    let (Some(medium), Some(entry)) = (medium, app.vault.index().entry(&id)) else {
+        return Ok(Written {
+            email: changed,
+            chat: false,
+        });
+    };
+    let title = plain_title(
+        &texts::filled("analysis.chat_title.email", &[("title", entry.doc.title())]),
+        CHAT_TITLE_CHARS,
+    );
+    let (model, account) = by;
+    let messages = medium_messages(&medium, &model, account, DateTime::now());
+    match chat::create(app, title, messages, Some(id)) {
+        Ok(_) => Ok(Written {
+            email: changed,
+            chat: true,
+        }),
+        Err(e) => {
+            log::warn!("Email analysis: the chat of {id} could not be written: {e}");
+            Err(Text::new("analysis.chat_write_failed"))
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
