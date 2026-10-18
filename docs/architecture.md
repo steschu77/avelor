@@ -414,7 +414,7 @@ side never touches the vault side; `app` is the only bridge.
 | `analysis.rs`, `analysis/` | the email analysis (`email.md#analysis`): the vault's `context`, the request per level, its parser and its writes (pure: `request_for`, `parse`, `apply_lite`, `medium_messages`), the analysis job one email at a time (`analyse`, `AnalysisState`); its tests against a fake Ollama; its parts in `analysis/`: `context.rs`, `request.rs`, `answer.rs`, `apply.rs`, `job.rs`, the tests in `analysis/tests.rs` |
 | `calendar.rs`, `calendar/` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests; its parts in `calendar/`: `mapping.rs`, `auto_sync.rs`, `plan.rs`, `apply.rs`, the tests in `calendar/tests.rs` |
 | `watches.rs`, `watches/folders.rs` | watch files in `.avelor/watches/`, the `Watches` sub-state, globbing, listing; the watch commands, the events `watches` / `watch` / `watch_removed`, their dispatch tests |
-| `scans.rs`, `scans/` | Import scans: `scan_list`, `scan_read`, `scan_previews`, `scan_open`, the events `scan_page` / `scan_preview`, OCR as a job (the account and model resolved, the spend limit checked per page); their dispatch tests; its parts in `scans/`: `read.rs`, `previews.rs`, the tests in `scans/tests.rs` |
+| `scans.rs`, `scans/` | Import scans: `scan_list`, `scan_read`, `scan_previews`, `scan_open`, `scan_import`, the events `scan_page` / `scan_preview`, OCR as a job (the account and model resolved, the spend limit checked per page), `scan_document` (pages → document); their dispatch tests; its parts in `scans/`: `read.rs`, `import.rs`, `previews.rs`, the tests in `scans/tests.rs` |
 
 ## Platforms <a id="platforms"></a>
 
@@ -500,7 +500,7 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`, `typing`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `addDays`, `sameDay`, `weekStartOf`, `monthStartOf`, `monthEndOf`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page (`TIME_FORMAT`, `MONTH_YEAR`, …, `shortDate`, `pageDate`) |
+| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`, `typing`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `addDays`, `sameDay`, `weekStartOf`, `monthStartOf`, `monthEndOf`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page (`TIME_FORMAT`, `MONTH_YEAR`, …, `shortDate`, `pageDate`), and counts with their noun (`plural`) |
 | `core/text.js` | the page's texts: `t`, a text of the run's catalog, `parts`, one with an element in it, `textOf`, one the host sent, and the run's `locale` (`localization.md`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js`, `core/match.js` | the action registry, the commands and the keys Go to lists (`listedActions`, `keyedActions`), the one global key handler and the keys' names (`shortcutKeys`, `shortcutText`); names found by words typed (`fit`) |
@@ -736,8 +736,10 @@ abort. Where the bundle lands and how to measure the size:
   the vault (what is there, what to ask for) → *run* on a worker (remote
   I/O, no vault access) → *apply* on the UI thread through the vault edit
   (`App::edit`). Calendar sync (`build_job`, the engine, `apply`) and
-  email fetch (`plan_fetch`, the downloads, `fetch_action`) work this way. The mapping between remote data and
-  entities is a pure function with tests (`event_entity`, `email_entity`).
+  email fetch (`plan_fetch`, the downloads, `fetch_action`) work this way;
+  the scan import has its plan and its apply. The mapping between remote
+  data and entities is a pure function with tests (`event_entity`,
+  `email_entity`, `scan_document`).
 
   ```mermaid
   flowchart LR

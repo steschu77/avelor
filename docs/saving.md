@@ -318,9 +318,11 @@ mode first, saving, so the session is the last step.
 What the app writes on its own is no step: a conflict copy
 (`#held-saves`), what a job writes (Fetch email,
 `email.md#fetch-email`; a calendar's sync, `calendar.md`; the email
-analysis, `email.md#analysis`), the calendar entity a check makes
+analysis, `email.md#analysis`; an import of scans,
+`import.md#import-scans`), the calendar entity a check makes
 (`calendar.md#syncing`); nor are a conversation with the assistant
-(`assistant.md`), Delete for good and Empty trash (`vault.md#trash`).
+(`assistant.md`), the folder watches (`import.md#folder-watches`), Delete
+for good and Empty trash (`vault.md#trash`).
 
 ## Closing the app <a id="closing-the-app"></a>
 

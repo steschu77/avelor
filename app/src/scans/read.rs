@@ -125,6 +125,9 @@ pub(super) struct PageEvent<'a> {
 pub(crate) struct ReadRequest {
     pub(super) watch: Id,
     pub(super) files: Vec<String>,
+    /// Read files that were read before too.
+    #[serde(default)]
+    pub(super) again: bool,
 }
 
 // ----------------------------------------------------------------------------
@@ -147,10 +150,10 @@ pub(super) fn is_image(name: &str) -> bool {
 }
 
 // ----------------------------------------------------------------------------
-/// `scan_read {watch, files}`: read the files with the model the
+/// `scan_read {watch, files, again?}`: read the files with the model the
 /// watch picked for OCR (`AiAccounts::choose`), as a job: a `scan_page` event per
 /// file as it is queued, read and done. Files read before (and unchanged)
-/// are answered at once. One read at a time: a request for
+/// are answered at once, unless `again`. One read at a time: a request for
 /// the watch being read adds to it. Answers `{job}`, the read of this watch
 /// (null if there is none: every file was read before). Before each file
 /// the account's spend limit is checked; reached, the read stops.
@@ -190,7 +193,7 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         let file = FolderFile::read(&root, &name).ok();
         let cached = file.as_ref().and_then(|f| app.scans.cached(f));
         match cached {
-            Some(ocr) => {
+            Some(ocr) if !request.again => {
                 let (words, title) = (ocr.words, ocr.title.as_str());
                 post_page(app, watch, &name, &PageStatus::Read { words, title });
             }
@@ -370,6 +373,7 @@ fn page_of(file: FolderFile, response: ChatResponse) -> Result<(PathBuf, Ocr), T
         stamp: Stamp::of(&file),
         words: word_count(&text),
         title: title_of(&text),
+        text,
     };
     Ok((file.path, ocr))
 }

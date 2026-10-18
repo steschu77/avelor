@@ -115,3 +115,10 @@ export function pageDate(iso, withTime) {
   if (!iso) return t('date.never');
   return (withTime ? DAY_MONTH_YEAR_TIME : DAY_MONTH_YEAR).format(new Date(iso));
 }
+
+// ----------------------------------------------------------------------------
+// A count with its noun, "1 file", "3 files"; `many` for a plural that
+// isn't `one` + "s".
+export function plural(n, one, many = `${one}s`) {
+  return `${n} ${n === 1 ? one : many}`;
+}

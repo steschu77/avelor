@@ -284,7 +284,8 @@ What a key, a menu, a button or Go to starts is a registered action
 - **Esc** closes an open menu, else the page in the expanded vault area
   (Settings, Fetch email, Import scans, New); in an editor it leaves edit
   mode.
-- **Ctrl+Enter** runs the open page's main action (Fetch, Create).
+- **Ctrl+Enter** runs the open page's main action (Fetch, Import all,
+  Create).
 - **Ctrl+N** opens New.
 - **Ctrl+Z** undoes the last edit, **Ctrl+Y** or **Ctrl+Shift+Z** does it
   again, outside a field or an editor (`saving.md#undo`).

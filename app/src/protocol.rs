@@ -121,6 +121,7 @@ enum Command {
     ScanRead(scans::ReadRequest),
     ScanPreviews(scans::PreviewRequest),
     ScanOpen(scans::OpenRequest),
+    ScanImport(scans::ImportRequest),
     // Fetch email (`email`).
     EmailLabels(OfAccount),
     EmailSearch(email::SearchRequest),
@@ -366,6 +367,7 @@ impl Command {
             "scan_read" => Command::ScanRead(from_value(args)?),
             "scan_previews" => Command::ScanPreviews(from_value(args)?),
             "scan_open" => Command::ScanOpen(from_value(args)?),
+            "scan_import" => Command::ScanImport(from_value(args)?),
             "email_labels" => Command::EmailLabels(from_value(args)?),
             "email_search" => Command::EmailSearch(from_value(args)?),
             "email_headers" => Command::EmailHeaders(from_value(args)?),
@@ -491,6 +493,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::ScanRead(a) => scans::scan_read(app, req, a),
         Command::ScanPreviews(a) => scans::scan_previews(app, req, a),
         Command::ScanOpen(a) => scans::scan_open(app, req, a),
+        Command::ScanImport(a) => scans::scan_import(app, req, a),
         Command::EmailLabels(a) => email::email_labels(app, req, a.account),
         Command::EmailSearch(a) => email::email_search(app, req, a),
         Command::EmailHeaders(a) => email::email_headers(app, req, a),
