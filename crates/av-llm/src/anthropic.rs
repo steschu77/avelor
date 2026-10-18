@@ -4,7 +4,9 @@
 use std::io::Read;
 
 use av_http::Method;
+use av_utils::base64::to_base64;
 use av_utils::cancel::Cancel;
+use av_utils::error::Error;
 use av_utils::error::Result;
 use serde_json::Value;
 use serde_json::json;
@@ -72,11 +74,34 @@ pub(crate) fn chat_body(req: &ChatRequest) -> Result<Value> {
 }
 
 // ----------------------------------------------------------------------------
+/// Images as image blocks, PDFs as document blocks.
 fn content_block(part: &Part) -> Result<Value> {
     let block = match part {
         Part::Text(text) => json!({"type": "text", "text": text}),
+        Part::Inline(file) if file.is_image() => json!({
+            "type": "image",
+            "source": {"type": "base64", "media_type": file.mime_type, "data": to_base64(&file.data)},
+        }),
+        Part::Inline(file) if file.mime_type == "application/pdf" => document(
+            &file.name,
+            json!({"type": "base64", "media_type": file.mime_type, "data": to_base64(&file.data)}),
+        ),
+        Part::Inline(file) => {
+            return Err(Error::Unsupported {
+                what: format!("{} files on Anthropic", file.mime_type),
+            });
+        }
     };
     Ok(block)
+}
+
+// ----------------------------------------------------------------------------
+fn document(title: &str, source: Value) -> Value {
+    let mut block = json!({"type": "document", "source": source});
+    if !title.is_empty() {
+        block["title"] = json!(title);
+    }
+    block
 }
 
 // ----------------------------------------------------------------------------
@@ -174,15 +199,20 @@ fn read_stream(body: impl Read, on_delta: &mut dyn FnMut(&str)) -> Result<ChatRe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::FileData;
     use crate::types::Message;
-    use av_utils::error::Error;
 
     // ------------------------------------------------------------------------
     #[test]
     fn chat_body_has_blocks_per_part() {
+        let pdf = FileData {
+            name: "a.pdf".into(),
+            mime_type: "application/pdf".into(),
+            data: b"%PDF".to_vec(),
+        };
         let req = ChatRequest::new("claude-sonnet-5-5")
             .system("Be brief.")
-            .message(Message::user("Compare."))
+            .message(Message::user("Compare.").with(Part::Inline(pdf)))
             .message(Message::assistant("Done."));
         assert_eq!(
             chat_body(&req).unwrap(),
@@ -194,6 +224,8 @@ mod tests {
                 "messages": [
                     {"role": "user", "content": [
                         {"type": "text", "text": "Compare."},
+                        {"type": "document", "title": "a.pdf", "source":
+                            {"type": "base64", "media_type": "application/pdf", "data": "JVBERg=="}},
                     ]},
                     {"role": "assistant", "content": [{"type": "text", "text": "Done."}]},
                 ],
