@@ -18,6 +18,7 @@ import { threads } from './entities.js';
 import { accounts } from './entities.js';
 import { setVaultSettings } from './entities.js';
 import { watches } from './entities.js';
+import { watchSourceKey } from './entities.js';
 import { forgetDocument, forgetDocuments } from './documents.js';
 import { onDocContent } from './documents.js';
 import { onActivated } from './documents.js';
@@ -114,7 +115,8 @@ rpcOn('account_removed', ({ id }) => {
   store.setState({ accounts_rev: store.getState().accounts_rev + 1 });
 });
 
-// The open vault's folder watches (api.md#watches), the same way.
+// The open vault's folder watches (api.md#watches), the same way. A watch
+// that is off or gone has no source row: a filter by it is left.
 rpcOn('watches', ({ items }) => {
   const ids = new Set(items.map(item => item.id));
   const left = [];
@@ -140,7 +142,9 @@ rpcOn('watch_removed', ({ id }) => {
 });
 
 function onWatchesChanged(left) {
-  store.setState({ watches_rev: store.getState().watches_rev + 1 });
+  const { selected_source, watches_rev } = store.getState();
+  const unfiltered = left.some(id => selected_source === watchSourceKey(id));
+  store.setState({ watches_rev: watches_rev + 1, ...(unfiltered && { selected_source: null }) });
 }
 
 // ----------------------------------------------------------------------------

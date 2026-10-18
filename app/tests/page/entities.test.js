@@ -114,6 +114,10 @@ test("the source of an event is the Google calendar its own syncs with", () => {
   equal(['family', 'own', 'half', 'gone'].map(id => sourceKeyOf({ kind: 'event', event: { calendar: id }, source: null })), ['g\ncalendar\nfam@google', null, null, null]);
 });
 
+test('the source of a scan or an import is its folder watch', () => {
+  equal([sourceKeyOf({ source: { scan: { watch: 'w1' } } }), sourceKeyOf({ source: { scan: {} } })], ['watch:w1', null]);
+});
+
 test('the conversations with an AI on an entity, the newest first', () => {
   const chat = (id, date, more = {}) => ({ id, kind: 'conversation', date, source: { ai: {} }, linked_to: 'letter', ...more });
   vault(
