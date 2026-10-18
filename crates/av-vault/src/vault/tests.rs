@@ -790,6 +790,42 @@ fn a_restore_is_refused_when_its_place_or_id_is_taken() {
 }
 
 #[test]
+fn a_trashed_file_is_rewritten_where_it_is() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    for id in &ids[..2] {
+        let deleted = index.delete(id, &mut changes);
+        assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+    }
+    let local = Path::new("Notes/n0.md");
+    let edited = index.edit_trashed(local, |doc| doc.set_title("Gone".into()));
+    assert_eq!(edited.unwrap(), SaveOutcome::Saved);
+    let text = fs::read_to_string(root.join(".trash/Notes/n0.md")).unwrap();
+    assert!(
+        text.contains("title: Gone") && text.contains("Body 0"),
+        "{text}"
+    );
+    assert!(index.entry(&ids[0]).is_none(), "still in the trash");
+    let unchanged = index.edit_trashed(local, |doc| doc.set_title("Gone".into()));
+    assert_eq!(unchanged.unwrap(), SaveOutcome::Unchanged);
+
+    let read_only = root.join(".trash/Notes/n1.md");
+    let mut permissions = fs::metadata(&read_only).unwrap().permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(&read_only, permissions).unwrap();
+    let err = index.edit_trashed(Path::new("Notes/n1.md"), |doc| doc.set_title("x".into()));
+    assert!(matches!(err, Err(Error::NotWritable { .. })));
+    let err = index.edit_trashed(Path::new("../Notes/n2.md"), |_| {});
+    assert!(matches!(err, Err(Error::InvalidPath { .. })));
+    let err = index.edit_trashed(Path::new("Notes/n2.md"), |_| {});
+    assert!(matches!(err, Err(Error::FileNotFound { .. })));
+
+    index.empty_trash().unwrap();
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn trashed_files_are_deleted_one_by_one_or_all_at_once() {
     let (root, ids) = thread_vault();
     let mut index = Index::build(&root);
@@ -1171,6 +1207,51 @@ fn remote_properties_find_imported_entities() {
 }
 
 #[test]
+fn editing_writes_several_properties_at_once() {
+    use crate::envelope::{Event, Remote};
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let start = DateTime::from_unix_millis(1_790_503_530_000);
+
+    let mut changes = Changes::default();
+    let edited = index.edit(&ids[0], &mut changes, |doc| {
+        doc.set_title("Dentist".into());
+        doc.set_date(start);
+        doc.set_labels(vec!["conflict".into()]);
+        doc.set_event(Some(Event {
+            start: Some(start),
+            ..Default::default()
+        }));
+        let mut remote = Remote::default();
+        remote.set("event-id", "e1");
+        doc.set_source(Some(Source::Remote(remote)));
+        doc.set_content("Moved\n".into());
+    });
+    assert_eq!(edited.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [ids[0]], "one write");
+    assert_eq!(changes.content, [ids[0]], "the body changed too");
+
+    let again = Index::build(&root);
+    let doc = again.get(&ids[0]).unwrap();
+    assert_eq!(doc.title(), "Dentist");
+    assert_eq!(doc.date(), Some(start));
+    assert_eq!(doc.labels(), ["conflict"]);
+    assert_eq!(doc.kind(), DocumentType::Event);
+    assert!(matches!(&doc.source(), Some(Source::Remote(r)) if r.get("event-id") == Some("e1")));
+    assert_eq!(doc.content(), "Moved\n");
+
+    // An edit that changes nothing writes nothing.
+    let mut changes = Changes::default();
+    let edited = index.edit(&ids[0], &mut changes, |doc| doc.set_title("Dentist".into()));
+    assert_eq!(edited.unwrap(), SaveOutcome::Unchanged);
+    assert!(changes.saved.is_empty());
+    let err = index.edit(&Id::generate(), &mut changes, |_| {});
+    assert!(matches!(err, Err(Error::NotFound)));
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_write_records_whether_it_changed_the_body() {
     let (root, ids) = thread_vault();
     let mut index = Index::build(&root);
@@ -1222,6 +1303,42 @@ fn an_undo_records_whether_it_changed_the_body() {
         (changes.saved, changes.content),
         (vec![ids[1]], vec![ids[1]])
     );
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_step_leaves_the_source_block_to_its_writer() {
+    use crate::envelope::Remote;
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut titled = Changes::default();
+    let set = index.set_title(&ids[0], "Renamed".into(), &mut titled);
+    assert_eq!(set.unwrap(), SaveOutcome::Saved);
+    // A sync's bookkeeping since, after it pushed the title.
+    let mut remote = Remote::default();
+    remote.set("etag", "\"2\"");
+    let source = Some(Source::Remote(remote));
+    let pushed = index.edit(&ids[0], &mut Changes::default(), |doc| {
+        doc.set_source(source.clone())
+    });
+    assert_eq!(pushed.unwrap(), SaveOutcome::Saved);
+
+    let undone = index.replay(&mut titled.files, Op::Undo, &mut Changes::default());
+    assert_eq!(undone.unwrap(), SaveOutcome::Saved);
+    let doc = index.get(&ids[0]).unwrap();
+    assert_eq!(doc.title(), "Note 0");
+    assert_eq!(doc.envelope().unwrap().source, source, "kept");
+    let redone = index.replay(&mut titled.files, Op::Redo, &mut Changes::default());
+    assert_eq!(redone.unwrap(), SaveOutcome::Saved);
+
+    // What else a writer changes is the conflict.
+    let pulled = index.edit(&ids[0], &mut Changes::default(), |doc| {
+        doc.set_title("Theirs".into())
+    });
+    assert_eq!(pulled.unwrap(), SaveOutcome::Saved);
+    let undone = index.replay(&mut titled.files, Op::Undo, &mut Changes::default());
+    assert_eq!(undone.unwrap(), SaveOutcome::Conflict(ids[0]));
 
     fs::remove_dir_all(&root).ok();
 }
@@ -1336,6 +1453,33 @@ fn a_file_changed_outside_is_not_overwritten() {
         &mut Changes::default(),
     );
     assert_eq!(saved.unwrap(), SaveOutcome::Unchanged);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_conflict_puts_back_everything_an_edit_changed() {
+    use crate::envelope::Event;
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let before = index.get(&ids[0]).unwrap().save();
+    edit_outside(&root, 0, &ids[0], "Theirs, longer\n");
+
+    let mut changes = Changes::default();
+    let edited = index.edit(&ids[0], &mut changes, |doc| {
+        doc.set_title("Mine".into());
+        doc.set_labels(vec!["mine".into()]);
+        doc.set_starred(true);
+        doc.set_date(DateTime::now());
+        doc.set_event(Some(Event::default()));
+        doc.join_project(Id::generate());
+        doc.set_content("Mine\n".into());
+    });
+    assert_eq!(edited.unwrap(), SaveOutcome::Conflict(ids[0]));
+    let doc = index.get(&ids[0]).unwrap();
+    assert_eq!(doc.save(), before, "as the app last read it");
+    assert!(!doc.is_dirty());
+    assert!(changes.saved.is_empty());
 
     fs::remove_dir_all(&root).ok();
 }

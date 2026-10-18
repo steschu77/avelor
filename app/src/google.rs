@@ -9,7 +9,7 @@ use std::hash::Hash;
 use std::path::PathBuf;
 
 use av_google::auth::{self, PendingConsent};
-use av_google::calendar;
+use av_google::calendar::{self, CalendarListEntry};
 use av_google::client::Client;
 use av_google::identity::{self, UserInfo};
 use av_utils::cancel::Cancel;
@@ -55,7 +55,7 @@ pub fn refuse_account(req: Req, error: Error) {
 }
 
 // ----------------------------------------------------------------------------
-/// A sync of the account `id` ended (an email fetch): its
+/// A sync of the account `id` ended (an email fetch, a calendar sync): its
 /// `last_sync` is now, `record` notes what else it did (an email fetch's
 /// `last_fetch`), the account file is saved, and the page gets the account.
 /// A failed save is logged; what the sync wrote stays in the vault.
@@ -350,7 +350,8 @@ struct Calendars<'a> {
 // ----------------------------------------------------------------------------
 /// `list_calendars {account}`: the calendars of the connected account, the
 /// primary calendar first, then by name. Checked calendars take their
-/// current names and colors along the way (the `account` event).
+/// current names and colors along the way (the `account` event), and
+/// get the vault's entities they lack.
 pub fn list_calendars(app: &mut App, req: Req, id: Id) {
     let client = match app.google.connected(id) {
         Ok(client) => client,
@@ -364,12 +365,8 @@ pub fn list_calendars(app: &mut App, req: Req, id: Id) {
                 Ok(list) => list,
                 Err(e) => return req.err(e),
             };
-            match app.google.update(id, |a| a.refresh_calendars(&list)) {
-                Ok(true) => post(app, id),
-                Ok(false) => {}
-                Err(Error::NotFound) => return req.err(Error::NotFound),
-                // Only display names changed: a failed save isn't worth an error.
-                Err(e) => log::warn!("Saving the renamed calendars of {id} failed: {e}"),
+            if let Err(e) = take_calendars(app, id, &list) {
+                return req.err(e);
             }
 
             list.sort_by_cached_key(|c| (!c.primary, c.summary.to_lowercase()));
@@ -389,8 +386,30 @@ pub fn list_calendars(app: &mut App, req: Req, id: Id) {
 }
 
 // ----------------------------------------------------------------------------
+/// Take the account's calendars as Google lists them: its checked ones their
+/// names and colors, and the vault's entities they lack. `not_found` for an
+/// account gone since.
+fn take_calendars(app: &mut App, id: Id, list: &[CalendarListEntry]) -> Result<()> {
+    let refreshed = match app.google.update(id, |a| a.refresh_calendars(list)) {
+        Ok(refreshed) => refreshed,
+        Err(Error::NotFound) => return Err(Error::NotFound),
+        // Only display names changed: a failed save isn't worth an error.
+        Err(e) => {
+            log::warn!("Saving the renamed calendars of {id} failed: {e}");
+            false
+        }
+    };
+    crate::calendar::ensure_entities(app, id);
+    if refreshed {
+        post(app, id);
+    }
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
 /// `set_calendar_source {account, calendar, selected}`: check or uncheck a
-/// calendar (`{id, name, color}` of `list_calendars`) as a source. The
+/// calendar (`{id, name, color}` of `list_calendars`) as a source,
+/// one checked getting its entity in the vault (the `entity` event). The
 /// account follows as the `account` event, also when nothing changed.
 pub fn set_calendar_source(
     app: &mut App,
@@ -409,6 +428,9 @@ pub fn set_calendar_source(
         .google
         .update(id, |a| a.set_calendar(calendar, selected));
     if set.is_ok() {
+        if selected {
+            crate::calendar::ensure_entities(app, id);
+        }
         post(app, id);
     }
     req.answer(set.map(|_| ()));
@@ -460,6 +482,31 @@ fn revoke(cancel: &Cancel, id: Id, token: Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::{CONNECTED, parse, shape, with_google};
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_calendars_listed_make_the_checked_ones_entities() {
+        let checked =
+            "  scopes:\n    - calendar: full\n  calendars:\n  - id: cal1\n    name: Personal\n";
+        let mut h = with_google("calendars-listed", checked, &[]);
+        let account = Id::parse(CONNECTED).unwrap();
+        let entry = |id: &str, summary: &str| CalendarListEntry {
+            id: id.into(),
+            summary: summary.into(),
+            ..CalendarListEntry::default()
+        };
+        let list = [entry("cal1", "Family"), entry("cal2", "Not checked")];
+        take_calendars(&mut h.app, account, &list).unwrap();
+        let sent = parse(&h.take());
+        assert_eq!(shape(&sent), ["entity", "account"], "{sent:?}");
+        assert_eq!(sent[0]["data"]["title"], "Family", "by its current name");
+
+        take_calendars(&mut h.app, account, &list).unwrap();
+        assert!(h.take().is_empty(), "nothing new");
+        let gone = take_calendars(&mut h.app, Id::generate(), &list);
+        assert!(matches!(gone, Err(Error::NotFound)));
+    }
 
     // ------------------------------------------------------------------------
     #[test]

@@ -1,8 +1,9 @@
 # Avelor — Accounts
 
 > The accounts the app works with: Google accounts (Gmail, Calendar,
-> Contacts, Tasks) and AI providers (chat) — their files, secrets and states, the
-> Accounts page, and how a feature picks its AI model. The assistant is in
+> Contacts, Tasks) and AI providers (chat) — their files, secrets and
+> states, the Accounts page, and how a feature picks its AI model. What a
+> Google account syncs is in `email.md` and `calendar.md`; the assistant,
 > `assistant.md`.
 
 ## Accounts in a vault
@@ -192,7 +193,7 @@ accounts with a detail pane.
   `disconnected`, so connecting the same Google account again keeps the
   account's `id` (and with it every document's `remote:` link). Removing
   a disconnected account deletes its file. The pane lists the account's
-  calendars; a checked one becomes a source; the Email row has its own Auto-sync check and
+  calendars; a checked one becomes a source (`calendar.md`) and gets its calendar entity; the Email row has its own Auto-sync check and
   filter (`email.md#email-auto-sync`).
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
   and Gemini with an API key, and Ollama by its address. A key or an address
@@ -252,7 +253,7 @@ why, with a button to Accounts where the fix is there.
 | H2 | Connect Google | Off/Read/Full per service → "Sign in with Google" → `connectGoogle` | `connect_google {levels}` → the browser opened after the handler → consent (loopback, PKCE) → code redeemed and user info fetched on workers → `GoogleAccounts::connect`: account YAML in `.avelor/accounts/` + DPAPI token `<id>.token` → `account`, `ok {id}` | card; sidebar sources |
 | H3 | Reconnect / change access | same with the account id | as H2 with `{account, levels}`; must be the same email (`wrong_account`) | id and `remote:` links kept |
 | H4 | Cancel sign-in | Cancel | `cancel_connect` → `ok`; the connect answers `cancelled` | — |
-| H5 | Calendars as sources | account pane renders → `list_calendars`; checkbox → `set_calendar_source {account, calendar, selected}` | `ok {calendars}` (after `account` if names changed); `account`, `ok` | checked calendars become sources |
+| H5 | Calendars as sources | account pane renders → `list_calendars`; checkbox → `set_calendar_source {account, calendar, selected}` | `ok {calendars}` (after `entity` per calendar entity made, `account` if names changed); `entity` for one made, `account`, `ok` | checked calendars become sources, each with its calendar entity |
 | H6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` (revoke on a worker, file marked `disconnected`, token deleted) → `account`, `ok`; `remove_account` (file and token deleted) → `account_removed`, `ok` | — |
 | I1 | Add an AI provider | "AI provider" menu → draft pane → key or address → Save → `aiConnect` | `connect_ai {provider, key \| address}` (channel `connect_ai`) → models listed with the new values on a worker → only then stored in `.avelor/accounts/` (the key as `<id>.key`) → `account`, `ok {id, models}` | card with models |
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |

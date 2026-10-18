@@ -324,9 +324,9 @@ mod tests {
         let args =
             serde_json::json!({ "account": GOOGLE_ID, "calendar": calendar, "selected": true });
         let sent = h.call("set_calendar_source", args);
-        assert_eq!(shape(&sent), ["account", "reply"]);
-        assert_eq!(sent[0]["data"]["calendars"][0]["name"], "Family");
-        assert_eq!(sent[1]["ok"], Json::Null);
+        assert_eq!(shape(&sent), ["entity", "account", "reply"]);
+        assert_eq!(sent[1]["data"]["calendars"][0]["name"], "Family");
+        assert_eq!(sent[2]["ok"], Json::Null);
         let file = h.vault().join(".avelor/accounts/google_a.yaml");
         let text = fs::read_to_string(file).unwrap();
         assert!(

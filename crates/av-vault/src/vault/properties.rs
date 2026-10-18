@@ -92,8 +92,8 @@ impl Index {
     }
 
     /// Apply `change` to `id`, which may be any entity, as one write: for
-    /// edits that touch several properties at once. Nothing is written if
-    /// nothing changed.
+    /// edits that touch several properties at once (e.g. a synced event
+    /// taking a remote version). Nothing is written if nothing changed.
     pub fn edit(
         &mut self,
         id: &Id,

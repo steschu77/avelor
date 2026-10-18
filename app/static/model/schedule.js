@@ -1,9 +1,10 @@
-// Schedules: the RFC 5545 lines of an event's `schedule` (`RRULE:`, `EXDATE:`,
-// as Google keeps them), expanded in local time from the first start, so 10:00
-// stays 10:00 across DST. Supported: FREQ DAILY/WEEKLY/MONTHLY/YEARLY with
-// INTERVAL, COUNT, UNTIL, BYDAY (weekdays; with an ordinal such as 2TU or -1FR
-// in a month), BYMONTHDAY, BYMONTH, and EXDATE. Any other rule shows the first
-// occurrence only. For the calendar (model/calendar.js).
+// Schedules (vault.md#event): the RFC 5545 lines of an event's `schedule`
+// (`RRULE:`, `EXDATE:`, as Google keeps them), expanded in local time from the
+// first start, so 10:00 stays 10:00 across DST. Supported: FREQ
+// DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL, COUNT, UNTIL, BYDAY (weekdays;
+// with an ordinal such as 2TU or -1FR in a month), BYMONTHDAY, BYMONTH, and
+// EXDATE. Any other rule shows the first occurrence only. For the calendar
+// (model/calendar.js).
 
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 const RRULE_PARTS = new Set(['FREQ', 'INTERVAL', 'COUNT', 'UNTIL', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'WKST']);

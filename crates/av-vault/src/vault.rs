@@ -316,7 +316,9 @@ impl FileStep {
 
 // ----------------------------------------------------------------------------
 /// What a step keeps of a file: its frontmatter, and its body only where the
-/// step changed it, so undoing a title keeps the text written since.
+/// step changed it, so undoing a title keeps the text written since. The
+/// frontmatter's source block, the bookkeeping of the writer the file came
+/// from (a calendar sync's `remote` properties), is no part of it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileState {
     envelope: Option<Box<Envelope>>,
@@ -333,20 +335,34 @@ impl FileState {
         }
     }
 
-    /// Whether `doc` holds this state.
+    /// Whether `doc` holds this state, whatever its source block.
     fn held_by(&self, doc: &Document) -> bool {
-        doc.envelope() == self.envelope.as_deref()
+        sourceless(doc.envelope()) == sourceless(self.envelope.as_deref())
             && self.body.as_ref().is_none_or(|body| body == doc.content())
     }
 
-    /// Put this state into `doc`; its body stays where the state has none.
+    /// Put this state into `doc`; its body stays where the state has none,
+    /// and its source block as it is.
     fn put(&self, doc: &mut Document) {
         let body = self
             .body
             .clone()
             .unwrap_or_else(|| doc.content().to_string());
-        doc.restore((self.envelope.as_deref().cloned(), body));
+        let source = doc.envelope().and_then(|now| now.source.clone());
+        let envelope = self.envelope.as_deref().map(|envelope| Envelope {
+            source,
+            ..envelope.clone()
+        });
+        doc.restore((envelope, body));
     }
+}
+
+/// `envelope` without its source block (`FileState`).
+fn sourceless(envelope: Option<&Envelope>) -> Option<Envelope> {
+    envelope.map(|envelope| Envelope {
+        source: None,
+        ..envelope.clone()
+    })
 }
 
 // ----------------------------------------------------------------------------

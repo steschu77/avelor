@@ -9,9 +9,11 @@ import { $ } from '../core/dom.js';
 import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
 import { titled } from '../core/dom.js';
+import { rpcCall } from '../core/rpc.js';
 import { registerAction, registerActions, runAction } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store, vaultOpen } from '../model/state.js';
+import { showError } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
 import { projects } from '../model/entities.js';
 import { accounts, sourceKeyOf } from '../model/entities.js';
@@ -187,7 +189,9 @@ function renderSidebar() {
       // A source that syncs on its own shows its button pressed.
       const button = row.querySelector('.nav-item__action');
       setAria(button, 'aria-pressed', source.autoSync);
-      button.title = source.autoSync ? t('sidebar.auto_sync_on', { action: t('sidebar.fetch_email') }) : t('sidebar.sync', { name });
+      const sync = t('sidebar.sync', { name });
+      const action = source.kind === 'email' ? t('sidebar.fetch_email') : sync;
+      button.title = source.autoSync ? t('sidebar.auto_sync_on', { action }) : sync;
     }
     return row;
   });
@@ -293,12 +297,10 @@ function vaultSources() {
   ];
 }
 
-// A source's button: Created Here's opens the New menu, an account's email
-// syncs.
+// A source's button: Created Here's opens the New menu, an account's syncs.
 function sourceButton(source) {
-  const { key, name, account } = source;
+  const { key, name } = source;
   if (key === 'created') return { icon: '#i-add', title: t('sidebar.new_title'), onClick: (_row, button) => runAction('new', button) };
-  if (!account) return null;
   return { icon: '#i-arrow-sync', title: t('sidebar.sync', { name }), onClick: () => syncSource(source) };
 }
 
@@ -342,23 +344,39 @@ function accountSources(account) {
   }
   if (scope.calendar && scope.calendar !== 'off') {
     for (const calendar of account.calendars ?? []) {
-      sources.push({ key: `${id}\ncalendar\n${calendar.id}`, name: calendar.name, icon: KIND_ICONS.calendar.icon });
+      sources.push({
+        key: `${id}\ncalendar\n${calendar.id}`, kind: 'calendar', account: id,
+        calendar: calendar.id, name: calendar.name, icon: KIND_ICONS.calendar.icon,
+        also: t('sidebar.sync_also'),
+      });
     }
   }
   return sources;
 }
 
 // The sync button of a source: Email opens the Fetch email page
-// (features/import/email.js).
+// (features/import/email.js); a calendar syncs right away, its progress and
+// summary in the jobs panel.
 function syncSource(source) {
-  return openEmailFetch(source.account);
+  if (source.kind === 'email') return openEmailFetch(source.account);
+  if (source.kind === 'calendar') return syncCalendar(source);
 }
 
-registerActions(() => [...accounts.values()].flatMap(accountSources).filter(source => source.kind === 'email').map(source => ({
-  id: `sync.${source.key}`, group: 'get', title: t('sidebar.fetch_email_for', { name: source.name }),
-  icon: '#i-arrow-import', also: source.also, page: true,
+registerActions(() => [...accounts.values()].flatMap(accountSources).map(source => ({
+  id: `sync.${source.key}`, group: 'get', also: source.also,
+  ...(source.kind === 'email'
+    ? { title: t('sidebar.fetch_email_for', { name: source.name }), icon: '#i-arrow-import', page: true }
+    : { title: t('sidebar.sync_now', { name: source.name }), icon: '#i-arrow-sync' }),
   run: () => syncSource(source),
 })));
+
+// The sync runs as a job (the jobs panel); a refused one is said in the
+// status bar.
+function syncCalendar(source) {
+  rpcCall('calendar_sync', { account: source.account, calendar: source.calendar }).catch(e => {
+    if (e.code !== 'cancelled') showError(t('sidebar.sync_failed', { name: source.name, error: e.message }));
+  });
+}
 
 // ----------------------------------------------------------------------------
 store.subscribe(state => state.vault_name,

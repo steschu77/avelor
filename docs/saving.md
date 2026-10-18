@@ -226,8 +226,9 @@ its file and when the file changed, or that it was deleted.
   through or it is reloaded. If no one is left to answer the dialog —
   Windows ends the session, another vault opens — it is kept as a new
   entity beside the file, made here and labelled `conflict`
-  (`documents::keep_conflict_copy`), so the edits survive and the file keeps
-  the other program's version.
+  (`documents::keep_conflict_copy`, as calendar sync keeps its local
+  version), so the edits survive and the file keeps the other program's
+  version.
 
 ### Atomic writes <a id="atomic-writes"></a>
 
@@ -247,13 +248,22 @@ the status bar).
   for files no editor shows.
 - Typing in the very instant a taken-in file arrives (one round trip)
   loses those keystrokes to the file's version.
+- Writers that can't ask (calendar sync, email fetch, the assistant) report
+  a conflict as a failure of that entity ("changed outside the app",
+  `Error::ChangedOutside` through `Vault::require_written`, their edits
+  through `App::edit_written`).
 
 ## Undo <a id="undo"></a>
 
 Every write keeps its step: `Changes`, the record of an operation, holds
 each file it wrote with what the file held before and after
 (`FileStep`): its frontmatter, and its body only where the operation
-changed it, so undoing a title keeps the text written since.
+changed it, so undoing a title keeps the text written since. The
+frontmatter's source block, the bookkeeping of the writer the file came
+from (a calendar sync's `remote` properties, `vault.md#remote`), is no
+part of it: set aside when compared, kept as it is when written, so an
+event edited and written back to Google since is undone all the same
+(`calendar.md`).
 `Index::replay` takes a step back (`Op::Undo`), its files as they were
 before, the last written first: what they held, the frontmatter's keys
 in the app's order, as any write puts them; or forth again
@@ -287,7 +297,8 @@ back into the editor (`content`). Ctrl+Z outside the editor leaves edit
 mode first, saving, so the session is the last step.
 What the app writes on its own is no step: a conflict copy
 (`#held-saves`), what a job writes (Fetch email,
-`email.md#fetch-email`); nor are a conversation with the assistant
+`email.md#fetch-email`; a calendar's sync, `calendar.md`), the calendar entity a check makes
+(`calendar.md#syncing`); nor are a conversation with the assistant
 (`assistant.md`), Delete for good and Empty trash (`vault.md#trash`).
 
 ## Closing the app <a id="closing-the-app"></a>

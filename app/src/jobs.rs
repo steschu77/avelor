@@ -23,6 +23,7 @@ use crate::{api, chat};
 pub enum JobKind {
     Indexing,
     EmailFetch,
+    CalendarSync,
 }
 
 impl JobKind {
@@ -35,9 +36,9 @@ impl JobKind {
 
     // ------------------------------------------------------------------------
     /// Whether it belongs to the open vault, so a vault switch stops it
-    /// first: it writes into the vault (email fetch).
+    /// first: it writes into the vault (email fetch, calendar sync).
     fn vault_bound(self) -> bool {
-        matches!(self, JobKind::EmailFetch)
+        matches!(self, JobKind::EmailFetch | JobKind::CalendarSync)
     }
 
     // ------------------------------------------------------------------------
@@ -46,6 +47,7 @@ impl JobKind {
         match self {
             JobKind::Indexing => "Indexing",
             JobKind::EmailFetch => "Email fetch",
+            JobKind::CalendarSync => "Calendar sync",
         }
     }
 }
@@ -175,7 +177,7 @@ impl App {
     // ------------------------------------------------------------------------
     /// Run `work` on a worker under the job `id`'s `Cancel`, then `apply` its
     /// output on the UI thread -- also after the job was stopped, so it can
-    /// keep what the work did before and end itself. Each
+    /// keep what the work did before (a sync's pushes) and end itself. Each
     /// continuation checks that its job is still running.
     pub fn run_job<T: Send + 'static>(
         &self,
@@ -217,7 +219,8 @@ impl App {
     // ------------------------------------------------------------------------
     /// Open `root` once the work bound to the open vault has stopped: the
     /// assistant's replies being written keep what they have so far (as
-    /// Stop does), email fetch is stopped. A newer switch replaces this one.
+    /// Stop does), email fetch and calendar sync are stopped, and a sync
+    /// first records what it already did. A newer switch replaces this one.
     pub fn switch_vault_when_stopped(&mut self, root: PathBuf) {
         chat::stop_all(self);
         let bound: Vec<Id> = self
@@ -264,7 +267,8 @@ pub fn cancel_job(app: &mut App, req: Req, id: Id) {
 
 // ----------------------------------------------------------------------------
 /// Stop the job `id`: its requests are cancelled, and the job ends -- at once
-/// (email fetch).
+/// (email fetch), or once it has kept what it did
+/// (calendar sync, whose continuation runs with what the sync returned).
 pub fn stop(app: &mut App, id: Id) {
     let Some(kind) = app.jobs.running.get(&id).map(|job| job.kind) else {
         return;
@@ -273,7 +277,7 @@ pub fn stop(app: &mut App, id: Id) {
     app.stop_job(id);
     match kind {
         JobKind::EmailFetch => email::stop(app),
-        JobKind::Indexing => {}
+        JobKind::CalendarSync | JobKind::Indexing => {}
     }
 }
 
@@ -382,6 +386,18 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn a_job_that_ends_without_a_stop_did_all_its_steps() {
+        let mut h = Harness::new("job-complete");
+        let id = h
+            .app
+            .start_job(JobKind::CalendarSync, Text::new("email.fetching"), 1);
+        h.app.end_job(id, vec![Text::new("count.new").arg("n", 3)]);
+        let jobs = events(&h.take(), "job");
+        assert_eq!(state(&jobs[1]), ("done", 1, 1, false));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn cancel_job_refuses_unknown_jobs_and_the_indexing() {
         let mut h = Harness::new("cancel-job");
         let unknown = json!({ "id": 1, "cmd": "cancel_job", "args": { "id": Id::generate() } });
@@ -412,7 +428,7 @@ mod tests {
         let mut h = Harness::new("run-job");
         let id = h
             .app
-            .start_job(JobKind::EmailFetch, Text::new("email.fetching"), 1);
+            .start_job(JobKind::CalendarSync, Text::new("email.fetching"), 1);
         h.app.stop_job(id);
         h.app.run_job(
             id,
@@ -434,9 +450,9 @@ mod tests {
         let (name, text) = note_file(1);
         fs_write(&other.join(name), &text);
 
-        let fetch = h
+        let sync = h
             .app
-            .start_job(JobKind::EmailFetch, Text::new("email.fetching"), 1);
+            .start_job(JobKind::CalendarSync, Text::new("email.fetching"), 1);
         h.take();
         api::switch_to(&mut h.app, other.clone());
         h.run_queue();
@@ -444,12 +460,12 @@ mod tests {
         assert_eq!(
             events(&sent, "job")[0]["state"],
             "stopping",
-            "the fetch was stopped"
+            "the sync was stopped"
         );
         assert!(events(&sent, "vault").is_empty(), "{sent:?}");
         assert_eq!(h.app.vault.root(), Some(h.vault().as_path()));
 
-        h.app.end_job(fetch, vec![Text::new("job.stopped")]);
+        h.app.end_job(sync, vec![Text::new("job.stopped")]);
         h.wait_indexed();
         let sent = h.take();
         assert!(!events(&sent, "vault").is_empty(), "{sent:?}");

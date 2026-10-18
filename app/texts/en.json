@@ -168,6 +168,18 @@
   },
   "cal.previous_month": "Previous month",
   "cal.today": "Today",
+  "calendar.count.skipped": {
+    "one": "{n} occurrence skipped",
+    "other": "{n} occurrences skipped"
+  },
+  "calendar.create_failed": "The calendar couldn't be created in the vault.",
+  "calendar.no_access": "The account has no calendar access.",
+  "calendar.not_a_source": "The calendar isn't a source of the account.",
+  "calendar.reconnect": "reconnect the account",
+  "calendar.sync_failed": "Could not sync {subject}.",
+  "calendar.sync_running": "Another calendar sync is still running.",
+  "calendar.syncing": "Syncing calendar · {name}",
+  "calendar.write_failed": "Could not write a synced event.",
   "card.chat": "Chat about document",
   "card.delete": "Delete document",
   "card.edit": "Edit document",
@@ -243,6 +255,11 @@
   "conflict.when_day": "on {date} at {time}",
   "conflict.when_today": "at {time}",
   "context.open": "Open",
+  "count.conflicts": {
+    "one": "{n} conflict",
+    "other": "{n} conflicts"
+  },
+  "count.deleted": "{n} deleted",
   "count.entities": {
     "one": "{n} entity",
     "other": "{n} entities"
@@ -267,9 +284,12 @@
   "count.new": "{n} new",
   "count.of_kind": "{n} {kind}",
   "count.of_total": "{at} of {n}",
+  "count.pushed": "{n} pushed",
   "count.read": "{n} read",
   "count.replaced": "{n} replaced",
+  "count.restored": "{n} restored",
   "count.skipped": "{n} skipped",
+  "count.updated": "{n} updated",
   "dash.all_closed": "All cards are closed.",
   "dash.card.conversations": "Recent conversations",
   "dash.card.files": "Recent files",
@@ -469,6 +489,8 @@
     "one": "{n} file couldn't be read",
     "other": "{n} files couldn't be read"
   },
+  "job.failed": "failed: {error}",
+  "job.nothing_new": "nothing new",
   "job.nothing_to_fetch": "nothing to fetch",
   "job.spend_limit": "spend limit reached",
   "job.stop": "Stop",
@@ -766,6 +788,9 @@
   "sidebar.star": "Star",
   "sidebar.switch_vault": "Switch vault…",
   "sidebar.sync": "Sync {name}",
+  "sidebar.sync_also": "Google, events",
+  "sidebar.sync_failed": "Could not sync {name}: {error}",
+  "sidebar.sync_now": "Sync {name} now",
   "sidebar.unstar": "Remove the star",
   "sidebar.workspace": "Workspace",
   "signin.declined": "The sign-in was declined.",

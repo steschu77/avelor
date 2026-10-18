@@ -171,6 +171,18 @@
   },
   "cal.previous_month": "Mes anterior",
   "cal.today": "Hoy",
+  "calendar.count.skipped": {
+    "one": "{n} repetición omitida",
+    "other": "{n} repeticiones omitidas"
+  },
+  "calendar.create_failed": "No se pudo crear el calendario en la bóveda.",
+  "calendar.no_access": "La cuenta no tiene acceso al calendario.",
+  "calendar.not_a_source": "El calendario no es una fuente de la cuenta.",
+  "calendar.reconnect": "vuelve a conectar la cuenta",
+  "calendar.sync_failed": "No se pudo sincronizar {subject}.",
+  "calendar.sync_running": "Otra sincronización del calendario sigue en curso.",
+  "calendar.syncing": "Sincronizando calendario · {name}",
+  "calendar.write_failed": "No se pudo escribir un evento sincronizado.",
   "card.chat": "Conversar sobre el documento",
   "card.delete": "Eliminar documento",
   "card.edit": "Editar documento",
@@ -246,6 +258,14 @@
   "conflict.when_day": "el {date} a las {time}",
   "conflict.when_today": "a las {time}",
   "context.open": "Abrir",
+  "count.conflicts": {
+    "one": "{n} conflicto",
+    "other": "{n} conflictos"
+  },
+  "count.deleted": {
+    "one": "{n} eliminado",
+    "other": "{n} eliminados"
+  },
   "count.entities": {
     "one": "{n} elemento",
     "other": "{n} elementos"
@@ -276,6 +296,10 @@
   },
   "count.of_kind": "{kind}: {n}",
   "count.of_total": "{at} de {n}",
+  "count.pushed": {
+    "one": "{n} enviado",
+    "other": "{n} enviados"
+  },
   "count.read": {
     "one": "{n} leído",
     "other": "{n} leídos"
@@ -284,9 +308,17 @@
     "one": "{n} reemplazado",
     "other": "{n} reemplazados"
   },
+  "count.restored": {
+    "one": "{n} restaurado",
+    "other": "{n} restaurados"
+  },
   "count.skipped": {
     "one": "{n} omitido",
     "other": "{n} omitidos"
+  },
+  "count.updated": {
+    "one": "{n} actualizado",
+    "other": "{n} actualizados"
   },
   "dash.all_closed": "Todas las tarjetas están cerradas.",
   "dash.card.conversations": "Conversaciones recientes",
@@ -499,6 +531,8 @@
     "one": "No se pudo leer {n} archivo",
     "other": "No se pudieron leer {n} archivos"
   },
+  "job.failed": "falló: {error}",
+  "job.nothing_new": "nada nuevo",
   "job.nothing_to_fetch": "nada que obtener",
   "job.spend_limit": "límite de gasto alcanzado",
   "job.stop": "Detener",
@@ -791,6 +825,9 @@
   "sidebar.star": "Destacar",
   "sidebar.switch_vault": "Cambiar de bóveda…",
   "sidebar.sync": "Sincronizar {name}",
+  "sidebar.sync_also": "Google, eventos",
+  "sidebar.sync_failed": "No se pudo sincronizar {name}: {error}",
+  "sidebar.sync_now": "Sincronizar {name} ahora",
   "sidebar.unstar": "Quitar el destacado",
   "sidebar.workspace": "Espacio de trabajo",
   "signin.declined": "Se rechazó el inicio de sesión.",

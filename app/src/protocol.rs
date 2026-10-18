@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::api;
 use crate::app::Prefs;
 use crate::app::{App, UiQueue};
+use crate::calendar;
 use crate::close;
 use crate::documents;
 use crate::google;
@@ -109,6 +110,8 @@ enum Command {
     EmailHeaders(email::HeadersRequest),
     EmailFetch(email::FetchRequest),
     SetEmailSync(email::SyncChange),
+    // Calendar sync (`calendar`).
+    CalendarSync(calendar::SyncRequest),
     // The assistant's conversations (`chat`).
     ChatOpen(Target),
     ChatSend(chat::SendRequest),
@@ -326,6 +329,7 @@ impl Command {
             "email_headers" => Command::EmailHeaders(from_value(args)?),
             "email_fetch" => Command::EmailFetch(from_value(args)?),
             "set_email_sync" => Command::SetEmailSync(from_value(args)?),
+            "calendar_sync" => Command::CalendarSync(from_value(args)?),
             "chat_open" => Command::ChatOpen(from_value(args)?),
             "chat_send" => Command::ChatSend(from_value(args)?),
             "chat_stop" => Command::ChatStop(from_value(args)?),
@@ -438,6 +442,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::EmailHeaders(a) => email::email_headers(app, req, a),
         Command::EmailFetch(a) => email::email_fetch(app, req, a),
         Command::SetEmailSync(a) => email::set_email_sync(app, req, a),
+        Command::CalendarSync(a) => calendar::calendar_sync(app, req, a),
         Command::ChatOpen(a) => chat::chat_open(app, req, a.id),
         Command::ChatSend(a) => chat::chat_send(app, req, a),
         Command::ChatStop(a) => chat::chat_stop(app, req, a.conversation),

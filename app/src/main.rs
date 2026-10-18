@@ -6,6 +6,7 @@ mod accounts;
 mod ai;
 mod api;
 mod app;
+mod calendar;
 mod chat;
 mod close;
 mod config;
