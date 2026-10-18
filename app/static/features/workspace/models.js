@@ -21,7 +21,7 @@ export function aiProvider(kind) {
   return AI_PROVIDERS.find(p => p.kind === kind);
 }
 
-function isAiAccount(account) {
+export function isAiAccount(account) {
   return !!aiProvider(account?.kind);
 }
 

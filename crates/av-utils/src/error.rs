@@ -55,6 +55,11 @@ pub enum Error {
     /// An AI account has spent its monthly limit; it takes no more calls
     /// this month.
     SpendLimit,
+    /// A sign-in for an account came back as another one: `email` is who
+    /// signed in.
+    WrongAccount {
+        email: String,
+    },
     /// The entity was created in the app and has no file yet.
     Unsaved,
     /// The entity's file can't be written: read-only, or its frontmatter
@@ -142,6 +147,7 @@ impl Error {
             Error::Unsupported { .. } => "unsupported",
             Error::NotConnected => "not_connected",
             Error::SpendLimit => "spend_limit",
+            Error::WrongAccount { .. } => "wrong_account",
             Error::Unsaved => "unsaved",
             Error::NotWritable { .. } => "not_writable",
             Error::ChangedOutside { .. } => "changed_outside",

@@ -749,7 +749,7 @@ These are the ID card thread's entities; the whole vault has every type.
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its settings (`vault_settings`), then the indexing: `vault` (indexing), the indexing's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a summary if files failed); answered `null` once the indexing has started | sidebar, lens and counts fill while scanning |
+| A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its settings (`vault_settings`), then the indexing: `vault` (indexing), the indexing's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a summary if files failed); answered `{google}` once the indexing has started | sidebar, lens and counts fill while scanning |
 | A3 | Show in folder | vault menu → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
 | E6 | Restore | Workspace > Trash, Restore → `restore_entity` | `Index::restore` moves the file back → `entity` | the restored entity selected; a thread the delete dissolved stays dissolved |
 

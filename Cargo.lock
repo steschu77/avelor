@@ -109,6 +109,7 @@ name = "avelor"
 version = "0.1.0"
 dependencies = [
  "av-bundle",
+ "av-google",
  "av-llm",
  "av-texts",
  "av-utils",

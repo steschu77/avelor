@@ -89,5 +89,6 @@ rpcOn('vault', ({ state }) => {
   if (state === 'indexing') shownVaultPage()?.close();
 });
 
-// The page listens: the host opens the vault of the last session.
-rpcCall('ready');
+// The page listens: the host opens the vault of the last session, and
+// says whether this build has Google.
+rpcCall('ready').then(({ google }) => store.setState({ google }));

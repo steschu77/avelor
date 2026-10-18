@@ -2,6 +2,7 @@
 //! `api.md#rules`): a JSON envelope per request, exactly
 //! one reply to each, events pushed.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -10,6 +11,8 @@ use crate::app::Prefs;
 use crate::app::{App, UiQueue};
 use crate::close;
 use crate::documents;
+use crate::google;
+use crate::google::accounts::{CalendarSource, Level};
 use crate::structure;
 use crate::texts::Text;
 use crate::trash;
@@ -85,7 +88,12 @@ enum Command {
     // The steps undone and redone (`undo`).
     Undo,
     Redo,
-    // Accounts (`accounts`).
+    // Google accounts (`google`), and what both kinds of account do alike
+    // (`accounts`).
+    ConnectGoogle(Connect),
+    CancelConnect,
+    ListCalendars(OfAccount),
+    SetCalendarSource(CalendarChoice),
     DisconnectAccount(OfAccount),
     RemoveAccount(OfAccount),
     // AI accounts (`ai`).
@@ -215,6 +223,14 @@ struct Archive {
     archived: bool,
 }
 
+/// `{account?, levels}`: no `account` connects a new one.
+#[derive(Deserialize)]
+struct Connect {
+    #[serde(default)]
+    account: Option<Id>,
+    levels: BTreeMap<String, Level>,
+}
+
 /// `{account?, provider?, key?, address?}`: no `account` connects a new
 /// one of `provider`.
 #[derive(Deserialize)]
@@ -239,6 +255,14 @@ struct OfConversation {
 #[derive(Deserialize)]
 struct OfAccount {
     account: Id,
+}
+
+/// `{account, calendar: {id, name, color}, selected}`
+#[derive(Deserialize)]
+struct CalendarChoice {
+    account: Id,
+    calendar: CalendarSource,
+    selected: bool,
 }
 
 impl Command {
@@ -278,6 +302,10 @@ impl Command {
             "empty_trash" => Command::EmptyTrash,
             "undo" => Command::Undo,
             "redo" => Command::Redo,
+            "connect_google" => Command::ConnectGoogle(from_value(args)?),
+            "cancel_connect" => Command::CancelConnect,
+            "list_calendars" => Command::ListCalendars(from_value(args)?),
+            "set_calendar_source" => Command::SetCalendarSource(from_value(args)?),
             "disconnect_account" => Command::DisconnectAccount(from_value(args)?),
             "remove_account" => Command::RemoveAccount(from_value(args)?),
             "connect_ai" => Command::ConnectAi(from_value(args)?),
@@ -378,6 +406,12 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::EmptyTrash => trash::empty_trash(app, req),
         Command::Undo => undo::replay(app, req, Op::Undo),
         Command::Redo => undo::replay(app, req, Op::Redo),
+        Command::ConnectGoogle(a) => google::connect_google(app, req, a.account, a.levels),
+        Command::CancelConnect => google::cancel_connect(app, req),
+        Command::ListCalendars(a) => google::list_calendars(app, req, a.account),
+        Command::SetCalendarSource(a) => {
+            google::set_calendar_source(app, req, a.account, a.calendar, a.selected)
+        }
         Command::DisconnectAccount(a) => accounts::disconnect_account(app, req, a.account),
         Command::RemoveAccount(a) => accounts::remove_account(app, req, a.account),
         Command::ConnectAi(a) => ai::connect_ai(app, req, a.account, a.provider, a.key, a.address),
