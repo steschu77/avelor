@@ -1,7 +1,10 @@
-//! Import scans (import.md#import-scans): the files of an images folder watch.
+//! Import scans (import.md#import-scans): the files of an images folder watch,
+//! read by an AI account's OCR model.
 //!
-//! The page lists the files; the commands of the typed protocol
-//! (api.md#scans).
+//! The page lists the files, has the ticked ones read (a job reading one file
+//! after the other, which `cancel_job` stops); the commands of the typed
+//! protocol (api.md#scans). What a file read to is kept in memory while the
+//! app runs.
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
@@ -23,15 +26,22 @@ use crate::protocol::Req;
 use crate::sys;
 use crate::texts::Text;
 use crate::watches::{self, FolderFile};
+use read::ScanRead;
 
 mod previews;
+mod read;
 
 pub(crate) use previews::{PreviewRequest, scan_previews};
+pub(crate) use read::{ReadRequest, scan_read, stop_read};
 
 // ----------------------------------------------------------------------------
 /// What the app keeps for Import scans.
 #[derive(Default)]
 pub struct ScanState {
+    /// What each file read to, by its path.
+    cache: HashMap<PathBuf, Ocr>,
+    /// The read in progress; one at a time.
+    read: Option<ScanRead>,
     /// Each file's preview, by its path: a JPEG `data:` URL, or empty if
     /// the file couldn't be decoded.
     previews: HashMap<PathBuf, (Stamp, String)>,
@@ -41,15 +51,45 @@ pub struct ScanState {
 
 impl ScanState {
     // ------------------------------------------------------------------------
+    /// What `file` read to, if it was read as it is now.
+    fn cached(&self, file: &FolderFile) -> Option<&Ocr> {
+        self.cache
+            .get(&file.path)
+            .filter(|ocr| ocr.stamp.matches(file))
+    }
+
+    // ------------------------------------------------------------------------
     /// The preview of `file`, if it was made of the file as it is now.
     fn preview(&self, file: &FolderFile) -> Option<&str> {
         let (stamp, url) = self.previews.get(&file.path)?;
         stamp.matches(file).then_some(url.as_str())
     }
+
+    // ------------------------------------------------------------------------
+    /// The job reading the files of `watch`, if one is running.
+    fn job_of(&self, watch: Id) -> Option<Id> {
+        self.read
+            .as_ref()
+            .filter(|r| r.watch == watch)
+            .map(|r| r.job)
+    }
+
+    // ------------------------------------------------------------------------
+    /// `queued` or `reading` while the read of `watch` has the file `name`.
+    fn status(&self, watch: Id, name: &str) -> Option<&'static str> {
+        let read = self.read.as_ref().filter(|r| r.watch == watch)?;
+        if read.queue.current().is_some_and(|current| current == name) {
+            Some("reading")
+        } else if read.queue.waiting().any(|queued| queued == name) {
+            Some("queued")
+        } else {
+            None
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
-/// A file as it was when something was made of it (its preview):
+/// A file as it was when something was made of it (its text, its preview):
 /// what was made is valid while the file still is.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Stamp {
@@ -73,6 +113,15 @@ impl Stamp {
 }
 
 // ----------------------------------------------------------------------------
+/// What a file read to.
+struct Ocr {
+    /// The file as it was read.
+    stamp: Stamp,
+    words: usize,
+    title: String,
+}
+
+// ----------------------------------------------------------------------------
 /// One file of `scan_list`'s answer.
 #[derive(Serialize)]
 struct FileInfo<'a> {
@@ -83,6 +132,17 @@ struct FileInfo<'a> {
     modified: DateTime,
     /// The document the file was imported into.
     in_vault: Option<Id>,
+    /// What it read to, if it was read as it is now.
+    read: Option<PageRead<'a>>,
+    /// `queued` or `reading` while a read has it.
+    status: Option<&'static str>,
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Serialize)]
+struct PageRead<'a> {
+    words: usize,
+    title: &'a str,
 }
 
 // ----------------------------------------------------------------------------
@@ -91,6 +151,8 @@ struct FileInfo<'a> {
 struct Listing<'a> {
     listed: DateTime,
     files: Vec<FileInfo<'a>>,
+    /// The job reading this watch's files, if one is running.
+    job: Option<Id>,
 }
 
 // ----------------------------------------------------------------------------
@@ -110,7 +172,8 @@ fn refuse(req: Req, error: Error, text: Text) {
 
 // ----------------------------------------------------------------------------
 /// `scan_list {watch}`: list the watch's files on a worker. Answers
-/// `{listed, files}`, each file with what is known of it.
+/// `{listed, files, job}`, each file with what is known of it, and the job
+/// reading this watch's files, if one is running.
 pub fn scan_list(app: &mut App, req: Req, id: Id) {
     let settings = match app.watches.get(id) {
         Ok(watch) => watch.settings().clone(),
@@ -138,6 +201,7 @@ pub fn scan_list(app: &mut App, req: Req, id: Id) {
 /// `scan_list`'s answer for the files of `watch`.
 fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> {
     let in_vault = app.vault.index().scan_origins(&watch);
+    let scans = &app.scans;
     let files = files
         .iter()
         .map(|file| FileInfo {
@@ -146,11 +210,17 @@ fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> 
             taken: file.taken,
             modified: DateTime::from_system_time(file.modified),
             in_vault: in_vault.get(&file.name).copied(),
+            read: scans.cached(file).map(|ocr| PageRead {
+                words: ocr.words,
+                title: &ocr.title,
+            }),
+            status: scans.status(watch, &file.name),
         })
         .collect();
     Listing {
         listed: DateTime::now(),
         files,
+        job: scans.job_of(watch),
     }
 }
 

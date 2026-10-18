@@ -59,6 +59,8 @@
   "new.pick_start": "Elija primero una fecha de inicio",
   "panel.delete_armed": "Haga clic otra vez para eliminar",
   "panel.select_hint": "Seleccione un documento de la lista.",
+  "scans.blurb_together": "Solo los archivos que lee se envían al OCR.",
+  "scans.read_running": "Todavía se está leyendo otra carpeta; deténgala o espérela.",
   "scrub.drag": "Arrastre para elegir un rango de semanas",
   "trash.delete_again": "Haga clic de nuevo para eliminar para siempre",
   "trash.empty_again": "Haga clic de nuevo para vaciar la papelera",
