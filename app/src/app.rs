@@ -21,6 +21,7 @@ use crate::google::accounts::GoogleAccounts;
 use crate::indexing::Indexing;
 use crate::jobs::Jobs;
 use crate::protocol::{self, Req};
+use crate::scans::ScanState;
 use crate::sys::Owner;
 use crate::sys::UiSignal;
 use crate::texts::Text;
@@ -259,6 +260,9 @@ pub struct App {
     /// The close asked of the page (`close`).
     pub close: CloseState,
 
+    /// Import scans (`scans`).
+    pub scans: ScanState,
+
     /// The assistant's replies being written, and the failed ones
     /// (`chat`); neither is in the vault.
     pub chat: ChatState,
@@ -290,6 +294,7 @@ impl App {
             email: EmailState::default(),
             calendar: CalendarState::default(),
             close: CloseState::default(),
+            scans: ScanState::default(),
             chat: ChatState::default(),
             analysis: AnalysisState::default(),
         }
@@ -715,7 +720,7 @@ impl<P> Clone for Progress<P> {
 impl<P: Send + 'static> Progress<P> {
     // ------------------------------------------------------------------------
     /// Queue `on_progress(app, item)` on the UI thread: every item
-    /// arrives.
+    /// arrives (a preview each).
     pub fn send(&self, item: P) {
         let on_progress = Arc::clone(&self.on_progress);
         self.ui.send_to_ui(move |app| {
