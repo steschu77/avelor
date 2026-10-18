@@ -105,6 +105,12 @@ join it again, a thread it dissolved is whole again.
   as links (`vault.md#metadata`). Ctrl+Z after a delete does bring them
   back (above); a restore is a step too, and Ctrl+Z puts the file back in
   the trash.
+- **Calendar events.** A two-way calendar sync deletes in Google the
+  trashed events of its calendar that it synced, and rewrites each trashed
+  file with `status: cancelled`: it stays in the trash, and a restore
+  brings it back cancelled. An event changed in Google before that sync is
+  restored instead, with Google's version. An event deleted for good before
+  the sync isn't deleted in Google (`calendar.md#two-way-sync`).
 - **Delete** in the trash and **Empty trash** remove files for good; both
   take two clicks. Empty removes the markdown and YAML files the trash
   lists, and the folders this leaves empty; anything else put into
@@ -599,7 +605,11 @@ Well-known properties (named in `av_vault::schema::remote`):
 * `event-id`: an event's id in its Google calendar,
 * `etag`: the version of the Google event last seen,
 * `snapshot`: a hash of the event's synced fields at the last sync; an
-  event whose fields hash differently has been changed in the vault since.
+  event whose fields hash differently has been changed in the vault since,
+* `event-type`: Google's kind of the event, where it isn't a plain one:
+  `fromGmail` (made from a mail), or one Google keeps as it is,
+  `birthday`, `outOfOffice`, `workingLocation`, `focusTime`
+  (`calendar.md#two-way-sync`).
 
 ### Scan
 

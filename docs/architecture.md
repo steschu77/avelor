@@ -361,7 +361,7 @@ side never touches the vault side; `app` is the only bridge.
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked entity; `create`, a new AI conversation; dispatch tests against a fake Ollama |
 | `ai/accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
 | `email.rs`, `email/` | Fetch email: `email_labels`, `email_search`, `email_headers`, `email_fetch`, `set_email_sync`; `EmailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); their tests; its parts in `email/`: `preview.rs`, `fetch.rs`, `entities.rs`, `apply.rs`, `auto_sync.rs`, the tests in `email/tests.rs` |
-| `calendar.rs`, `calendar/` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync`; `CalendarState`; the sync job as plan → run → apply; their dispatch tests; its parts in `calendar/`: `mapping.rs`, `plan.rs`, `apply.rs`, the tests in `calendar/tests.rs` |
+| `calendar.rs`, `calendar/` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; their dispatch tests; its parts in `calendar/`: `mapping.rs`, `plan.rs`, `apply.rs`, the tests in `calendar/tests.rs` |
 
 ## Platforms <a id="platforms"></a>
 
