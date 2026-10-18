@@ -4,7 +4,8 @@
 // and thread folding (the projects folded kept in the `doc_folded`
 // preference), an entity dropped on either joining it; its own type selection (features/lenses/types.js; the
 // `doc_types` and `doc_types_bar` preferences); and one entity shown on
-// request (`revealInDocuments`, the selection restored on start). This
+// request (`showInDocuments`, the `documents.show` action;
+// `revealInDocuments`, the selection restored on start). This
 // file owns the rows, the folds and the sort-state UI, model/entities.js
 // the entities and features/selection.js the selection.
 
@@ -12,10 +13,12 @@ import { $, accEl, placeChildren } from '../../core/dom.js';
 import { setAria } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
 import { shortDate } from '../../core/format.js';
-import { t } from '../../core/text.js';
 
+import { registerAction } from '../../core/actions.js';
+import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { savePrefs } from '../../model/state.js';
+import { showError } from '../../model/state.js';
 import { isDirty } from '../../model/documents.js';
 import { entities } from '../../model/entities.js';
 import { matchesFilter } from '../../model/entities.js';
@@ -24,11 +27,13 @@ import { knownThreads, threads } from '../../model/entities.js';
 import { joinProjectLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
+import { closeVaultArea } from '../../ui/page.js';
 import {
   dropTarget, endDragPreview, startDragPreview, takeMemberDrops,
 } from '../../ui/dropzone.js';
 import { markSelection, selectById, selectDocument } from '../selection.js';
 import { selectFilter } from '../selection.js';
+import { selectLens } from '../selection.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
 import { invalidateLenses, registerLens } from './registry.js';
 
@@ -500,6 +505,25 @@ export function initDocumentsLens() {
   }
   renderSortHead();
 }
+
+// ----------------------------------------------------------------------------
+// Show the entity `id` in the lens (a new email's notice, through the
+// `documents.show` action): without a filter or a type selection that
+// would hide it, the entity selected and its row unfolded and scrolled
+// into view.
+function showInDocuments(id) {
+  const doc = entities.get(id);
+  if (!doc) return showError(t('docs.gone'));
+  closeVaultArea();
+  if (!matchesFilter(doc)) {
+    store.setState({ selected_project: null, selected_source: null, selected_labels: [] });
+  }
+  docTypes.show(typeOf(doc));
+  selectLens('documents');
+  selectDocument(id);
+  revealInDocuments(id);
+}
+registerAction({ id: 'documents.show', title: t('docs.show_in_documents'), run: showInDocuments });
 
 showHeader(store.getState().selected_lens);
 registerLens('documents', lensEl, renderDocuments);

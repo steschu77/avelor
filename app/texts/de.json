@@ -298,8 +298,10 @@
   "date.never": "Nie",
   "docs.date": "Datum",
   "docs.fold_thread": "Verlauf zuklappen",
+  "docs.gone": "Dieser Eintrag ist nicht mehr im Tresor.",
   "docs.hidden_count": "{n} ausgeblendet",
   "docs.name": "Name",
+  "docs.show_in_documents": "In Dokumente zeigen",
   "docs.unfold_thread": "Verlauf aufklappen",
   "docs.unsaved": "Ungespeicherte Änderungen",
   "documents.reload_failed": "Die Fassung auf der Festplatte konnte nicht geladen werden.",
@@ -359,6 +361,11 @@
     "other": "{n} Treffer"
   },
   "email.never_fetched": "nie abgerufen",
+  "email.new_many": {
+    "one": "{n} neue E-Mail · {email}",
+    "other": "{n} neue E-Mails · {email}"
+  },
+  "email.new_one": "Neue E-Mail: {title}",
   "email.next_page": "Nächste Seite",
   "email.no_matches": "Keine E-Mail passt zu diesem Filter.",
   "email.no_more_labels": "Keine weiteren Labels",
@@ -662,6 +669,7 @@
   "start.failed": "Ein Fehler ist aufgetreten.\n\nNäheres steht in der Protokolldatei.",
   "status.dismiss": "Ausblenden",
   "status.more": "+{n} weitere",
+  "status.show_in_documents": "In „Dokumente“ zeigen",
   "structure.invalid_argument": "es kann diese Änderung nicht annehmen",
   "structure.not_found": "es ist nicht mehr im Tresor",
   "structure.not_writable": "seine Datei ist schreibgeschützt oder sein Frontmatter kann nicht gelesen werden",

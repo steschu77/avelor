@@ -322,11 +322,13 @@
   "date.never": "Nunca",
   "docs.date": "Fecha",
   "docs.fold_thread": "Plegar el hilo",
+  "docs.gone": "Ese elemento ya no está en la bóveda.",
   "docs.hidden_count": {
     "one": "{n} oculto",
     "other": "{n} ocultos"
   },
   "docs.name": "Nombre",
+  "docs.show_in_documents": "Mostrarlo en Documentos",
   "docs.unfold_thread": "Desplegar el hilo",
   "docs.unsaved": "Cambios sin guardar",
   "documents.reload_failed": "No se pudo cargar la versión del disco.",
@@ -386,6 +388,11 @@
     "other": "{n} coincidencias"
   },
   "email.never_fetched": "nunca recogido",
+  "email.new_many": {
+    "one": "{n} correo nuevo · {email}",
+    "other": "{n} correos nuevos · {email}"
+  },
+  "email.new_one": "Correo nuevo: {title}",
   "email.next_page": "Página siguiente",
   "email.no_matches": "Ningún correo coincide con este filtro.",
   "email.no_more_labels": "No hay más etiquetas",
@@ -692,6 +699,7 @@
   "start.failed": "Se ha producido un error.\n\nEl archivo de registro tiene más información.",
   "status.dismiss": "Descartar",
   "status.more": "+{n} más",
+  "status.show_in_documents": "Mostrar en Documentos",
   "structure.invalid_argument": "no admite este cambio",
   "structure.not_found": "ya no está en la bóveda",
   "structure.not_writable": "su archivo es de solo lectura o no se puede leer su frontmatter",
