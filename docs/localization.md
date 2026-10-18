@@ -66,8 +66,8 @@ its locale does (`textOf`); a count's form follows the language's rules,
 a contributed language's too.
 
 What the host shows or writes itself it takes from the same catalogs,
-plain texts only: the failed start's box and the folder picker's title
-(`texts::text`).
+plain texts only: the failed start's box, the folder picker's title and
+the sign-in pages (`texts::text`).
 
 ## The language <a id="language"></a>
 
