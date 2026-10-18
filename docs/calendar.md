@@ -9,7 +9,7 @@
 
 Each calendar checked in the account pane is a source in the vault panel.
 Its sync button syncs that calendar right away, as a job: the jobs panel
-shows it and its summary (new, updated, pushed,
+shows it and its summary (new, updated, pushed, deleted, restored,
 conflicts, skipped occurrences, failed), and its Stop ends it early — what
 it already did is kept, the rest waits for the next sync. One calendar
 syncs at a time: a sync asked for while another runs is refused, with a
@@ -44,6 +44,15 @@ named after the calendar beside it, e.g. `Calendar/Personal/`.
 - The body is written to Google as HTML and read back as markdown. Bold,
   italic, struck-out text, links and lists (also numbered and nested)
   survive the way back; headings, code and tables come back as plain text.
+- With Full access, an event deleted in the vault is deleted in Google by
+  the next sync (at once if the calendar syncs on its own). Its file in the
+  trash is then marked cancelled, so restoring it brings it back hidden. If
+  it changed in Google before that sync, it isn't deleted: it comes back
+  from the trash with Google's version, keeping its labels, projects and
+  links (or as a new event if the restore is refused). With Read access a
+  delete stays in the vault, and the event comes back as a new one once it
+  changes in Google. Emptying the trash before the sync means the event
+  isn't deleted in Google.
 
 ## Flows
 
@@ -94,6 +103,11 @@ sequenceDiagram
 - **Descriptions**: Google → vault goes through
   `av_vault::html::to_markdown` (`body_of`), the mail converter, so the
   lists and emphasis come back as the editor writes them.
+- **Deletes**: with Full access, the calendar's trashed events that Google
+  still has are deleted there (`delete_one`, with `If-Match`), and each
+  trashed file is rewritten `cancelled` (`cancel_trashed`,
+  `Index::edit_trashed`); one changed in Google since is restored from the
+  trash with Google's version (`restore_event`).
 - **Resuming**: a sync stopped mid-way (Stop, a close) resumes without
   duplicates. A change pushed but not recorded is matched as equal and
   recorded (`push_one`); an insert is idempotent (`google_id_for`): `plan`
