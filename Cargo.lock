@@ -56,6 +56,7 @@ version = "0.1.0"
 dependencies = [
  "av-http",
  "av-utils",
+ "log",
  "serde",
  "serde_json",
 ]

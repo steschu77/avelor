@@ -122,8 +122,9 @@ plus `load_config_files` and `free_stem` (the next free file name).
 `accounts.rs` does the pass on vault open, disconnect, remove, the events
 `accounts` and `account_removed`.
 
-av-llm's `Client` speaks to Anthropic, OpenAI, Mistral, Gemini and Ollama,
-with the price table (`architecture.md#crates`). What the app knows of
+av-llm's `Client` speaks to Anthropic, OpenAI (Responses API, not Chat
+Completions), Mistral, Gemini and Ollama, with streaming (SSE/NDJSON), a
+normalized `Usage` and the price table (`architecture.md#crates`). What the app knows of
 each provider is one table, `PROVIDERS` (`av-llm/types.rs`): its name in
 files (`claude` as an alias of `anthropic`), the name the Accounts page
 shows, the default address, whether it takes a key (Ollama is addressed
