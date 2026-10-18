@@ -22,6 +22,7 @@ import {
 import { openVaultOp } from '../../ui/page.js';
 import { fieldEditKey, fieldEdits, renderEditField } from '../../ui/field.js';
 import { AI_PROVIDERS, aiHost, aiProvider, aiTitle, aiUsd } from './models.js';
+import { aiLimitReached } from './models.js';
 
 let selectedAccount = null; // an account id, or 'new:<kind>' for a new AI account
 let accountError = null; // { account, message } from the last failed op
@@ -310,10 +311,23 @@ function aiToggleOffered(account, modelId, on) {
 // ----------------------------------------------------------------------------
 // formatting
 
+// What was spent: "$3.18".
+function aiCost(n) {
+  return `$${(n ?? 0).toFixed(2)}`;
+}
+
 function aiPrice(price) {
   if (!price) return '\u2014';
   if (price.input === 0 && price.output === 0) return 'free';
   return `${aiUsd(price.input)} / ${aiUsd(price.output)}`;
+}
+
+// "12 calls this month, 2 not priced": what "This month" counts; calls of a
+// model the price table doesn't know cost nothing there.
+function aiSpentNote(spent) {
+  const calls = spent?.calls ?? 0;
+  const note = `${plural(calls, 'call')} this month`;
+  return spent?.unpriced ? `${note}, ${spent.unpriced} not priced` : note;
 }
 
 function aiOfferedText(count) {
@@ -334,7 +348,7 @@ function renderAiCard(account) {
   const meta = provider.local
     ? `${aiHost(account.address)} \u00b7 ${offered}`
     : account.key
-      ? `${account.key} \u00b7 ${offered}`
+      ? `${account.key} \u00b7 ${offered} \u00b7 ${aiCost(account.spent?.cost)} this month`
       : `No key \u00b7 ${offered}`;
   return itemCard({
     kind: provider.name,
@@ -434,7 +448,9 @@ function renderAiSpendStat(account) {
     },
     rerender: scheduleRenderAccounts,
   });
-  const hint = 'calls stop at the limit';
+  const hint = aiLimitReached(account)
+    ? 'reached: calls stop until next month or a higher limit'
+    : 'calls stop at the limit';
   return stat('Spend limit', field, note ?? hint);
 }
 
@@ -446,8 +462,12 @@ function renderAiStats(id, kind, account) {
     : stat('Account id', '\u2014', 'given on connect');
 
   if (!provider.local) {
+    const spent = account?.spent;
     return stats(
       renderAiKeyStat(id, kind, account),
+      account
+        ? stat('This month', aiCost(spent?.cost), aiSpentNote(spent))
+        : stat('This month', '\u2014'),
       account ? renderAiSpendStat(account) : stat('Spend limit', '\u2014'),
       accountId);
   }

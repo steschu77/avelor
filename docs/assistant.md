@@ -60,7 +60,7 @@ when it started.
   AI accounts offer (`aiModelPicker`), and kept in the vault's settings
   (`chat-model`, `set_vault_settings`). With no model picked, or one the
   host would refuse (its account gone or without its key, no longer
-  offered), the head is marked and a setup guide
+  offered, its spend limit reached), the head is marked and a setup guide
   replaces the input (`renderAssistantGuide`), with the menu of models or a
   button to Accounts. A refused message comes back in the host's words,
   nothing written, the draft back in the input.
@@ -94,12 +94,12 @@ the server's default applies.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | L1 | Show for the current item | the shown item changes → `assistantShow` | `chat_open {id}` → `ok {conversation}` | last or newest linked conversation; an AI conversation entity opens itself |
-| L2 | Send | Enter → `assistantSendInput` | `chat_send {conversation?, text, parent \| linked_to}` → the host checks the picked model and adds the linked item → user message written (`entity`) → `ok {id, conversation}` (writing) → `ai_delta` × n (coalesced) → `conversation` | reply written when complete; a refusal → `err` in the host's words, nothing written, draft back in the input |
+| L2 | Send | Enter → `assistantSendInput` | `chat_send {conversation?, text, parent \| linked_to}` → the host checks the picked model and adds the linked item → user message written (`entity`) → `ok {id, conversation}` (writing) → `ai_delta` × n (coalesced) → `conversation` → `account` | reply written when complete; a refusal → `err` in the host's words, nothing written, draft back in the input |
 | L3 | Stop | Stop | `chat_stop` → partial reply written, `conversation`, `ok` | — |
 | L4 | Retry, edit and resend | click own message, edit, Enter → `assistantResend` | `chat_send {retry}` or `{text, parent}` | sibling branch |
 | L5 | Switch sibling | ‹ › | `chat_select` → `active` written → `conversation`, `ok` | — |
 | L6 | Switch / new conversation | switcher menu | `chat_open`, or a first `chat_send` | — |
-| L7 | Pick the model, setup guide | the head's picker, or the guide's button → `aiShowModels` → a model → `assistantPickModel`; without a provider or key, the guide's button opens Accounts | `set_vault_settings {chat_model}` → `vault_settings`, `ok` | chats answered by the picked model |
+| L7 | Pick the model, setup guide | the head's picker, or the guide's button → `aiShowModels` → a model → `assistantPickModel`; without a provider or key, or at the spend limit, the guide's button opens Accounts | `set_vault_settings {chat_model}` → `vault_settings`, `ok` | chats answered by the picked model |
 | L8 | Chat from a card | card's chat button → `toggleCardChat` → `selectDocument`, `panel_size: 'chat'` (not at full width), `selectContextTab('conversation', true)` | then L1 | the chat beside the card, the input focused; pressed, the button goes back to the normal panel |
 | L9 | Save a reply as a document | Save as document under a written reply → `assistantSaveReply` | `create_entity {roles: {document}, title, content, projects, linked_to?}` → `entity`, `ok {id}` | the chat stays; the reply notes the document, with Open; the card lists it among its links |
 | L10 | Task from a reply | "+ Task from this" → `openTaskWith` → `selectContextTab('task', true)` | — (Create: D8, `panel.md`) | the Task tab for what the panel shows, the reply in its body, the title focused |
@@ -126,7 +126,7 @@ sequenceDiagram
     end
     W-->>S: final response + usage
     S->>S: write the reply
-    S-->>P: conversation
+    S-->>P: conversation, account
 ```
 
 - The reply's worker sends the whole reply so far, rendered from its
@@ -138,6 +138,8 @@ sequenceDiagram
   `conversation` (`path_to`, `leaf_from`, `add`, `activate`,
   `ConversationMessage::is_reply`); the page's helpers are
   `features/assistant/tree.js`.
+- What the reply cost is recorded in the account's spend file
+  (`ai::account_used`), and `account` follows.
 - Opening another vault stops every reply first, writing what it has
   (`architecture.md#jobs`).
 - `chat.rs` has dispatch tests against a fake Ollama

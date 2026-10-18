@@ -28,8 +28,9 @@ export function isAiAccount(account) {
 // `AiAccounts::choose` checks it: `{ account, model }`, which the page
 // shows, or with `problem` what the host would refuse: 'provider' (no AI
 // account at all), 'pick' (nothing picked), 'gone' (the account was
-// removed), 'key' (the account has no readable key) or 'offered' (the model
-// isn't ticked any more). No other model is ever put in its place.
+// removed), 'key' (the account has no readable key), 'offered' (the model
+// isn't ticked any more) or 'limit' (the account has spent its monthly
+// limit). No other model is ever put in its place.
 export function aiModelOf(choice) {
   if (!choice) {
     const any = [...accounts.values()].some(isAiAccount);
@@ -40,13 +41,18 @@ export function aiModelOf(choice) {
   if (!isAiAccount(account)) return { model: choice.model, problem: 'gone' };
   if (!aiUsable(account)) return { ...setup, problem: 'key' };
   if (!(account.offered ?? []).includes(choice.model)) return { ...setup, problem: 'offered' };
-  return setup;
+  return aiLimitReached(account) ? { ...setup, problem: 'limit' } : setup;
 }
 
 // Whether `account` can be called: Ollama always, a key provider with its
 // key.
 function aiUsable(account) {
   return aiProvider(account.kind).local || account.status === 'connected';
+}
+
+// Whether `account` has spent its monthly limit (`spent` is this month's).
+export function aiLimitReached(account) {
+  return account?.spend_limit != null && (account.spent?.cost ?? 0) >= account.spend_limit;
 }
 
 // Whether any AI account offers a model to pick.

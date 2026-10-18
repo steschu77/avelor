@@ -6,7 +6,8 @@
 //! - `Client::chat_stream` runs a conversation turn (streamed text
 //!   arrives through a callback; the `Cancel` passed in stops the request),
 //! - every answer carries its normalized `Usage` and, where the model's
-//!   price is known, its cost.
+//!   price is known, its cost; a `Ledger` (shareable between clients) sums
+//!   them per provider and model.
 //!
 //! Everything blocks: requests go through av-http, each under the caller's
 //! `av_utils::cancel::Cancel`; the caller runs them on a worker thread. Failures are
@@ -28,3 +29,4 @@ pub use client::Client;
 pub use types::{ChatRequest, ChatResponse, Message, Part, Role, StopReason};
 pub use types::{ModelInfo, PROVIDERS, Provider, ProviderSpec, base_url};
 pub use usage::Price;
+pub use usage::{Ledger, Totals, Usage};

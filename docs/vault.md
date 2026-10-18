@@ -667,7 +667,8 @@ What the vault's entities name by id is kept in the vault, in `.avelor/`, which
 the scan skips like every dot-folder:
 
 - `.avelor/accounts/` (`av_vault::schema::layout::ACCOUNTS`): one YAML file per
-  AI account. An assistant reply names the AI account it came through. The
+  AI account, and beside an AI account its monthly spending. An assistant
+  reply names the AI account it came through. The
   secrets stay with the app and never enter the vault.
   `accounts.md#account-files`.
 - `.avelor/vault.yaml` (`av_vault::schema::layout::VAULT_SETTINGS`): the
@@ -694,7 +695,8 @@ not by location:
 ```
 Vault/
   .avelor/                 # vault config
-    accounts/          # *.yaml per account (AI providers), without secrets
+    accounts/          # *.yaml per account (AI providers), without secrets;
+                       # *.spend.yaml: an AI account's spending per month
     vault.yaml         # the vault's own settings (the chat model)
   Projects/            # *.md / *.yaml project descriptors
   Conversations/       # *.yaml conversations

@@ -1,6 +1,7 @@
 //! AI accounts' commands (api.md#ai): check and store a key or an
-//! address, list the models, keep the offered models and settings. The
-//! accounts themselves: `ai_accounts`.
+//! address, list the models, keep the offered models and settings; and what
+//! using an account cost (`account_used`). The accounts themselves:
+//! `ai_accounts`.
 
 use std::path::PathBuf;
 
@@ -302,6 +303,18 @@ pub fn set_ai_settings(app: &mut App, req: Req, change: SettingsChange) {
         Err(Error::NotFound) => req.err(Error::NotFound),
         Err(e) => save_failed(req, e),
     }
+}
+
+// ----------------------------------------------------------------------------
+/// The account `id` was used (a chat reply): what it spent is
+/// added to its spend file, and the account follows as the `account` event.
+pub fn account_used(app: &mut App, id: Id) {
+    match app.ai.record_spend(id) {
+        // Gone: the vault was switched meanwhile.
+        Ok(()) | Err(Error::NotFound) => {}
+        Err(e) => log::warn!("Could not save what AI account {id} spent: {e}"),
+    }
+    post(app, id);
 }
 
 // ----------------------------------------------------------------------------

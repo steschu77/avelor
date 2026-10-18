@@ -37,6 +37,7 @@ import {
   aiAnyOffered, aiModelOf, aiModelPicker, aiOpenAccounts, aiProvider,
   aiShowModels,
 } from '../workspace/models.js';
+import { aiUsd } from '../workspace/models.js';
 import {
   childrenByParent, firstLeafFrom, pathToActive, siblingsOf,
 } from './tree.js';
@@ -460,6 +461,10 @@ function renderAssistantGuide(setup) {
   } else if (setup.problem === 'key') {
     text = `${name} needs its API key before ${setup.model} can chat.`;
     label = `Open ${name}`;
+    pick = false;
+  } else if (setup.problem === 'limit') {
+    text = `${name} has reached its spend limit of ${aiUsd(setup.account.spend_limit)} this month.`;
+    label = 'Raise the limit';
     pick = false;
   } else if (setup.problem === 'gone') {
     text = `The account of ${setup.model}, the model picked for chats, is gone.`;

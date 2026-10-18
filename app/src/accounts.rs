@@ -1,5 +1,6 @@
 //! Accounts (accounts.md): their files in the open vault's
-//! `.avelor/accounts/`, read in one pass when a vault opens; what the page gets
+//! `.avelor/accounts/` (and an AI account's spend file beside its own), read in
+//! one pass when a vault opens; what the page gets
 //! about them (`accounts`, `account`, `account_removed`); and disconnect and
 //! remove. AI accounts: `ai_accounts`, `ai`.
 
@@ -20,10 +21,14 @@ use crate::protocol::Req;
 
 // ----------------------------------------------------------------------------
 /// The accounts in `folder`, their secrets in `secrets`: every `*.yaml`,
-/// handed to the loader of its top-level key (a provider's). Other and
-/// broken files are logged and skipped.
+/// handed to the loader of its top-level key (a provider's); AI accounts
+/// read their spend files themselves. Other and broken files are logged and
+/// skipped.
 pub(crate) fn load(folder: &Path, secrets: &Path) -> Vec<AiAccount> {
     load_config_files(folder, "account", |path| {
+        if ai_accounts::is_spend_file(path) {
+            return Ok(None);
+        }
         let Value::Mapping(map) = serde_yaml_ng::from_str(&fs::read_to_string(path)?)? else {
             log::warn!("Skipping {}: not an account", path.display());
             return Ok(None);
@@ -123,6 +128,8 @@ mod tests {
         secret_file(&secrets, &format!("{OPENAI_ID}.key"), "sk-0123456789abcd");
         let ollama = "id: 01a0e1cc-a24c-7490-82fe-e75669985b32\nollama:\n  model: qwen\n";
         write(&folder.join("ollama.yaml"), ollama);
+        let spend = format!("account: {OPENAI_ID}\nmonths: {{}}\n");
+        write(&folder.join("openai.spend.yaml"), spend);
         let watch = "id: 01a0e1cc-a24c-7490-82fe-e75669985b34\nfolder-watch:\n  type: pdf\n";
         write(&folder.join("watch_pdf.yaml"), watch);
         write(

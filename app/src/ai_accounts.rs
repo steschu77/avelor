@@ -1,14 +1,20 @@
 //! AI accounts (accounts.md#ai-account-file): one YAML file per account in the
 //! vault's `.avelor/accounts/`, its block named after the provider (`openai:`,
-//! `ollama:`, …). An API key is kept DPAPI-encrypted with the app (on Linux,
-//! in a file only the user can read; `config_files::SecretFile`); the key
-//! never enters the YAML, the vault or the page. `AiAccounts` holds the open
-//! vault's accounts; the rest of the app reaches them only through it.
+//! `ollama:`, …), and beside it what the account's calls cost per month
+//! (`openai.spend.yaml`). An API key is kept DPAPI-encrypted with the app
+//! (on Linux, in a file only the user can read; `config_files::SecretFile`);
+//! the key never enters the YAML, the vault or the page. `AiAccounts` holds
+//! the open vault's accounts; the rest of the app reaches them only through
+//! it.
 
 use std::collections::BTreeMap;
+use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use av_llm::{Client, PROVIDERS, Provider};
+use av_llm::{Ledger, Totals};
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
@@ -19,6 +25,63 @@ use crate::config_files::{ConnectionStatus, SecretFile, free_stem, remove_if_exi
 
 /// The extension of an AI account's secret, its API key.
 const KEY: &str = "key";
+
+/// The extension of the file beside an account file that holds what its
+/// calls cost (`openai.yaml` → `openai.spend.yaml`).
+const SPEND: &str = "spend.yaml";
+
+// ----------------------------------------------------------------------------
+/// What an account's calls to one model added up to in one month.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default)]
+pub struct ModelSpend {
+    pub calls: u64,
+    /// Calls whose price was unknown (not in `cost`).
+    pub unpriced_calls: u64,
+    /// USD, of the calls whose price was known.
+    pub cost: f64,
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub reasoning: u64,
+}
+
+impl ModelSpend {
+    // ------------------------------------------------------------------------
+    fn add(&mut self, totals: &Totals) {
+        self.calls += totals.calls;
+        self.unpriced_calls += totals.unpriced_calls;
+        self.cost += totals.cost;
+        let usage = &totals.usage;
+        self.input += usage.input;
+        self.output += usage.output;
+        self.cache_read += usage.cache_read;
+        self.cache_write += usage.cache_write;
+        self.reasoning += usage.reasoning;
+    }
+}
+
+/// Per month (UTC, `2026-10`), per model id.
+type Months = BTreeMap<String, BTreeMap<String, ModelSpend>>;
+
+// ----------------------------------------------------------------------------
+/// The spend file: the account it belongs to (a file left by a removed
+/// account isn't taken over by a new one of the same name), and its months.
+#[derive(Serialize, Deserialize)]
+struct SpendFile {
+    account: Id,
+    #[serde(default)]
+    months: Months,
+}
+
+// ----------------------------------------------------------------------------
+/// The month `now` is in, as the spend file names it: `2026-10`, in UTC as
+/// the providers bill.
+fn month_of(now: DateTime) -> String {
+    let (year, month, _) = now.date.to_ymd();
+    format!("{year:04}-{month:02}")
+}
 
 // ----------------------------------------------------------------------------
 /// The model a feature picked (accounts.md#model-choice): one of the models
@@ -76,7 +139,8 @@ pub struct AiSettings {
 }
 
 // ----------------------------------------------------------------------------
-/// A configured AI account, with its key once decrypted.
+/// A configured AI account, with its key once decrypted. Clones share the
+/// ledger.
 #[derive(Clone)]
 pub struct AiAccount {
     /// The account file.
@@ -94,6 +158,11 @@ pub struct AiAccount {
     /// Ollama: whether the last model listing reached the server; `None`
     /// until one ran.
     reachable: Option<bool>,
+    /// What the account's clients record, from their workers, until
+    /// `take_spend` moves it into `spend`.
+    ledger: Arc<Ledger>,
+    /// What the account's calls cost, as in its spend file.
+    spend: Months,
 }
 
 // ----------------------------------------------------------------------------
@@ -110,6 +179,18 @@ pub struct AiAccountMeta<'a> {
     pub connected: Option<DateTime>,
     pub offered: &'a [String],
     pub spend_limit: Option<f64>,
+    pub spent: Spent,
+}
+
+// ----------------------------------------------------------------------------
+/// What the account's calls cost this month.
+#[derive(Debug, Default, PartialEq, Serialize)]
+pub struct Spent {
+    /// USD, of the calls whose price was known.
+    pub cost: f64,
+    pub calls: u64,
+    /// Calls whose price was unknown (not in `cost`).
+    pub unpriced: u64,
 }
 
 impl AiAccount {
@@ -131,6 +212,8 @@ impl AiAccount {
             rest: Mapping::new(),
             key: None,
             reachable: None,
+            ledger: Arc::new(Ledger::new()),
+            spend: Months::new(),
         }
     }
 
@@ -166,9 +249,11 @@ impl AiAccount {
     }
 
     // ------------------------------------------------------------------------
-    /// A client for the account's key and address.
+    /// A client for the account's key and address, recording into the
+    /// account's ledger.
     pub fn client(&self) -> Client {
         candidate(self.provider, self.key.clone(), self.address())
+            .with_ledger(Arc::clone(&self.ledger))
     }
 
     // ------------------------------------------------------------------------
@@ -212,13 +297,80 @@ impl AiAccount {
             connected: self.settings.connected,
             offered: &self.settings.offered,
             spend_limit: self.settings.spend_limit,
+            spent: self.spent(&month_of(DateTime::now())),
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// What the calls of `month` cost, all models together.
+    pub fn spent(&self, month: &str) -> Spent {
+        let models = self.spend.get(month).into_iter().flat_map(|m| m.values());
+        models.fold(Spent::default(), |mut spent, model| {
+            spent.cost += model.cost;
+            spent.calls += model.calls;
+            spent.unpriced += model.unpriced_calls;
+            spent
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether the account has spent its monthly limit in `month`.
+    pub fn limit_reached(&self, month: &str) -> bool {
+        let limit = self.settings.spend_limit;
+        limit.is_some_and(|limit| self.spent(month).cost >= limit)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Refuse a call once the account has spent its limit in `month`.
+    fn check_limit(&self, month: &str) -> std::result::Result<(), Refusal> {
+        if !self.limit_reached(month) {
+            return Ok(());
+        }
+        let name = self.provider.spec().display;
+        let limit = self.settings.spend_limit.unwrap_or_default();
+        let message = format!(
+            "{name} has reached its spend limit of ${limit:.2} this month; raise it under Accounts."
+        );
+        Err(Refusal {
+            error: Error::SpendLimit,
+            message,
+        })
     }
 
     // ------------------------------------------------------------------------
     /// Whether it can be called: Ollama always, a key provider with its key.
     fn usable(&self) -> bool {
         !self.uses_key() || self.has_key()
+    }
+
+    // ------------------------------------------------------------------------
+    /// Move what the clients recorded since the last time into `month`;
+    /// whether there was anything.
+    fn take_spend(&mut self, month: &str) -> bool {
+        let drained = self.ledger.drain();
+        if drained.is_empty() {
+            return false;
+        }
+        let models = self.spend.entry(month.to_string()).or_default();
+        for entry in drained {
+            models.entry(entry.model).or_default().add(&entry.totals);
+        }
+        true
+    }
+
+    // ------------------------------------------------------------------------
+    /// The spend file beside the account file.
+    fn spend_path(&self) -> PathBuf {
+        self.path.with_extension(SPEND)
+    }
+
+    // ------------------------------------------------------------------------
+    fn save_spend(&self) -> Result<()> {
+        let file = SpendFile {
+            account: self.id,
+            months: self.spend.clone(),
+        };
+        write_yaml(&self.spend_path(), &file)
     }
 
     // ------------------------------------------------------------------------
@@ -255,8 +407,8 @@ impl AiAccount {
     }
 
     // ------------------------------------------------------------------------
-    /// Forget the key but keep the account (and its id), marked
-    /// `disconnected`. Nothing changes if writing the file fails.
+    /// Forget the key but keep the account (and its id, and what it spent),
+    /// marked `disconnected`. Nothing changes if writing the file fails.
     fn disconnect(&mut self, secrets: &Path) -> Result<()> {
         let mut settings = self.settings.clone();
         settings.disconnected = Some(DateTime::now());
@@ -269,9 +421,11 @@ impl AiAccount {
     }
 
     // ------------------------------------------------------------------------
-    /// Delete the account file and its key if there is one.
+    /// Delete the account file, its spend file, and its key if there is
+    /// one.
     fn remove(&self, secrets: &Path) -> Result<()> {
         remove_if_exists(&self.path)?;
+        remove_if_exists(&self.spend_path())?;
         self.secret(secrets).remove()?;
         log::info!("Removed AI account {}", self.path.display());
         Ok(())
@@ -310,6 +464,41 @@ pub(crate) fn kind_of(map: &Mapping) -> Option<&'static str> {
 }
 
 // ----------------------------------------------------------------------------
+/// Whether `path` is an AI account's spend file (`openai.spend.yaml`), not
+/// an account file.
+pub(crate) fn is_spend_file(path: &Path) -> bool {
+    let name = path.file_name().and_then(|name| name.to_str());
+    name.is_some_and(|name| name.to_ascii_lowercase().ends_with(&format!(".{SPEND}")))
+}
+
+// ----------------------------------------------------------------------------
+/// The months of the spend file `path`, if it belongs to the account `id`.
+/// A file that doesn't parse or names another account is logged, and
+/// replaced on the next save.
+fn load_spend(path: &Path, id: Id) -> Months {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Months::new(),
+        Err(e) => {
+            log::warn!("Could not read {}: {e}", path.display());
+            return Months::new();
+        }
+    };
+    match serde_yaml_ng::from_str::<SpendFile>(&text) {
+        Ok(file) if file.account == id => file.months,
+        Ok(file) => {
+            let other = file.account;
+            log::warn!("{} is account {other}'s, not {id}'s", path.display());
+            Months::new()
+        }
+        Err(e) => {
+            log::warn!("Could not read {}: {e}", path.display());
+            Months::new()
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// The AI account in `path` (`map`, its parsed top level, with the block
 /// `kind_key`), its key in `secrets`.
 pub(crate) fn load(
@@ -338,7 +527,10 @@ pub(crate) fn load(
         rest: map,
         key: None,
         reachable: None,
+        ledger: Arc::new(Ledger::new()),
+        spend: Months::new(),
     };
+    account.spend = load_spend(&account.spend_path(), id);
     let secret = account.secret(secrets);
     if account.uses_key() {
         match secret.read() {
@@ -495,12 +687,14 @@ impl AiAccounts {
     /// The account, model and client of `choice`, the model a feature picked
     /// for `what` ("chats"; accounts.md#model-choice), as the page's
     /// `aiModelOf` shows it. Refused in words if nothing is picked, the
-    /// account is gone or has no key, or the model isn't offered any more.
+    /// account is gone or has no key, the model isn't offered any more, or
+    /// the account has reached its spend limit in the month of `now` (UTC).
     /// No other model is ever tried: it could send the text elsewhere.
     pub fn choose(
         &self,
         choice: Option<&ModelChoice>,
         what: &str,
+        now: DateTime,
     ) -> std::result::Result<Resolved, Refusal> {
         let refuse = |error, message: String| Err(Refusal { error, message });
         let no_model = || Error::InvalidArgument {
@@ -531,6 +725,7 @@ impl AiAccounts {
             );
             return refuse(no_model(), message);
         }
+        account.check_limit(&month_of(now))?;
         Ok(Resolved {
             account: account.id(),
             model: model.clone(),
@@ -538,6 +733,19 @@ impl AiAccounts {
             provider: account.provider(),
             address: account.address().to_string(),
         })
+    }
+
+    // ------------------------------------------------------------------------
+    /// Add what the clients of the account `id` recorded since the last time
+    /// to this month, and save its spend file. A failed save keeps it in
+    /// memory, for the next one.
+    pub fn record_spend(&mut self, id: Id) -> Result<()> {
+        let index = self.index(id)?;
+        let account = &mut self.list[index];
+        if !account.take_spend(&month_of(DateTime::now())) {
+            return Ok(());
+        }
+        account.save_spend()
     }
 }
 
@@ -638,9 +846,13 @@ note: top-level kept
         let id = account.id();
         account.set_credentials(Some("sk-0123456789ab".into()), None);
         account.save(&dirs.secrets).unwrap();
+        record(&account, "gpt-5-mini", 0.5);
+        account.take_spend("2026-10");
+        account.save_spend().unwrap();
 
         account.disconnect(&dirs.secrets).unwrap();
         assert!(!dirs.key(id).exists(), "the key file is gone");
+        assert!(dirs.folder.join("openai.spend.yaml").exists(), "spend kept");
         let text = fs::read_to_string(dirs.folder.join("openai.yaml")).unwrap();
         assert!(text.contains("disconnected:"), "{text}");
         let reloaded = dirs.load("openai.yaml");
@@ -648,7 +860,87 @@ note: top-level kept
 
         reloaded.remove(&dirs.secrets).unwrap();
         let left: Vec<_> = fs::read_dir(&dirs.folder).unwrap().collect();
-        assert!(left.is_empty(), "the account file is gone");
+        assert!(left.is_empty(), "the account and spend files are gone");
+    }
+
+    // ------------------------------------------------------------------------
+    /// Record a call to `model` costing `cost` (`None`: unpriced) through
+    /// `account`'s client, as a worker does.
+    fn record(account: &AiAccount, model: &str, cost: impl Into<Option<f64>>) {
+        let usage = av_llm::Usage {
+            input: 100,
+            output: 20,
+            ..Default::default()
+        };
+        let client = account.client();
+        client
+            .ledger()
+            .record(account.provider(), model, &usage, cost.into());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn spending_is_kept_per_month_and_read_back() {
+        let dirs = Dirs::new();
+        fs::write(dirs.folder.join("openai.yaml"), OPENAI).unwrap();
+        let mut account = dirs.load("openai.yaml");
+        assert!(!account.take_spend("2026-09"), "nothing recorded yet");
+        record(&account, "gpt-5-mini", 0.25);
+        account.take_spend("2026-09");
+        record(&account, "gpt-5-mini", 0.5);
+        record(&account, "gpt-5-mini", 0.25);
+        record(&account, "gpt-5-nano", None);
+        assert!(account.take_spend("2026-10"));
+        account.save_spend().unwrap();
+
+        let text = fs::read_to_string(dirs.folder.join("openai.spend.yaml")).unwrap();
+        let again = dirs.load("openai.yaml");
+        let october = Spent {
+            cost: 0.75,
+            calls: 3,
+            unpriced: 1,
+        };
+        assert!(
+            text.starts_with(&format!("account: {}", account.id())),
+            "{text}"
+        );
+        assert!(text.contains("cache-read: 0"), "{text}");
+        assert_eq!(again.spent("2026-10"), october);
+        assert_eq!(again.spent("2026-09").calls, 1);
+        assert_eq!(again.spent("2026-08"), Spent::default());
+        assert_eq!(again.spend["2026-10"]["gpt-5-mini"].input, 200);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_spend_file_of_another_account_is_not_taken_over() {
+        let dirs = Dirs::new();
+        fs::write(dirs.folder.join("openai.yaml"), OPENAI).unwrap();
+        let other = Id::generate();
+        let spend = format!("account: {other}\nmonths:\n  2026-10:\n    gpt-5:\n      calls: 7\n");
+        fs::write(dirs.folder.join("openai.spend.yaml"), spend).unwrap();
+        let account = dirs.load("openai.yaml");
+        assert_eq!(account.spent("2026-10"), Spent::default());
+        assert!(is_spend_file(&dirs.folder.join("openai.Spend.yaml")));
+        assert!(!is_spend_file(&dirs.folder.join("openai.yaml")));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_use_is_recorded_into_this_month() {
+        let dirs = Dirs::new();
+        fs::write(dirs.folder.join("openai.yaml"), OPENAI).unwrap();
+        let account = dirs.load("openai.yaml");
+        let id = account.id();
+        record(&account, "gpt-5-mini", 0.5);
+        let mut accounts =
+            AiAccounts::new(dirs.folder.clone(), dirs.secrets.clone(), vec![account]);
+
+        accounts.record_spend(id).unwrap();
+        let spent = &accounts.get(id).unwrap().meta().spent;
+        assert_eq!((spent.calls, spent.cost), (1, 0.5));
+        let reloaded = dirs.load("openai.yaml");
+        assert_eq!(reloaded.meta().spent.calls, 1, "survives a restart");
     }
 
     // ------------------------------------------------------------------------
@@ -711,18 +1003,19 @@ note: top-level kept
     // ------------------------------------------------------------------------
     #[test]
     fn a_pick_goes_to_its_account_and_model() {
+        let now = DateTime::now();
         let ollama = account(Provider::Ollama, false, &["qwen", "llama"]);
         let anthropic = account(Provider::Anthropic, true, &["claude"]);
         let (llama, claude) = (pick(&ollama, "llama"), pick(&anthropic, "claude"));
         let accounts = list(vec![ollama, anthropic]);
 
-        let chat = accounts.choose(Some(&llama), "chats").unwrap();
+        let chat = accounts.choose(Some(&llama), "chats", now).unwrap();
         assert_eq!(
             (chat.account, chat.model.as_str(), chat.provider),
             (llama.account, "llama", Provider::Ollama),
             "not the first offered model: the one picked"
         );
-        let ocr = accounts.choose(Some(&claude), "OCR").unwrap();
+        let ocr = accounts.choose(Some(&claude), "OCR", now).unwrap();
         assert_eq!(
             (ocr.account, ocr.model.as_str(), ocr.provider),
             (claude.account, "claude", Provider::Anthropic)
@@ -733,7 +1026,10 @@ note: top-level kept
     #[test]
     fn a_pick_that_does_not_work_is_refused_in_words_and_nothing_else_tried() {
         let refusal = |accounts: &AiAccounts, choice: Option<&ModelChoice>| {
-            let refusal = accounts.choose(choice, "OCR").err().unwrap();
+            let refusal = accounts
+                .choose(choice, "OCR", DateTime::now())
+                .err()
+                .unwrap();
             (refusal.error.code(), refusal.message)
         };
         let none = list(vec![]);
@@ -780,5 +1076,37 @@ note: top-level kept
                     .to_string()
             )
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_account_at_its_limit_this_month_is_refused_and_no_other_tried() {
+        let mut openai = account(Provider::OpenAi, true, &["gpt-5"]);
+        openai.settings.spend_limit = Some(10.0);
+        let spend = ModelSpend {
+            calls: 40,
+            cost: 12.5,
+            ..ModelSpend::default()
+        };
+        openai
+            .spend
+            .insert("2026-09".into(), [("gpt-5".to_string(), spend)].into());
+        let (id, gpt) = (openai.id(), pick(&openai, "gpt-5"));
+        let ollama = account(Provider::Ollama, false, &["qwen"]);
+        let accounts = list(vec![openai, ollama]);
+        let september = DateTime::from_iso8601("2026-09-30T23:00:00Z").unwrap();
+        let october = DateTime::from_iso8601("2026-10-01T01:00:00Z").unwrap();
+
+        let refusal = accounts
+            .choose(Some(&gpt), "chats", september)
+            .err()
+            .unwrap();
+        assert_eq!(refusal.error.code(), "spend_limit");
+        assert_eq!(
+            refusal.message,
+            "OpenAI has reached its spend limit of $10.00 this month; raise it under Accounts."
+        );
+        let chat = accounts.choose(Some(&gpt), "chats", october).unwrap();
+        assert_eq!(chat.account, id);
     }
 }
