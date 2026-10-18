@@ -131,6 +131,7 @@
   "accounts.unknown_account": "Cuenta desconocida",
   "accounts.used_by": "Usado por",
   "accounts.used_fetch": "Recoger correo · {email}",
+  "accounts.used_sync": "Sincronización automática · {email}",
   "accounts.where_answers": "donde responde {name}",
   "accounts.works": {
     "one": "Funciona · {n} modelo",
@@ -899,6 +900,7 @@
   "vault_op.vault": "Bóveda",
   "watch.level.lite": "Ligero",
   "watch.off": "No",
+  "watch.step.analysis": "Análisis",
   "week.of": "Semana del {day} · {what}",
   "workspace.accounts": "Cuentas",
   "workspace.trash": "Papelera",

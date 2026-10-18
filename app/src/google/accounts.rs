@@ -263,6 +263,9 @@ pub struct AutoSync {
     /// Email from then on is fetched: when auto-sync was switched on, then
     /// the start of the last complete run.
     pub since: DateTime,
+    /// The analysis of the email it fetches; absent: off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis: Option<Analysis>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
 }
@@ -275,6 +278,7 @@ impl AutoSync {
             enabled: false,
             filter: EmailFilter::default(),
             since,
+            analysis: None,
             rest: BTreeMap::new(),
         }
     }
