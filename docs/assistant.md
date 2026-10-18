@@ -1,7 +1,8 @@
 # Avelor — Assistant
 
-> The AI assistant: conversations about the shown document or thread, the
-> context it sends, and how a reply streams. The model that answers is
+> The AI assistant: conversations about the shown document or thread, also
+> beside a card in the half-open panel, the context it sends, and how a
+> reply streams. The model that answers is
 > picked in the
 > assistant's head (`accounts.md#model-choice`); the conversation format,
 > `vault.md#conversation`; the commands, `api.md#chat`.
@@ -13,10 +14,22 @@ The assistant lives in the Conversation tab of the panel's context column
 `Conversations/`, each linked to the document or thread the panel showed
 when it started.
 
+- A card's chat button opens the assistant beside the card
+  (`toggleCardChat`): the card is selected, and the panel opens half-open
+  (`panel_size: 'chat'`, `app.js`). As at full width, the panel opens
+  over the main view (`.panel.is-chat`), which keeps its layout: the card
+  keeps its width, and the context column comes beside it. The vault list
+  stays uncovered; in a narrow window the card gives way. The Conversation
+  tab is shown, with the input focused.
+  The button looks pressed while the chat is open, and a second click
+  goes back to the normal panel. At full width the panel stays as it is.
+  Expand, collapse and × work as in the normal panel.
 - The tab shows the last or newest conversation linked to the shown item
   (`assistantShow`), and follows the selection. The page finds the
   conversations itself, from the `entity` events (`linked_to`). An AI
-  conversation entity selected in the table opens itself.
+  conversation entity selected in the table opens itself. A card's chat
+  button carries a dot while chats are linked to the card
+  (`renderCardChat`, `panel.md#cards`).
 - Enter sends the input (`assistantSendInput`). The reply streams in and
   is written once it is complete; Stop ends it, and what it wrote so far
   is kept as the reply. A failed reply is shown with its error and never
@@ -71,6 +84,7 @@ the server's default applies.
 | L5 | Switch sibling | ‹ › | `chat_select` → `active` written → `conversation`, `ok` | — |
 | L6 | Switch / new conversation | switcher menu | `chat_open`, or a first `chat_send` | — |
 | L7 | Pick the model, setup guide | the head's picker, or the guide's button → `aiShowModels` → a model → `assistantPickModel`; without a provider or key, the guide's button opens Accounts | `set_vault_settings {chat_model}` → `vault_settings`, `ok` | chats answered by the picked model |
+| L8 | Chat from a card | card's chat button → `toggleCardChat` → `selectDocument`, `panel_size: 'chat'` (not at full width), `selectContextTab('conversation', true)` | then L1 | the chat beside the card, the input focused; pressed, the button goes back to the normal panel |
 
 ## Design <a id="design"></a>
 

@@ -20,8 +20,10 @@ Three panels:
 
 Both side panels can be extended to full width for focused work and have
 grips to resize them; the widths are remembered across restarts
-(`ui.md#preferences`). Opening a panel never moves the main view's
-layout. The expanded vault area hosts the
+(`ui.md#preferences`). The right panel can also be half-open: a card's chat
+button puts the assistant beside the card, over the main view, as the
+full width does (`assistant.md#conversations`). Opening a panel never
+moves the main view's layout. The expanded vault area hosts the
 pages of the vault panel: the Workspace pages (Accounts, Trash) and New. It is
 expanded only while one of them is shown: a page opens it (`openVaultOp`,
 `ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
@@ -286,7 +288,8 @@ was selected meanwhile; a vault switch clears it. The host stores them as given
 it loads on the next start, as JSON in
 `<script type="application/json" id="prefs">` (`page::html`), which
 becomes `prefs` in the store, so the layout is right from the first frame.
-The panel's mode (`panel_size`: closed, normal, expanded) isn't kept.
+The half-open panel is `panel_width` plus `context_width`. The panel's mode
+(`panel_size`: closed, normal, chat, expanded) isn't kept.
 
 ## Flows
 

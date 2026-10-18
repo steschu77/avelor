@@ -12,9 +12,10 @@
 The panel on the right shows what is selected: one card for an entity
 outside any thread, all members of a thread as a stack of individually
 editable cards, or — under the calendar lens — the selected day. It can be
-closed, expanded to full width and resized (`panel_size` in the store;
-the widths are preferences, `ui.md#preferences`); expanded, it has the
-context column (`panel.md#context-column`).
+closed, half-open with the chat beside the card, expanded to full width and
+resized (`panel_size` in the store; the widths are preferences,
+`ui.md#preferences`); half-open or expanded, it has the context column
+(`panel.md#context-column`).
 
 ```mermaid
 sequenceDiagram
@@ -60,7 +61,7 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
 - its project and label chips on one line, with the "+" menu that adds
   either (`panel.md#labels`, `panel.md#projects`), and its link chips
   (`panel.md#links`);
-- an action toolbar (edit/link/task/thread/delete, cloned from
+- an action toolbar (edit/link/chat/task/thread/delete, cloned from
   `#preview-toolbar-template`), an editing toolbar (cloned from
   `#editor-toolbar-template`), and its own `createEditor()` instance.
 
@@ -87,7 +88,7 @@ but not for a lone document, with nothing else on screen to select;
 `occurrence` — a day card's occurrence of its event, whose date the head
 and whose times the details show. A card's head (title, date) and details
 follow its entity in place on `entities_rev`, with its links and threads
-lines (`refreshCardChips`).
+lines and its chat button's dot (`refreshCardChips`).
 
 Two `<template>` elements in `index.html` hold the markup each card
 clones from, via `createEditorToolbar()`/`createDocPreviewToolbar()`
@@ -99,7 +100,10 @@ template itself:
 - **`#preview-toolbar-template`** — the action row:
   `data-cmd="edit"` (edit mode, if the entity is `editable`; one card in
   edit mode at a time), `data-cmd="link"` and `data-cmd="task"` (the
-  context column's Linked and Task tabs), `data-cmd="thread"`
+  context column's Linked and Task tabs), `data-cmd="chat"` (the chat
+  beside the card, `assistant.md#conversations`; a dot in its corner and
+  "· 2 chats" in its title while chats are linked to the card,
+  `renderCardChat`), `data-cmd="thread"`
   (remove from thread) and `data-cmd="delete"`. The template's elements
   carry no ids, since it is cloned for every card.
 
@@ -275,12 +279,15 @@ on at midnight.
 
 ## Context column <a id="context-column"></a>
 
-The context column of the expanded panel has tabs about what
+The context column of the expanded or half-open panel has tabs about what
 the panel shows (`features/context.js`: `registerContextTab`,
 `selectContextTab`).
 A tab picked by its button focuses its first field.
 
-- **Conversation** — the assistant (`assistant.md`).
+- **Conversation** — the assistant (`assistant.md`). The card's chat
+  button (`toggleCardChat`) selects the card and opens the panel half-open
+  on this tab: the card keeps its width and the column comes beside it
+  (`assistant.md#conversations`).
 - **Task** — the New form for a task `linked-to` the selected card, else
   the shown thread (`features/new.js`); a draft per card. The card's Task button
   (`openTaskTab`) selects the card, expands the panel and opens the tab.
@@ -299,7 +306,7 @@ other side is derived.
 
 - A card lists its links as chips below its labels (`renderCardLinks`,
   `features/panel/panel.js`): the one it links to first, then those that link to
-  it. A
+  it, but the chats about the card, which the Conversation tab lists. A
   click selects the other entity, × removes the link (on an entity the app
   can't write, there is none). The chips are refreshed on `entities_rev`
   without rebuilding the card.

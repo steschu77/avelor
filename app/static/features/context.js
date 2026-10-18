@@ -1,11 +1,13 @@
-// The panel's context column, expanded (index.html, .panel__context,
-// `panel_size`): tabs about what the panel shows -- Conversation
-// (features/assistant/assistant.js), Task (features/new.js) and Linked
-// (features/linked.js). One tab shows at a time, the one picked last while the
-// app runs. A tab registers itself, in the order the strip shows them, which
-// is the order app.js imports their files in; a card's buttons open them.
+// The panel's context column, expanded or half-open (index.html,
+// .panel__context, `panel_size`): tabs about what the panel shows --
+// Conversation (features/assistant/assistant.js), Task (features/new.js) and
+// Linked (features/linked.js). One tab shows at a time, the one picked last
+// while the app runs. A tab registers itself, in the order the strip shows
+// them, which is the order app.js imports their files in; a card's buttons
+// open them.
 
 import { $, accEl } from '../core/dom.js';
+import { store } from '../model/state.js';
 import { expandPanel, panelMode, selectDocument } from './selection.js';
 import { dayShows } from './selection.js';
 
@@ -69,6 +71,19 @@ export function openLinkedTab(doc_id) {
   selectDocument(doc_id);
   expandPanel();
   selectContextTab('linked', true);
+}
+
+// A card's chat button: the Conversation tab beside the card, the panel
+// half-open (`panel_size: 'chat'`; at full width it stays so), the input
+// focused. Pressed while the chat is open, it goes back to the normal panel.
+export function toggleCardChat(doc_id) {
+  if (store.getState().panel_size === 'chat') {
+    store.setState({ panel_size: 'normal' });
+    return;
+  }
+  selectDocument(doc_id);
+  if (store.getState().panel_size !== 'expanded') store.setState({ panel_size: 'chat' });
+  selectContextTab('conversation', true);
 }
 
 // ----------------------------------------------------------------------------

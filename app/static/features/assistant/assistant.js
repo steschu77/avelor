@@ -1,6 +1,6 @@
 // The assistant (assistant.md): chats with the model picked for chats
 // (the vault's settings, picked in the head: accounts.md#model-choice),
-// in the panel's context column (expanded), its Conversation tab
+// in the panel's context column (expanded or half-open), its Conversation tab
 // (features/context.js). A chat is a conversation entity in
 // the vault, linked to the document or thread the panel showed when it
 // started; the switcher lists the chats linked to what is shown. The host
@@ -10,7 +10,8 @@
 // (`chat_open`, `chat_send`, `chat_stop`, `chat_select`; the events
 // `conversation` and `ai_delta`); the page shows the path from the first
 // message to `active`, and lets the user edit a message and send it again,
-// which starts a branch.
+// which starts a branch. A card's chat button opens the chat beside the
+// card (`toggleCardChat`).
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { DAY_SHORT_MONTH, TIME_FORMAT } from '../../core/format.js';
@@ -585,6 +586,13 @@ store.subscribe([
 ], (_values, state) => assistantShow(state));
 
 store.subscribe([state => state.accounts_rev, state => state.settings_rev], () => renderAssistant());
+
+// The cards' chat buttons are pressed while the chat is open beside them.
+store.subscribe(state => state.panel_size, panel_size => {
+  for (const btn of document.querySelectorAll('#panel-body [data-cmd="chat"]')) {
+    btn.setAttribute('aria-pressed', String(panel_size === 'chat'));
+  }
+});
 
 // A chat written (or deleted) changes the switcher's count; the chat shown
 // leaving the vault is gone.

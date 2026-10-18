@@ -75,6 +75,23 @@
   color: var(--c-card);
 }
 
+/* a card's chat button while chats are linked to the card (features/panel/panel.js):
+   a dot in its corner */
+.tool[data-chats] {
+  position: relative;
+}
+
+.tool[data-chats]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--c-accent);
+}
+
 /* Round icon buttons; --quiet shows the ring only on hover, --square is a
    larger square one. */
 .icon-btn {

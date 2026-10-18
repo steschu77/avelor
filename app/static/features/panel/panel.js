@@ -19,11 +19,13 @@ import { placeChildren } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
 import { parseDate } from '../../core/format.js';
 import { DAY_LONG_MONTH_YEAR, WEEKDAY_LONG, dayStart, relativeDay } from '../../core/format.js';
+import { plural } from '../../core/format.js';
 import { createEditor } from '../../editor/editor.js';
 import { store } from '../../model/state.js';
 import { entities, knownThreads, threadMembers, threads } from '../../model/entities.js';
 import { projects, projectsInOrder, threadProjects } from '../../model/entities.js';
 import { getMeta } from '../../model/entities.js';
+import { assistantChats, isAiConversation } from '../../model/entities.js';
 import { dayOccurrences, dayTasks } from '../../model/calendar.js';
 import { bindDocContent } from '../../model/documents.js';
 import { editorRoots, isDirty, onEdited, trySave } from '../../model/documents.js';
@@ -49,6 +51,7 @@ import { selectById } from '../selection.js';
 import { documentsIfCalendar, setDayListed } from '../selection.js';
 import { openLinkedTab } from '../context.js';
 import { openTaskTab } from '../context.js';
+import { toggleCardChat } from '../context.js';
 import { parseContact, taskTag } from './details.js';
 import { renderCardDetails } from './details.js';
 
@@ -287,9 +290,9 @@ export function linkChip(id, { incoming = false, label = null, onRemove = null }
 }
 
 // Fill `row` with the links of the card `doc_id`, as `linkChip`s: the one
-// it links to, then those linking to it. An x where the entity holding the
-// link can be written; none on a transaction item. The row is hidden while
-// empty.
+// it links to, then those linking to it -- but the chats about it, which
+// the Conversation tab lists. An x where the entity holding the link can
+// be written; none on a transaction item. The row is hidden while empty.
 function renderCardLinks(doc_id, row) {
   const { to, from, items } = linksOf(doc_id);
   const writable = id => (entities.get(id) ?? threads.get(id))?.writable;
@@ -298,6 +301,7 @@ function renderCardLinks(doc_id, row) {
     chips.push(linkChip(to, { onRemove: writable(doc_id) ? () => setLinkLocal(doc_id, null) : null }));
   }
   for (const id of from) {
+    if (isAiConversation(entities.get(id))) continue;
     chips.push(linkChip(id, { incoming: true, onRemove: writable(id) ? () => setLinkLocal(id, null) : null }));
   }
   for (const item of items) {
@@ -318,8 +322,19 @@ const refreshCardChips = oncePerFrame(() => {
     renderCardDetails(controller.detailsEl, entities.get(controller.doc_id), controller.occurrence);
     renderCardLinks(controller.doc_id, controller.linksEl);
     renderCardThreads(controller.doc_id, controller.threadsEl);
+    renderCardChat(controller);
   }
 });
+
+// The card's chat button, marked with a dot while chats are linked to its
+// entity (`assistantChats`, model/entities.js).
+function renderCardChat(controller) {
+  const count = assistantChats(controller.doc_id).length;
+  controller.chatBtn.toggleAttribute('data-chats', count > 0);
+  controller.chatBtn.title = count
+    ? `Chat about document \u00b7 ${plural(count, 'chat')}`
+    : 'Chat about document';
+}
 
 // A card's icon, title and date as its entity has them now (a document's
 // icon is its genre's); a day card's date is its occurrence's, and so is
@@ -780,9 +795,13 @@ function createMessageController(msg, { selectable = false, thread = false, occu
   });
 
   // New task for this: the context column's Task tab, for this card
-  // (features/new.js); its links: the Linked tab (features/linked.js).
+  // (features/new.js); its links: the Linked tab (features/linked.js);
+  // the chat beside it, pressed while open (features/assistant/assistant.js).
   previewToolbar.querySelector('button[data-cmd="task"]').addEventListener('click', () => openTaskTab(doc_id));
   previewToolbar.querySelector('button[data-cmd="link"]').addEventListener('click', () => openLinkedTab(doc_id));
+  const chatBtn = previewToolbar.querySelector('button[data-cmd="chat"]');
+  chatBtn.setAttribute('aria-pressed', String(store.getState().panel_size === 'chat'));
+  chatBtn.addEventListener('click', () => toggleCardChat(doc_id));
 
   // Delete: two clicks, no dialog (`armedButton`).
   const deleteBtn = previewToolbar.querySelector('button[data-cmd="delete"]');
@@ -792,10 +811,11 @@ function createMessageController(msg, { selectable = false, thread = false, occu
 
   const controller = {
     doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
-    dateEl, detailsEl, linksEl, threadsEl, occurrence, unsubscribeContent,
+    dateEl, detailsEl, linksEl, threadsEl, chatBtn, occurrence, unsubscribeContent,
   };
   msgControllers.set(doc_id, controller);
   renderCardHead(controller);
+  renderCardChat(controller);
 
   if (selectable) {
     // Clicking a card selects that entity, except when the click landed on
