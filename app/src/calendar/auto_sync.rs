@@ -1,0 +1,126 @@
+//! A calendar's auto-sync: a quiet list of Google's changes, then a sync when
+//! there is something to do.
+
+use std::path::{Path, PathBuf};
+
+use av_google::auth::ScopeAccess;
+use av_google::calendar_sync;
+use av_google::calendar_sync::Changes;
+use av_utils::datetime::DateTime;
+use av_utils::error::{Error, Result};
+
+use super::plan::{build_job, calendar_entity, calendar_job, find_calendar, first_sync_start};
+use super::{SourceKey, find_source, start};
+use crate::app::App;
+use crate::texts::Text;
+
+// ----------------------------------------------------------------------------
+/// The calendars whose auto-sync may run, in the accounts' order: switched
+/// on, of a connected account with calendar access.
+pub(super) fn auto_sync_sources(app: &App) -> Vec<SourceKey> {
+    app.google
+        .iter()
+        .filter(|account| {
+            let client = account.client.as_ref();
+            client.is_some_and(|c| c.scope().calendar != ScopeAccess::None)
+        })
+        .flat_map(|account| {
+            let sources = account.file.google.calendars.iter();
+            let on = sources.filter(|source| source.auto_sync);
+            on.map(|source| (account.id(), source.id.clone()))
+        })
+        .collect()
+}
+
+// ----------------------------------------------------------------------------
+/// The clock ticked, or the indexing ended (`App::on_clock`): list
+/// the changes of the first calendar that is due -- one with auto-sync on,
+/// of a connected account with calendar access, last synced 15 minutes ago
+/// -- unless the
+/// indexing, a sync or another auto-sync's list still runs. One at a time; the
+/// next tick takes the next calendar. The list writes nothing;
+/// `on_auto_listed` decides on a job.
+pub fn auto_sync(app: &mut App, now: DateTime) {
+    let state = &app.calendar;
+    if app.indexing() || state.sync.is_some() || state.auto.is_listing() {
+        return;
+    }
+    let sources = auto_sync_sources(app);
+    let Some(key) = state.auto.first_due(sources, now) else {
+        return;
+    };
+    let (account, calendar_id) = key.clone();
+    let client = app.google.connected(account);
+    let source = find_source(app, account, &calendar_id);
+    let (Ok(client), Some(source)) = (client, source) else {
+        return;
+    };
+
+    app.calendar.auto.listing(key.clone(), now);
+    let calendar = find_calendar(app, account, &calendar_id);
+    let cal = calendar_job(app, account, calendar, &source);
+    let time_min = first_sync_start(now).as_iso8601();
+    let root = app.vault.root().map(Path::to_path_buf);
+    log::info!("Calendar auto-sync of {calendar_id} ({account}): listing");
+    app.run(
+        move |cancel| calendar_sync::list_changes(&client, cancel, &cal, &time_min),
+        move |app, result| on_auto_listed(app, key, root, result),
+    );
+}
+
+// ----------------------------------------------------------------------------
+/// An auto-sync's list answered: sync the calendar as a job with what was
+/// listed -- or do nothing, if that changes nothing and nothing waits to be
+/// pushed (no job, no write). Dropped if another vault opened or the
+/// calendar's auto-sync was switched off meanwhile.
+pub(super) fn on_auto_listed(
+    app: &mut App,
+    key: SourceKey,
+    root: Option<PathBuf>,
+    result: Result<Changes>,
+) {
+    app.calendar.auto.listed();
+    let (account, calendar_id) = key.clone();
+    let source = find_source(app, account, &calendar_id);
+    let on = auto_sync_sources(app).contains(&key);
+    let (Some(source), true) = (source, on && app.vault.root() == root.as_deref()) else {
+        return log::info!(
+            "Calendar auto-sync of {calendar_id}: dropped, the vault or setting changed"
+        );
+    };
+    let changes = match result {
+        Ok(changes) => changes,
+        Err(e) => return auto_sync_failed(app, key, &source.name, &e),
+    };
+    if app.calendar.sync.is_some() {
+        // A sync started meanwhile: again at the next tick.
+        app.calendar.auto.again(key);
+        return;
+    }
+    let Ok(client) = app.google.connected(account) else {
+        return;
+    };
+    // Without a calendar entity there was no sync token: the full list is
+    // work, and the entity is made for it.
+    let calendar = match calendar_entity(app, account, &source) {
+        Ok(calendar) => calendar,
+        Err(e) => return auto_sync_failed(app, key, &source.name, &e),
+    };
+    let push = client.scope().calendar == ScopeAccess::Full;
+    let built = build_job(app, account, calendar, &source, push, Some(changes));
+    if !built.0.has_work() {
+        app.calendar.auto.worked(&key);
+        return log::info!("Calendar auto-sync of {calendar_id}: nothing new");
+    }
+    start(app, client, account, calendar, &source, built);
+}
+
+// ----------------------------------------------------------------------------
+/// An auto-sync of `key` failed before its job: said once, not every 15
+/// minutes while offline.
+fn auto_sync_failed(app: &mut App, key: SourceKey, name: &str, error: &Error) {
+    log::warn!("Calendar auto-sync of {name} failed: {error}");
+    if app.calendar.auto.failed(key) {
+        app.notice(Text::new("calendar.auto_sync_failed").arg("name", name));
+    }
+}

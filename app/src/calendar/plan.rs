@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use av_google::calendar_sync::Changes;
 use av_google::calendar_sync::{self, CalendarJob, LocalEvent, SyncJob};
 use av_utils::datetime::DateTime;
 use av_utils::error::Result;
@@ -31,7 +32,7 @@ pub(super) fn first_sync_start(now: DateTime) -> DateTime {
 // ----------------------------------------------------------------------------
 /// The vault's calendar entity of the account's Google calendar
 /// `calendar_id`, if there is one.
-fn find_calendar(app: &App, account: Id, calendar_id: &str) -> Option<Id> {
+pub(super) fn find_calendar(app: &App, account: Id, calendar_id: &str) -> Option<Id> {
     let entries = app.vault.index().all();
     let entry = entries.iter().find(|e| {
         e.doc.kind() == DocumentType::Calendar
@@ -74,16 +75,17 @@ pub(super) fn calendar_entity(app: &mut App, account: Id, source: &CalendarSourc
 }
 
 // ----------------------------------------------------------------------------
-/// The job for the calendar entity `calendar`, two-way if `push`; and its
-/// events' ids and snapshots by path. Two-way, it also holds the calendar's
-/// events in the trash that Google still has, to delete there, under their
-/// path in `.trash`.
+/// The job for the calendar entity `calendar`, two-way if `push`, with the
+/// changes an auto-sync `listed` already; and its events' ids and snapshots
+/// by path. Two-way, it also holds the calendar's events in the trash that
+/// Google still has, to delete there, under their path in `.trash`.
 pub(super) fn build_job(
     app: &App,
     account: Id,
     calendar: Id,
     source: &CalendarSource,
     push: bool,
+    listed: Option<Changes>,
 ) -> (SyncJob, PlannedEvents) {
     let mut events = HashMap::new();
     let mut locals: Vec<LocalEvent> = app
@@ -128,6 +130,7 @@ pub(super) fn build_job(
         exception,
         calendars: vec![CalendarJob {
             events: locals,
+            listed,
             ..calendar_job(app, account, Some(calendar), source)
         }],
     };
@@ -144,7 +147,7 @@ fn of_calendar(doc: &Document, calendar: Id) -> bool {
 // ----------------------------------------------------------------------------
 /// The job's part for `source` without its events: the calendar entity's
 /// path and bookkeeping, if it has one yet.
-fn calendar_job(
+pub(super) fn calendar_job(
     app: &App,
     account: Id,
     calendar: Option<Id>,

@@ -122,6 +122,7 @@
   "accounts.status.running": "en marcha",
   "accounts.stop_offering": "Dejar de ofrecer este modelo",
   "accounts.stop_sync": "Detener la sincronización automática",
+  "accounts.sync_every": "Sincronizar este calendario cada 15 minutos",
   "accounts.test": "Probar",
   "accounts.testing": "Probando…",
   "accounts.this_month": "Este mes",
@@ -169,6 +170,7 @@
     "other": "{n} tareas vencidas"
   },
   "cal.today": "Hoy",
+  "calendar.auto_sync_failed": "Falló la sincronización automática del calendario {name}.",
   "calendar.count.skipped": {
     "one": "{n} repetición omitida",
     "other": "{n} repeticiones omitidas"

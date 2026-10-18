@@ -122,6 +122,7 @@
   "accounts.status.running": "läuft",
   "accounts.stop_offering": "Dieses Modell nicht mehr anbieten",
   "accounts.stop_sync": "Auto-Sync beenden",
+  "accounts.sync_every": "Diesen Kalender alle 15 Minuten synchronisieren",
   "accounts.test": "Testen",
   "accounts.testing": "Wird getestet …",
   "accounts.this_month": "Diesen Monat",
@@ -166,6 +167,7 @@
     "other": "{n} überfällige Aufgaben"
   },
   "cal.today": "Heute",
+  "calendar.auto_sync_failed": "Der Auto-Sync des Kalenders {name} ist fehlgeschlagen.",
   "calendar.count.skipped": {
     "one": "{n} Wiederholung übersprungen",
     "other": "{n} Wiederholungen übersprungen"

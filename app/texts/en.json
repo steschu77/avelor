@@ -122,6 +122,7 @@
   "accounts.status.running": "running",
   "accounts.stop_offering": "Stop offering this model",
   "accounts.stop_sync": "Stop the auto-sync",
+  "accounts.sync_every": "Sync this calendar every 15 minutes",
   "accounts.test": "Test",
   "accounts.testing": "Testing…",
   "accounts.this_month": "This month",
@@ -166,6 +167,7 @@
     "other": "{n} overdue tasks"
   },
   "cal.today": "Today",
+  "calendar.auto_sync_failed": "Calendar auto-sync of {name} failed.",
   "calendar.count.skipped": {
     "one": "{n} occurrence skipped",
     "other": "{n} occurrences skipped"
