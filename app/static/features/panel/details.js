@@ -54,6 +54,7 @@ export function renderCardDetails(row, doc, occurrence = null) {
         const dd = accEl('dd');
         dd.append(...content);
         parts.push(dt, dd);
+        return dt;
     };
     if (doc?.event && doc.date) eventFields(doc, add, occurrence);
     if (doc?.task && doc.writable) taskFields(doc, add);
@@ -196,11 +197,21 @@ function taskText(doc, add) {
 }
 
 // ----------------------------------------------------------------------------
-// An email's sender (vault.md#email) and its type (the email analysis's).
+// An email's sender and its type (the email analysis's), whom
+// it went to and its subject (written only once the title differs from it,
+// vault.md#email): read only, as the mail came, each such row's label saying
+// so.
+const EMAIL_PEOPLE = [['to', t('props.to')], ['cc', t('props.cc')], ['bcc', t('props.bcc')]];
+
 function emailFields(doc, add) {
     const { email } = doc;
-    if (email.from) add(t('props.from'), contactChip(email.from), ...(doc.type ? [` \u00b7 ${doc.type}`] : []));
+    const asItCame = dt => { dt.title = t('email.as_it_came'); };
+    if (email.from) asItCame(add(t('props.from'), contactChip(email.from), ...(doc.type ? [` \u00b7 ${doc.type}`] : [])));
     else if (doc.type) add(t('props.type'), doc.type);
+    for (const [key, label] of EMAIL_PEOPLE) {
+        if (email[key]?.length) asItCame(add(label, ...email[key].map(contactChip)));
+    }
+    if (email.subject) asItCame(add(t('props.subject'), email.subject));
 }
 
 // ----------------------------------------------------------------------------
