@@ -31,6 +31,11 @@ const SYSTEM: &str = "You are the assistant in Avelor, the user's \
 personal document manager. Answer in Markdown and keep it short unless asked \
 for more.";
 
+/// The user's turn before a conversation that starts with a reply (the mail
+/// analysis's chat): providers want a request to start with the user, and
+/// what it is about is in the system text.
+const OPENING: &str = "Have a look at it.";
+
 // ----------------------------------------------------------------------------
 /// A reply being written.
 struct Writing {
@@ -368,8 +373,8 @@ fn save(app: &mut App, id: Id, conversation: Conversation) -> Result<()> {
 /// message before it (`Conversation::add`), and the last is `active`.
 /// `Error::InvalidArgument` if there is none or the first has a parent,
 /// `Error::NotFound` if a later one's parent is missing. A chat's first
-/// message.
-fn create(
+/// message, and the mail analysis's chat (`enrich`).
+pub fn create(
     app: &mut App,
     title: String,
     messages: Vec<ConversationMessage>,
@@ -659,8 +664,9 @@ fn view_of<'a>(
 
 // ----------------------------------------------------------------------------
 /// The request answering `question`: the path down to it, as alternating
-/// turns (consecutive turns of one side merged, empty ones left out);
-/// `context`, what the conversation is about, follows the system text.
+/// turns (consecutive turns of one side merged, empty ones left out; a
+/// leading reply follows `OPENING`); `context`, what the conversation is
+/// about, follows the system text.
 fn request_for(
     conversation: &Conversation,
     question: Id,
@@ -678,6 +684,9 @@ fn request_for(
         };
         if text.is_empty() {
             continue;
+        }
+        if turns.is_empty() && role == Role::Assistant {
+            turns.push((Role::User, OPENING.to_string()));
         }
         match turns.last_mut() {
             Some((last, joined)) if *last == role => {
@@ -787,11 +796,13 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn empty_turns_are_left_out() {
-        let [q1, a2, q2] = ids();
+    fn a_leading_reply_follows_the_opening_and_empty_turns_are_left_out() {
+        let [a0, a1, q1, a2, q2] = ids();
         let conversation = Conversation {
             messages: vec![
-                message(q1, None, None, "Hi"),
+                message(a0, None, Some("m"), "- The amount is new."),
+                message(a1, Some(a0), Some("m"), "Thanks, paid."),
+                message(q1, Some(a1), None, "Hi"),
                 message(a2, Some(q1), Some("m"), "  "),
                 message(q2, Some(a2), None, "Still there?"),
             ],
@@ -807,7 +818,14 @@ mod tests {
         );
         assert_eq!(
             turns(&request),
-            [(Role::User, "Hi\n\nStill there?".to_string())]
+            [
+                (Role::User, OPENING.to_string()),
+                (
+                    Role::Assistant,
+                    "- The amount is new.\n\nThanks, paid.".to_string()
+                ),
+                (Role::User, "Hi\n\nStill there?".to_string()),
+            ]
         );
     }
 

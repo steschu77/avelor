@@ -328,7 +328,8 @@ const refreshCardChips = oncePerFrame(() => {
 });
 
 // The card's chat button, marked with a dot while chats are linked to its
-// entity (`assistantChats`, model/entities.js).
+// entity (`assistantChats`, model/entities.js; the mail analysis writes
+// one).
 function renderCardChat(controller) {
   const count = assistantChats(controller.doc_id).length;
   controller.chatBtn.toggleAttribute('data-chats', count > 0);

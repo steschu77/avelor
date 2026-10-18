@@ -1578,15 +1578,19 @@ Content-Type: text/html; charset=utf-8\r\n\
     #[test]
     fn the_auto_syncs_analysis_is_stored_as_given() {
         let mut h = with_google("mail-sync-analysis", MAIL, &[]);
-        let analysis = json!({ "level": "lite" });
+        let analysis = json!({ "level": "medium" });
         let args = json!({ "account": CONNECTED, "enabled": true, "analysis": analysis });
         let sent = h.call("set_mail_sync", args);
         assert_eq!(shape(&sent), ["account", "reply"]);
         let sync = &sent[0]["data"]["mail"]["auto_sync"];
-        assert_eq!(sync["analysis"], json!({ "level": "lite" }), "no model yet");
+        assert_eq!(
+            sync["analysis"],
+            json!({ "level": "medium" }),
+            "no model yet"
+        );
         let file = h.vault().join(".avelor/accounts/google_a.yaml");
         let text = fs::read_to_string(file).unwrap();
-        assert!(text.contains("level: lite"), "{text}");
+        assert!(text.contains("level: medium"), "{text}");
     }
 
     // ------------------------------------------------------------------------

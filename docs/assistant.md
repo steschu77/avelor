@@ -30,6 +30,13 @@ when it started.
   conversation entity selected in the table opens itself. A card's chat
   button carries a dot while chats are linked to the card
   (`renderCardChat`, `panel.md#cards`).
+- The mail analysis's Medium level writes a chat about a mail
+  (`mail.md#analysis`) that starts with the model's replies: the points to
+  check, then the quick reply. Its questions show as chips under the last
+  message while it ends the shown path (`renderAssistantSuggestions`, the
+  message's `suggestions`); a click asks one, as if it were typed, after
+  that message. They are disabled while a reply is being written or the
+  chat model can't answer.
 - Enter sends the input (`assistantSendInput`). The reply streams in and
   is written once it is complete; Stop ends it, and what it wrote so far
   is kept as the reply. A failed reply is shown with its error and never
@@ -75,7 +82,10 @@ prompt, fresh for every request:
   block, then its text;
 - a thread as its members, oldest first.
 
-Past about 40,000
+A conversation that starts with a reply (the mail analysis's chat) is sent
+after a fixed question of the user's, "Have a look at it." (`OPENING`):
+providers want a request to start with the user, and so the model sees
+its points and quick reply when the chat goes on. Past about 40,000
 characters the oldest messages' text is left out, and a document's text
 is cut. A chat started with nothing selected sends only
 what is typed; the hint of a new chat says which. The request also carries

@@ -1,12 +1,14 @@
 //! Enriching entities with an AI (mail.md#analysis): the mail analysis -- Lite
 //! gives each new mail its kind, a clean title, labels in use and active
-//! projects.
+//! projects; Medium also points to check, a quick reply and questions, as a
+//! chat linked to the mail.
 //!
 //! An analysis goes plan → run → apply (architecture.md#conventions), one mail
 //! after another, as a job: the plan picks the model (`AiAccounts::choose`),
 //! gathers the vault's labels and projects and each mail's text; the run asks
-//! the model; the apply reads its answer and writes it through the vault edit.
-//! The spend limit is checked before each mail.
+//! the model; the apply reads its answer and writes it through the vault edit
+//! (`chat::create` for Medium's chat). The spend limit is checked before each
+//! mail.
 
 use std::collections::{HashMap, VecDeque};
 
@@ -15,15 +17,18 @@ use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_vault::document::Document;
+use av_vault::envelope::ConversationMessage;
 use av_vault::envelope::DocumentType;
 use av_vault::vault::SaveOutcome;
 use serde_json::Value;
 
 use crate::ai;
 use crate::app::App;
+use crate::chat;
 use crate::google_accounts::{Analysis, AnalysisLevel};
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
+use av_vault::markdown::plain_title;
 use av_vault::vault::Index;
 
 /// What the mail analysis is called in a refused pick's words
@@ -39,6 +44,14 @@ const LABELS_PER_MAIL: usize = 3;
 const PROJECTS_PER_MAIL: usize = 2;
 /// A longer title is cut.
 const TITLE_CHARS: usize = 120;
+/// The most points to check and questions one mail gets, and how long
+/// each may be; a longer quick reply is cut too.
+const CHECKS_PER_MAIL: usize = 3;
+const QUESTIONS_PER_MAIL: usize = 3;
+const POINT_CHARS: usize = 300;
+const REPLY_CHARS: usize = 4000;
+/// A longer title of Medium's chat is cut.
+const CHAT_TITLE_CHARS: usize = 60;
 /// The kinds of mail (vault.md#email).
 pub const KINDS: [&str; 5] = ["request", "reply", "notification", "newsletter", "other"];
 /// How often a mail is asked about at most while the answer isn't the JSON
@@ -52,6 +65,8 @@ window or its output limit).";
 /// The JSON object each level asks for.
 const LITE_SHAPE: &str =
     "{\"kind\": \"...\", \"title\": \"...\", \"labels\": [\"...\"], \"projects\": [\"...\"]}";
+const MEDIUM_SHAPE: &str = "{\"kind\": \"...\", \"title\": \"...\", \"labels\": [\"...\"], \
+\"projects\": [\"...\"], \"check\": [\"...\"], \"reply\": \"...\", \"questions\": [\"...\"]}";
 
 const LITE_RULES: &str = "
 - kind: what the mail is: \"request\" (it asks its recipient to do, answer, pay or decide \
@@ -64,6 +79,16 @@ name.
 - labels: up to 3 labels from the list of labels that clearly fit the mail; none if unsure.
 - projects: up to 2 projects from the list of projects the mail clearly belongs to; none if \
 unsure.";
+
+const MEDIUM_RULES: &str = "
+- check: up to 3 points a closer look at the mail should check, one sentence each: an amount, a \
+deadline, a claim, a condition; none if there is nothing to check, and none for a newsletter.
+- reply: a short reply to the mail in its language, ready to send, without a signature or \
+placeholders; only if the mail expects an answer from its recipient, else null; never for a \
+notification or a newsletter.
+- questions: 1 to 3 short questions the recipient might ask about this mail; none for a \
+newsletter.
+Write the points and the questions in the mail's language too.";
 
 const LISTS_ONLY: &str = "\nUse only labels and projects from the lists, spelled as given.";
 
@@ -174,10 +199,17 @@ pub fn request_for(
         "Labels:\n{labels}\nProjects:\n{projects}\nThe mail:\nSubject: {}\nFrom: {}\nTo: {}\nDate: {date}\n\n{}",
         mail.subject, mail.from, mail.to, mail.body
     );
-    let task = "You sort incoming mail.";
+    let medium = level == AnalysisLevel::Medium;
+    let task = match medium {
+        true => "You sort incoming mail and prepare it for its recipient.",
+        false => "You sort incoming mail.",
+    };
     let shape = shape(level);
     let mut system =
         format!("{task} Answer with one JSON object and nothing else: {shape}.{LITE_RULES}");
+    if medium {
+        system.push_str(MEDIUM_RULES);
+    }
     system.push_str(LISTS_ONLY);
     ChatRequest::new(model)
         .system(system)
@@ -190,8 +222,11 @@ pub fn request_for(
 
 // ----------------------------------------------------------------------------
 /// The JSON object the analysis at `level` asks for.
-fn shape(_level: AnalysisLevel) -> &'static str {
-    LITE_SHAPE
+fn shape(level: AnalysisLevel) -> &'static str {
+    match level {
+        AnalysisLevel::Medium => MEDIUM_SHAPE,
+        _ => LITE_SHAPE,
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -227,18 +262,31 @@ pub struct Lite {
 }
 
 // ----------------------------------------------------------------------------
+/// What Medium found beyond Lite, for the mail's chat: a quick reply or a
+/// point to check, at least.
+#[derive(Debug, Default, PartialEq)]
+pub struct Medium {
+    pub check: Vec<String>,
+    pub reply: Option<String>,
+    pub questions: Vec<String>,
+}
+
+// ----------------------------------------------------------------------------
 /// Read the `answer` of the analysis at `level` against `ctx` for a mail
 /// titled `title`: the JSON object in it (code fences and text around it
 /// ignored); a title trimmed and cut, dropped if empty or the mail's own;
 /// a kind from `KINDS`, in any case; the labels and projects from the lists
-/// only, matched in any case, each once, the first few kept. An answer
-/// without such an object is refused, in words.
+/// only, matched in any case, each once, the first few kept. Medium's
+/// points, reply and questions trimmed and cut, the first few kept; none
+/// for a newsletter, no reply for a notification, and no chat without a
+/// reply or a point. An answer without such an object is refused, in
+/// words.
 pub fn parse(
     answer: &str,
-    _level: AnalysisLevel,
+    level: AnalysisLevel,
     ctx: &Context,
     title: &str,
-) -> std::result::Result<Lite, String> {
+) -> std::result::Result<(Lite, Option<Medium>), String> {
     let refused = || "The answer wasn't the JSON object asked for.".to_string();
     let (Some(start), Some(end)) = (answer.find('{'), answer.rfind('}')) else {
         return Err(refused());
@@ -275,12 +323,39 @@ pub fn parse(
     }
     projects.truncate(PROJECTS_PER_MAIL);
 
-    Ok(Lite {
+    let lite = Lite {
         title: new_title,
         kind,
         labels,
         projects,
-    })
+    };
+    let medium = match level {
+        AnalysisLevel::Medium => medium_of(&object, lite.kind.as_deref()),
+        _ => None,
+    };
+    Ok((lite, medium))
+}
+
+// ----------------------------------------------------------------------------
+/// Medium's part of the answer `object` for a mail of `kind` (see `parse`).
+fn medium_of(object: &Value, kind: Option<&str>) -> Option<Medium> {
+    if kind == Some("newsletter") {
+        return None;
+    }
+    let points = |key: &str, most: usize| -> Vec<String> {
+        let points = names(&object[key]).into_iter().map(|p| cut(p, POINT_CHARS));
+        points.filter(|p| !p.is_empty()).take(most).collect()
+    };
+    let reply = object["reply"]
+        .as_str()
+        .map(|reply| cut(reply, REPLY_CHARS))
+        .filter(|reply| !reply.is_empty() && kind != Some("notification"));
+    let medium = Medium {
+        check: points("check", CHECKS_PER_MAIL),
+        reply,
+        questions: points("questions", QUESTIONS_PER_MAIL),
+    };
+    (medium.reply.is_some() || !medium.check.is_empty()).then_some(medium)
 }
 
 // ----------------------------------------------------------------------------
@@ -342,6 +417,37 @@ pub fn apply_lite(doc: &mut Document, lite: &Lite) {
 }
 
 // ----------------------------------------------------------------------------
+/// The messages of Medium's chat about a mail: the points to check as a
+/// list, then the quick reply as a message of its own, each following the
+/// one before; the questions are offered under the last. Written by `model`
+/// through `account` at `now`.
+pub fn medium_messages(
+    medium: &Medium,
+    model: &str,
+    account: Id,
+    now: DateTime,
+) -> Vec<ConversationMessage> {
+    let points = medium.check.iter().map(|p| format!("- {p}"));
+    let points = Some(points.collect::<Vec<_>>().join("\n")).filter(|p| !p.is_empty());
+    let mut messages: Vec<ConversationMessage> = Vec::new();
+    for content in [points, medium.reply.clone()].into_iter().flatten() {
+        messages.push(ConversationMessage {
+            id: Some(Id::generate()),
+            parent: messages.last().and_then(|m| m.id),
+            model: Some(model.to_string()),
+            account: Some(account),
+            date: Some(now),
+            content: Some(content),
+            ..Default::default()
+        });
+    }
+    if let Some(last) = messages.last_mut() {
+        last.suggestions = medium.questions.clone();
+    }
+    messages
+}
+
+// ----------------------------------------------------------------------------
 /// The analyses running (`App::enrich`), by job.
 #[derive(Default)]
 pub struct EnrichState {
@@ -381,6 +487,8 @@ struct Ask {
 struct Counts {
     /// Mails written with what was found.
     analysed: usize,
+    /// Medium's chats written.
+    chats: usize,
     /// Mails the answer had nothing new for, or gone meanwhile.
     unchanged: usize,
     failed: usize,
@@ -397,6 +505,7 @@ impl Counts {
     fn summary(&self) -> String {
         let counts = [
             (self.analysed, "analysed", "analysed"),
+            (self.chats, "chat", "chats"),
             (self.unchanged, "unchanged", "unchanged"),
             (self.failed, "failed", "failed"),
             (self.left, "left", "left"),
@@ -539,15 +648,22 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
         Err(e) => Err(ai::chat_error(run.provider, &run.address, &e)),
     };
     let mail = ask.mail;
-    let written = found.and_then(|lite| write(app, &mail, lite));
+    let by = (run.model.clone(), account);
+    let written = found.and_then(|(lite, medium)| write(app, &mail, lite, medium, by));
 
     let Some(run) = app.enrich.runs.get_mut(&job) else {
         return;
     };
     let counts = &mut run.counts;
     match written {
-        Ok(Written { mail: false }) => counts.unchanged += 1,
-        Ok(Written { .. }) => counts.analysed += 1,
+        Ok(Written {
+            mail: false,
+            chat: false,
+        }) => counts.unchanged += 1,
+        Ok(Written { chat, .. }) => {
+            counts.analysed += 1;
+            counts.chats += usize::from(chat);
+        }
         Err(error) => {
             log::info!("Mail analysis {job}: {} failed: {error}", mail.id);
             counts.failed += 1;
@@ -565,16 +681,29 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
 }
 
 // ----------------------------------------------------------------------------
-/// What writing an answer changed: the mail.
+/// What writing an answer changed: the mail, and whether Medium's chat was
+/// written.
 struct Written {
     mail: bool,
+    chat: bool,
 }
 
 // ----------------------------------------------------------------------------
-/// Write `lite` into `mail`. A title the user changed since the plan stays;
-/// a mail gone meanwhile gets nothing. A failed write is logged.
-fn write(app: &mut App, mail: &MailText, mut lite: Lite) -> std::result::Result<Written, String> {
-    let gone = Written { mail: false };
+/// Write `lite` into `mail`, then `medium` as a chat linked to it, by the
+/// model and account `by`, titled "Mail analysis · <the mail's title>". A
+/// title the user changed since the plan stays; a mail gone meanwhile gets
+/// nothing. A failed write is logged.
+fn write(
+    app: &mut App,
+    mail: &MailText,
+    mut lite: Lite,
+    medium: Option<Medium>,
+    by: (String, Id),
+) -> std::result::Result<Written, String> {
+    let gone = Written {
+        mail: false,
+        chat: false,
+    };
     let Some(entry) = app.vault.index().entry(&mail.id) else {
         return Ok(gone);
     };
@@ -597,7 +726,28 @@ fn write(app: &mut App, mail: &MailText, mut lite: Lite) -> std::result::Result<
         },
         Err(e) => return Err(failed(e)),
     };
-    Ok(Written { mail: changed })
+    let (Some(medium), Some(entry)) = (medium, app.vault.index().entry(&id)) else {
+        return Ok(Written {
+            mail: changed,
+            chat: false,
+        });
+    };
+    let title = plain_title(
+        &format!("Mail analysis \u{b7} {}", entry.doc.title()),
+        CHAT_TITLE_CHARS,
+    );
+    let (model, account) = by;
+    let messages = medium_messages(&medium, &model, account, DateTime::now());
+    match chat::create(app, title, messages, Some(id)) {
+        Ok(_) => Ok(Written {
+            mail: changed,
+            chat: true,
+        }),
+        Err(e) => {
+            log::warn!("Mail analysis: the chat of {id} could not be written: {e}");
+            Err("the chat could not be written.".to_string())
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -758,6 +908,19 @@ mod tests {
             system.contains("- kind:") && !system.contains("- check:"),
             "{system}"
         );
+        let medium = request_for(AnalysisLevel::Medium, "m", &ctx(), &mail);
+        let system = medium.system.as_deref().unwrap();
+        assert!(system.contains(MEDIUM_SHAPE), "{system}");
+        assert!(
+            system.contains("- check:")
+                && system.contains("- reply:")
+                && system.contains("- questions:")
+        );
+        let asked = again(medium.clone(), "Sorry.", AnalysisLevel::Medium);
+        let Some(av_llm::Part::Text(reminder)) = asked.messages[2].parts.first() else {
+            panic!("{:?}", asked.messages);
+        };
+        assert!(reminder.contains(MEDIUM_SHAPE), "{reminder}");
         let empty = again(request.clone(), "  ", AnalysisLevel::Lite);
         assert_eq!(
             empty.messages.len(),
@@ -825,9 +988,9 @@ mod tests {
     #[test]
     fn the_answer_is_read_against_the_lists() {
         let answer = "Sure! ```json\n{\"title\": \"  Abschlag Oktober \", \"labels\": [\"rechnungen\", \"Unbekannt\", \"Rechnungen\", \"Umzug\", \"Steuer\", \"Bank\"], \"projects\": [\"wohnung köln\", \"Garten\", \"Auto\", \"Wohnung Köln\"]}\n``` Done.";
-        let lite = parse(answer, AnalysisLevel::Lite, &ctx(), "AW: Abschlag").unwrap();
+        let (lite, medium) = parse(answer, AnalysisLevel::Lite, &ctx(), "AW: Abschlag").unwrap();
         assert_eq!(lite.title.as_deref(), Some("Abschlag Oktober"));
-        assert_eq!(lite.kind, None);
+        assert_eq!((lite.kind, medium), (None, None));
         assert_eq!(
             lite.labels,
             ["Rechnungen", "Umzug", "Steuer"],
@@ -842,7 +1005,7 @@ mod tests {
             "Abschlag",
         );
         assert_eq!(
-            same.unwrap(),
+            same.unwrap().0,
             Lite {
                 title: None,
                 kind: Some("request".into()),
@@ -851,12 +1014,12 @@ mod tests {
             },
             "the mail's own title is no change; one label as a string; the kind in any case"
         );
-        let unknown = lite(r#"{"kind": "spam"}"#, "t").unwrap();
+        let unknown = lite(r#"{"kind": "spam"}"#, "t").unwrap().0;
         assert_eq!(unknown.kind, None, "only the known kinds");
         let long = format!(r#"{{"title": "{}"}}"#, "x".repeat(200));
-        let cut = lite(&long, "t").unwrap().title.unwrap();
+        let cut = lite(&long, "t").unwrap().0.title.unwrap();
         assert_eq!(cut.chars().count(), TITLE_CHARS);
-        assert_eq!(lite(r#"{"title": "  "}"#, "t").unwrap().title, None);
+        assert_eq!(lite(r#"{"title": "  "}"#, "t").unwrap().0.title, None);
 
         for bad in ["Sorry, I can't.", "{not json}", "[1, 2]", "} {"] {
             let refused = lite(bad, "t");
@@ -866,6 +1029,73 @@ mod tests {
                 "{bad}"
             );
         }
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn medium_reads_the_points_the_reply_and_the_questions() {
+        let medium = |answer: &str| parse(answer, AnalysisLevel::Medium, &ctx(), "t").unwrap().1;
+        let long = "x".repeat(POINT_CHARS + 10);
+        let answer = format!(
+            r#"{{"kind": "request", "check": [" Der Betrag ", "", "{long}", "Die Frist", "Zu viel"], "reply": " Danke! ", "questions": "Warum?"}}"#
+        );
+        let found = medium(&answer).unwrap();
+        assert_eq!(found.check.len(), CHECKS_PER_MAIL, "{found:?}");
+        assert_eq!(found.check[0], "Der Betrag");
+        assert_eq!(found.check[1].chars().count(), POINT_CHARS, "cut");
+        assert_eq!(found.reply.as_deref(), Some("Danke!"));
+        assert_eq!(found.questions, ["Warum?"]);
+
+        let notification =
+            medium(r#"{"kind": "notification", "check": ["Der Betrag"], "reply": "Danke!"}"#);
+        assert_eq!(
+            notification,
+            Some(Medium {
+                check: vec!["Der Betrag".into()],
+                reply: None,
+                questions: vec![],
+            }),
+            "no reply to a notification"
+        );
+        let newsletter = r#"{"kind": "newsletter", "check": ["Rabatt"], "reply": "Nein", "questions": ["Was?"]}"#;
+        assert_eq!(medium(newsletter), None, "nothing for a newsletter");
+        let nothing = r#"{"kind": "request", "reply": null, "check": [], "questions": ["Was?"]}"#;
+        assert_eq!(medium(nothing), None, "questions alone make no chat");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn medium_messages_follow_each_other() {
+        let account = Id::parse(OLLAMA_ID).unwrap();
+        let now = DateTime::now();
+        let medium = Medium {
+            check: vec!["Der Betrag".into(), "Die Frist".into()],
+            reply: Some("Danke!".into()),
+            questions: vec!["Warum?".into()],
+        };
+        let messages = medium_messages(&medium, "m", account, now);
+        let [points, reply] = &messages[..] else {
+            panic!("{messages:?}");
+        };
+        assert_eq!(points.content.as_deref(), Some("- Der Betrag\n- Die Frist"));
+        assert_eq!((points.parent, reply.parent), (None, points.id));
+        assert_eq!(reply.content.as_deref(), Some("Danke!"));
+        assert!(points.suggestions.is_empty());
+        assert_eq!(reply.suggestions, ["Warum?"]);
+        assert_eq!(
+            (reply.model.as_deref(), reply.account),
+            (Some("m"), Some(account))
+        );
+        assert!(reply.is_reply());
+
+        let only_reply = Medium {
+            check: vec![],
+            ..medium
+        };
+        let messages = medium_messages(&only_reply, "m", account, now);
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].parent, None);
+        assert_eq!(messages[0].suggestions, ["Warum?"]);
     }
 
     // ------------------------------------------------------------------------
@@ -968,7 +1198,7 @@ mod tests {
     // ------------------------------------------------------------------------
     #[test]
     fn an_analysis_writes_the_title_labels_and_projects() {
-        let answer = r#"{"kind": "request", "title": "Abschlag Oktober", "labels": ["rechnungen"], "projects": ["Wohnung"]}"#;
+        let answer = r#"{"kind": "request", "title": "Abschlag Oktober", "labels": ["rechnungen"], "projects": ["Wohnung"], "reply": "Danke!"}"#;
         let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
         let mut h = with_mails("enrich-run", &address, "");
         let ids = vec![Id::parse(MAIL_ID).unwrap()];
@@ -992,6 +1222,83 @@ mod tests {
             !h.vault().join("Conversations").exists(),
             "Lite writes no chat"
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn medium_writes_a_chat_linked_to_the_mail() {
+        let answer = r#"{"kind": "request", "title": "Abschlag Oktober", "check": ["Der Betrag ist neu."], "reply": "Danke, ist bezahlt.", "questions": ["Warum ist er hoeher?"]}"#;
+        let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
+        let mut h = with_mails("enrich-medium", &address, "");
+        let mail = Id::parse(MAIL_ID).unwrap();
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            vec![mail],
+            &at(AnalysisLevel::Medium),
+        );
+        let sent = until_done(&mut h);
+
+        assert_eq!(
+            of(&sent, "job").last().unwrap()["note"],
+            "1 analysed · 1 chat"
+        );
+        assert!(of(&sent, "notice").is_empty(), "{sent:?}");
+        let text = fs::read_to_string(h.vault().join("Mail/a.md")).unwrap();
+        assert!(text.contains("kind: request"), "{text}");
+        let chats: Vec<_> = fs::read_dir(h.vault().join("Conversations"))
+            .unwrap()
+            .collect();
+        assert_eq!(chats.len(), 1);
+
+        let chat = h
+            .app
+            .vault
+            .index()
+            .all()
+            .iter()
+            .find(|e| e.doc.linked_to() == Some(mail))
+            .unwrap();
+        let id = chat.doc.id();
+        assert_eq!(chat.doc.title(), "Mail analysis · Abschlag Oktober");
+        assert_eq!(chat.doc.kind(), DocumentType::Conversation);
+        let conversation = chat.doc.roles().conversation.clone().unwrap();
+        let [points, reply] = &conversation.messages[..] else {
+            panic!("{conversation:?}");
+        };
+        assert_eq!(points.content.as_deref(), Some("- Der Betrag ist neu."));
+        assert_eq!(reply.parent, points.id);
+        assert_eq!(reply.content.as_deref(), Some("Danke, ist bezahlt."));
+        assert_eq!(conversation.active, reply.id);
+        assert_eq!(reply.account, Some(Id::parse(OLLAMA_ID).unwrap()));
+
+        // As the page opens it: the questions under the reply.
+        let opened = h.call("chat_open", json!({ "id": id }));
+        let messages = &opened[0]["ok"]["conversation"]["messages"];
+        assert_eq!(messages[0]["role"], "assistant");
+        assert!(messages[0].get("suggestions").is_none());
+        assert_eq!(messages[1]["suggestions"], json!(["Warum ist er hoeher?"]));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_newsletter_gets_no_chat() {
+        let answer = r#"{"kind": "newsletter", "title": "Angebote", "check": ["Rabatt"], "reply": "Nein", "questions": ["Was?"]}"#;
+        let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
+        let mut h = with_mails("enrich-newsletter", &address, "");
+        let ids = vec![Id::parse(MAIL_ID).unwrap()];
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            ids,
+            &at(AnalysisLevel::Medium),
+        );
+        let sent = until_done(&mut h);
+
+        assert_eq!(of(&sent, "job").last().unwrap()["note"], "1 analysed");
+        let text = fs::read_to_string(h.vault().join("Mail/a.md")).unwrap();
+        assert!(text.contains("kind: newsletter"), "{text}");
+        assert!(!h.vault().join("Conversations").exists());
     }
 
     // ------------------------------------------------------------------------

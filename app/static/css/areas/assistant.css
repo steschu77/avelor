@@ -180,6 +180,23 @@
   margin-top: 0;
 }
 
+/* under the last reply: the questions it offers to ask next (the mail
+   analysis's chat, features/assistant/assistant.js), each sent on a click */
+.chat__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat__suggestions>.chip {
+  text-align: left;
+}
+
+.chat__suggestions>.chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .chat__reply {
   color: var(--c-ink);
   text-wrap: pretty;

@@ -208,12 +208,14 @@ impl Default for MailSettings {
 }
 
 // ----------------------------------------------------------------------------
-/// How closely new mail is analysed (mail.md#analysis): Lite sorts it.
+/// How closely new mail is analysed (mail.md#analysis): Lite sorts it,
+/// Medium also drafts a reply and what to check, as a chat.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AnalysisLevel {
     Off,
     Lite,
+    Medium,
 }
 
 // ----------------------------------------------------------------------------

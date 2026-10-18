@@ -87,7 +87,7 @@ Every account file has:
     * `last-fetch`: when the last fetch without failures started; the
       "Since last time" preset
     * `analysis`: Fetch mail's analysis of new mail (`mail.md#analysis`):
-      `level` (`off`, `lite`) and the `model` it runs with,
+      `level` (`off`, `lite`, `medium`) and the `model` it runs with,
       `{account, model}`, kept while the level is off; absent: off
     * `auto-sync`: the account's mail auto-sync (`mail.md#mail-auto-sync`),
       absent until it is first switched on: `enabled`; `filter`, its own
@@ -118,6 +118,11 @@ google:
       after: 2026-09-20T22:00:00Z
     auto-update: true
     last-fetch: 2026-09-22T12:10:00Z
+    analysis:
+      level: medium
+      model:
+        account: 0193a7c1-4b0e-7c1a-9d2f-3a51c8e05be0
+        model: gpt-5-mini
     auto-sync:
       enabled: true
       filter:

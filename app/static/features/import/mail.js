@@ -665,7 +665,7 @@ const MAIL_ANALYSIS_OFF = { level: 'off', model: null };
 // (`aiMissingHint`; not for a plain "pick a model", which the picker says
 // itself). `onChange` gets the analysis as changed.
 function renderMailAnalysis(analysis, onChange) {
-  const seg = accSeg([['off', 'Off'], ['lite', 'Lite']], analysis.level,
+  const seg = accSeg([['off', 'Off'], ['lite', 'Lite'], ['medium', 'Medium']], analysis.level,
     level => onChange({ ...analysis, level }));
   const body = accEl('div', 'page-text mail__text');
   if (analysis.level === 'off') {
@@ -674,7 +674,10 @@ function renderMailAnalysis(analysis, onChange) {
   }
   const picker = aiModelPicker(analysis.model, model => onChange({ ...analysis, model }));
   body.append('Sends each new mail to ', picker,
-    ' for its kind, a clean title, and labels and projects from this vault.');
+    ' for its kind, a clean title, and labels and projects from this vault',
+    analysis.level === 'medium'
+      ? '; and, for a mail that asks for it, a quick reply, points to check and questions, as a chat linked to the mail.'
+      : '.');
   const ai = aiModelOf(analysis.model);
   if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
     body.append(notice('hint', ...aiMissingHint(ai, 'the mail analysis')));
