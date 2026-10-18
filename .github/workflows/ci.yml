@@ -8,6 +8,12 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # The Google OAuth client is taken from the build (av-google/auth.rs).
+  AVELOR_GOOGLE_CLIENT_ID: ${{ secrets.AVELOR_GOOGLE_CLIENT_ID }}
+  AVELOR_GOOGLE_CLIENT_SECRET: ${{ secrets.AVELOR_GOOGLE_CLIENT_SECRET }}
+  # With both the build has Google (the feature google-account); a pull
+  # request from a fork gets none, and builds without it.
+  GOOGLE_ACCOUNT: ${{ (secrets.AVELOR_GOOGLE_CLIENT_ID != '' && secrets.AVELOR_GOOGLE_CLIENT_SECRET != '') && '--features avelor/google-account' || '' }}
 
 jobs:
   build:
@@ -25,7 +31,7 @@ jobs:
         uses: ./.github/actions/linux-deps
 
       - name: Release Build
-        run: cargo build --release
+        run: cargo build --release ${{ env.GOOGLE_ACCOUNT }}
 
   check:
     name: Check (Linux only)
@@ -52,7 +58,7 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets ${{ env.HIDE_GOOGLE }} -- -D warnings
 
   test:
     name: Test (Linux only)
@@ -65,7 +71,7 @@ jobs:
         uses: ./.github/actions/linux-deps
 
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --verbose ${{ env.GOOGLE_ACCOUNT }}
 
       # The editor's markdown (docs/markdown.md), in the runner's Chrome.
       - name: Markdown selftest
