@@ -17,6 +17,7 @@ use super::fetch::{FetchPlan, find_account_email, plan_fetch, pump, start_fetch}
 use super::{MATCH_CAP, Origin};
 use crate::app::App;
 use crate::google;
+use crate::google::accounts::Analysis;
 use crate::google::accounts::AutoSync;
 use crate::google::accounts::FetchEmail;
 use crate::protocol::Req;
@@ -32,11 +33,14 @@ pub(crate) struct SyncChange {
     enabled: Option<bool>,
     #[serde(default)]
     pub(super) filter: Option<EmailFilter>,
+    #[serde(default)]
+    pub(super) analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
-/// `set_email_sync {account, enabled?, filter?}`: change the
+/// `set_email_sync {account, enabled?, filter?, analysis?}`: change the
 /// account's auto-sync. Its filter drops the dates (the host sets them);
+/// its analysis is stored as given (its pick is checked when it runs);
 /// switching it on starts it from now -- only email that arrives from then on
 /// is fetched -- and switching it off keeps the filter. Answered after the
 /// `account` event.
@@ -51,6 +55,9 @@ pub fn set_email_sync(app: &mut App, req: Req, change: SyncChange) {
         let sync = email.auto_sync.get_or_insert_with(|| AutoSync::new(now));
         if let Some(filter) = change.filter {
             sync.filter = without_dates(filter);
+        }
+        if let Some(analysis) = change.analysis {
+            sync.analysis = Some(analysis);
         }
         if let Some(enabled) = change.enabled {
             if enabled && !sync.enabled {
@@ -163,6 +170,8 @@ pub(super) fn on_sync_listed(
         .ok()
         .and_then(|a| a.file.google.fetch_email.as_ref()?.auto_sync.as_ref())
         .filter(|sync| sync.enabled);
+    // As it is now: a change made while the search ran counts.
+    let analysis = sync.and_then(|sync| sync.analysis.clone());
     if app.vault.root() != root.as_deref() || sync.is_none() {
         return log::info!("Email auto-sync of {account}: dropped, the vault or setting changed");
     }
@@ -203,7 +212,7 @@ pub(super) fn on_sync_listed(
         replace: HashSet::new(),
         origin: Origin::AutoSync,
         started,
-        analysis: None,
+        analysis,
     };
     start_fetch(app, Text::new("email.syncing").arg("email", email), plan);
     pump(app);

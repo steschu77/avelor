@@ -133,6 +133,7 @@
   "accounts.unknown_account": "Unbekanntes Konto",
   "accounts.used_by": "Genutzt von",
   "accounts.used_fetch": "E-Mails abrufen · {email}",
+  "accounts.used_sync": "Auto-Sync · {email}",
   "accounts.where_answers": "wo {name} antwortet",
   "accounts.works": {
     "one": "Funktioniert · {n} Modell",
@@ -1003,6 +1004,7 @@
   "vault_op.vault": "Tresor",
   "watch.level.lite": "Leicht",
   "watch.off": "Aus",
+  "watch.step.analysis": "Analyse",
   "week.of": "Woche vom {day} · {what}",
   "workspace.accounts": "Konten",
   "workspace.accounts_also": "Google, KI, Anbieter, Gmail",

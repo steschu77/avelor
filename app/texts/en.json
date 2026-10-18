@@ -133,6 +133,7 @@
   "accounts.unknown_account": "Unknown account",
   "accounts.used_by": "Used by",
   "accounts.used_fetch": "Fetch email · {email}",
+  "accounts.used_sync": "Auto-sync · {email}",
   "accounts.where_answers": "where {name} answers",
   "accounts.works": {
     "one": "Works · {n} model",
@@ -1008,6 +1009,7 @@
   "vault_op.vault": "Vault",
   "watch.level.lite": "Lite",
   "watch.off": "Off",
+  "watch.step.analysis": "Analysis",
   "week.of": "Week of {day} · {what}",
   "workspace.accounts": "Accounts",
   "workspace.accounts_also": "Google, AI, provider, Gmail",
