@@ -1,10 +1,13 @@
 //! Import scans (import.md#import-scans): the files of an images folder watch,
-//! read by an AI account's OCR model.
+//! read by an AI account's OCR model and imported as documents into `Scans/`.
 //!
 //! The page lists the files, has the ticked ones read (a job reading one file
-//! after the other, which `cancel_job` stops); the commands of the typed
-//! protocol (api.md#scans). What a file read to is kept in memory while the
-//! app runs.
+//! after the other, which `cancel_job` stops), arranges the pages into
+//! documents and imports them; the commands of the typed protocol
+//! (api.md#scans). What a file read to is kept in memory while the app runs.
+//! Every document written carries `scan: {watch, origin: [files]}`, which is
+//! how a later listing tells the files already in the vault
+//! (`Index::scan_origins`).
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
@@ -28,9 +31,11 @@ use crate::texts::Text;
 use crate::watches::{self, FolderFile};
 use read::ScanRead;
 
+mod import;
 mod previews;
 mod read;
 
+pub(crate) use import::{ImportRequest, scan_import};
 pub(crate) use previews::{PreviewRequest, scan_previews};
 pub(crate) use read::{ReadRequest, scan_read, stop_read};
 
@@ -113,10 +118,11 @@ impl Stamp {
 }
 
 // ----------------------------------------------------------------------------
-/// What a file read to.
+/// A file's text, as the OCR model read it.
 struct Ocr {
     /// The file as it was read.
     stamp: Stamp,
+    text: String,
     words: usize,
     title: String,
 }
