@@ -50,6 +50,8 @@
   "new.pick_date": "Wählen Sie zuerst ein Datum",
   "new.pick_start": "Wählen Sie zuerst ein Startdatum",
   "panel.select_hint": "Wählen Sie ein Dokument aus der Liste.",
+  "scans.blurb_together": "Nur die Dateien, die Sie lesen, werden zur OCR gesendet.",
+  "scans.read_running": "Ein anderer Ordner wird noch gelesen; stoppen Sie ihn oder warten Sie darauf.",
   "settings.intro": "Wie Avelor für Sie auf diesem PC arbeitet. Eine Änderung gilt sofort; was auf den nächsten Start wartet, sagt es. Was alle teilen, die den Tresor öffnen, steht auf seinen eigenen Seiten.",
   "watch.enter_folder": "Geben Sie einen Ordner an.",
   "watch.no_vault": "Ordnerüberwachungen werden im Tresor aufbewahrt: Öffnen Sie einen Tresor, um sie zu sehen.",

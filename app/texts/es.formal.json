@@ -62,6 +62,8 @@
   "new.pick_start": "Elija primero una fecha de inicio",
   "panel.delete_armed": "Haga clic otra vez para eliminar",
   "panel.select_hint": "Seleccione un documento de la lista.",
+  "scans.blurb_together": "Solo los archivos que lee se envían al OCR.",
+  "scans.read_running": "Todavía se está leyendo otra carpeta; deténgala o espérela.",
   "scrub.drag": "Arrastre para elegir un rango de semanas",
   "settings.intro": "Cómo trabaja Avelor para usted en este PC. Un cambio vale al momento; el que espera al próximo inicio lo dice. Lo que comparten todos los que abren la bóveda se ajusta en sus propias páginas.",
   "trash.delete_again": "Haga clic de nuevo para eliminar para siempre",
