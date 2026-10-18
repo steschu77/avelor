@@ -64,5 +64,8 @@
   "trash.delete_again": "Haga clic de nuevo para eliminar para siempre",
   "trash.empty_again": "Haga clic de nuevo para vaciar la papelera",
   "watch.enter_folder": "Indique una carpeta.",
-  "watch.open_vault_first": "Abra primero una bóveda: las carpetas vigiladas se guardan en ella."
+  "watch.no_vault": "Las vigilancias de carpeta se guardan en la bóveda: abra una bóveda para verlas.",
+  "watch.none_yet": "Aún no se vigila ninguna carpeta. Elija Vigilar una carpeta y luego el tipo de archivos que contiene.",
+  "watch.open_vault_first": "Abra primero una bóveda: las carpetas vigiladas se guardan en ella.",
+  "watch.remove_again": "Haga clic de nuevo para quitar"
 }

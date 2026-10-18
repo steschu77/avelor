@@ -1,6 +1,6 @@
 /* The pages of the expanded vault area: New (features/new.js) and the
-   Workspace pages (features/workspace/: accounts, vault, trash). The page
-   itself and the list + detail page are components. */
+   Workspace pages (features/workspace/: accounts, folders, vault, trash).
+   The page itself and the list + detail page are components. */
 
 /* New (features/new.js): the sheet of the entity being
    made, raised on the card layer */
@@ -284,6 +284,67 @@
   gap: 10px 14px;
   align-items: baseline;
   font: 400 var(--fs-body)/1.4 var(--f-serif);
+}
+
+/* Folder watches (Workspace -> Folders, features/workspace/folders.js): cards and panes as on
+   the accounts page; a watch's parts, then its import steps */
+.watch__part {
+  display: flex;
+  flex-direction: column;
+}
+
+/* the folder field takes its row; its note (checking, an error) goes on a
+   line of its own under it */
+.watch__folder {
+  flex: 1;
+}
+
+.watch__note {
+  flex-basis: 100%;
+  margin-bottom: 8px;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+}
+
+/* one step of an import: its check, what it does, and the model it runs
+   with (aiModelPicker) */
+.step {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 0 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.step>.check {
+  margin-top: 3px;
+}
+
+.step__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.step__title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 400 var(--fs-sub)/1.25 var(--f-serif);
+  color: var(--c-ink);
+}
+
+.step__opts {
+  margin: 8px 0 0;
+}
+
+.step__model {
+  white-space: nowrap;
 }
 
 /* Vault (Workspace -> Vault, features/workspace/vault.js): the open vault, then the files its

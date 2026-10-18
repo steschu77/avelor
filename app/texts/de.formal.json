@@ -49,5 +49,7 @@
   "new.pick_start": "Wählen Sie zuerst ein Startdatum",
   "panel.select_hint": "Wählen Sie ein Dokument aus der Liste.",
   "watch.enter_folder": "Geben Sie einen Ordner an.",
+  "watch.no_vault": "Ordnerüberwachungen werden im Tresor aufbewahrt: Öffnen Sie einen Tresor, um sie zu sehen.",
+  "watch.none_yet": "Noch wird kein Ordner überwacht. Wählen Sie Ordner überwachen und dann die Art der Dateien darin.",
   "watch.open_vault_first": "Öffnen Sie zuerst einen Tresor: Ordnerüberwachungen werden darin gespeichert."
 }
