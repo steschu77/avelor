@@ -1,6 +1,7 @@
 # Avelor — Import from folder watches
 
-> Folder watches: the watch files. The commands are `api.md#watches`.
+> Folder watches: the watch files, the Folders page. The commands are
+> `api.md#watches`.
 
 ## Overview
 
@@ -55,3 +56,31 @@ folder-watch:
       model: gemini-3.8-flash
   added: 2026-01-03T10:00:00Z
 ```
+
+### The Folders page <a id="the-folders-page"></a>
+
+Workspace → Folders (`features/workspace/folders.js`) lists the open vault's
+watches and adds new ones (with no vault open, the page says that
+watches are kept in the
+vault), following the Accounts page:
+
+- "Watch a folder" asks for the type first (Images), then for the folder,
+  suggested per type, typed or picked with Browse (`pick_folder`). The
+  folder is looked for before the watch is saved; the new watch takes its
+  type's file types (and Collect: taken within 2 min, for images).
+- A watch's pane changes its name, folder, subfolders, file types, and
+  its import process: the reading step. A step that sends the file to an
+  AI has the picker of the model it runs with in its row
+  (`accounts.md#model-choice`): the reading step of images (`models`). A
+  step without a pick shows "Pick a model". What keeps a picked model from
+  working shows under its step, with a button to Accounts where the fix
+  is there.
+- Removing a watch deletes its file; what it imported stays in the vault.
+
+## Flows
+
+| # | Flow | Trigger → page | Host → events | Result |
+|---|---|---|---|---|
+| J1 | Add a watch | "Watch a folder" → type → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card |
+| J2 | Edit | name, folder, subfolders, patterns, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
+| J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |

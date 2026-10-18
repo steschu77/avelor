@@ -93,8 +93,9 @@ export function shortMonthDate(date, withTime) {
 }
 
 // ----------------------------------------------------------------------------
-// A date of the Workspace pages (`iso`: an account connected or synced),
-// like "Oct 3, 2026", with the time if `withTime`; "Never" without one.
+// A date of the Workspace pages (`iso`: an account connected or synced, a
+// watch added), like "Oct 3, 2026", with the time if `withTime`; "Never"
+// without one.
 export function pageDate(iso, withTime) {
   if (!iso) return 'Never';
   return (withTime ? DAY_MONTH_YEAR_TIME : DAY_MONTH_YEAR).format(new Date(iso));

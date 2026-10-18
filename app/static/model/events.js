@@ -1,13 +1,13 @@
 // The host's events into the model (api.md#events): the entities as they
 // are on disk, those that left the vault, their content sent unasked, the
-// open vault's accounts, the vault being opened and its settings, and the
-// window active again. Each handler writes the Maps (model/entities.js) and the
-// documents' state (model/documents.js) and bumps the store's counters; the
-// renders follow the counters (app.js), the model calls none of them. Only
-// this module writes the Maps. A page that keeps its own state about an
-// account listens to the same events (features/workspace/accounts.js); its
-// listener runs after this module's, which app.js imports before every
-// feature.
+// open vault's accounts and folder watches, the vault being opened and its
+// settings, and the window active again. Each handler writes the Maps
+// (model/entities.js) and the documents' state (model/documents.js) and
+// bumps the store's counters; the renders follow the counters (app.js),
+// the model calls none of them. Only this module writes the Maps. A page
+// that keeps its own state about an account or a watch listens to the
+// same events (features/workspace/accounts.js, folders.js); its listener
+// runs after this module's, which app.js imports before every feature.
 
 import { rpcOn } from '../core/rpc.js';
 import { parseDate } from '../core/format.js';
@@ -17,6 +17,7 @@ import { projects } from './entities.js';
 import { threads } from './entities.js';
 import { accounts } from './entities.js';
 import { setVaultSettings } from './entities.js';
+import { watches } from './entities.js';
 import { forgetDocument, forgetDocuments } from './documents.js';
 import { onDocContent } from './documents.js';
 import { onActivated } from './documents.js';
@@ -113,13 +114,43 @@ rpcOn('account_removed', ({ id }) => {
   store.setState({ accounts_rev: store.getState().accounts_rev + 1 });
 });
 
+// The open vault's folder watches (api.md#watches), the same way.
+rpcOn('watches', ({ items }) => {
+  const ids = new Set(items.map(item => item.id));
+  const left = [];
+  for (const id of [...watches.keys()]) {
+    if (!ids.has(id)) {
+      watches.delete(id);
+      left.push(id);
+    }
+  }
+  for (const item of items) {
+    watches.set(item.id, item);
+    if (!item.enabled) left.push(item.id);
+  }
+  onWatchesChanged(left);
+});
+rpcOn('watch', meta => {
+  watches.set(meta.id, meta);
+  onWatchesChanged(meta.enabled ? [] : [meta.id]);
+});
+rpcOn('watch_removed', ({ id }) => {
+  watches.delete(id);
+  onWatchesChanged([id]);
+});
+
+function onWatchesChanged(left) {
+  store.setState({ watches_rev: store.getState().watches_rev + 1 });
+}
+
 // ----------------------------------------------------------------------------
 // A vault opens (at the start, or after a switch): the page forgets the one
 // shown before, so the scan fills an empty page (vault.md#opening).
-// Its accounts came as the new vault's already (`accounts`); the lens, the
-// calendar's day and the panel's size stay. The documents
-// are forgotten first, so the cards torn down by the selection's reset save
-// nothing (`forgetDocuments`). A page about the old vault closes (app.js).
+// Its accounts and folder watches came as the new vault's already
+// (`accounts`, `watches`); the lens, the calendar's day and the panel's size
+// stay. The documents are forgotten first, so the cards torn down by the
+// selection's reset save nothing (`forgetDocuments`). A page about the old
+// vault closes (app.js).
 function forgetVault() {
   forgetDocuments();
 

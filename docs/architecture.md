@@ -82,7 +82,7 @@ read by OCR.
   `av-vault/vault.rs:201`).
 - **Flows** have ids by area (A vault, B navigation, C projects, D
   documents and cards, E threads, F lenses, G sync sources, H Google
-  accounts, I AI accounts, L assistant): trigger
+  accounts, I AI accounts, J watches, L assistant): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
@@ -438,10 +438,10 @@ nothing imports `app.js`.
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`; `serializeMarkdown` |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `setNotice`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `sourceKeyOf`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the chats with an AI); the selection published minus what is gone (`commitExistingSelection`) |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, `watches`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `sourceKeyOf`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the chats with an AI); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/calendar.js` | what the calendar shows: the events in the filter with their series expanded (RFC 5545 lines), the tasks due, the day an entity shows on (`calendarDayOf`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts, the documents in edit mode (`editorRoots`, `reportEditing`) |
-| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinThreadLocal`, …, `editEntityLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, the accounts, `vault`, `vault_settings`, `activated`; `forgetVault`), the only writer of the Maps |
+| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinThreadLocal`, …, `editEntityLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, the accounts and watches, `vault`, `vault_settings`, `activated`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc; the two-click confirm (`armedButton`: one armed button page-wide, which a page rebuilt on every change names by a key); the editors' toolbars |
 | `ui/page.js`, `ui/field.js`, `ui/segmented.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages: their Esc and Ctrl+Enter (`registerVaultPage`), `replaceVaultPage`, which keeps the focus; the parts of a list + detail page (`listDetailPage`, `pageList`, `itemCard`, `addTile`, `detailPane`, `detailHead`, `stats`, `notice`, `failedRetry`, `detailFooter`) and the changes a page shows until the host has them (`sentDrafts`); editing in place (`editTextInPlace`) and the Workspace pages' editable field (`renderEditField`); the segmented control (`accSeg`) |
 | `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
@@ -452,7 +452,7 @@ nothing imports `app.js`.
 | `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`showInDocuments`, `revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`), `aiMissingHint`; its way to the Accounts page is the `accounts.open` action |
-| `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts, Google and AI; the trash |
+| `features/workspace/folders.js`, `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the folder watches with their types; the accounts, Google and AI; the trash |
 | `features/import/mail.js` | Fetch mail, and an account's mail auto-sync |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event, with Stop |
@@ -482,10 +482,10 @@ The store (`model/state.js`) holds selection and UI state, the documents
 with unsaved edits, the conflicts and the notices, plus revision counters
 (`projects_rev`, `threads_rev`, `accounts_rev`, …). The domain data lives
 in Maps outside it (`entities`, `projects`, `threads`, `accounts`,
-in `model/entities.js`), changed in place. Only the host's
+`watches`, in `model/entities.js`), changed in place. Only the host's
 events write them, in `model/events.js`, each followed by a counter's
 bump; a vault being opened clears them (`forgetVault`). A page that keeps
-its own state about an account (its drafts, what it shows
+its own state about an account or a watch (its drafts, what it shows
 selected) listens to the same events, and its listener runs after the
 model's: `rpcOn` calls the listeners in the order they came, and `app.js`
 imports `model/events.js` before every feature.

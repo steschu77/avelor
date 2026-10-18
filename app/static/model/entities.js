@@ -1,8 +1,9 @@
 // The vault's data as the page knows it (architecture.md#page-state): the
-// Maps of the entities, projects, threads and accounts, and the vault's own
-// settings, written only from the host's events (model/events.js); the
-// selectors over them (a thread's members in thread order, the chats with an
-// AI); and the selection, published minus what no longer exists
+// Maps of the entities, projects, threads, accounts and folder watches,
+// and the vault's own settings, written only from the host's events
+// (model/events.js); the selectors over them
+// (a thread's members in thread order, the chats with an AI); and the
+// selection, published minus what no longer exists
 // (`commitExistingSelection`).
 
 import { store } from './state.js';
@@ -10,6 +11,7 @@ import { store } from './state.js';
 export const projects = new Map(); // project_id -> project data
 export const threads = new Map(); // thread_id -> thread data
 export const accounts = new Map(); // account_id -> account data
+export const watches = new Map(); // watch_id -> the open vault's folder watch
 export const entities = new Map(); // doc_id -> document data (every non-{project, thread, account} entity)
 
 // The open vault's own settings (the `vault_settings` event,

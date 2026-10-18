@@ -3,7 +3,7 @@
 > The main window: its layout, the vault panel with its filters, the
 > lenses, the status bar, the jobs panel, page keys, New and the
 > preferences. The side panel is `panel.md`; the Workspace pages belong to
-> their features (`accounts.md`, `vault.md`).
+> their features (`accounts.md`, `import.md`, `vault.md`).
 
 ## Layout
 
@@ -24,8 +24,8 @@ grips to resize them; the widths are remembered across restarts
 button puts the assistant beside the card, over the main view, as the
 full width does (`assistant.md#conversations`). Opening a panel never
 moves the main view's layout. The expanded vault area hosts the
-pages of the vault panel: the Workspace pages (Accounts, Vault, Trash),
-Fetch mail and New. It is
+pages of the vault panel: the Workspace pages (Accounts, Folders, Vault,
+Trash), Fetch mail and New. It is
 expanded only while one of them is shown: a page opens it (`openVaultOp`,
 `ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
 or a click on a filter closes it (`closeVaultArea`). Menus are popups
@@ -54,7 +54,7 @@ the page, once per frame (`panel.md#host-pushes`).
   opens Fetch mail (`mail.md`). While auto-sync
   is on, the sync button stays shown, pressed, in the count's place
   (`.nav-item__action[aria-pressed]`).
-- **Workspace**: Accounts, Vault, Trash.
+- **Workspace**: Accounts, Folders, Vault, Trash.
 
 **Labels** filter from the lens head, for every lens: after the project's
 name the active labels, each a label chip whose × takes it out of the

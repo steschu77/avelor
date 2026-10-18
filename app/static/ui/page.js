@@ -6,6 +6,7 @@ import { $ } from '../core/dom.js';
 import { accEl } from '../core/dom.js';
 import { registerAction } from '../core/actions.js';
 import { store } from '../model/state.js';
+import { iconEl } from './icons.js';
 
 // The pages of the expanded vault area: op -> { close, submit? }. While one
 // is open, Esc closes it and Ctrl+Enter runs its main action (`submit`);
@@ -62,8 +63,8 @@ export function replaceVaultPage(page) {
   }
 }
 
-// The kind of a new item's pane ('new:openai' for an AI account), else
-// null.
+// The kind of a new item's pane ('new:openai' for an AI account, 'new:images'
+// for a folder watch), else null.
 export function draftKind(selected) {
   return typeof selected === 'string' && selected.startsWith('new:') ? selected.slice(4) : null;
 }
@@ -78,13 +79,14 @@ export function draftKind(selected) {
 const vaultOpTitles = {
   new: "New",
   accounts: "Account Setup",
+  folders: "Watch Folders",
   settings: "Vault",
   trash: "Trash",
 };
 const vaultAreaTitle = $("vault-area-title");
 
 // Selecting an op titles the vault area and expands it. Each op renders
-// its own body (features/workspace/: accounts.js, trash.js;
+// its own body (features/workspace/: accounts.js, folders.js, trash.js;
 // features/import/: mail.js; features/new.js,
 // features/workspace/vault.js). Ops without a sidebar entry (Fetch mail)
 // pass their title.
@@ -104,7 +106,7 @@ export function closeVaultArea() {
 $("vault-area-close-btn").addEventListener('click', closeVaultArea);
 
 // ----------------------------------------------------------------------------
-// A list + detail page (the Accounts page): the list of items
+// A list + detail page (the Accounts and Folders pages): the list of items
 // with the tiles that add one, then the selected item's detail; each part
 // is built from the component classes (css/components.css).
 
@@ -126,15 +128,18 @@ export function listSection(label) {
   return accEl('div', 'label list-detail__section', label);
 }
 
-// An item of the list: its kind and `status`, its `title`, and a line
-// about it (`sub`); marked while `current`, `onSelect` on a click.
+// An item of the list: its kind (after its `icon`, if any) and `status`,
+// its `title`, and a line about it (`sub`, cut to one line if `cut`);
+// marked while `current`, `onSelect` on a click.
 export function itemCard({ icon, kind, status, title, sub, cut = false, current, onSelect }) {
   const card = accEl('button', 'tile item-card');
   card.type = 'button';
   if (current) card.setAttribute('aria-current', 'true');
   const head = accEl('div', 'label item-card__head');
+  if (icon) head.append(iconEl(icon));
   head.append(accEl('span', 'item-card__kind', kind), accEl('span', 'item-card__status', status));
-  card.append(head, accEl('div', 'item-card__title', title), accEl('div', 'meta', sub));
+  card.append(head, accEl('div', 'item-card__title', title),
+    accEl('div', cut ? 'meta item-card__cut' : 'meta', sub));
   card.addEventListener('click', onSelect);
   return card;
 }
@@ -155,10 +160,11 @@ export function detailPane() {
   return accEl('div', 'page list-detail__detail');
 }
 
-// The detail's head: its kind and state (`label`), and an action
-// (`button`) at its right.
+// The detail's head: the kind's `icon`, if any, its kind and state
+// (`label`), and an action (`button`) at its right.
 export function detailHead(label, { icon, button } = {}) {
   const head = accEl('div', 'detail-head');
+  if (icon) head.append(iconEl(icon));
   head.append(accEl('span', 'label', label));
   if (button) head.append(button);
   return head;
