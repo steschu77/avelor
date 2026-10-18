@@ -212,6 +212,13 @@ pub struct ChatRequest {
     pub model: String,
     pub system: Option<String>,
     pub messages: Vec<Message>,
+    /// Whether a model that can reason does so before it answers; `None`:
+    /// the model's default. Ollama only (`think`).
+    pub think: Option<bool>,
+    /// The context window to run the model with, in tokens; `None`: the
+    /// server's default. Ollama only (`num_ctx`): the cloud providers'
+    /// windows are fixed.
+    pub context: Option<u32>,
 }
 
 impl ChatRequest {
@@ -221,6 +228,8 @@ impl ChatRequest {
             model: model.into(),
             system: None,
             messages: Vec::new(),
+            think: None,
+            context: None,
         }
     }
 
@@ -233,6 +242,18 @@ impl ChatRequest {
     // ------------------------------------------------------------------------
     pub fn message(mut self, message: Message) -> Self {
         self.messages.push(message);
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn think(mut self, think: bool) -> Self {
+        self.think = Some(think);
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn context(mut self, tokens: u32) -> Self {
+        self.context = Some(tokens);
         self
     }
 }

@@ -67,7 +67,17 @@ pub(crate) fn chat_body(req: &ChatRequest) -> Result<Value> {
         let entry = json!({"role": message.role, "content": texts.join("\n\n")});
         messages.push(entry);
     }
-    let body = json!({"model": req.model, "messages": messages, "stream": true});
+    let mut body = json!({"model": req.model, "messages": messages, "stream": true});
+    if let Some(think) = req.think {
+        body["think"] = json!(think);
+    }
+    let mut options = json!({});
+    if let Some(context) = req.context {
+        options["num_ctx"] = json!(context);
+    }
+    if options.as_object().is_some_and(|o| !o.is_empty()) {
+        body["options"] = options;
+    }
     Ok(body)
 }
 
@@ -251,5 +261,16 @@ mod tests {
         assert_eq!(resp.text, "", "cut off while reasoning");
         assert_eq!(resp.stop, StopReason::MaxTokens);
         assert!(deltas.is_empty(), "the deltas are the answer's");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn think_and_the_context_go_to_ollama() {
+        let req = ChatRequest::new("qwen3").think(false).context(8192);
+        let body = chat_body(&req).unwrap();
+        assert_eq!(body["think"], json!(false));
+        assert_eq!(body["options"], json!({"num_ctx": 8192}));
+        let plain = chat_body(&ChatRequest::new("qwen3")).unwrap();
+        assert!(plain.get("think").is_none() && plain.get("options").is_none());
     }
 }
