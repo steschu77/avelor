@@ -4,6 +4,7 @@ version.workspace = true
 edition = "2024"
 
 [dependencies]
+log = { workspace = true }
 av-http = { path = "../av-http" }
 av-utils = { path = "../av-utils" }
 serde = { workspace = true }
