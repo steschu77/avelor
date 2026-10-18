@@ -1,8 +1,28 @@
-//! Prices.
+//! Token usage and prices.
+//!
+//! `Usage` is normalized across providers so that a call's cost is a plain
+//! sum of tokens times prices: `input` is only the input billed at the full
+//! rate (providers that count cache reads into their prompt tokens have them
+//! subtracted), and `output` includes reasoning (providers that count it
+//! apart have it added).
 
 use serde::{Deserialize, Serialize};
 
 use crate::types::Provider;
+
+// ----------------------------------------------------------------------------
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Usage {
+    /// Input tokens at the full rate (neither read from nor written to a
+    /// prompt cache).
+    pub input: u64,
+    /// Output tokens, reasoning included.
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    /// The part of `output` spent on reasoning, where the provider tells.
+    pub reasoning: u64,
+}
 
 // ----------------------------------------------------------------------------
 /// USD per million tokens.
@@ -26,6 +46,16 @@ impl Price {
             cache_read,
             cache_write,
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// USD.
+    pub fn cost(&self, usage: &Usage) -> f64 {
+        (usage.input as f64 * self.input
+            + usage.output as f64 * self.output
+            + usage.cache_read as f64 * self.cache_read
+            + usage.cache_write as f64 * self.cache_write)
+            / 1_000_000.0
     }
 }
 
@@ -258,5 +288,20 @@ mod tests {
         );
         assert_eq!(price(Provider::Anthropic, "gpt-5"), None, "per provider");
         assert_eq!(price(Provider::Ollama, "llama3.2"), None);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn cost_sums_every_kind_of_token() {
+        let usage = Usage {
+            input: 1_000_000,
+            output: 500_000,
+            cache_read: 2_000_000,
+            cache_write: 100_000,
+            reasoning: 200_000,
+        };
+        let price = anthropic(3.0, 15.0, 0.3);
+        // 3 + 7.5 + 0.6 + 0.375; reasoning is part of output.
+        assert!((price.cost(&usage) - 11.475).abs() < 1e-9);
     }
 }

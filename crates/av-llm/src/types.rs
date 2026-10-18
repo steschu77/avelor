@@ -6,6 +6,8 @@ use std::str::FromStr;
 use av_utils::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::usage::Usage;
+
 // ----------------------------------------------------------------------------
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -162,6 +164,108 @@ pub fn base_url(address: &str) -> String {
     } else {
         format!("http://{address}")
     }
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    User,
+    Assistant,
+}
+
+// ----------------------------------------------------------------------------
+/// One turn of the conversation.
+#[derive(Clone, Debug)]
+pub struct Message {
+    pub role: Role,
+    pub parts: Vec<Part>,
+}
+
+impl Message {
+    // ------------------------------------------------------------------------
+    pub fn user(text: impl Into<String>) -> Self {
+        Self {
+            role: Role::User,
+            parts: vec![Part::Text(text.into())],
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn assistant(text: impl Into<String>) -> Self {
+        Self {
+            role: Role::Assistant,
+            parts: vec![Part::Text(text.into())],
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Clone, Debug)]
+pub enum Part {
+    Text(String),
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Clone, Debug)]
+pub struct ChatRequest {
+    pub model: String,
+    pub system: Option<String>,
+    pub messages: Vec<Message>,
+}
+
+impl ChatRequest {
+    // ------------------------------------------------------------------------
+    pub fn new(model: impl Into<String>) -> Self {
+        Self {
+            model: model.into(),
+            system: None,
+            messages: Vec::new(),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn system(mut self, system: impl Into<String>) -> Self {
+        self.system = Some(system.into());
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn message(mut self, message: Message) -> Self {
+        self.messages.push(message);
+        self
+    }
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Clone, Debug)]
+pub struct ChatResponse {
+    /// The answer's text (reasoning and thinking left out).
+    pub text: String,
+    /// The model's reasoning, where the provider hands it out (Ollama: its
+    /// `thinking`, or what a model wrote before `</think>`); empty
+    /// otherwise.
+    pub thinking: String,
+    /// The model that answered, as the provider names it (may be a dated
+    /// version of the requested one).
+    pub model: String,
+    pub stop: StopReason,
+    pub usage: Usage,
+    /// USD; `None` if the model's price is unknown.
+    pub cost: Option<f64>,
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StopReason {
+    /// The model finished its answer.
+    End,
+    /// The answer hit `max_tokens`.
+    MaxTokens,
+    /// The model or the provider's filter declined.
+    Refused,
+    /// Anything else, as the provider named it.
+    Other(String),
 }
 
 // ----------------------------------------------------------------------------

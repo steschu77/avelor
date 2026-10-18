@@ -30,6 +30,10 @@ pub enum Error {
     /// The id names something of another kind than the command takes (a
     /// task where a project is expected).
     WrongKind,
+    /// A 2xx answer whose content can't be used.
+    InvalidResponse {
+        msg: String,
+    },
     /// The service doesn't offer this.
     Unsupported {
         what: String,
@@ -111,6 +115,7 @@ impl Error {
             Error::InvalidFileType => "invalid_file_type",
             Error::NotFound => "not_found",
             Error::WrongKind => "wrong_kind",
+            Error::InvalidResponse { .. } => "invalid_response",
             Error::Unsupported { .. } => "unsupported",
             Error::NotConnected => "not_connected",
             Error::Unsaved => "unsaved",
