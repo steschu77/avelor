@@ -111,7 +111,20 @@ pub struct Event {
     pub created: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated: Option<String>,
+    /// Google's kind of event: `default`, or one an app may change little of
+    /// (`FROM_GMAIL`, `KEPT_TYPES`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
 }
+
+// ----------------------------------------------------------------------------
+/// The kind of an event Gmail made from a mail (a flight, a hotel stay): no
+/// app may change it, but one may delete it.
+pub const FROM_GMAIL: &str = "fromGmail";
+
+/// The kinds of event Google keeps as they are: an app can't change what
+/// the sync keeps of them, nor delete or make one.
+pub const KEPT_TYPES: [&str; 4] = ["birthday", "outOfOffice", "workingLocation", "focusTime"];
 
 impl Event {
     // ------------------------------------------------------------------------
@@ -125,6 +138,7 @@ impl Event {
         p.recurring_event_id = None;
         p.created = None;
         p.updated = None;
+        p.event_type = None;
         p
     }
 }
@@ -139,6 +153,9 @@ pub struct CalendarListEntry {
     pub primary: bool,
     pub background_color: String,
     pub time_zone: String,
+    /// What the account may do with it: `owner`, `writer`, `reader`, or
+    /// `freeBusyReader`.
+    pub access_role: String,
 }
 
 // ----------------------------------------------------------------------------
@@ -268,11 +285,11 @@ pub fn insert_event(
 }
 
 // ----------------------------------------------------------------------------
-/// Update the event to what `event` holds of the fields the sync keeps: what
-/// Google has of them is read first, so the patch can name what the vault
-/// dropped (`patch_body`); with an `etag`, only if the event hasn't changed
-/// since (`Conflict` otherwise). A patch Google refuses is logged by its
-/// shape, its keys without their values.
+/// Update the event to what `event` holds of the fields the sync keeps,
+/// naming what the vault dropped of what Google has, `remote`
+/// (`patch_body`); with an `etag`, only if the event hasn't changed since
+/// (`Conflict` otherwise). A patch Google refuses is logged by its shape,
+/// its keys without their values.
 pub fn patch_event(
     client: &Client,
     cancel: &Cancel,
@@ -280,9 +297,9 @@ pub fn patch_event(
     event_id: &str,
     etag: Option<&str>,
     event: &Event,
+    remote: &Event,
 ) -> Result<WriteOutcome> {
-    let remote = get_event(client, cancel, calendar_id, event_id)?;
-    let body = patch_body(event, &remote)?;
+    let body = patch_body(event, remote)?;
     let mut req = client
         .request(cancel, Method::Patch, &event_url(calendar_id, event_id))?
         .json(&body)?;

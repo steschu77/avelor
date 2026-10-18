@@ -10,7 +10,7 @@ import { DATE_FORMAT, MONTH, WEEKDAY, addDays, sameDay } from '../../core/format
 import { TIME_FORMAT, isoInstant, localDay, relativeDay } from '../../core/format.js';
 import { ordinal, t } from '../../core/text.js';
 import { entities } from '../../model/entities.js';
-import { isOverdue } from '../../model/calendar.js';
+import { googleKept, googleType, isOverdue } from '../../model/calendar.js';
 import { byDay, icalDate, parseSchedule, ruleSupported } from '../../model/schedule.js';
 import { editEntityLocal } from '../../model/structure.js';
 import { onEditEnd } from '../../ui/field.js';
@@ -81,7 +81,7 @@ function eventFields(doc, add, occurrence) {
     if (location) add(t('props.where'), location);
     if (event.guests?.length) add(t('props.guests'), ...event.guests.map(contactChip));
     const calendar = entities.get(event.calendar);
-    if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')));
+    if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')), ...accessText(calendar));
     const status = { tentative: t('event.tentative'), cancelled: t('event.cancelled') }[event.status];
     if (status) add(t('props.status'), status);
 }
@@ -112,6 +112,31 @@ function heldWhileTyping(row, render) {
         }));
     }
     return true;
+}
+
+// ----------------------------------------------------------------------------
+// What becomes of a change to a synced calendar's event in Google (its
+// entity's `access`, api.md#events; read-only for a kind of event Google
+// keeps as it is, `googleKept`), after the calendar's chip: a word, its
+// tooltip saying what it means; and for one Gmail made, that a change
+// replaces it.
+const CALENDAR_ACCESS = {
+    'two-way': [t('event.calendar_two_way'), t('event.calendar_two_way_title')],
+    'read-only': [t('event.calendar_read_only'), t('event.calendar_read_only_title')],
+    'not-synced': [t('event.calendar_not_synced'), t('event.calendar_not_synced_title')],
+};
+
+function accessText(doc, calendar) {
+    const [word, means] = googleKept(doc) ? [t('event.calendar_read_only'), t('event.kept_title')]
+        : CALENDAR_ACCESS[calendar.access] ?? [];
+    const texts = word ? [[word, means]] : [];
+    // one Gmail made, which a change replaces in Google
+    if (googleType(doc) === 'fromGmail') texts.push([t('event.from_gmail'), t('event.from_gmail_title')]);
+    return texts.map(([text, title]) => {
+        const el = accEl('span', 'meta', text);
+        el.title = title;
+        return el;
+    });
 }
 
 // ----------------------------------------------------------------------------

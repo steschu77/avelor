@@ -12,7 +12,8 @@ use av_vault::envelope::{Event, Remote, Roles, Source};
 use av_vault::filename;
 
 use super::mapping::{
-    apply_to, event_entity, from_google, payload_of, take_exceptions, take_guests, to_google,
+    apply_to, event_entity, from_google, payload_of, set_event_type, take_exceptions, take_guests,
+    to_google,
 };
 use super::{CANCELLED, CalendarSync};
 use crate::app::App;
@@ -201,6 +202,7 @@ fn apply_effect(
                     take_guests(doc, &remote);
                     set_bookkeeping(doc, account, |r| {
                         r.set(EVENT_ID, &remote_event_id);
+                        set_event_type(r, &remote);
                         r.set(CALENDAR_ID, &remote_calendar_id);
                         if let Some(etag) = &etag {
                             r.set(ETAG, etag);
@@ -348,6 +350,7 @@ fn take_remote(
                 if let Some(event_id) = &remote.id {
                     r.set(EVENT_ID, event_id);
                 }
+                set_event_type(r, remote);
                 r.set(CALENDAR_ID, remote_calendar_id);
                 if let Some(etag) = &remote.etag {
                     r.set(ETAG, etag);

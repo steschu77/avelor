@@ -2,7 +2,8 @@ import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import { addDays, dayStart, isoInstant, localDay, parseDate } from '../../static/core/format.js';
 import {
-  calendarDayOf, dayOccurrences, dayTasks, eventsBetween, eventsOnDay, getDueTasks, getEvents, isOverdue,
+  calendarDayOf, dayOccurrences, dayTasks, eventsBetween, eventsOnDay, getDueTasks, getEvents, googleKept, googleLocked,
+  googleType, isOverdue,
 } from '../../static/model/calendar.js';
 import { entities } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
@@ -122,6 +123,23 @@ test('the day the calendar shows an entity on', () => {
   equal(calendarDayOf(entities.get('event')), new Date(2027, 6, 8));
   equal(calendarDayOf(entities.get('task')), dayStart(new Date('2027-07-09T08:00:00Z')));
   equal([calendarDayOf(entities.get('done')), calendarDayOf(entities.get('letter'))], [null, null]);
+});
+
+test('Google keeps the events of a read-only calendar and of its own kinds', () => {
+  const remote = type => ({ source: { remote: { remote: [{ 'event-id': 'x' }, ...(type ? [{ 'event-type': type }] : [])] } } });
+  vault(
+    { id: 'holidays', kind: 'calendar', title: 'Holidays', access: 'read-only', calendar: {} },
+    { id: 'family', kind: 'calendar', title: 'Family', access: 'full', calendar: {} },
+    { ...event('holiday', '2027-07-08', '2027-07-09', { calendar: 'holidays' }), ...remote() },
+    { ...event('birthday', '2027-07-08', '2027-07-09', { calendar: 'family' }), ...remote('birthday') },
+    { ...event('mailed', '2027-07-08', '2027-07-09', { calendar: 'family' }), ...remote('fromGmail') },
+    event('own', '2027-07-08', '2027-07-09', {}),
+  );
+  const of = check => ['holiday', 'birthday', 'mailed', 'own'].map(id => check(entities.get(id)));
+  equal(of(googleLocked), [true, true, false, false]);
+  equal(of(googleKept), [false, true, false, false]);
+  equal(of(googleType), [null, 'birthday', 'fromGmail', null]);
+  equal([googleLocked(null), googleLocked(entities.get('family'))], [false, false]);
 });
 
 test('an occurrence is not expanded again', () => {

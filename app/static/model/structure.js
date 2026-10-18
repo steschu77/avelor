@@ -181,6 +181,7 @@ export function editEntityLocal(id, change) {
 // Why `edit_entities` skipped an entity, by the reason it names.
 const SKIP_REASONS = {
   not_writable: t('structure.not_writable'),
+  read_only_in_google: t('structure.read_only_in_google'),
   not_found: t('structure.not_found'),
   invalid_argument: t('structure.invalid_argument'),
 };

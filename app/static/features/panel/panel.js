@@ -29,7 +29,7 @@ import { entities, knownThreads, threadMembers, threads } from '../../model/enti
 import { projects, projectsInOrder, threadProjects } from '../../model/entities.js';
 import { getMeta } from '../../model/entities.js';
 import { assistantConversations, isAiConversation } from '../../model/entities.js';
-import { dayOccurrences, dayTasks } from '../../model/calendar.js';
+import { dayOccurrences, dayTasks, googleLocked } from '../../model/calendar.js';
 import { bindDocContent } from '../../model/documents.js';
 import { editorRoots, isDirty, onEdited, trySave } from '../../model/documents.js';
 import { beginEditSession, endEditSession } from '../../model/documents.js';
@@ -358,7 +358,7 @@ function renderCardHead(controller) {
   }
   controller.dateEl.textContent = date ? DATE_FORMAT.format(date) : '';
   controller.iconEl.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.type));
-  controller.renameBtn.hidden = !doc.writable || ownTitle !== undefined;
+  controller.renameBtn.hidden = !doc.writable || ownTitle !== undefined || googleLocked(doc);
 }
 
 // Rename `id` -- a card's entity, or the thread shown -- in place in
@@ -795,7 +795,7 @@ function createMessageController(msg, { selectable = false, thread = false, occu
 
   editorRoots.set(doc_id, editorRoot);
 
-  const editable = Boolean(getMeta(doc_id)?.editable);
+  const editable = Boolean(getMeta(doc_id)?.editable) && !googleLocked(getMeta(doc_id));
   const editBtn = previewToolbar.querySelector('button[data-cmd="edit"]');
   editBtn.setAttribute('aria-disabled', String(!editable));
   editBtn.title = editable ? t('panel.edit_message') : t('panel.read_only');
@@ -828,7 +828,9 @@ function createMessageController(msg, { selectable = false, thread = false, occu
 
   // Delete: two clicks, no dialog (`armedButton`).
   const deleteBtn = previewToolbar.querySelector('button[data-cmd="delete"]');
-  deleteBtn.setAttribute('aria-disabled', String(!getMeta(doc_id)?.deletable));
+  const kept = googleLocked(getMeta(doc_id));
+  deleteBtn.setAttribute('aria-disabled', String(!getMeta(doc_id)?.deletable || kept));
+  if (kept) deleteBtn.title = t('event.read_only_delete');
   armedButton(deleteBtn, t('panel.delete_armed'),
     () => deleteEntityLocal(doc_id, thread ? renderedThreadId : null));
 

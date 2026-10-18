@@ -27,6 +27,9 @@ pub mod remote {
     pub const ETAG: &str = "etag";
     /// A hash of the event's synced fields at the last sync.
     pub const SNAPSHOT: &str = "snapshot";
+    /// An event's kind in Google where it isn't a plain one (`fromGmail`,
+    /// `birthday`, ...): Google keeps some as they are.
+    pub const EVENT_TYPE: &str = "event-type";
 }
 
 /// The folders the app writes entities into, relative to the vault's root

@@ -10,6 +10,30 @@ import { entities, matchesFilter } from './entities.js';
 import { dayKey, scheduleStarts } from './schedule.js';
 
 // ----------------------------------------------------------------------------
+// Whether Google keeps the event `doc` as it is: in a calendar read-only in
+// Google (its entity's `access`, api.md#events), or of a kind Google keeps
+// (`googleKept`). What it syncs -- its title, text, times, place and status
+// -- is shown, not edited, and it isn't deleted.
+export function googleLocked(doc) {
+  return Boolean(doc?.event) && (googleKept(doc) || entities.get(doc.event.calendar)?.access === 'read-only');
+}
+
+// Google's kind of the event `doc` as its sync recorded it (`event-type`,
+// vault.md#remote): `fromGmail`, `birthday`, ...; null for a plain one.
+export function googleType(doc) {
+  const properties = doc?.source?.remote?.remote ?? [];
+  return properties.find(property => property['event-type'])?.['event-type'] ?? null;
+}
+
+// Whether the event `doc` is of a kind Google keeps as it is (av-google's
+// `KEPT_TYPES`).
+const KEPT_TYPES = ['birthday', 'outOfOffice', 'workingLocation', 'focusTime'];
+
+export function googleKept(doc) {
+  return KEPT_TYPES.includes(googleType(doc));
+}
+
+// ----------------------------------------------------------------------------
 function compareEventsByDate(a, b) {
     return a.date.getTime() - b.date.getTime();
 }

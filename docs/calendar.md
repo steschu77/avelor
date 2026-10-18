@@ -33,8 +33,24 @@ are written to a folder named after the calendar beside it, e.g.
   vault (title, body, time, location, status) is written back to Google,
   a field removed in the vault removed there too, and an event made in the
   vault in a synced calendar is created there.
-  With Read access it only fetches; changes made in the vault stay in the
-  vault.
+  With Read access it only fetches. So it does for a calendar Google lets
+  the account only see (its `access`, `accounts.md#google-file`), whatever
+  the account's access. A change that would stay in the vault isn't made:
+  such a calendar's events keep what they sync (title, body, times, zones,
+  place, status) as Google has them, and aren't deleted in the vault, as
+  Google's next change would bring them back; their labels, projects,
+  links, a trip's fields and a work day's off or remote stay the vault's
+  to change, and no new event goes into such a calendar. So does an event
+  of a kind Google keeps as it is in any calendar, a birthday, an out of
+  office, a working location or a focus time (its `event-type`,
+  `vault.md#remote`, from Google's `eventType`); one changed in the vault
+  anyway takes Google's version back at its push. An event Gmail made from
+  a mail (a flight, a hotel stay), which Google lets no app change but
+  lets one delete, stays editable, its card saying so: its push deletes
+  Gmail's event and makes the vault's version in its place, an ordinary
+  event from then on, no longer linked to the mail. A calendar not
+  syncing now (unchecked, its account signed out) keeps its events
+  editable: a change goes to Google once it syncs two-way again.
 - An event changed on both sides since the last sync is a conflict: the
   vault's version is kept as a new event beside it, labelled `conflict`
   (without the recurring event's exceptions), and Google's version takes the file.

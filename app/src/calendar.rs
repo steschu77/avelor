@@ -17,11 +17,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use av_google::auth::ScopeAccess;
+use av_google::calendar::KEPT_TYPES;
 use av_google::calendar_sync::{self, SyncJob};
 use av_google::client::Client;
 use av_utils::error::Error;
 use av_utils::id::Id;
-use serde::Deserialize;
+use av_vault::document::Document;
+use av_vault::envelope::{DocumentType, Source};
+use av_vault::schema::remote::{CALENDAR_ID, EVENT_TYPE};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::App;
@@ -108,10 +112,96 @@ pub fn calendar_sync(app: &mut App, req: Req, request: SyncRequest) {
             return req.fail(e, Text::new("calendar.create_failed"));
         }
     };
-    let push = access == ScopeAccess::Full;
+    let push = two_way(access, &source);
     let built = build_job(app, account, calendar, &source, push);
     let job_id = start(app, client, account, calendar, &source, built);
     req.ok(json!({ "job": job_id }));
+}
+
+// ----------------------------------------------------------------------------
+/// Whether a sync of `source` writes back to Google: the account's calendar
+/// access is Full, and Google lets it change the calendar's events
+/// (`CalendarSource::writable`).
+fn two_way(access: ScopeAccess, source: &CalendarSource) -> bool {
+    access == ScopeAccess::Full && source.writable()
+}
+
+// ----------------------------------------------------------------------------
+/// What becomes of a change to a synced calendar's events in Google, as its
+/// entity tells the page (`EntityMeta::access`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Access {
+    /// The sync writes it back.
+    TwoWay,
+    /// Google keeps its own: the account's calendar access is Read, or
+    /// Google lets the account only see the calendar.
+    ReadOnly,
+    /// It waits: the calendar isn't checked, or its account isn't signed in,
+    /// or has no calendar access, so nothing syncs now.
+    NotSynced,
+}
+
+// ----------------------------------------------------------------------------
+/// The access of the calendar entity `calendar`, if it syncs with a Google
+/// account.
+pub fn access(app: &App, calendar: &Document) -> Option<Access> {
+    let Some(Source::Remote(remote)) = calendar.source() else {
+        return None;
+    };
+    let (account, calendar_id) = (remote.account?, remote.get(CALENDAR_ID)?);
+    let Ok(google) = app.google.get(account) else {
+        return Some(Access::NotSynced);
+    };
+    let scope = match &google.client {
+        Some(client) => client.scope().calendar,
+        None => google.file.google.scope().calendar,
+    };
+    let source = find_source(app, account, calendar_id);
+    Some(match source {
+        Some(source) if scope == ScopeAccess::ReadOnly || !source.writable() => Access::ReadOnly,
+        Some(_) if scope == ScopeAccess::Full && app.google.connected(account).is_ok() => {
+            Access::TwoWay
+        }
+        _ => Access::NotSynced,
+    })
+}
+
+// ----------------------------------------------------------------------------
+/// Whether the calendar entity `calendar` is one Google keeps as it is
+/// (`Access::ReadOnly`): what its events sync isn't changed in the vault,
+/// and they aren't deleted, as the next change in Google would bring them
+/// back.
+pub fn read_only(app: &App, calendar: &Id) -> bool {
+    let entry = app.vault.index().entry(calendar);
+    entry.is_some_and(|e| access(app, &e.doc) == Some(Access::ReadOnly))
+}
+
+// ----------------------------------------------------------------------------
+/// `NotWritable` if the entity `id` is an event Google keeps as it is, of a
+/// calendar read-only in Google (`read_only`) or of a kind it keeps
+/// (`kept_kind`), for a change of what it syncs: its title, its body, or
+/// its delete.
+pub fn kept_by_google(app: &App, id: &Id) -> Option<Error> {
+    let entry = app.vault.index().entry(id)?;
+    let calendar = entry.doc.roles().event.as_ref()?.calendar;
+    let kept = kept_kind(&entry.doc) || calendar.is_some_and(|c| read_only(app, &c));
+    kept.then(|| Error::NotWritable {
+        path: entry.local.clone(),
+    })
+}
+
+// ----------------------------------------------------------------------------
+/// Whether the event `doc` is of a kind Google keeps as it is (a birthday,
+/// an out of office, ..., `KEPT_TYPES`), as its sync recorded it
+/// (`event-type`).
+fn kept_kind(doc: &Document) -> bool {
+    let Some(Source::Remote(remote)) = doc.source() else {
+        return false;
+    };
+    remote
+        .get(EVENT_TYPE)
+        .is_some_and(|kind| KEPT_TYPES.contains(&kind))
 }
 
 // ----------------------------------------------------------------------------
@@ -130,6 +220,20 @@ pub fn ensure_entities(app: &mut App, account: Id) {
         if let Err(e) = calendar_entity(app, account, &source) {
             log::warn!("Creating the calendar {} failed: {e}", source.id);
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Send the account `account`'s calendar entities to the page again, their
+/// access having changed with it.
+pub fn post_calendars(app: &App, account: Id) {
+    let index = app.vault.index();
+    let of_account = |doc: &Document| {
+        doc.kind() == DocumentType::Calendar
+            && matches!(doc.source(), Some(Source::Remote(r)) if r.account == Some(account))
+    };
+    for entry in index.all().iter().filter(|e| of_account(&e.doc)) {
+        app.post_entity(entry);
     }
 }
 

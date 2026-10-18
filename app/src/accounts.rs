@@ -18,6 +18,7 @@ use serde_yaml_ng::Value;
 use crate::ai;
 use crate::ai::accounts::{AiAccount, AiAccountMeta, AiAccounts};
 use crate::app::App;
+use crate::calendar;
 use crate::config::files::load_config_files;
 use crate::google;
 use crate::google::accounts::{Account, AccountMeta, GoogleAccounts};
@@ -142,7 +143,10 @@ pub fn remove_account(app: &mut App, req: Req, id: Id) {
         false => app.google.remove(id),
     };
     match &removed {
-        Ok(()) => app.post_event("account_removed", json!({ "id": id })),
+        Ok(()) => {
+            app.post_event("account_removed", json!({ "id": id }));
+            calendar::post_calendars(app, id);
+        }
         Err(e) => log::warn!("Could not remove account {id}: {e}"),
     }
     req.answer(removed);
@@ -324,9 +328,9 @@ mod tests {
         let args =
             serde_json::json!({ "account": GOOGLE_ID, "calendar": calendar, "selected": true });
         let sent = h.call("set_calendar_source", args);
-        assert_eq!(shape(&sent), ["entity", "account", "reply"]);
+        assert_eq!(shape(&sent), ["entity", "account", "entity", "reply"]);
         assert_eq!(sent[1]["data"]["calendars"][0]["name"], "Family");
-        assert_eq!(sent[2]["ok"], Json::Null);
+        assert_eq!(sent[3]["ok"], Json::Null);
         let file = h.vault().join(".avelor/accounts/google_a.yaml");
         let text = fs::read_to_string(file).unwrap();
         assert!(

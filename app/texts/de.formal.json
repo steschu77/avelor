@@ -9,6 +9,7 @@
   "accounts.no_local_models": "Noch keine Modelle auf diesem Computer. Holen Sie sich eines mit `ollama pull`, dann Liste aktualisieren.",
   "accounts.no_vault": "Konten werden im Tresor aufbewahrt: Öffnen Sie einen Tresor, um sie zu sehen.",
   "accounts.open_vault_first": "Öffnen Sie zuerst einen Tresor: Konten werden darin aufbewahrt.",
+  "accounts.read_only_title": "Google lässt Sie diesen Kalender nur ansehen: Avelor liest ihn und schreibt nichts zurück.",
   "accounts.reconnect_to_apply": "Verbinden Sie neu, um den geänderten Zugriff zu übernehmen.",
   "accounts.sign_in_missing": "Die Anmeldung für dieses Konto fehlt auf diesem Computer. Verbinden Sie es, um es wieder zu nutzen.",
   "accounts.start_then_test": "Starten Sie {name}, dann Testen.",

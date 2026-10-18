@@ -519,6 +519,12 @@ impl Remote {
             None => self.remote.push(property),
         }
     }
+
+    // ------------------------------------------------------------------------
+    /// Drop the property `key`, each `{key: ...}` entry.
+    pub fn remove(&mut self, key: &str) {
+        self.remote.retain(|property| property.get(key).is_none());
+    }
 }
 
 // ----------------------------------------------------------------------------

@@ -19,6 +19,7 @@ use av_vault::vault::{Changes, Index};
 use serde::Serialize;
 
 use crate::app::App;
+use crate::calendar;
 use crate::documents;
 use crate::protocol::Req;
 use crate::texts::Text;
@@ -120,6 +121,14 @@ pub fn create_thread(app: &mut App, req: Req, title: String, members: Vec<Id>) {
 /// event, contact, list or record (`Index::create_new`), in its type's
 /// folder.
 pub fn create_entity(app: &mut App, req: Req, new: NewEntity) {
+    let calendar = new.roles.event.as_ref().and_then(|e| e.calendar);
+    if calendar.is_some_and(|id| calendar::read_only(app, &id)) {
+        let arg = "event.calendar".to_string();
+        return req.fail(
+            Error::InvalidArgument { arg },
+            Text::new("calendar.read_only"),
+        );
+    }
     let step = Text::new("undo.create_entity").arg("title", new.title.clone());
     let created = app.step(&req, step, |index, changes| index.create_new(new, changes));
     let id = created.as_ref().ok().copied();
@@ -159,6 +168,9 @@ pub fn membership(
 // ----------------------------------------------------------------------------
 /// `set_title`: the title of `id`, any entity; an empty title removes it.
 pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
+    if let Some(err) = calendar::kept_by_google(app, &id) {
+        return req.fail(err, Text::new("calendar.read_only"));
+    }
     let step = Text::new("undo.set_title").arg("title", named(app, &id, &title));
     let result = app.step(&req, step, |index, changes| {
         index.set_title(&id, title, changes)
@@ -292,6 +304,9 @@ pub fn edit_entities(app: &mut App, req: Req, ids: Vec<Id>, change: Change) {
 /// fewer than two members are dissolved (`panel.md#structural-edits`), and a
 /// project's members leave it first.
 pub fn delete_entity(app: &mut App, req: Req, id: Id) {
+    if let Some(err) = calendar::kept_by_google(app, &id) {
+        return req.fail(err, Text::new("calendar.read_only"));
+    }
     let step = Text::new("undo.delete_entity").arg("title", named(app, &id, ""));
     let result = app.step(&req, step, |index, changes| index.delete(&id, changes));
     answer(app, req, result, None);

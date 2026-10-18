@@ -45,6 +45,15 @@ pub fn post(app: &App, id: Id) {
 }
 
 // ----------------------------------------------------------------------------
+/// Send the account `id` to the page, and its calendar entities, whose
+/// access follows its sign-in, its access and its checked calendars
+/// (`calendar::access`).
+pub fn post_with_calendars(app: &App, id: Id) {
+    post(app, id);
+    crate::calendar::post_calendars(app, id);
+}
+
+// ----------------------------------------------------------------------------
 /// Answer a request whose account has no client (`GoogleAccounts::connected`
 /// failed): `not_found`, or `not_connected`.
 pub fn refuse_account(req: Req, error: Error) {
@@ -307,7 +316,7 @@ fn on_consent_redeemed(
     );
     match app.google.connect(target, &user.email, client) {
         Ok(id) => {
-            post(app, id);
+            post_with_calendars(app, id);
             req.ok(Connected { id });
         }
         Err(e) => {
@@ -339,6 +348,8 @@ struct CalendarInfo<'a> {
     name: &'a str,
     color: Option<&'a str>,
     primary: bool,
+    /// Google's access for the account (`CalendarSource::access`).
+    access: Option<&'a str>,
 }
 
 /// `list_calendars`' answer.
@@ -350,7 +361,7 @@ struct Calendars<'a> {
 // ----------------------------------------------------------------------------
 /// `list_calendars {account}`: the calendars of the connected account, the
 /// primary calendar first, then by name. Checked calendars take their
-/// current names and colors along the way (the `account` event), and
+/// current names, colors and access along the way (the `account` event), and
 /// get the vault's entities they lack.
 pub fn list_calendars(app: &mut App, req: Req, id: Id) {
     let client = match app.google.connected(id) {
@@ -377,6 +388,7 @@ pub fn list_calendars(app: &mut App, req: Req, id: Id) {
                     name: &c.summary,
                     color: Some(c.background_color.as_str()).filter(|c| !c.is_empty()),
                     primary: c.primary,
+                    access: Some(c.access_role.as_str()).filter(|a| !a.is_empty()),
                 })
                 .collect();
             log::info!("{} calendars of {id}", list.len());
@@ -387,8 +399,8 @@ pub fn list_calendars(app: &mut App, req: Req, id: Id) {
 
 // ----------------------------------------------------------------------------
 /// Take the account's calendars as Google lists them: its checked ones their
-/// names and colors, and the vault's entities they lack. `not_found` for an
-/// account gone since.
+/// names, colors and access, and the vault's entities they lack. `not_found`
+/// for an account gone since.
 fn take_calendars(app: &mut App, id: Id, list: &[CalendarListEntry]) -> Result<()> {
     let refreshed = match app.google.update(id, |a| a.refresh_calendars(list)) {
         Ok(refreshed) => refreshed,
@@ -401,14 +413,14 @@ fn take_calendars(app: &mut App, id: Id, list: &[CalendarListEntry]) -> Result<(
     };
     crate::calendar::ensure_entities(app, id);
     if refreshed {
-        post(app, id);
+        post_with_calendars(app, id);
     }
     Ok(())
 }
 
 // ----------------------------------------------------------------------------
 /// `set_calendar_source {account, calendar, selected}`: check or uncheck a
-/// calendar (`{id, name, color}` of `list_calendars`) as a source,
+/// calendar (`{id, name, color, access}` of `list_calendars`) as a source,
 /// one checked getting its entity in the vault (the `entity` event). The
 /// account follows as the `account` event, also when nothing changed.
 pub fn set_calendar_source(
@@ -431,7 +443,7 @@ pub fn set_calendar_source(
         if selected {
             crate::calendar::ensure_entities(app, id);
         }
-        post(app, id);
+        post_with_calendars(app, id);
     }
     req.answer(set.map(|_| ()));
 }
@@ -459,7 +471,7 @@ pub fn disconnect(app: &mut App, req: Req, id: Id) {
         move |app, ()| {
             let disconnected = app.google.disconnect(id);
             if disconnected.is_ok() {
-                post(app, id);
+                post_with_calendars(app, id);
             }
             req.answer(disconnected);
         },
@@ -499,7 +511,7 @@ mod tests {
         let list = [entry("cal1", "Family"), entry("cal2", "Not checked")];
         take_calendars(&mut h.app, account, &list).unwrap();
         let sent = parse(&h.take());
-        assert_eq!(shape(&sent), ["entity", "account"], "{sent:?}");
+        assert_eq!(shape(&sent), ["entity", "account", "entity"], "{sent:?}");
         assert_eq!(sent[0]["data"]["title"], "Family", "by its current name");
 
         take_calendars(&mut h.app, account, &list).unwrap();

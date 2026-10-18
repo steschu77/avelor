@@ -238,7 +238,8 @@ impl AutoSync {
 
 // ----------------------------------------------------------------------------
 /// A Google calendar chosen as a source; name and color are kept for
-/// showing it without asking Google.
+/// showing it without asking Google, and what Google lets the account do
+/// with it (`writable`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct CalendarSource {
@@ -250,8 +251,21 @@ pub struct CalendarSource {
     /// Written only when on.
     #[serde(default, skip_serializing_if = "is_false")]
     pub auto_sync: bool,
+    /// Google's access for the account (`accessRole`: `owner`, `writer`,
+    /// `reader`, `freeBusyReader`), as the calendar list named it last.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<String>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
+}
+
+impl CalendarSource {
+    // ------------------------------------------------------------------------
+    /// Whether Google lets the account change the calendar's events: its
+    /// access is `owner` or `writer`, or none was named.
+    pub fn writable(&self) -> bool {
+        matches!(self.access.as_deref(), None | Some("owner" | "writer"))
+    }
 }
 
 impl GoogleAccount {
@@ -428,9 +442,10 @@ impl Account {
     }
 
     // ------------------------------------------------------------------------
-    /// Take names and colors of checked calendars from a fresh calendar
-    /// list; whether anything changed. Calendars missing from the list stay
-    /// checked (a hiccup on Google's side mustn't drop the selection).
+    /// Take names, colors and access of checked calendars from a fresh
+    /// calendar list; whether anything changed. Calendars missing from the
+    /// list stay checked (a hiccup on Google's side mustn't drop the
+    /// selection).
     pub fn refresh_calendars(&mut self, list: &[CalendarListEntry]) -> bool {
         let mut changed = false;
         for source in &mut self.file.google.calendars {
@@ -438,9 +453,11 @@ impl Account {
                 continue;
             };
             let color = Some(entry.background_color.clone()).filter(|c| !c.is_empty());
-            if source.name != entry.summary || source.color != color {
+            let access = Some(entry.access_role.clone()).filter(|a| !a.is_empty());
+            if source.name != entry.summary || source.color != color || source.access != access {
                 source.name = entry.summary.clone();
                 source.color = color;
+                source.access = access;
                 changed = true;
             }
         }
@@ -923,6 +940,7 @@ last-sync: 2026-09-27T10:30:00Z
             name: name.into(),
             color: Some("#9fe1e7".into()),
             auto_sync: false,
+            access: None,
             rest: BTreeMap::new(),
         }
     }
@@ -1000,6 +1018,7 @@ last-sync: 2026-09-27T10:30:00Z
             id: id.into(),
             summary: summary.into(),
             background_color: color.into(),
+            access_role: "reader".into(),
             ..CalendarListEntry::default()
         };
         let list = [
@@ -1022,6 +1041,8 @@ last-sync: 2026-09-27T10:30:00Z
             (calendars[0].name.as_str(), calendars[0].color.as_deref()),
             ("Me, renamed", None)
         );
+        assert!(!calendars[0].writable(), "Google lets it only read");
         assert_eq!(calendars[1], calendar("gone@group", "Gone"));
+        assert!(calendars[1].writable());
     }
 }

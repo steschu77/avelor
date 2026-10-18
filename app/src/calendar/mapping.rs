@@ -5,13 +5,13 @@ use av_google::calendar_sync;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
 use av_vault::document::{Document, FileFormat};
-use av_vault::envelope::{Bare, Event, Exception, Roles, Source};
+use av_vault::envelope::{Bare, Event, Exception, Remote, Roles, Source};
 use av_vault::shared::ContactRef;
 use av_vault::{html, markdown, md_writer};
 
 use super::CANCELLED;
 use super::apply::set_bookkeeping;
-use av_vault::schema::remote::{CALENDAR_ID, ETAG, EVENT_ID, SNAPSHOT};
+use av_vault::schema::remote::{CALENDAR_ID, ETAG, EVENT_ID, EVENT_TYPE, SNAPSHOT};
 
 /// What the sync keeps of an event, both ways: exactly what `to_google`
 /// sends. Guests are only pulled (`guests_of`), and so are the
@@ -66,6 +66,16 @@ pub(super) fn to_google(fields: &EventFields) -> GoogleEvent {
         end: end.map(time),
         recurrence: Some(fields.schedule.clone()).filter(|r| !r.is_empty()),
         ..GoogleEvent::default()
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Record Google's kind of the event `event` in its bookkeeping `r`
+/// (`event-type`, vault.md#remote): none for a plain one.
+pub(super) fn set_event_type(r: &mut Remote, event: &GoogleEvent) {
+    match event.event_type.as_deref() {
+        Some(kind) if kind != "default" => r.set(EVENT_TYPE, kind),
+        _ => r.remove(EVENT_TYPE),
     }
 }
 
@@ -346,6 +356,7 @@ pub(super) fn event_entity(
     take_guests(&mut doc, remote);
     set_bookkeeping(&mut doc, account, |r| {
         r.set(EVENT_ID, remote.id.as_deref().unwrap_or_default());
+        set_event_type(r, remote);
         r.set(CALENDAR_ID, remote_calendar_id);
         if let Some(etag) = &remote.etag {
             r.set(ETAG, etag);

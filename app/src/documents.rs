@@ -25,6 +25,7 @@ use av_vault::vault::{Changes, SaveOutcome};
 use serde::Serialize;
 
 use crate::app::App;
+use crate::calendar;
 use crate::protocol::Req;
 use crate::structure::{self, Conflict};
 use crate::texts::Text;
@@ -134,6 +135,9 @@ pub fn load_doc_content(app: &mut App, req: Req, id: Id) {
 /// words. A step: the saves of one editing session, the page's group, are
 /// one (`saving.md#undo`).
 pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overwrite: bool) {
+    if let Some(err) = calendar::kept_by_google(app, &id) {
+        return req.fail(err, Text::new("calendar.read_only"));
+    }
     let mut changes = Changes::default();
     let saved = app
         .vault

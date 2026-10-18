@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::ai::accounts::AiAccounts;
+use crate::calendar;
 use crate::calendar::CalendarState;
 use crate::chat::ChatState;
 use crate::close::CloseState;
@@ -73,6 +74,10 @@ pub struct EntityMeta {
     pub writable: bool,
     /// Whether the delete button may move the file to `.trash`.
     pub deletable: bool,
+    /// A synced calendar's: what becomes of a change to its events in Google
+    /// (`calendar::access`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access: Option<calendar::Access>,
     #[serde(flatten)]
     pub roles: Roles,
 }
@@ -562,6 +567,9 @@ impl App {
             editable: entry.is_editable(),
             writable: entry.is_writable(),
             deletable: entry.is_deletable(),
+            access: (doc.kind() == DocumentType::Calendar)
+                .then(|| calendar::access(self, doc))
+                .flatten(),
             roles: doc.roles().clone(),
         };
         self.post_event("entity", meta);

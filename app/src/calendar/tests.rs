@@ -358,7 +358,7 @@ fn a_recurring_event_takes_googles_instances_and_its_conflict_copy_doesnt() {
 // ------------------------------------------------------------------------
 /// Check or uncheck the calendar `cal2`, Work, in the connected account.
 fn check_work(h: &mut Harness, selected: bool) -> Vec<Value> {
-    let calendar = json!({ "id": "cal2", "name": "Work", "color": null });
+    let calendar = json!({ "id": "cal2", "name": "Work", "color": null, "access": "writer" });
     let args = json!({ "account": CONNECTED, "calendar": calendar, "selected": selected });
     h.call("set_calendar_source", args)
 }
@@ -374,16 +374,22 @@ fn calendar_files(h: &Harness) -> usize {
 fn checking_a_calendar_makes_its_entity_once() {
     let mut h = with_google("calendar-check", FULL, &[calendar_file()]);
     let sent = check_work(&mut h, true);
-    assert_eq!(shape(&sent), ["entity", "account", "reply"], "{sent:?}");
+    assert_eq!(
+        shape(&sent),
+        ["entity", "account", "entity", "entity", "reply"],
+        "{sent:?}"
+    );
     let work = find_calendar(&h.app, connected(), "cal2").unwrap();
     let made = &sent[0]["data"];
     assert_eq!(made["id"], json!(work));
     assert_eq!(made["title"], "Work");
+    assert_eq!(made["access"], "two-way");
     assert!(Path::new(made["path"].as_str().unwrap()).starts_with("Calendar"));
 
     check_work(&mut h, true);
     check_work(&mut h, false);
-    assert!(h.app.vault.index().get(&work).is_some(), "kept");
+    let entry = h.app.vault.index().entry(&work).unwrap();
+    assert_eq!(access(&h.app, &entry.doc), Some(Access::NotSynced), "kept");
     check_work(&mut h, true);
     assert_eq!(find_calendar(&h.app, connected(), "cal2"), Some(work));
     assert_eq!(calendar_files(&h), 2);

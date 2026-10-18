@@ -747,8 +747,9 @@ enum PushOutcome {
     /// Changed in Google since it was deleted locally: it comes back as the
     /// fetched remote version.
     Back(Box<Event>),
-    /// Moved, and changed in Google since the last sync, but not locally:
-    /// Google's version takes the file.
+    /// Google's version takes the file: moved, and changed in Google since
+    /// the last sync but not locally; or of a kind Google keeps as it is
+    /// (`KEPT_TYPES`), which no change reaches.
     Pulled(Box<Event>),
     /// Gone in Google before it could be moved.
     Vanished,
@@ -757,7 +758,8 @@ enum PushOutcome {
 // ----------------------------------------------------------------------------
 /// Push `l`: insert it if it was never synced (nor its insert found),
 /// delete it if it was deleted locally, else patch it -- assuming the
-/// remote's etag (`Push`).
+/// remote's etag (`Push`) -- or, by the kind of event Google has, replace it
+/// or take Google's version (`change_of`).
 fn push_one(
     client: &Client,
     cancel: &Cancel,
@@ -769,29 +771,7 @@ fn push_one(
     let calendar_id = cal.remote_calendar_id.as_str();
     let etag = push.etag.as_deref();
     let Some(rid) = l.remote_event_id.as_ref().or(push.found.as_ref()) else {
-        let gid = google_id_for(&l.local_id);
-        let mut body = l.payload.clone();
-        body.id = Some(gid.clone());
-        return match calendar::insert_event(client, cancel, calendar_id, &body)? {
-            WriteOutcome::Written(created) => Ok(PushOutcome::Synced {
-                remote_event_id: created.id.clone().unwrap_or(gid),
-                snapshot: l.snapshot.clone(),
-                remote: created,
-            }),
-            // Our id is taken: we created it in an earlier run and crashed
-            // before the bookkeeping write. Adopt: fetch and record; if the
-            // remote content drifted from the current local state, the next
-            // run's change detection patches it (local wins — the remote
-            // was born from an earlier local version).
-            WriteOutcome::Conflict => {
-                let got = calendar::get_event(client, cancel, calendar_id, &gid)?;
-                Ok(PushOutcome::Synced {
-                    snapshot: snapshot(&normalize(&got)),
-                    remote_event_id: got.id.clone().unwrap_or(gid),
-                    remote: Box::new(got),
-                })
-            }
-        };
+        return insert_one(client, cancel, calendar_id, l, normalize);
     };
 
     if l.deleted {
@@ -826,7 +806,17 @@ fn push_one(
         }
     }
     let etag = etag.as_deref();
-    match calendar::patch_event(client, cancel, calendar_id, rid, etag, &l.payload)? {
+    // what Google has: the patch names what to drop by it, and its kind says
+    // whether Google lets the event be changed at all
+    let remote = calendar::get_event(client, cancel, calendar_id, rid)?;
+    match change_of(&remote) {
+        Change::Pull => return Ok(PushOutcome::Pulled(Box::new(remote))),
+        Change::Replace => {
+            return replace_one(client, cancel, calendar_id, l, rid, etag, normalize);
+        }
+        Change::Patch => {}
+    }
+    match calendar::patch_event(client, cancel, calendar_id, rid, etag, &l.payload, &remote)? {
         WriteOutcome::Written(updated) => Ok(PushOutcome::Synced {
             remote_event_id: rid.clone(),
             snapshot: l.snapshot.clone(),
@@ -836,6 +826,87 @@ fn push_one(
             // Remote changed since our snapshot: fetch the winner.
             let remote = calendar::get_event(client, cancel, calendar_id, rid)?;
             Ok(PushOutcome::Conflict(Box::new(remote)))
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Insert `l`, never synced, under the id its local id gives it
+/// (`google_id_for`).
+fn insert_one(
+    client: &Client,
+    cancel: &Cancel,
+    calendar_id: &str,
+    l: &LocalEvent,
+    normalize: fn(&Event) -> Event,
+) -> Result<PushOutcome> {
+    let gid = google_id_for(&l.local_id);
+    let mut body = l.payload.clone();
+    body.id = Some(gid.clone());
+    match calendar::insert_event(client, cancel, calendar_id, &body)? {
+        WriteOutcome::Written(created) => Ok(PushOutcome::Synced {
+            remote_event_id: created.id.clone().unwrap_or(gid),
+            snapshot: l.snapshot.clone(),
+            remote: created,
+        }),
+        // Our id is taken: we created it in an earlier run and crashed
+        // before the bookkeeping write. Adopt: fetch and record; if the
+        // remote content drifted from the current local state, the next
+        // run's change detection patches it (local wins — the remote
+        // was born from an earlier local version).
+        WriteOutcome::Conflict => {
+            let got = calendar::get_event(client, cancel, calendar_id, &gid)?;
+            Ok(PushOutcome::Synced {
+                snapshot: snapshot(&normalize(&got)),
+                remote_event_id: got.id.clone().unwrap_or(gid),
+                remote: Box::new(got),
+            })
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// How a change of the vault reaches the event Google has, `remote`, by its
+/// kind: a patch; a replacement for one Gmail made, which no app may change
+/// (`FROM_GMAIL`); none for one Google keeps as it is (`KEPT_TYPES`), whose
+/// version then takes the file.
+#[derive(Debug, PartialEq)]
+enum Change {
+    Patch,
+    Replace,
+    Pull,
+}
+
+fn change_of(remote: &Event) -> Change {
+    match remote.event_type.as_deref() {
+        Some(calendar::FROM_GMAIL) => Change::Replace,
+        Some(kind) if calendar::KEPT_TYPES.contains(&kind) => Change::Pull,
+        _ => Change::Patch,
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Replace the event `rid`, one Gmail made, with `l`: it is deleted, if it
+/// hasn't changed since (`etag`), and the vault's version made in its place
+/// under an id of its own (`insert_one`), an ordinary event from then on,
+/// no longer linked to its mail. Changed meanwhile, it is a conflict, as a
+/// patch refused for that is.
+fn replace_one(
+    client: &Client,
+    cancel: &Cancel,
+    calendar_id: &str,
+    l: &LocalEvent,
+    rid: &str,
+    etag: Option<&str>,
+    normalize: fn(&Event) -> Event,
+) -> Result<PushOutcome> {
+    match calendar::delete_event(client, cancel, calendar_id, rid, etag)? {
+        DeleteOutcome::Conflict => {
+            let remote = calendar::get_event(client, cancel, calendar_id, rid)?;
+            Ok(PushOutcome::Conflict(Box::new(remote)))
+        }
+        DeleteOutcome::Deleted | DeleteOutcome::Gone => {
+            insert_one(client, cancel, calendar_id, l, normalize)
         }
     }
 }
@@ -1530,6 +1601,22 @@ mod tests {
             snapshot(&payload),
             format!("{:016x}", fnv1a_64(br#"{"summary":"x"}"#))
         );
+    }
+
+    #[test]
+    fn a_change_reaches_an_event_by_its_kind() {
+        let of = |kind: Option<&str>| {
+            change_of(&Event {
+                event_type: kind.map(str::to_string),
+                ..Event::default()
+            })
+        };
+        assert_eq!(of(None), Change::Patch);
+        assert_eq!(of(Some("default")), Change::Patch);
+        assert_eq!(of(Some("fromGmail")), Change::Replace);
+        for kept in calendar::KEPT_TYPES {
+            assert_eq!(of(Some(kept)), Change::Pull, "{kept}");
+        }
     }
 
     #[test]

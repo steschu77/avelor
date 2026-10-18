@@ -10,6 +10,7 @@
   "accounts.no_local_models": "Aún no hay modelos en este equipo. Descargue uno con `ollama pull` y luego Actualizar la lista.",
   "accounts.no_vault": "Las cuentas se guardan en la bóveda: abra una bóveda para verlas.",
   "accounts.open_vault_first": "Abra primero una bóveda: las cuentas se guardan en ella.",
+  "accounts.read_only_title": "Google solo le deja ver este calendario: Avelor lo lee y no escribe nada en él.",
   "accounts.reconnect_to_apply": "Reconecte para aplicar el acceso cambiado.",
   "accounts.remove_again": "Haga clic de nuevo para quitar la cuenta",
   "accounts.sign_in_missing": "Falta el inicio de sesión de esta cuenta en este equipo. Conéctela para volver a usarla.",

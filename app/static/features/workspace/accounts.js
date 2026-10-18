@@ -48,7 +48,7 @@ let selectedAccount = 'new'; // an account id, 'new' for the Google connect pane
 let pendingConnect = null; // { account } while the browser sign-in runs
 let accountError = null; // { account, message } from the last failed op
 const accountDrafts = new Map(); // account id | 'new' -> edited levels
-// account id -> 'loading' | { error } | [{ id, name, color, primary }] (list_calendars)
+// account id -> 'loading' | { error } | [{ id, name, color, primary, access }] (list_calendars)
 const accountCalendars = new Map();
 const calendarToggles = new Map(); // `${account}\n${calendar}` -> checked, until the host confirms
 // account id -> its status and calendar scope as last seen: every account
@@ -182,7 +182,7 @@ function requestCalendars(account) {
 function setCalendarSource(account, calendar, checked) {
   const toggle = `${account}\n${calendar.id}`;
   calendarToggles.set(toggle, checked);
-  const source = { id: calendar.id, name: calendar.name, color: calendar.color ?? null };
+  const source = { id: calendar.id, name: calendar.name, color: calendar.color ?? null, access: calendar.access ?? null };
   const args = { account, calendar: source, selected: checked };
   rpcCall('set_calendar_source', args).catch(e => {
     calendarToggles.delete(toggle);
@@ -342,6 +342,11 @@ function renderCalendarSources(account) {
     pick.append(box, swatch, accEl('span', '', calendar.name));
     if (calendar.primary) pick.append(accEl('span', 'label', t('accounts.primary')));
     if (missing.includes(calendar)) pick.append(accEl('span', 'label', t('accounts.not_on_google')));
+    if (!['owner', 'writer', undefined, null].includes(calendar.access ?? source?.access)) {
+      const only = accEl('span', 'label', t('accounts.read_only'));
+      only.title = t('accounts.read_only_title');
+      pick.append(only);
+    }
     row.append(pick);
     list.append(row);
   }
