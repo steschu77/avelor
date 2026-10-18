@@ -15,6 +15,7 @@ import { locale, t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
 import { vaultSettings } from '../../model/entities.js';
+import { entities } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
 import {
@@ -27,6 +28,7 @@ import { accSeg } from '../../ui/segmented.js';
 import { AI_PROVIDERS, aiHost, aiProvider, aiTitle, aiUsd } from './models.js';
 import { aiLimitReached } from './models.js';
 import { isAiAccount } from './models.js';
+import { kindName } from '../../ui/icons.js';
 
 // The access rows shown; `tasks` stays in the account (and in every
 // reconnect request) without a row.
@@ -373,6 +375,18 @@ function renderConnectPane() {
   return pane;
 }
 
+// Entities that arrived from `id`, by kind: [total, "12 email \u00b7 3 event"].
+function accountEntityCounts(id) {
+  const byKind = new Map();
+  for (const doc of entities.values()) {
+    if (doc.source?.remote?.account !== id) continue;
+    byKind.set(doc.kind, (byKind.get(doc.kind) ?? 0) + 1);
+  }
+  const total = [...byKind.values()].reduce((a, b) => a + b, 0);
+  const detail = [...byKind].map(([kind, n]) => t('count.of_kind', { kind: kindName(kind), n })).join(' \u00b7 ');
+  return [total, detail];
+}
+
 function renderAccountPane(account) {
   const pane = detailPane();
   const connected = account.status === 'connected';
@@ -387,8 +401,12 @@ function renderAccountPane(account) {
   pane.append(detailHead(heading, { button: reconnect }),
     accEl('div', 'pane-title', account.email ?? t('accounts.unknown_account')));
 
+  const [total, detail] = accountEntityCounts(account.id);
   pane.append(stats(
+    stat(t('accounts.last_sync'), pageDate(account.last_sync, true)),
     stat(t('accounts.connected_since'), account.connected ? pageDate(account.connected) : t('accounts.unknown')),
+    stat(t('accounts.in_vault'), t('count.entities', { n: total }), detail),
+    stat(t('accounts.account_id'), `${account.id.slice(0, 8)}\u2026${account.id.slice(-4)}`, t('accounts.in_remote_blocks')),
   ), renderAccessRows(account.id));
 
   // An edit only takes effect with the next consent.
@@ -417,11 +435,12 @@ function renderAccountPane(account) {
   return pane;
 }
 
-// Re-render while visible when the op, the vault, the accounts, or what
-// picked a model (the vault's settings: "Used by") change.
+// Re-render while visible when the op, the vault, the accounts, the
+// entities, or what picked a model (the vault's settings:
+// "Used by") change.
 store.subscribe([
   state => state.vault_op, state => state.vault_path, state => state.accounts_rev,
-  state => state.settings_rev,
+  state => state.entities_rev, state => state.settings_rev,
 ], () => scheduleRenderAccounts());
 
 // ----------------------------------------------------------------------------

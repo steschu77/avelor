@@ -34,8 +34,8 @@ pub enum Error {
         path: PathBuf,
     },
     InvalidFileType,
-    /// No entity, account or message has the id: it never did, or it is
-    /// gone.
+    /// No entity, account, job or message has the id: it never did,
+    /// or it is gone.
     NotFound,
     /// The id names something of another kind than the command takes (a
     /// task where a project is expected, a reply where the user's own

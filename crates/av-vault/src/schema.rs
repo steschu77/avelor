@@ -1,9 +1,19 @@
 //! The names the vault's files use beyond the envelope's typed fields: the
-//! folders entities are written into (vault.md#vault-layout).
+//! well-known `remote:` properties and the folders entities are written
+//! into (vault.md#remote, vault.md#vault-layout).
 
 /// The vault's format, which its settings carry (vault.md#vault-config): a
 /// vault of a higher one was written by a newer app, and isn't opened.
 pub const VAULT_FORMAT: u32 = 1;
+
+/// The well-known properties of a `remote:` block (vault.md#remote).
+pub mod remote {
+    /// An email's RFC 5322 Message-ID, e.g. `"<abc@example.com>"`.
+    pub const MESSAGE_ID: &str = "message-id";
+    /// An email's id in the Gmail account, so a fetch knows the emails it
+    /// already has without reading their headers.
+    pub const GMAIL_ID: &str = "gmail-id";
+}
 
 /// The folders the app writes entities into, relative to the vault's root
 /// (vault.md#vault-layout). A convention: entities are found by
@@ -23,12 +33,14 @@ pub mod layout {
     pub const LISTS: &str = "Lists";
     /// Records made in the app.
     pub const RECORDS: &str = "Records";
+    /// Emails fetched from an account.
+    pub const EMAIL: &str = "Email";
     /// Conversations with the assistant.
     pub const CONVERSATIONS: &str = "Conversations";
     /// Deleted entities, kept at their vault-relative path; the scan skips
     /// it like every dot-folder.
     pub const TRASH: &str = ".trash";
-    /// The vault's accounts (AI providers), one YAML file each; no
+    /// The vault's accounts (Google, AI providers), one YAML file each; no
     /// entities, and skipped by the scan like every dot-folder. Their
     /// secrets stay with the app.
     pub const ACCOUNTS: &str = ".avelor/accounts";

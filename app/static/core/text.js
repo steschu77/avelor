@@ -26,8 +26,10 @@ export const ordinal = n => t('ordinal', { n, ordinal: true });
 
 // ----------------------------------------------------------------------------
 // A text the host sent (texts.rs): `{ key, args }`, an argument a text too, a
-// sum of money (`{ amount, currency }`).
+// sum of money (`{ amount, currency }`); a list of texts is a job's summary,
+// its parts joined.
 export function textOf(text) {
+  if (Array.isArray(text)) return text.map(textOf).join(' \u00b7 ');
   if (!text?.key) return '';
   const args = {};
   for (const [name, value] of Object.entries(text.args ?? {})) args[name] = argOf(value);

@@ -240,7 +240,7 @@
   opacity: 0.5;
 }
 
-/* the job's name (features/jobs.js) */
+/* the job's name, and its Stop button while it can be stopped (features/jobs.js) */
 .job__head {
   display: flex;
   align-items: center;
