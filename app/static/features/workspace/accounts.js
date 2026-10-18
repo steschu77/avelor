@@ -1,10 +1,11 @@
 // Workspace -> Accounts (accounts.md): the open vault's accounts, rendered
-// into the expanded vault area while its op is "accounts" -- the AI
-// providers: the AI provider menu, an AI account's card and pane, and the
-// pane of a new one until its key or address checks out. A required field
-// (the key, Ollama's address) stays an input until the host has checked
-// it; then it shows as text with a pencil. A model picker's way here is the
-// `accounts.open` action (`openAccountsPage`).
+// into the expanded vault area while its op is "accounts" -- the Google
+// accounts and their connect, then the AI providers: the AI provider menu,
+// an AI account's card and pane, and the pane of a new one until its key or
+// address checks out. A required field (the key, Ollama's address) stays an
+// input until the host has checked it; then it shows as text with a pencil.
+// A model picker's way here is the `accounts.open` action
+// (`openAccountsPage`).
 
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { titled } from '../../core/dom.js';
@@ -23,12 +24,31 @@ import {
 } from '../../ui/page.js';
 import { openVaultOp } from '../../ui/page.js';
 import { fieldEditKey, fieldEdits, renderEditField } from '../../ui/field.js';
+import { accSeg } from '../../ui/segmented.js';
 import { AI_PROVIDERS, aiHost, aiProvider, aiTitle, aiUsd } from './models.js';
 import { aiLimitReached } from './models.js';
+import { isAiAccount } from './models.js';
 
-let selectedAccount = null; // an account id, or 'new:<kind>' for a new AI account
+// The access rows shown; `tasks` stays in the account (and in every
+// reconnect request) without a row.
+const ACCOUNT_SERVICES = [
+  { key: 'email', name: t('kind.email'), product: 'Gmail' },
+  { key: 'calendar', name: t('kind.calendar'), product: 'Google Calendar' },
+  { key: 'contacts', name: t('types.contacts'), product: 'Google Contacts' },
+];
+const ACCOUNT_LEVELS = ['off', 'read', 'full'];
+const ACCOUNT_LEVEL_NAMES = { off: t('access.off'), read: t('access.read'), full: t('access.full') };
+const NEW_ACCOUNT_LEVELS = { email: 'read', calendar: 'read', contacts: 'off', tasks: 'off' };
+
+let selectedAccount = 'new'; // an account id, 'new' for the Google connect pane, or 'new:<kind>' for a new AI account
+let pendingConnect = null; // { account } while the browser sign-in runs
 let accountError = null; // { account, message } from the last failed op
-// account id -> its status as last seen: every account the page knows
+const accountDrafts = new Map(); // account id | 'new' -> edited levels
+// account id -> 'loading' | { error } | [{ id, name, color, primary }] (list_calendars)
+const accountCalendars = new Map();
+const calendarToggles = new Map(); // `${account}\n${calendar}` -> checked, until the host confirms
+// account id -> its status and calendar scope as last seen: every account
+// the page knows
 const accountAccess = new Map();
 
 // ----------------------------------------------------------------------------
@@ -48,28 +68,46 @@ rpcOn('account_removed', ({ id }) => onAccountRemoved(id));
 
 function onAccount(meta) {
   const id = meta.id;
-  if (selectedAccount === null && accountAccess.size === 0) {
+  // A (re)connect or disconnect can change which calendars are visible.
+  const access = `${meta.status}\n${meta.scope?.calendar}`;
+  if (accountAccess.get(id) !== access) accountCalendars.delete(id);
+  if (selectedAccount === 'new' && pendingConnect === null && accountAccess.size === 0) {
     selectedAccount = id; // the first account
   }
-  accountAccess.set(id, meta.status);
+  accountAccess.set(id, access);
+  accountDrafts.delete(id); // what was granted replaces any edit
+  for (const key of calendarToggles.keys()) {
+    if (key.startsWith(`${id}\n`)) calendarToggles.delete(key); // confirmed
+  }
 }
 
 function onAccountRemoved(id) {
   accountAccess.delete(id);
   aiAccountRemoved(id);
-  if (selectedAccount === id) selectedAccount = accounts.keys().next().value ?? null;
+  accountDrafts.delete(id);
+  accountCalendars.delete(id);
+  if (selectedAccount === id) selectedAccount = accounts.keys().next().value ?? 'new';
 }
 
 // ----------------------------------------------------------------------------
 // actions
 
-// What to show for a failed call; null for one that was cancelled or
-// replaced.
+// What to show for a failed call about `account` (an id, or 'new'); null
+// for one that was cancelled or replaced.
 function accountErrorText(e, account) {
   switch (e.code) {
     case 'cancelled':
     case 'superseded':
       return null;
+    case 'timeout':
+      return t('signin.timed_out');
+    case 'denied':
+      return t('signin.declined');
+    case 'wrong_account':
+      return accounts.get(account)?.email ? t('signin.other_account', { email: accounts.get(account).email })
+        : t('signin.other_account_this');
+    case 'not_connected':
+      return t('accounts.not_connected');
     case 'not_found':
       return t('accounts.gone');
     case 'invalid_path':
@@ -79,15 +117,88 @@ function accountErrorText(e, account) {
   }
 }
 
+// Connect a new Google account (`account` 'new') or reconnect one. A newer
+// connect replaces this one, whose call then ends as cancelled.
+function connectGoogle(account) {
+  const connect = { account };
+  pendingConnect = connect;
+  accountError = null;
+  const levels = accountLevels(account);
+  const args = account === 'new' ? { levels } : { account, levels };
+  rpcCall('connect_google', args).then(({ id }) => {
+    if (pendingConnect === connect) pendingConnect = null;
+    accountDrafts.delete('new');
+    selectedAccount = id;
+    scheduleRenderAccounts();
+  }, e => {
+    if (pendingConnect === connect) pendingConnect = null;
+    const message = accountErrorText(e, account);
+    if (message) accountError = { account, message };
+    scheduleRenderAccounts();
+  });
+  scheduleRenderAccounts();
+}
+
+function cancelConnect() {
+  if (pendingConnect) rpcCall('cancel_connect');
+}
+
 // `disconnect_account` or `remove_account`, on the second click of its
 // button (`armedButton`).
 function accountOp(cmd, id) {
   const settled = e => {
-    const message = e && accountErrorText(e);
+    const message = e && accountErrorText(e, id);
     accountError = message ? { account: id, message } : null;
     scheduleRenderAccounts();
   };
   rpcCall(cmd, { account: id }).then(() => settled(null), settled);
+}
+
+const ACCOUNT_STATUS_LABELS = {
+  connected: t('accounts.status.connected'),
+  disconnected: t('accounts.status.disconnected'),
+  reconnect: t('accounts.status.reconnect'),
+};
+
+// Calendar ops report on the calendar list, not on the pane.
+function requestCalendars(account) {
+  accountCalendars.set(account, 'loading');
+  rpcCall('list_calendars', { account }).then(({ calendars }) => {
+    accountCalendars.set(account, calendars);
+    scheduleRenderAccounts();
+  }, e => {
+    const message = accountErrorText(e, account) ?? t('accounts.calendars_cancelled');
+    accountCalendars.set(account, { error: t('accounts.calendars_failed', { error: message }) });
+    scheduleRenderAccounts();
+  });
+}
+
+// The host confirms with the account (`onAccount` clears the toggle), then
+// answers.
+function setCalendarSource(account, calendar, checked) {
+  const toggle = `${account}\n${calendar.id}`;
+  calendarToggles.set(toggle, checked);
+  const source = { id: calendar.id, name: calendar.name, color: calendar.color ?? null };
+  const args = { account, calendar: source, selected: checked };
+  rpcCall('set_calendar_source', args).catch(e => {
+    calendarToggles.delete(toggle);
+    const message = accountErrorText(e, account);
+    if (message) accountError = { account, message };
+    scheduleRenderAccounts();
+  });
+  scheduleRenderAccounts();
+}
+
+// The levels a (re)connect asks for: the edited ones, else what is granted.
+function accountLevels(account) {
+  return accountDrafts.get(account)
+    ?? (account === 'new' ? NEW_ACCOUNT_LEVELS : accounts.get(account)?.scope)
+    ?? NEW_ACCOUNT_LEVELS;
+}
+
+function setAccountLevel(account, service, level) {
+  accountDrafts.set(account, { ...accountLevels(account), [service]: level });
+  scheduleRenderAccounts();
 }
 
 // ----------------------------------------------------------------------------
@@ -95,20 +206,28 @@ function accountOp(cmd, id) {
 
 const scheduleRenderAccounts = oncePerFrame(renderAccounts);
 
+// "Email read \u00b7 Calendar full", or "No access".
+function accountAccessSummary(scope) {
+  const parts = ACCOUNT_SERVICES
+    .filter(({ key }) => scope?.[key] && scope[key] !== 'off')
+    .map(({ key, name }) => t('access.summary', { service: name, level: ACCOUNT_LEVEL_NAMES[scope[key]] ?? scope[key] }));
+  return parts.length ? parts.join(' \u00b7 ') : t('access.none');
+}
+
 function renderAccounts() {
   if (store.getState().vault_op !== 'accounts') return;
   replaceVaultPage(listDetailPage(renderAccountList(), renderAccountDetail()));
 }
 
-// The selected account's pane or a new AI account's; nothing without a
-// vault to keep an account in.
+// The selected account's pane, a new AI account's, or the Google connect;
+// nothing without a vault to keep an account in.
 function renderAccountDetail() {
   if (!store.getState().vault_path) return detailPane();
   const kind = draftKind(selectedAccount);
   if (kind) return renderAiPane(null, kind);
   const account = accounts.get(selectedAccount);
-  if (!account) return detailPane();
-  return renderAiPane(account);
+  if (!account) return store.getState().google ? renderConnectPane() : detailPane();
+  return isAiAccount(account) ? renderAiPane(account) : renderAccountPane(account);
 }
 
 function renderAccountList() {
@@ -118,12 +237,185 @@ function renderAccountList() {
     return list;
   }
 
-  const ai = [...accounts.values()];
+  const google = [...accounts.values()].filter(account => !isAiAccount(account));
+  if (google.length) list.append(listSection(t('sidebar.sources')));
+  for (const account of google) {
+    list.append(itemCard({
+      kind: 'Google',
+      status: ACCOUNT_STATUS_LABELS[account.status] ?? account.status,
+      title: account.email ?? t('accounts.unknown_account'),
+      sub: accountAccessSummary(account.scope),
+      current: account.id === selectedAccount,
+      onSelect: () => {
+        selectedAccount = account.id;
+        scheduleRenderAccounts();
+      },
+    }));
+  }
+
+  const ai = [...accounts.values()].filter(isAiAccount);
   if (ai.length) list.append(listSection(t('accounts.ai_providers')));
   for (const account of ai) list.append(renderAiCard(account));
 
-  list.append(listSection(t('accounts.connect')), renderAiConnect());
+  list.append(listSection(t('accounts.connect')));
+  if (store.getState().google) {
+    list.append(addTile({
+      label: t('accounts.google_account'),
+      hint: t('accounts.sign_in_hint'),
+      current: selectedAccount === 'new',
+      onClick: () => {
+        selectedAccount = 'new';
+        scheduleRenderAccounts();
+      },
+    }));
+  }
+  list.append(renderAiConnect());
   return list;
+}
+
+// Off / Read / Full per service; `account` is an id or 'new'.
+function renderAccessRows(account) {
+  const levels = accountLevels(account);
+  const rows = accEl('div', 'accounts__access');
+  for (const { key, name, product } of ACCOUNT_SERVICES) {
+    const row = accEl('div', 'accounts__access-row');
+    const label = accEl('div', 'accounts__service');
+    label.append(accEl('span', 'subtitle', name), accEl('span', 'label', product));
+    const seg = accSeg(ACCOUNT_LEVELS.map(level => [level, ACCOUNT_LEVEL_NAMES[level]]), levels[key] ?? 'off',
+      level => setAccountLevel(account, key, level), pendingConnect !== null);
+    row.append(label, seg);
+    rows.append(row);
+
+    // A connected account's calendars can each become a source.
+    const granted = accounts.get(account);
+    const connected = granted?.status === 'connected';
+    if (key === 'calendar' && connected && granted.scope?.calendar !== 'off') {
+      rows.append(renderCalendarSources(account));
+    }
+  }
+  return rows;
+}
+
+// Checkboxes for the account's calendars. Loaded once per account (and
+// again after a reconnect).
+function renderCalendarSources(account) {
+  const list = accEl('div', 'accounts__sub');
+  list.append(accEl('span', 'label', t('accounts.calendars_shown')));
+  let calendars = accountCalendars.get(account);
+  if (calendars === undefined) {
+    requestCalendars(account);
+    calendars = 'loading';
+  }
+  if (calendars === 'loading') {
+    list.append(accEl('span', 'page-text', t('accounts.loading_calendars')));
+    return list;
+  }
+  if (calendars.error) {
+    list.append(failedRetry(calendars.error, () => requestCalendars(account)));
+    return list;
+  }
+
+  // Checked calendars Google no longer lists stay, so they can be unchecked.
+  const checked = accounts.get(account)?.calendars ?? [];
+  const missing = checked.filter(c => !calendars.some(listed => listed.id === c.id));
+  for (const calendar of [...calendars, ...missing]) {
+    const toggle = `${account}\n${calendar.id}`;
+    const source = checked.find(c => c.id === calendar.id);
+    const row = accEl('div', 'accounts__calendar');
+    const pick = accEl('label', 'accounts__pick');
+    const box = accEl('input');
+    box.type = 'checkbox';
+    box.checked = calendarToggles.get(toggle) ?? !!source;
+    box.disabled = calendarToggles.has(toggle);
+    box.addEventListener('change', () => setCalendarSource(account, calendar, box.checked));
+    const swatch = accEl('span', 'accounts__swatch');
+    if (calendar.color) swatch.style.background = calendar.color;
+    pick.append(box, swatch, accEl('span', '', calendar.name));
+    if (calendar.primary) pick.append(accEl('span', 'label', t('accounts.primary')));
+    if (missing.includes(calendar)) pick.append(accEl('span', 'label', t('accounts.not_on_google')));
+    row.append(pick);
+    list.append(row);
+  }
+  if (!calendars.length && !missing.length) {
+    list.append(accEl('span', 'page-text', t('accounts.no_calendars')));
+  }
+  return list;
+}
+
+// "Continue in your browser..." with Cancel, or the last error, if any.
+function renderConnectState(account) {
+  if (pendingConnect?.account === account) {
+    const cancel = accEl('button', 'btn', t('field.cancel'));
+    cancel.type = 'button';
+    cancel.addEventListener('click', cancelConnect);
+    return notice('info', accEl('span', '', t('accounts.continue_in_browser')), cancel);
+  }
+  if (accountError && accountError.account === account) return notice('error', accountError.message);
+  return null;
+}
+
+function renderConnectPane() {
+  const pane = detailPane();
+  pane.append(detailHead(t('accounts.connect_google_head')),
+    accEl('div', 'pane-title', t('accounts.google_account')),
+    accEl('div', 'page-text', t('accounts.connect_google_text')),
+    renderAccessRows('new'));
+
+  const actions = accEl('div', 'accounts__actions');
+  const signIn = accEl('button', 'btn btn--primary', t('accounts.sign_in_google'));
+  signIn.type = 'button';
+  signIn.disabled = pendingConnect !== null;
+  signIn.addEventListener('click', () => connectGoogle('new'));
+  actions.append(signIn);
+  pane.append(actions);
+
+  const state = renderConnectState('new');
+  if (state) pane.append(state);
+  return pane;
+}
+
+function renderAccountPane(account) {
+  const pane = detailPane();
+  const connected = account.status === 'connected';
+
+  const reconnect = accEl('button', 'btn', connected ? t('accounts.reconnect') : t('accounts.connect'));
+  reconnect.type = 'button';
+  reconnect.disabled = pendingConnect !== null;
+  reconnect.addEventListener('click', () => connectGoogle(account.id));
+  const heading = connected
+    ? t('accounts.head_connected', { date: pageDate(account.connected) })
+    : t('accounts.head_status', { status: ACCOUNT_STATUS_LABELS[account.status] ?? account.status });
+  pane.append(detailHead(heading, { button: reconnect }),
+    accEl('div', 'pane-title', account.email ?? t('accounts.unknown_account')));
+
+  pane.append(stats(
+    stat(t('accounts.connected_since'), account.connected ? pageDate(account.connected) : t('accounts.unknown')),
+  ), renderAccessRows(account.id));
+
+  // An edit only takes effect with the next consent.
+  const draft = accountDrafts.get(account.id);
+  if (connected && draft && ACCOUNT_SERVICES.some(({ key }) => (draft[key] ?? 'off') !== (account.scope?.[key] ?? 'off'))) {
+    pane.append(notice('info', t('accounts.reconnect_to_apply')));
+  }
+  if (account.status === 'disconnected') {
+    pane.append(notice('info', t('accounts.disconnected_note')));
+  } else if (account.status === 'reconnect') {
+    pane.append(notice('error', t('accounts.sign_in_missing')));
+  }
+  const state = renderConnectState(account.id);
+  if (state) pane.append(state);
+
+  // Connected accounts disconnect; the others can be removed for good.
+  const [text, op, label, armed] = connected
+    ? [t('accounts.disconnect_google_note'), 'disconnect_account', t('accounts.disconnect_dots'), t('accounts.disconnect_again')]
+    : [t('accounts.remove_google_note'), 'remove_account', t('accounts.remove_dots'), t('accounts.remove_again')];
+  const button = accEl('button', 'btn btn--ghost', label);
+  button.type = 'button';
+  button.disabled = pendingConnect !== null;
+  armedButton(button, armed, () => accountOp(op, account.id),
+    `${op} ${account.id}`);
+  pane.append(detailFooter(text, button));
+  return pane;
 }
 
 // Re-render while visible when the op, the vault, the accounts, or what
@@ -176,7 +468,7 @@ function aiErrorText(e, account) {
       return null;
     case 'not_found':
     case 'invalid_path':
-      return accountErrorText(e);
+      return accountErrorText(e, account);
     default:
       return e.message;
   }
@@ -244,7 +536,7 @@ function aiConnect(account, field, value) {
     const failed = fieldEdits.get(key);
     if (failed) {
       failed.checking = false;
-      failed.error = aiErrorText(e);
+      failed.error = aiErrorText(e, account);
       setPageFocus(key);
     }
     scheduleRenderAccounts();
@@ -265,7 +557,7 @@ function aiRequestModels(account, op = 'models') {
     }
     scheduleRenderAccounts();
   }, e => {
-    const message = aiErrorText(e) ?? t('accounts.models_cancelled');
+    const message = aiErrorText(e, account) ?? t('accounts.models_cancelled');
     if (op === 'test') aiTests.set(account, { ok: false, message });
     else aiModels.set(account, { error: message });
     scheduleRenderAccounts();
@@ -283,7 +575,7 @@ function aiListModels(account, op = 'models') {
 function aiSetSettings(account, change) {
   accountError = null;
   const settled = e => {
-    const message = e && aiErrorText(e);
+    const message = e && aiErrorText(e, account);
     accountError = message ? { account, message } : null;
     scheduleRenderAccounts();
   };
@@ -521,7 +813,7 @@ function renderAiModels(account) {
   }
   let list = aiModels.get(account.id);
   if (list === undefined) {
-    // Once per account and session.
+    // Once per account and session, like the calendars.
     aiRequestModels(account.id);
     list = 'loading';
   }

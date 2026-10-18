@@ -1,6 +1,7 @@
 //! What the YAML files of the configuration share (`accounts.md#design`):
-//! accounts are each one YAML file, an account's secret a DPAPI-encrypted
-//! file with the app (on Linux, a file only the user can read).
+//! accounts of both kinds are each one YAML file, an account's secret a
+//! DPAPI-encrypted file with the app (on Linux, a file only the user can
+//! read).
 
 use std::fs;
 use std::io::ErrorKind;
@@ -13,10 +14,10 @@ use av_utils::secret;
 use serde::Serialize;
 
 // ----------------------------------------------------------------------------
-/// An account's secret (an API key), DPAPI-encrypted in the app's config
-/// folder (on Linux, readable by the user alone) and named by the account's
-/// id (`<id>.key`): the account file doesn't name it, and it never enters a
-/// vault.
+/// An account's secret (a refresh token, an API key), DPAPI-encrypted in
+/// the app's config folder (on Linux, readable by the user alone) and named
+/// by the account's id (`<id>.token`, `<id>.key`): the account file doesn't
+/// name it, and it never enters a vault.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SecretFile(PathBuf);
 
