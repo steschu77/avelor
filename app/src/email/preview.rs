@@ -84,7 +84,7 @@ struct LabelInfo<'a> {
 /// Message-ID from anywhere (another account, an imported `.eml`).
 struct KnownEmails {
     pub(super) gmail: HashSet<String>,
-    message: HashSet<String>,
+    pub(super) message: HashSet<String>,
 }
 
 impl KnownEmails {

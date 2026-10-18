@@ -171,9 +171,9 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   thread. Thread and group rows don't drag.
 - **Keyed rows** (by group, thread and entity) stay built while filtered
   out or folded, so an indexing only adds rows.
-- **Shown on request** (the selection restored on start,
-  `revealInDocuments`): the group and thread holding the entity's first
-  row unfold and it is scrolled to.
+- **Shown on request** (`showInDocuments`, the `documents.show` action;
+  the selection restored on start, `revealInDocuments`): the group and
+  thread holding the entity's first row unfold and it is scrolled to.
 
 ### Timeline <a id="timeline"></a>
 
@@ -240,7 +240,15 @@ bottom of the main view and slides in only while there is something to
 tell (the `notice` event, a failed call), the newest message with a count
 of the others.
 
-- An error (a failed save) stays until dismissed with ×.
+- An error (a failed save, an email a fetch couldn't write) stays until
+  dismissed with ×.
+- A message about what a job brought goes on its own after 6 seconds, but
+  not while the mouse is over it: after a fetch or an auto-sync wrote new
+  email, "3 new emails · jan@gmail.com", or for a single email "New email:
+  <subject>", which a click shows in the Documents lens
+  (`showInDocuments`, `features/lenses/documents.js`): the email selected,
+  its thread unfolded and scrolled to, a filter that would hide it
+  cleared and its type shown.
 
 ## Jobs panel <a id="jobs-panel"></a>
 

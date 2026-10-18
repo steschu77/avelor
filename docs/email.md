@@ -1,6 +1,7 @@
 # Avelor — Email
 
-> Email from a Google account into the vault: Fetch email and the auto-sync. The
+> Email from a Google account into the vault: Fetch email, the auto-sync and
+> the new-email notices. The
 > account and its `fetch-email:` keys are `accounts.md`; the commands,
 > `api.md#email`.
 
@@ -47,6 +48,12 @@ switched on, then since its last complete run.
   succeeds.
 - The Email source's sync button stays shown, pressed, while auto-sync is
   on; it still opens Fetch email.
+
+## New-email notices
+
+After a fetch or an auto-sync run wrote new email, the status bar says so
+(`email::fetch::new_email_notice` → `App::inform`, an `info` notice;
+`ui.md#status-bar`).
 
 ## Flows
 

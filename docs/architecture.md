@@ -442,7 +442,7 @@ nothing imports `app.js`.
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`, which makes its parts for each editor (`editor/selection.js`, `editor/blocks.js`, `editor/tables.js`, `editor/shortcuts.js`, `editor/paste.js`); `isLink` (`editor/links.js`); the tags both read (`editor/tags.js`); `serializeMarkdown` |
-| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
+| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `setNotice`, `showError` |
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `sourceKeyOf`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the conversations with an AI); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/calendar.js` | what the calendar shows: the events in the filter with their recurring events expanded (RFC 5545 lines), the tasks due, the day an entity shows on (`calendarDayOf`) |
 | `model/schedule.js` | the schedules, an event's: their RFC 5545 lines read (`parseSchedule`, `ruleSupported`) and expanded from a first start (`scheduleStarts`) |
@@ -455,7 +455,7 @@ nothing imports `app.js`.
 | `features/lenses/registry.js` | the lens registry: the tabs, the lenses' elements and renders (`registerLens`), at most one render per frame of the shown lens (`invalidateLenses`), the lens shown last on start (`restoreLens`) |
 | `features/panel/details.js`, `features/panel/panel.js` | what a card shows of its event, task, email or document, a task's fields and a genre editable in place; the side panel renderer (day view, thread, standalone card), its chips, the structural edits it starts, its subscriptions |
 | `features/dashboard/dashboard.js`, `features/dashboard/cards.js` | the Dashboard lens: its cards' order and the closed ones, the Cards menu, dragging a card; the cards Week, Tasks (a task dragged to another column), Upcoming, Recent files and Recent conversations |
-| `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
+| `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`showInDocuments`, `revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`); its way to the Accounts page is the `accounts.open` action |
 | `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts, Google and AI; the trash |
@@ -516,7 +516,10 @@ What a key, a menu or a button starts is registered once
 with the key's shortcut whose `when` holds; a key something else already
 handled (`defaultPrevented`, Ctrl+I as italic in an editor) is left
 alone. The pages of the expanded vault area register what Esc and
-Ctrl+Enter do on them (`registerVaultPage`, `ui/page.js`). The keys
+Ctrl+Enter do on them (`registerVaultPage`, `ui/page.js`). An action is
+also how a lower layer starts something above it: a new email's notice
+in the status bar runs `documents.show` (`showInDocuments`,
+`features/lenses/documents.js`). The keys
 in use: `ui.md#keys-and-actions`.
 
 ### CSS <a id="css"></a>
