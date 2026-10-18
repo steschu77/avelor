@@ -19,6 +19,8 @@ pub mod layout {
     pub const LISTS: &str = "Lists";
     /// Records made in the app.
     pub const RECORDS: &str = "Records";
+    /// Conversations with the assistant.
+    pub const CONVERSATIONS: &str = "Conversations";
     /// Deleted entities, kept at their vault-relative path; the scan skips
     /// it like every dot-folder.
     pub const TRASH: &str = ".trash";
@@ -26,4 +28,7 @@ pub mod layout {
     /// entities, and skipped by the scan like every dot-folder. Their
     /// secrets stay with the app.
     pub const ACCOUNTS: &str = ".avelor/accounts";
+    /// The vault's own settings (`vault.md#vault-config`); skipped by the
+    /// scan like every dot-folder.
+    pub const VAULT_SETTINGS: &str = ".avelor/vault.yaml";
 }

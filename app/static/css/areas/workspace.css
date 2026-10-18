@@ -155,7 +155,7 @@
 }
 
 .ai-models__row {
-  --cols: 18px minmax(150px, 1fr) 120px;
+  --cols: 18px minmax(150px, 1fr) 120px minmax(0, 1.4fr);
   min-height: 42px;
   color: var(--c-ink);
 }
@@ -168,7 +168,8 @@
   color: var(--c-label);
 }
 
-.ai-models__id {
+.ai-models__id,
+.ai-pick__name {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -178,6 +179,35 @@
 .ai-models__price {
   color: var(--c-label);
   white-space: nowrap;
+}
+
+.ai-models__uses {
+  min-height: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+/* A feature's model picker (aiModelPicker, features/workspace/models.js): a tool that
+   names the model, marked while the pick can't be used */
+.ai-pick {
+  max-width: 100%;
+  gap: 4px;
+  color: var(--c-ink);
+}
+
+.ai-pick[aria-invalid="true"] {
+  color: var(--c-danger);
+}
+
+.ai-sends {
+  padding-top: 8px;
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 10px 14px;
+  align-items: baseline;
+  font: 400 var(--fs-body)/1.4 var(--f-serif);
 }
 
 /* Trash (Workspace -> Trash, features/workspace/trash.js): the files in the vault's trash,

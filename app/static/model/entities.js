@@ -1,8 +1,9 @@
 // The vault's data as the page knows it (architecture.md#page-state): the
-// Maps of the entities, projects, threads and accounts, written only from
-// the host's events (model/events.js); the selectors over them (a thread's
-// members in thread order); and the selection, published minus what no
-// longer exists (`commitExistingSelection`).
+// Maps of the entities, projects, threads and accounts, and the vault's own
+// settings, written only from the host's events (model/events.js); the
+// selectors over them (a thread's members in thread order, the chats with an
+// AI); and the selection, published minus what no longer exists
+// (`commitExistingSelection`).
 
 import { store } from './state.js';
 
@@ -10,6 +11,18 @@ export const projects = new Map(); // project_id -> project data
 export const threads = new Map(); // thread_id -> thread data
 export const accounts = new Map(); // account_id -> account data
 export const entities = new Map(); // doc_id -> document data (every non-{project, thread, account} entity)
+
+// The open vault's own settings (the `vault_settings` event,
+// vault.md#vault-config): { chat_model }. Read through `vaultSettings()`.
+let openVaultSettings = { chat_model: null };
+
+export function vaultSettings() {
+  return openVaultSettings;
+}
+
+export function setVaultSettings(settings) {
+  openVaultSettings = settings;
+}
 
 // ----------------------------------------------------------------------------
 // The thread shown for `doc_id`: the first of the threads it's a member of
@@ -148,4 +161,13 @@ function sourceKind(source) {
 // Whether `doc` is a chat with an AI: a conversation from the `ai` source.
 export function isAiConversation(doc) {
   return doc?.kind === 'conversation' && sourceKind(doc.source) === 'ai';
+}
+
+// The chats linked to `item` (null: linked to nothing), newest first.
+export function assistantChats(item) {
+  const chats = [];
+  for (const doc of entities.values()) {
+    if (isAiConversation(doc) && (doc.linked_to ?? null) === item) chats.push(doc);
+  }
+  return chats.sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || (a.doc_id < b.doc_id ? 1 : -1));
 }

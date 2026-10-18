@@ -13,6 +13,7 @@ use crate::documents;
 use crate::structure;
 use crate::trash;
 use crate::{accounts, ai};
+use crate::{chat, vault_settings};
 use av_llm::Provider;
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -44,6 +45,8 @@ enum Command {
     Ready,
     SwitchVault(SwitchTo),
     SetPrefs(PagePrefs),
+    /// The vault's own settings (`vault_settings`).
+    SetVaultSettings(vault_settings::SettingsChange),
     RevealVault,
     /// Open a web, mail or phone link in its default app.
     OpenUrl(Url),
@@ -81,6 +84,11 @@ enum Command {
     ConnectAi(ConnectAi),
     ListAiModels(OfAccount),
     SetAiSettings(ai::SettingsChange),
+    // The assistant's chats (`chat`).
+    ChatOpen(Target),
+    ChatSend(chat::SendRequest),
+    ChatStop(OfConversation),
+    ChatSelect(chat::SelectRequest),
 }
 
 /// `{path?}`: no `path` shows the folder picker.
@@ -213,6 +221,12 @@ struct ConnectAi {
     address: Option<String>,
 }
 
+/// `{conversation}`
+#[derive(Deserialize)]
+struct OfConversation {
+    conversation: Id,
+}
+
 /// `{account}`
 #[derive(Deserialize)]
 struct OfAccount {
@@ -228,6 +242,7 @@ impl Command {
             "ready" => Command::Ready,
             "switch_vault" => Command::SwitchVault(from_value(args)?),
             "set_prefs" => Command::SetPrefs(from_value(args)?),
+            "set_vault_settings" => Command::SetVaultSettings(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
             "open_url" => Command::OpenUrl(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
@@ -258,6 +273,10 @@ impl Command {
             "connect_ai" => Command::ConnectAi(from_value(args)?),
             "list_ai_models" => Command::ListAiModels(from_value(args)?),
             "set_ai_settings" => Command::SetAiSettings(from_value(args)?),
+            "chat_open" => Command::ChatOpen(from_value(args)?),
+            "chat_send" => Command::ChatSend(from_value(args)?),
+            "chat_stop" => Command::ChatStop(from_value(args)?),
+            "chat_select" => Command::ChatSelect(from_value(args)?),
             _ => {
                 let unknown = format!("unknown command `{cmd}`");
                 return Err(serde::de::Error::custom(unknown));
@@ -288,6 +307,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::Ready => api::ready(app, req),
         Command::SwitchVault(a) => api::switch_vault(app, req, a.path),
         Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
+        Command::SetVaultSettings(a) => vault_settings::set_vault_settings(app, req, a),
         Command::RevealVault => api::reveal_vault(app, req),
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::CloseReady(a) => close::close_ready(app, req, a),
@@ -324,6 +344,10 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::ConnectAi(a) => ai::connect_ai(app, req, a.account, a.provider, a.key, a.address),
         Command::ListAiModels(a) => ai::list_ai_models(app, req, a.account),
         Command::SetAiSettings(a) => ai::set_ai_settings(app, req, a),
+        Command::ChatOpen(a) => chat::chat_open(app, req, a.id),
+        Command::ChatSend(a) => chat::chat_send(app, req, a),
+        Command::ChatStop(a) => chat::chat_stop(app, req, a.conversation),
+        Command::ChatSelect(a) => chat::chat_select(app, req, a),
     }
 }
 

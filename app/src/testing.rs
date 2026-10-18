@@ -3,11 +3,13 @@
 //! the test runs its UI queue.
 
 use std::cell::RefCell;
+use std::io::Read;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -200,9 +202,16 @@ pub fn notes(name: &str, n: usize) -> (Harness, Vec<Id>) {
 
 // ----------------------------------------------------------------------------
 /// A fake Ollama on this computer, for the AI commands: `GET /api/tags`
-/// lists its models.
+/// lists its models; `POST /api/chat` streams its reply as Ollama does (one
+/// JSON object per line, chunked), or, holding, sends the first piece and
+/// keeps the answer open until the client goes away (a reply to stop).
+#[derive(Default)]
 pub struct FakeOllama {
     models: Vec<String>,
+    reply: Vec<String>,
+    hold: bool,
+    /// Where the chat requests go, as JSON, if they are kept.
+    requests: Option<Arc<Mutex<Vec<Value>>>>,
 }
 
 impl FakeOllama {
@@ -210,7 +219,29 @@ impl FakeOllama {
     pub fn new(models: &[&str]) -> Self {
         Self {
             models: models.iter().map(|m| m.to_string()).collect(),
+            ..Self::default()
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Answer chats with `pieces`, streamed one after the other.
+    pub fn replying(mut self, pieces: &[&str]) -> Self {
+        self.reply = pieces.iter().map(|p| p.to_string()).collect();
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    /// Keep the chat requests in `requests`.
+    pub fn recording(mut self, requests: &Arc<Mutex<Vec<Value>>>) -> Self {
+        self.requests = Some(Arc::clone(requests));
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    /// Stop after the first piece of a reply, until the client goes away.
+    pub fn holding(mut self) -> Self {
+        self.hold = true;
+        self
     }
 
     // ------------------------------------------------------------------------
@@ -230,22 +261,74 @@ impl FakeOllama {
     }
 
     // ------------------------------------------------------------------------
-    /// Read the request, then answer it.
+    /// Read the request, then answer it by its path.
     fn answer(&self, mut stream: TcpStream) {
         let mut reader = BufReader::new(stream.try_clone().unwrap());
         let mut line = String::new();
+        let _ = reader.read_line(&mut line);
+        let path = line
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or_default()
+            .to_string();
+        let mut length = 0;
         loop {
             line.clear();
             if !reader.read_line(&mut line).is_ok_and(|n| n > 2) {
                 break;
             }
+            if let Some((name, value)) = line.split_once(':') {
+                if name.eq_ignore_ascii_case("content-length") {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+            }
         }
-        let models: Vec<Value> = self
-            .models
-            .iter()
-            .map(|name| json!({ "name": name, "details": {} }))
-            .collect();
-        write_json(&mut stream, &json!({ "models": models }))
+        let mut body = vec![0; length];
+        let _ = reader.read_exact(&mut body);
+        if let (Some(requests), "/api/chat") = (&self.requests, path.as_str()) {
+            let request = serde_json::from_slice(&body).unwrap_or_default();
+            requests.lock().unwrap().push(request);
+        }
+
+        if path != "/api/chat" {
+            let models: Vec<Value> = self
+                .models
+                .iter()
+                .map(|name| json!({ "name": name, "details": {} }))
+                .collect();
+            return write_json(&mut stream, &json!({ "models": models }));
+        }
+
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
+        let _ = stream.write_all(head.as_bytes());
+        let send = |stream: &mut TcpStream, chunk: Value| {
+            let line = format!("{chunk}\n");
+            let _ = write!(stream, "{:x}\r\n{line}\r\n", line.len());
+            let _ = stream.flush();
+        };
+        for (i, piece) in self.reply.iter().enumerate() {
+            let message = json!({ "role": "assistant", "content": piece });
+            send(
+                &mut stream,
+                json!({ "model": "m", "message": message, "done": false }),
+            );
+            if self.hold && i == 0 {
+                // Until the client gives up on the answer.
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+                let _ = reader.read(&mut [0; 1]);
+                return;
+            }
+        }
+        let done = json!({
+            "model": "m",
+            "message": { "role": "assistant", "content": "" },
+            "done": true,
+            "done_reason": "stop",
+            "prompt_eval_count": 5,
+            "eval_count": 3,
+        });
+        send(&mut stream, done);
+        let _ = stream.write_all(b"0\r\n\r\n");
     }
 }
 

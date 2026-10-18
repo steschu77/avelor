@@ -1,6 +1,6 @@
 //! The app's own commands (`api.md#the-page-side`): `ready`, switching and
 //! revealing the vault, opening a link, and the page's preferences; and
-//! opening a vault with its accounts (`open_vault`).
+//! opening a vault with its accounts and settings (`open_vault`).
 
 use std::path::{Path, PathBuf};
 
@@ -10,6 +10,7 @@ use crate::app::Prefs;
 use crate::documents;
 use crate::protocol::Req;
 use crate::sys;
+use crate::vault_settings;
 use av_utils::error::Error;
 use serde_json::json;
 
@@ -56,10 +57,11 @@ pub fn switch_vault(app: &mut App, req: Req, path: Option<PathBuf>) {
 }
 
 // ----------------------------------------------------------------------------
-/// Remember `root` as the vault, then open it.
+/// Remember `root` as the vault, then open it once the work bound to the
+/// open vault has stopped (`App::switch_vault_when_stopped`).
 pub(crate) fn switch_to(app: &mut App, root: PathBuf) {
     app.remember_vault(root.clone());
-    open_vault(app, &root);
+    app.switch_vault_when_stopped(root);
 }
 
 // ----------------------------------------------------------------------------
@@ -71,6 +73,7 @@ pub(crate) fn open_vault(app: &mut App, root: &Path) {
     documents::keep_held(app);
     app.vault.begin_open(root);
     accounts::open(app, root);
+    vault_settings::open(app, root);
     app.run_scan(root.to_path_buf());
 }
 

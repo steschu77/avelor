@@ -1,7 +1,8 @@
 # Avelor — Accounts
 
-> The accounts the app works with: AI providers — their files, secrets and
-> states, and the Accounts page.
+> The accounts the app works with: AI providers (chat) — their files, secrets
+> and states, the Accounts page, and how a feature picks its AI model. The
+> assistant is in `assistant.md`.
 
 ## Accounts in a vault
 
@@ -59,7 +60,7 @@ Every account file has:
   * `address`: where the API lives, if not at the provider's default
     address (Ollama: `http://localhost:11434`)
   * `offered`: the models offered wherever a model is picked (ticked on
-    the Accounts page)
+    the Accounts page; `accounts.md#model-choice`)
   * `spend-limit`: USD a month
   * `connected`: when the account was first connected
   * `disconnected`: when its key was forgotten
@@ -81,12 +82,46 @@ accounts with a detail pane.
   and Gemini with an API key, and Ollama by its address. A key or an address
   is checked by listing the provider's models before it is stored; until
   then it stays an input. The pane lists the models with their price per
-  million tokens: ticking one offers it in the features' pickers. An Ollama
-  account shows whether the server answers. Disconnecting forgets the key
+  million tokens: ticking one offers it in the features' pickers, and "Used
+  by" names, read only, what picked it (`accounts.md#model-choice`): Chats;
+  an unticked model still names them, as they are refused until they pick
+  another. An Ollama account shows whether the server answers. Disconnecting forgets the key
   but keeps the account and its id, marked `disconnected`; removing
   deletes its files (Ollama accounts are removed directly).
 - The page widgets the Workspace pages share are `ui/`'s (`ui/page.js`,
-  `ui/field.js`).
+  `ui/field.js`); the model picker every feature uses is
+  `features/workspace/models.js` (`accounts.md#model-choice`).
+
+## Model choice <a id="model-choice"></a>
+
+Every feature that calls an AI picks its model: one of the models the
+vault's AI accounts offer, `{account, model}` (a `ModelChoice`), kept with
+the feature's own settings:
+
+| Feature | Kept in | Picked in |
+|---|---|---|
+| The assistant | the vault's settings, `.avelor/vault.yaml` `chat-model` (`vault.md#vault-config`; `set_vault_settings`) | the assistant's head |
+
+The host reads the pick where it is kept and checks it,
+`AiAccounts::choose(choice, what)`: a `Resolved` (account, model,
+client) or a `Refusal` in the host's words. The page sends no model with
+a request; `aiModelOf(choice)` mirrors the check for its hints. Refused:
+
+- nothing picked: "For chats, pick a model." (`invalid_argument`), or
+  "add an AI provider under Accounts." without one (`not_connected`);
+- the account gone: "the picked model's account is gone; pick another
+  model.";
+- its key missing: "enter OpenAI's key again under Accounts."
+  (`not_connected`);
+- the model no longer offered (unticked): "gpt-5 is no longer offered;
+  tick it under Accounts or pick another model."
+
+No other model is ever tried in place of the pick: it could send a
+document to another provider. The picker (`aiModelPicker`, `aiShowModels`
+in `features/workspace/models.js`) names the picked model, marked while it is refused,
+and opens a menu of every account's offered models, by account; an
+account without its key is dimmed. Where a pick is refused the page shows
+why, with a button to Accounts where the fix is there.
 
 ## Flows
 
@@ -96,6 +131,7 @@ accounts with a detail pane.
 | I1 | Add an AI provider | "AI provider" menu → draft pane → key or address → Save → `aiConnect` | `connect_ai {provider, key \| address}` (channel `connect_ai`) → models listed with the new values on a worker → only then stored in `.avelor/accounts/` (the key as `<id>.key`) → `account`, `ok {id, models}` | card with models |
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |
 | I3 | Offer a model | tick | `set_ai_settings {account, offered}` → `account`, `ok` | pickers offer it |
+| I8 | Pick a model | a feature's picker → `aiShowModels` → a model | the feature's own command: `set_vault_settings {chat_model}` → `vault_settings`, `ok` | the feature uses it; "Used by" names the feature |
 | I4 | Spend limit | edit field | `set_ai_settings {account, spend_limit}` → `account`, `ok` | — |
 | I5 | Replace key | edit key | `connect_ai {account, key}` | — |
 | I6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` / `remove_account` | — |

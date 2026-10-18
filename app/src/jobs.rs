@@ -2,11 +2,13 @@
 //! in the page's jobs panel (the `job` event, `api.md#events`).
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use av_utils::id::Id;
 use serde::Serialize;
 
 use crate::app::App;
+use crate::{api, chat};
 
 // ----------------------------------------------------------------------------
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -103,5 +105,14 @@ impl App {
         };
         job.done = job.total;
         self.post_event("job", event(id, &job, note, true));
+    }
+
+    // ------------------------------------------------------------------------
+    /// Open `root` once the work bound to the open vault has stopped: the
+    /// assistant's replies being written keep what they have so far (as
+    /// Stop does).
+    pub fn switch_vault_when_stopped(&mut self, root: PathBuf) {
+        chat::stop_all(self);
+        api::open_vault(self, &root);
     }
 }

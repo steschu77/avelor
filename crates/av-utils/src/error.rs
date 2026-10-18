@@ -25,10 +25,12 @@ pub enum Error {
         path: PathBuf,
     },
     InvalidFileType,
-    /// No entity or account has the id: it never did, or it is gone.
+    /// No entity, account or message has the id: it never did, or it is
+    /// gone.
     NotFound,
     /// The id names something of another kind than the command takes (a
-    /// task where a project is expected).
+    /// task where a project is expected, a reply where the user's own
+    /// message is).
     WrongKind,
     /// A 2xx answer whose content can't be used.
     InvalidResponse {
@@ -46,6 +48,12 @@ pub enum Error {
     /// The entity's file can't be written: read-only, or its frontmatter
     /// didn't parse (rewriting it would lose the broken original).
     NotWritable {
+        path: PathBuf,
+    },
+    /// The entity's file changed outside the app since it was last read or
+    /// written, so it wasn't overwritten. Only for callers that can't let
+    /// the user choose; av-vault reports it as `SaveOutcome::Conflict`.
+    ChangedOutside {
         path: PathBuf,
     },
     FileNotFound {
@@ -120,6 +128,7 @@ impl Error {
             Error::NotConnected => "not_connected",
             Error::Unsaved => "unsaved",
             Error::NotWritable { .. } => "not_writable",
+            Error::ChangedOutside { .. } => "changed_outside",
             Error::FileNotFound { .. } => "file_not_found",
             Error::FileExists { .. } => "file_exists",
             Error::FileWrite { .. } => "file_write",
@@ -210,3 +219,21 @@ impl From<glib::error::BoolError> for Error {
 
 // ----------------------------------------------------------------------------
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn codes_are_the_variant_names_in_snake_case() {
+        assert_eq!(Error::Cancelled.code(), "cancelled");
+        assert_eq!(Error::NotFound.code(), "not_found");
+        let arg = "url".to_string();
+        assert_eq!(Error::InvalidArgument { arg }.code(), "invalid_argument");
+        let path = PathBuf::from("a.md");
+        assert_eq!(Error::ChangedOutside { path }.code(), "changed_outside");
+        let msg = String::new();
+        assert_eq!(Error::BadRequest { msg }.code(), "bad_request");
+    }
+}

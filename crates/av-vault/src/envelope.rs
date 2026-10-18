@@ -527,6 +527,11 @@ impl Envelope {
     pub fn compose(&self) -> Option<String> {
         serde_yaml_ng::to_string(self).ok()
     }
+
+    /// Set a non-standard key (stored via the flattened `extra` map).
+    pub fn set_extra(&mut self, key: &str, value: impl Into<serde_yaml_ng::Value>) {
+        self.extra.insert(key.into(), value.into());
+    }
 }
 
 #[cfg(test)]

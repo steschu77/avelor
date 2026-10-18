@@ -59,6 +59,7 @@ read by OCR.
 | `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
 | `accounts.md` | AI accounts: files, secrets, states, the Accounts page |
+| `assistant.md` | the assistant: conversations, context, streaming |
 
 ## Doc conventions
 
@@ -78,7 +79,7 @@ read by OCR.
   `av-vault/vault.rs:201`).
 - **Flows** have ids by area (A vault, B navigation, C projects, D
   documents and cards, E threads, F lenses, H Google
-  accounts, I AI accounts): trigger
+  accounts, I AI accounts, L assistant): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
@@ -122,17 +123,24 @@ The rules the code follows, and every change to it:
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
 | UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the vault scan's batches into the index; every vault write | — |
-| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the vault scan's walk and reads (`vault_scan.rs`); the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
+| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the vault scan's walk and reads (`vault_scan.rs`); HTTP (LLMs), LLM streams; the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
 | WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
 
 ### The run family
 
 Three variants: plain (`run`), with ordered progress callbacks
 (`run_with_progress`), and superseding per channel (`run_superseding`;
-channels `connect_ai`); continuations are `FnOnce(&mut App, T)`. `Task(Cancel)` aborts (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
+channels `connect_ai`); continuations are `FnOnce(&mut App, T)`. One OS thread per task is right without an async runtime:
+AI streams block for minutes. `Task(Cancel)` aborts (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
 dropping a `Task` leaves its work running. Continuations re-check identity themselves
-(batch ids), because an already queued `apply`
+(`writing.id`, batch ids), because an already queued `apply`
 still runs, and so does progress queued before the abort.
+
+### Coalesced progress <a id="progress"></a>
+
+`Progress::send_latest` (`app.rs`) replaces a not-yet-delivered update
+of the same stream, so at most one `ai_delta` per run of the UI queue. The
+reply's worker uses it.
 
 ### One way in <a id="one-way-in"></a>
 
@@ -170,7 +178,9 @@ dialog waits in its modal loop.
 ### Jobs <a id="jobs"></a>
 
 `App::start_job` / `update_job` / `end_job` (`jobs.rs`): a
-card per job in the jobs panel (the `job` event, `ui.md#jobs-panel`). A new long operation becomes a job through
+card per job in the jobs panel (the `job` event, `ui.md#jobs-panel`). A vault switch stops the
+assistant's replies, and opens the new vault once they have ended
+(`switch_vault_when_stopped`). A new long operation becomes a job through
 this helper, not a slot with callbacks of its own.
 
 ### Closing
@@ -207,8 +217,9 @@ methods.
 `App::new`): the web view in the app, a `Vec<String>` in tests. With the
 test running the UI queue itself, a command is dispatched against a
 temporary vault and its events and reply asserted (`testing.rs`:
-`Harness::call`, `notes`); work on a worker is waited for
-(`wait_scanned`).
+`Harness::call`, `notes`); work on a worker is waited for (`wait_for`,
+`wait_scanned`). Every feature module has such dispatch tests;
+the assistant's run against a fake Ollama (`testing::FakeOllama`).
 
 ## Crates <a id="crates"></a>
 
@@ -260,20 +271,23 @@ temporary vault and its events and reply asserted (`testing.rs`:
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
 | `vault_scan.rs` | the vault scan (`vault.md#opening`): `run_scan` with av-vault's `scan` on a worker, its batches into the index (`Vault::apply_scanned`) and to the page (`vault`, `entity`, `vault_error`, the scan's `job`), a replaced scan's batches dropped, `scanning`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
-| `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events |
+| `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
-| `jobs.rs` | the jobs helper: start, update and end a job (the `job` event) |
-| `api.rs` | `ready`, vault open (with its accounts), switch and reveal, `set_prefs`, `open_url` |
+| `jobs.rs` | the jobs helper: start, update and end a job (the `job` event), the vault switch |
+| `api.rs` | `ready`, vault open (with its accounts and settings), switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 | `accounts.rs` | the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
 | `config_files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
-| `ai_accounts.rs`, `ai.rs` | AI account files and key, the `AiAccounts` sub-state; the AI commands (connect, models, settings) |
+| `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
+| `ai_context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file, within a budget; its tests |
+| `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked item; `create`, a new AI conversation; dispatch tests against a fake Ollama |
+| `ai_accounts.rs`, `ai.rs` | AI account files and key, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked); the AI commands (connect, models, settings) |
 
 ## Platforms <a id="platforms"></a>
 
@@ -358,10 +372,10 @@ nothing imports `app.js`.
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`; `serializeMarkdown` |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`; the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the chats with an AI); the selection published minus what is gone (`commitExistingSelection`) |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the chats with an AI); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/calendar.js` | what the calendar shows: the events in the filter with their series expanded (RFC 5545 lines), the tasks due, the day an entity shows on (`calendarDayOf`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts (`editorRoots`) |
-| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinThreadLocal`, …, `editEntityLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, the accounts, `vault`, `activated`; `forgetVault`), the only writer of the Maps |
+| `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinThreadLocal`, …, `editEntityLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, the accounts, `vault`, `vault_settings`, `activated`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc; the two-click confirm (`armedButton`: one armed button page-wide, which a page rebuilt on every change names by a key); the editors' toolbars |
 | `ui/page.js`, `ui/field.js`, `ui/segmented.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages: their Esc and Ctrl+Enter (`registerVaultPage`), `replaceVaultPage`, which keeps the focus; the parts of a list + detail page (`listDetailPage`, `pageList`, `itemCard`, `addTile`, `detailPane`, `detailHead`, `stats`, `notice`, `failedRetry`, `detailFooter`) and the changes a page shows until the host has them (`sentDrafts`); editing in place (`editTextInPlace`) and the Workspace pages' editable field (`renderEditField`); the segmented control (`accSeg`) |
 | `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
@@ -371,13 +385,14 @@ nothing imports `app.js`.
 | `features/dashboard/dashboard.js`, `features/dashboard/cards.js` | the Dashboard lens: its cards' order and the closed ones, the Cards menu, dragging a card; the cards Week, Tasks (a task dragged to another column), Upcoming, Recent files and Recent chats |
 | `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
-| `features/workspace/models.js` | the models features pick: the AI providers |
+| `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`); its way to the Accounts page is the `accounts.open` action |
 | `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts; the trash |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
 | `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
+| `features/assistant/tree.js`, `features/assistant/assistant.js` | conversation tree helpers; the assistant |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the vault area's and the panel's layout, the page items, the sidebar's sections, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, the dirty dots, `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
@@ -488,8 +503,10 @@ The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
 A broken `config.yaml` is set aside at start, without a question, as
 `config.yaml.broken`; an older one is kept, and the broken file is
 dropped. A key `config.yaml` doesn't know is kept as it is, so the
-settings of another version survive a save. Every overwriting write here
-is atomic (`saving.md#atomic-writes`).
+settings of another version survive a save. Everything the vault's
+entities name by id — accounts — is kept in the vault's `.avelor/`, and so are
+the vault's own settings (`vault.md#vault-config`). Every overwriting
+write, in the vault and here, is atomic (`saving.md#atomic-writes`).
 
 ## Build <a id="build"></a>
 
@@ -519,6 +536,10 @@ abort. Where the bundle lands and how to measure the size:
 
 ## Conventions <a id="conventions"></a>
 
+- **AI use** names the model its feature picked (a `ModelChoice`, kept
+  with the feature's settings); the host reads the pick there and checks
+  it with `AiAccounts::choose`, and never puts another model in its place
+  (`accounts.md#model-choice`).
 - **Naming**: a feature's commands, sub-state and module share its name.
 - **Errors**: one `av_utils::Error` for every layer (`av-utils/error.rs`:
   logging, the operating system), extended when needed; a separate error type only for functions

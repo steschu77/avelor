@@ -1,7 +1,7 @@
 // The host's events into the model (api.md#events): the entities as they
 // are on disk, those that left the vault, their content sent unasked, the
-// open vault's accounts, the vault being opened, and the window active
-// again. Each handler writes the Maps (model/entities.js) and the
+// open vault's accounts, the vault being opened and its settings, and the
+// window active again. Each handler writes the Maps (model/entities.js) and the
 // documents' state (model/documents.js) and bumps the store's counters; the
 // renders follow the counters (app.js), the model calls none of them. Only
 // this module writes the Maps. A page that keeps its own state about an
@@ -16,6 +16,7 @@ import { entities } from './entities.js';
 import { projects } from './entities.js';
 import { threads } from './entities.js';
 import { accounts } from './entities.js';
+import { setVaultSettings } from './entities.js';
 import { forgetDocument, forgetDocuments } from './documents.js';
 import { onDocContent } from './documents.js';
 import { onActivated } from './documents.js';
@@ -142,5 +143,11 @@ rpcOn('vault', ({ state, name, path, total }) => {
   store.setState({
     vault_name: name, vault_path: path, files_total: total, vault_state: 'scanning',
   });
+});
+// A vault opened (before its scan), or its settings changed
+// (vault.md#vault-config).
+rpcOn('vault_settings', settings => {
+  setVaultSettings(settings);
+  store.setState({ settings_rev: store.getState().settings_rev + 1 });
 });
 rpcOn('activated', onActivated);

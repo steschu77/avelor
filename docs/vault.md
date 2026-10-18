@@ -476,11 +476,17 @@ It carries the following additional fields:
 * `active`: UUIDv7, ID of the leaf message of the currently shown path.
 
 A message with a `model` is an AI reply. In an AI conversation (the `ai`
-source) the user's own messages carry no `sender`.
+source) the user's own messages carry no `sender`. The app writes its
+chats to `Conversations/`, `linked-to` (the metadata field) the document
+or thread shown when the chat started; a reply is written once it is
+complete or stopped, and a failed reply isn't written at all.
 
 Messages are ordered by their `parent` links, forming a tree. Messages that
 share a parent are siblings, e.g. an AI re-run, or an AI re-run with a
-modified prompt.
+modified prompt. The UI shows the path from the first message to `active`
+and lets the user toggle between siblings along it; toggling writes the new
+leaf to `active`. The tree's rules are av-vault's `conversation` module
+(`path_to`, `leaf_from`, `add`, `activate`).
 
 The tree itself is fixed: it is determined by the importer or the AI
 conversation, and the user can't reorder messages.
@@ -655,6 +661,29 @@ Only the files the app creates get generated names, and the app renames no
 file later: a file keeps the slug of the title it was created with, and the
 `rename` key is ignored.
 
+## Vault Configuration <a id="vault-config"></a>
+
+What the vault's entities name by id is kept in the vault, in `.avelor/`, which
+the scan skips like every dot-folder:
+
+- `.avelor/accounts/` (`av_vault::schema::layout::ACCOUNTS`): one YAML file per
+  AI account. An assistant reply names the AI account it came through. The
+  secrets stay with the app and never enter the vault.
+  `accounts.md#account-files`.
+- `.avelor/vault.yaml` (`av_vault::schema::layout::VAULT_SETTINGS`): the
+  vault's own settings, read when it opens (`vault_settings.rs`; changed
+  with `set_vault_settings`, pushed as `vault_settings`). `chat-model`, the model the assistant answers with, `{account, model}`
+  (`accounts.md#model-choice`); a missing file is the defaults, a broken
+  one too (logged), and keys the app doesn't know are kept.
+
+```yaml
+chat-model:
+  account: 0193a7c1-4b0e-7c1a-9d2f-3a51c8e05be0
+  model: gpt-5-mini
+```
+
+Opening another vault switches to its accounts and settings.
+
 ## Vault layout <a id="vault-layout"></a>
 
 A convention, not law. The folders the app writes into are named in
@@ -666,7 +695,9 @@ not by location:
 Vault/
   .avelor/                 # vault config
     accounts/          # *.yaml per account (AI providers), without secrets
+    vault.yaml         # the vault's own settings (the chat model)
   Projects/            # *.md / *.yaml project descriptors
+  Conversations/       # *.yaml conversations
   Documents/           # *.md notes made with New
   Contacts/            # *.md per contact
   Records/             # *.yaml (IDs, passports, …)
@@ -707,6 +738,7 @@ These are the ID card thread's entities; the whole vault has every type.
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
+| A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its settings (`vault_settings`), then the scan: `vault` (scanning), the scan's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a note if files failed); answered `null` once the scan has started | sidebar, lens and counts fill while scanning |
 | A3 | Show in folder | vault menu → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
 | E6 | Restore | Workspace > Trash, Restore → `restore_entity` | `Index::restore` moves the file back → `entity` | the restored entity selected; a thread the delete dissolved stays dissolved |
 
@@ -720,6 +752,8 @@ sequenceDiagram
     P->>S: ready
     S->>S: accounts::open (.avelor/accounts/)
     S-->>P: accounts
+    S->>S: vault_settings::open (.avelor/vault.yaml)
+    S-->>P: vault_settings
     S->>W: run_scan(root)
     W->>W: walk the tree
     W->>S: [Start]

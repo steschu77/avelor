@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::ai_accounts::AiAccounts;
+use crate::chat::ChatState;
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
 use crate::documents::DocumentState;
@@ -17,8 +18,10 @@ use crate::protocol::{self, Req};
 use crate::sys::Owner;
 use crate::sys::UiSignal;
 use crate::vault_scan::VaultScan;
+use crate::vault_settings::VaultSettings;
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
+use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::id::Id;
 use av_vault::envelope::{DocumentType, Roles, Source};
@@ -155,6 +158,22 @@ impl Vault {
             .ok()?;
         Some(DateTime::from_unix_millis(since.as_millis() as i64))
     }
+
+    // ------------------------------------------------------------------------
+    /// For writers that can't let the user choose (the assistant):
+    /// a conflict as a failure, `Error::ChangedOutside`.
+    pub fn require_written(&self, outcome: SaveOutcome) -> Result<()> {
+        match outcome {
+            SaveOutcome::Conflict(id) => Err(Error::ChangedOutside {
+                path: self
+                    .index
+                    .entry(&id)
+                    .map(|e| e.local.clone())
+                    .unwrap_or_default(),
+            }),
+            SaveOutcome::Saved | SaveOutcome::Unchanged => Ok(()),
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -170,6 +189,9 @@ pub struct App {
 
     /// The open vault's AI accounts (`accounts::open`).
     pub ai: AiAccounts,
+
+    /// The open vault's own settings (`vault_settings::open`).
+    pub settings: VaultSettings,
 
     /// The vault scan running (`vault_scan`); a new one replaces it.
     pub scan: VaultScan,
@@ -187,6 +209,10 @@ pub struct App {
 
     /// The close asked of the page (`close`).
     pub close: CloseState,
+
+    /// The assistant's replies being written, and the failed ones
+    /// (`chat`); neither is in the vault.
+    pub chat: ChatState,
 }
 
 impl App {
@@ -200,11 +226,13 @@ impl App {
             vault: Vault::default(),
             ui,
             ai: AiAccounts::default(),
+            settings: VaultSettings::default(),
             scan: VaultScan::default(),
             superseding: HashMap::new(),
             jobs: Jobs::default(),
             documents: DocumentState::default(),
             close: CloseState::default(),
+            chat: ChatState::default(),
         }
     }
 
@@ -292,9 +320,10 @@ impl App {
     // ------------------------------------------------------------------------
     /// Run `work` like `run`, handing it a `Progress` to report along the
     /// way: each `Progress::send` queues `on_progress` on the UI thread, in
-    /// order, and `apply` runs after the last of them. Aborting the returned
-    /// task cancels `work` and skips `apply`; progress queued before still
-    /// arrives, so `on_progress` must check it is still wanted.
+    /// order (`send_latest` replaces what hasn't arrived yet), and `apply`
+    /// runs after the last of them. Aborting the returned task cancels
+    /// `work` and skips `apply`; progress queued before still arrives, so
+    /// `on_progress` must check it is still wanted.
     pub fn run_with_progress<P, T>(
         &self,
         work: impl FnOnce(Progress<P>, &Cancel) -> T + Send + 'static,
@@ -318,6 +347,7 @@ impl App {
         Progress {
             ui: Arc::clone(&self.ui),
             on_progress: Arc::new(Mutex::new(Box::new(on_progress))),
+            latest: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -517,12 +547,15 @@ pub type Apply = Box<dyn FnOnce(&mut App)>;
 type OnProgress<P> = Box<dyn FnMut(&mut App, P) + Send>;
 
 // ----------------------------------------------------------------------------
-/// What `App::run_with_progress` hands its work: `send` queues the run's
-/// `on_progress` on the UI thread. It never reaches the webview itself; only
-/// the queued continuation runs, with the `App`.
+/// What `App::run_with_progress` hands its work: `send` queues the
+/// run's `on_progress` on the UI thread, `send_latest` coalesces. It never
+/// reaches the webview itself; only the queued continuation runs, with the
+/// `App`.
 pub struct Progress<P> {
     ui: Arc<UiQueue>,
     on_progress: Arc<Mutex<OnProgress<P>>>,
+    /// The item of `send_latest` waiting for its queued task.
+    latest: Arc<Mutex<Option<P>>>,
 }
 
 impl<P> Clone for Progress<P> {
@@ -530,6 +563,7 @@ impl<P> Clone for Progress<P> {
         Self {
             ui: Arc::clone(&self.ui),
             on_progress: Arc::clone(&self.on_progress),
+            latest: Arc::clone(&self.latest),
         }
     }
 }
@@ -541,6 +575,25 @@ impl<P: Send + 'static> Progress<P> {
     pub fn send(&self, item: P) {
         let on_progress = Arc::clone(&self.on_progress);
         self.ui.send_to_ui(move |app| {
+            let mut on_progress = on_progress.lock().unwrap();
+            on_progress(app, item);
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    /// Queue `on_progress(app, item)` on the UI thread, replacing an
+    /// item sent this way that hasn't arrived yet: for state so far (a
+    /// reply's text, the words read), at most one per run of the UI queue
+    /// however fast the work sends. A run uses either this or `send`.
+    pub fn send_latest(&self, item: P) {
+        if self.latest.lock().unwrap().replace(item).is_some() {
+            return; // its task is queued already
+        }
+        let (latest, on_progress) = (Arc::clone(&self.latest), Arc::clone(&self.on_progress));
+        self.ui.send_to_ui(move |app| {
+            let Some(item) = latest.lock().unwrap().take() else {
+                return;
+            };
             let mut on_progress = on_progress.lock().unwrap();
             on_progress(app, item);
         });
@@ -619,5 +672,31 @@ impl UiQueue {
     /// How many tasks are queued.
     pub fn queued(&self) -> usize {
         self.tasks.lock().unwrap().len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::Harness;
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn latest_progress_replaces_what_has_not_arrived() {
+        let mut h = Harness::new("latest-progress");
+        let got = Arc::new(Mutex::new(Vec::new()));
+        let progress = {
+            let got = Arc::clone(&got);
+            h.app
+                .progress(move |_app, n: u32| got.lock().unwrap().push(n))
+        };
+        for n in 1..=3 {
+            progress.send_latest(n);
+        }
+        assert_eq!(h.ui.queued(), 1, "one task for all three");
+        h.run_queue();
+        progress.send_latest(4);
+        h.run_queue();
+        assert_eq!(*got.lock().unwrap(), [3, 4]);
     }
 }

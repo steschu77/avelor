@@ -37,9 +37,9 @@ which answers through a `Req`.
   current when the reply arrives.
 - **Error codes** are the names of `av_utils::Error`'s variants in
   snake_case (`Error::code()`): `bad_request`, `invalid_argument`,
-  `cancelled`, `not_found` (no entity or account with that id), `wrong_kind` (the id
+  `cancelled`, `not_found` (no entity, account or message with that id), `wrong_kind` (the id
   names something of another kind than the command takes), `not_writable`,
-  `file_not_found`, `file_write`, `file_exists`, `win32`, `gtk`, `http`, …. `Req::fail` answers in the host's own
+  `changed_outside`, `file_not_found`, `file_write`, `file_exists`, `win32`, `gtk`, `http`, …. `Req::fail` answers in the host's own
   words where the page shows the message.
 - The page sends **strings** (`JSON.stringify`), since the host reads with
   `TryGetWebMessageAsString`.
@@ -76,12 +76,13 @@ The structural commands go through `structureCall`
 
 ### Vault commands
 
-Host modules: `api.rs`, `vault_scan.rs`.
+Host modules: `api.rs`, `vault_scan.rs`, `vault_settings.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one: its accounts (`accounts`), then the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `null` once the scan has started. |
+| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one (`vault.md#flows`, A1): its accounts and settings (`accounts`, `vault_settings`), then the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `null` once the scan has started. |
 | `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and scanned as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. The page sends its unsaved edits first. |
+| `set_vault_settings` | `{ chat_model? }` | Change the open vault's settings (`.avelor/vault.yaml`, `vault.md#vault-config`); only the fields given change. `chat_model` is `{account, model}`, the model the assistant answers with, checked when it is used (`accounts.md#model-choice`). Pushes `vault_settings`, then `null`; `invalid_path` (no vault is open), or the failed save ("Could not save the vault's settings."). |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
 | `reveal_vault` | — | Open the vault's folder in Explorer (on Linux the file manager) once the handler has returned. `null`; `invalid_path` ("No vault is open."), or the shell's error ("Could not show the vault's folder."). |
 | `open_url` | `{ url }` | Open a link in its default app (the browser, the mail app). Only `http://`, `https://`, `mailto:` and `tel:` links, else `invalid_argument`: anything else could start a program or open a file. `null` once the shell has taken the link, or the shell's error ("Could not open …"). An `id:` link never reaches the host (`editor.md#links`). |
@@ -155,6 +156,17 @@ Host module: `ai.rs`, `accounts.rs`. `accounts.md`.
 | `disconnect_account` | `{ account }` | An AI account's key deleted; the account file stays, marked `disconnected` (`accounts.md#connection`). Pushes `account`, then `null`. |
 | `remove_account` | `{ account }` | Forget an account that isn't connected (`disconnected` or `reconnect`; an Ollama account in any state): its file and secret are deleted. Pushes `account_removed`, then `null`; `unsupported` for a connected account. |
 
+### Chat commands <a id="chat"></a>
+
+Host module: `chat.rs`. `assistant.md`.
+
+| Command | Args | Reply and pushes |
+|---|---|---|
+| `chat_open` | `{ id }` | The conversation `id` as the assistant shows it: `ok {conversation}`, the `conversation` event's data; `not_found` if there is no such entity, `wrong_kind` if it is no conversation. The page calls it on the channel `chat-open`. |
+| `chat_send` | `{ conversation?, text?, parent?, linked_to?, retry? }` | A user turn: `text` after the message `parent` (none: a first message, or an edited first message beside it), or a new reply to the user message `retry`. Without `conversation` it starts one in `Conversations/`, titled after `text` and linked to `linked_to`. The host checks the model picked for chats (the vault's settings, `accounts.md#model-choice`) and builds the context (`assistant.md#context`). The user message is written first (`entity`), then `ok {id, conversation}` shows the reply being written; `ai_delta` streams it, `conversation` ends it. Refused in the host's words, with nothing written: `not_connected` ("For chats, add an AI provider under Accounts.", or the picked model's key is missing), `invalid_argument` ("For chats, pick a model.", its account gone, the model no longer offered; "The message is empty."), `not_found` (the conversation, the message it follows, or the one to answer again is gone), `wrong_kind` (the one to answer again is a reply), `invalid_argument` ("The message it follows is gone." for a new conversation's first message that follows another; `retry` without `conversation`), `unsupported` ("A reply is still being written."), or the failed write ("Could not save the conversation."). |
+| `chat_stop` | `{ conversation }` | Stop the reply being written; what it wrote so far is written as the reply (`status: "stopped"` until the app closes). Pushes `conversation`, then `null`; also `null` when no reply is being written. Opening another vault stops every reply the same way first. |
+| `chat_select` | `{ conversation, message }` | Show another branch: the leaf below `message` (following the newest child; a failed reply stands for its question) is written as the conversation's `active` (`vault.md#conversation`). Pushes `conversation`, then `null`; `not_found`, `wrong_kind` (`conversation` is no conversation), or the failed write ("Could not save the branch."). |
+
 ## Events <a id="events"></a>
 
 What the host pushes; the page listens with `rpcOn`.
@@ -162,14 +174,17 @@ What the host pushes; the page listens with `rpcOn`.
 | Event | Data | Pushed when |
 |---|---|---|
 | `vault` | `{ state, name, path, total }` | A vault scan started, `state` `scanning` (on `ready`, after `switch_vault`), or read every file, `state` `open`: the vault's folder name and path, and the number of files found. Every entity comes in between as an `entity` event, with the scan's `job` events. A new scan starts the page's vault over. |
+| `vault_settings` | `{ chat_model }` | A vault opened (before its scan), or its settings changed (`set_vault_settings`): `chat_model` is `{account, model}` or null. |
 | `vault_error` | `{ path, error }` | A file of the scan couldn't be read; it stays out of the index. The scan's job ends with the count as its note. |
 | `activated` | `null` | The window is active again: the page saves its unsaved edits and looks at the files of the others (`check_files`). |
 | `close` | `{ id }` | The window's Close (`saving.md#closing-the-app`). |
 | `job` | `{ id, label, state: "running"\|"done", done, total, note, stoppable }` | A job started, made progress, or ended: a vault scan. `note` is an ended job's summary (what it did, what failed, or why it failed); a job that ended did all its steps (`done` = `total`). |
-| `entity` | `{ id, kind, title, path, source, genre, date, projects, tags, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during a vault scan, and for every entity an edit created or rewrote, whatever the edit (a structural command, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
+| `entity` | `{ id, kind, title, path, source, genre, date, projects, tags, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during a vault scan, and for every entity an edit created or rewrote, whatever the edit (a structural command, the assistant, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
 | `entity_deleted` | `{ id }` | The entity left the vault: its file was moved to `.trash` (a delete, a dissolved thread) or is gone. |
 | `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: its file was read again. `load_doc_content` answers with the same `source` and `html`. |
 | `accounts` | `{ items: [account…] }` | A vault opened: its accounts, from `.avelor/accounts/`, replacing the ones the page has. Each item is an `account`'s data. |
 | `account` | `{ id, kind: "anthropic"\|"openai"\|"mistral"\|"gemini"\|"ollama", key, address, status, connected, offered, spend_limit }` | An account was connected, changed or disconnected. `status` is `connected`, `disconnected` or `reconnect`, an Ollama account's `running`/`not running`/`unknown` (`accounts.md#connection`). `key` is only the key's ends (`sk-…4f2a`) or null. |
 | `account_removed` | `{ id }` | The account was removed (`remove_account`); its files are gone. |
+| `conversation` | `{ id, title, linked_to, active, messages: [{ id, parent, role: "user"\|"assistant", model, date, content, html, status: "done"\|"writing"\|"stopped"\|"failed", error?, suggestions? }] }` | A conversation changed without the page asking: a reply done, failed or stopped, a branch selected. `chat_open` and `chat_send` answer with the same shape. `suggestions` are questions offered to ask next (`vault.md#conversation`). `messages` are the file's plus the reply being written and the failed ones, which are never written. The page shows the path from the first message to `active`, then on down the newest children, and derives the siblings from `parent`. |
+| `ai_delta` | `{ conversation, message, html }` | The reply being written, all of it so far, rendered from its markdown. Coalesced: at most one per run of the host's queue, however fast the model writes. The page ignores it for a conversation it doesn't show. |
 | `notice` | `{ level: "error", message }` | `error`: the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), or `config.yaml` couldn't be read at start (on `ready`). A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |

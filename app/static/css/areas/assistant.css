@@ -1,5 +1,5 @@
-/* The context column (features/context.js) and the Linked tab
-   (features/linked.js). */
+/* The context column (features/context.js), the Linked tab
+   (features/linked.js) and the assistant (features/assistant/). */
 
 /* The context column (context.js): tabs about what the panel shows,
    raised over the panel's body */
@@ -29,8 +29,9 @@
   box-shadow: 0 1px 0 var(--c-card);
 }
 
-/* a tab of the column: Task, the New form (features/new.js) for a task
-   about what is shown, with its inset; Linked (features/linked.js) */
+/* a tab of the column besides the assistant: Task, the New form
+   (features/new.js) for a task about what is shown, with its inset;
+   Linked (features/linked.js) */
 .context__pane {
   --p-new-x: var(--p-pane);
   flex: 1;
@@ -62,4 +63,233 @@
 
 .linked__search {
   margin: 10px 0 4px;
+}
+
+/* the assistant (features/assistant/assistant.js), after designs/assistant.html: the head with
+   the switcher, the messages, and the input with its send/stop button */
+.chat {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat__head {
+  padding: 14px var(--p-pane) 12px;
+  border-bottom: 1px solid var(--c-line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.chat__spark {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.chat__switch {
+  margin-left: auto;
+  color: var(--c-ink);
+}
+
+.chat__messages {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px var(--p-pane);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chat__msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat__msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+  max-width: 86%;
+  gap: 4px;
+}
+
+.chat__msg--editing {
+  align-self: stretch;
+}
+
+.chat__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: stretch;
+}
+
+.chat__msg--user .chat__label {
+  justify-content: flex-end;
+}
+
+.chat__nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--c-ink);
+}
+
+.chat__msg--user .chat__nav {
+  margin-left: 8px;
+}
+
+.chat__nav-count {
+  letter-spacing: 0.05em;
+}
+
+.chat__bubble {
+  padding: 8px 12px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  color: var(--c-ink);
+  cursor: text;
+}
+
+.chat__msg--editing .chat__bubble {
+  align-self: stretch;
+  border-color: var(--c-ink-mute);
+}
+
+/* below a message: an edited one's Cancel and Send */
+.chat__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat__reply {
+  color: var(--c-ink);
+  text-wrap: pretty;
+}
+
+.chat__reply--writing {
+  color: var(--c-ink-soft);
+}
+
+/* the design's caret at the end of a reply being written */
+.chat__reply--writing> :last-child::after,
+.chat__reply--writing:empty::after {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  margin-left: 1px;
+  vertical-align: -2px;
+  background: var(--c-ink);
+  animation: chat-caret 1s steps(1) infinite;
+}
+
+@keyframes chat-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+.chat__hint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: 400 var(--fs-small)/1.5 var(--f-chrome);
+  color: var(--c-label);
+}
+
+.chat__guide {
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--c-line);
+  color: var(--c-ink-mute);
+}
+
+.chat__compose {
+  margin: 0 var(--p-pane) 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-line);
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: var(--c-card);
+  box-shadow: var(--shadow-card);
+}
+
+.chat__compose:focus-within {
+  border-color: var(--c-ink-mute);
+}
+
+.chat__input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-height: 40vh;
+  overflow: auto;
+  color: var(--c-ink);
+}
+
+.chat__input[data-empty]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--c-label);
+  pointer-events: none;
+}
+
+/* send, outlined while there is nothing to send; stop while a reply is written */
+.chat__send {
+  flex: 0 0 auto;
+  width: var(--h-control);
+  height: var(--h-control);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--c-ink);
+  background: var(--c-ink);
+  color: var(--c-card);
+  cursor: default;
+}
+
+.chat__send>.icon {
+  width: var(--fs-small);
+  height: var(--fs-small);
+}
+
+.chat__send:disabled {
+  opacity: 1;
+  border-color: var(--c-line);
+  background: transparent;
+  color: var(--c-ink-faint);
+}
+
+.chat__send[data-mode="stop"] {
+  background: transparent;
+  color: var(--c-ink);
+}
+
+.chat__send--small {
+  width: var(--h-control-sm);
+  height: var(--h-control-sm);
+}
+
+.chat__send--small>.icon {
+  width: var(--fs-ui);
+  height: var(--fs-ui);
 }

@@ -1,7 +1,7 @@
 /* The editor (editor/editor.js) and its toolbars. */
 
-/* WYSIWYG editor (editor.js); also the read-only preview. The container
-   sets the inset. */
+/* WYSIWYG editor (editor.js); also the read-only preview and the chat's
+   messages and input. The container sets the inset. */
 .editor-toolbar {
   padding: 3px var(--p-pane);
   border-bottom: 1px solid var(--c-line);

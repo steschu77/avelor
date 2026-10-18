@@ -257,6 +257,27 @@
         <!-- Tabs about what the panel shows (context.js) -->
         <div class="context">
           <nav class="tabs context__tabs" id="context-tabs" role="tablist"></nav>
+          <!-- Assistant (features/assistant/assistant.js) -->
+          <div id="assistant" class="chat">
+            <div class="chat__head">
+              <div class="chat__bar label">
+                <svg class="chat__spark" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="1.5" stroke-linejoin="round">
+                  <path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"></path>
+                </svg>
+                <button type="button" class="tool ai-pick" id="assistant-model"></button>
+                <button type="button" class="tool chat__switch" id="assistant-switch"
+                  title="Conversations about what is shown">New &#x2304;</button>
+              </div>
+              <div class="subtitle" id="assistant-title" hidden></div>
+            </div>
+            <div class="chat__messages" id="assistant-messages"></div>
+            <div class="chat__compose">
+              <div class="editor prose chat__input" id="assistant-input" data-placeholder="Ask anything&hellip;"></div>
+              <button type="button" class="chat__send" id="assistant-send" title="Send (Enter)"
+                disabled><svg class="icon"><use href="#i-send" /></svg></button>
+            </div>
+          </div>
           <!-- A new task for what is shown (features/new.js) -->
           <div id="context-task" class="context__pane" hidden></div>
           <!-- The links of what is shown (features/linked.js) -->

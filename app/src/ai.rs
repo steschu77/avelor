@@ -79,6 +79,13 @@ fn check_error(provider: Provider, address: &str, err: &Error) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// What went wrong in a chat, for the page.
+pub fn chat_error(provider: Provider, address: &str, err: &Error) -> String {
+    let name = provider.spec().display;
+    error_text(provider, address, err).unwrap_or_else(|| format!("{name} failed: {err}"))
+}
+
+// ----------------------------------------------------------------------------
 /// A rejected key, an HTTP error, or an unreachable server, in words;
 /// `None` for anything else.
 fn error_text(provider: Provider, address: &str, err: &Error) -> Option<String> {
