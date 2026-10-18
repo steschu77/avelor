@@ -18,7 +18,7 @@ import { titled } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { isoInstant, localDay, shortMonthDate } from '../../core/format.js';
 import { pageDate } from '../../core/format.js';
-import { t } from '../../core/text.js';
+import { parts, t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
@@ -26,8 +26,12 @@ import { armedButton } from '../../ui/confirm.js';
 import {
   closeVaultArea, openVaultOp, registerVaultPage,
 } from '../../ui/page.js';
+import { notice } from '../../ui/page.js';
 import { accSeg } from '../../ui/segmented.js';
 import { iconEl } from '../../ui/icons.js';
+import {
+  aiAnyOffered, aiMissingHint, aiModelOf, aiModelPicker,
+} from '../workspace/models.js';
 
 const EMAIL_PAGE_SIZE = 50; // matches per page, as the host pages them
 const EMAIL_DEBOUNCE_MS = 500;
@@ -68,6 +72,7 @@ export function openEmailFetch(account_id) {
       to: filter.since === 'custom' && before ? emailDateInput(before) : '',
     },
     auto: saved?.auto_update ?? true,
+    analysis: { ...EMAIL_ANALYSIS_OFF, ...saved?.analysis },
     searching: false, // while a `email_search` / `email_headers` is answered
     error: null,
     matches: null, // [{ id, in_vault }] of the last search
@@ -106,12 +111,14 @@ store.subscribe([state => state.vault_op, state => state.vault_expanded], ([vaul
 });
 
 // The account changed (e.g. its last fetch after a fetch): refresh the
-// header line and the date presets that depend on it.
+// header line and the date presets that depend on it; and the analysis,
+// whose pick may have changed with the AI accounts.
 store.subscribe(state => state.accounts_rev, () => {
   if (!email) return;
   if (!accounts.has(email.account)) return closeEmailPage();
   renderEmailSubtitle();
   renderEmailDate(email.form);
+  renderEmailAnalysisSection();
   scheduleRenderEmailMatches();
 });
 
@@ -324,10 +331,12 @@ function emailReplacing() {
 }
 
 // Whether Fetch can run: a list to fetch from, not about to be replaced by
-// a pending Auto-update search.
+// a pending Auto-update search, and an analysis that is off or has a
+// working pick.
 function emailCanFetch() {
   return email.matches !== null && email.selected.size > 0 && !email.fetching
-    && !email.searching && !(email.auto && email.timer !== null);
+    && !email.searching && !(email.auto && email.timer !== null)
+    && !emailAnalysisBlocked(email.analysis);
 }
 
 // Fetch the selection; replacing bodies takes a second click on Fetch
@@ -341,7 +350,7 @@ function emailFetch() {
   m.fetching = true;
   const ids = m.matches.filter(match => m.selected.has(match.id)).map(match => match.id);
   const filter = m.listFilter ? JSON.parse(m.listFilter) : emailHostFilter();
-  const args = { account: m.account, ids, replace, filter, auto_update: m.auto };
+  const args = { account: m.account, ids, replace, filter, auto_update: m.auto, analysis: m.analysis };
   // Once the fetch runs, the page closes; the job card shows it.
   rpcCall('email_fetch', args).then(({ job }) => {
     emailFetchJobs.set(job, args.account);
@@ -377,11 +386,15 @@ function renderEmailPage() {
   filter.append(renderEmailFilterForm(email.form));
   form.append(section, filter);
 
+  els.analysis = accEl('div');
+  form.append(els.analysis);
+
   els.matches = accEl('div', 'email__matches');
   grid.append(form, els.matches);
   page.append(grid);
   $('vault-area-body').replaceChildren(page);
 
+  renderEmailAnalysisSection();
   renderEmailSubtitle();
   renderEmailMatches();
 }
@@ -641,6 +654,52 @@ function emailSetSync(account, change) {
 }
 
 // ----------------------------------------------------------------------------
+// the analysis of new email (email.md#analysis), of Fetch email: a level,
+// and the model it runs with
+
+const EMAIL_ANALYSIS_OFF = { level: 'off', model: null };
+
+// `analysis` ({ level, model }) as a seg of its levels and a body: with the
+// analysis on, the picker of its model, and what keeps the pick from working
+// (`aiMissingHint`; not for a plain "pick a model", which the picker says
+// itself). `onChange` gets the analysis as changed.
+function renderEmailAnalysis(analysis, onChange) {
+  const seg = accSeg([['off', t('watch.off')], ['lite', t('watch.level.lite')]], analysis.level,
+    level => onChange({ ...analysis, level }));
+  const body = accEl('div', 'page-text email__text');
+  if (analysis.level === 'off') {
+    body.append(t('email.analysis_off'));
+    return { seg, body };
+  }
+  const picker = aiModelPicker(analysis.model, model => onChange({ ...analysis, model }));
+  body.append(...parts('email.analysis_lite', { picker }));
+  const ai = aiModelOf(analysis.model);
+  if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
+    body.append(notice('hint', ...aiMissingHint(ai, t('feature.email_analysis'))));
+  }
+  return { seg, body };
+}
+
+// Whether `analysis` is on but its pick wouldn't work (the host refuses a
+// fetch then).
+function emailAnalysisBlocked(analysis) {
+  return analysis.level !== 'off' && !!aiModelOf(analysis.model).problem;
+}
+
+// Fetch email's third section, Analysis: built again on its changes, and
+// when the accounts change (the pick's problems).
+function renderEmailAnalysisSection() {
+  const { seg, body } = renderEmailAnalysis(email.analysis, analysis => {
+    email.analysis = analysis;
+    renderEmailAnalysisSection();
+    scheduleRenderEmailMatches();
+  });
+  const head = accEl('div', 'section-head', t('email.section.analysis'));
+  head.append(seg);
+  email.els.analysis.replaceChildren(head, body);
+}
+
+// ----------------------------------------------------------------------------
 // rendering: the matches pane
 
 const scheduleRenderEmailMatches = oncePerFrame(() => {
@@ -796,6 +855,9 @@ function renderEmailFooter() {
 
   if (replacing) {
     footer.append(accEl('div', 'note email__warning', t('email.replacing', { n: replacing })));
+  }
+  if (emailAnalysisBlocked(email.analysis)) {
+    footer.append(accEl('div', 'note email__warning', t('email.analysis_blocked')));
   }
   if (email.fetchError) footer.append(accEl('div', 'error-note', email.fetchError));
   return footer;

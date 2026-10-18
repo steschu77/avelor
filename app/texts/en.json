@@ -126,24 +126,37 @@
   "accounts.test": "Test",
   "accounts.testing": "Testing…",
   "accounts.this_month": "This month",
-  "accounts.ticked_note": "Ticked models are offered wherever a model is picked: in the assistant.",
+  "accounts.ticked_note": "Ticked models are offered wherever a model is picked: in the assistant, Fetch email.",
   "accounts.unknown": "Unknown",
   "accounts.unknown_account": "Unknown account",
   "accounts.used_by": "Used by",
+  "accounts.used_fetch": "Fetch email · {email}",
   "accounts.where_answers": "where {name} answers",
   "accounts.works": {
     "one": "Works · {n} model",
     "other": "Works · {n} models"
   },
+  "ai.account_gone": "The AI account is gone.",
   "ai.add_provider": "For {feature}, add an AI provider under Accounts.",
   "ai.answered": "{name} answered {status}: {why}",
   "ai.check_failed": "Checking {name} failed: {error}",
   "ai.choose_provider": "Choose an AI provider.",
   "ai.enter_key": "Enter the API key.",
   "ai.failed": "{name} failed: {error}",
+  "ai.failed.emails": {
+    "one": "{failed} of {n} email couldn't be analysed",
+    "other": "{failed} of {n} emails couldn't be analysed"
+  },
+  "ai.failed.files": {
+    "one": "{failed} of {n} file couldn't be read",
+    "other": "{failed} of {n} files couldn't be read"
+  },
+  "ai.failures": "{failed}; {error}",
+  "ai.item_failed": "“{title}”: {error}",
   "ai.key_again": "For {feature}, enter {name}’s key again under Accounts.",
   "ai.key_rejected": "The key was rejected.",
   "ai.key_rejected_why": "The key was rejected: {why}",
+  "ai.limit_for": "For {feature}, {name} has reached its spend limit; raise it under Accounts.",
   "ai.no_key": "The account has no key.",
   "ai.not_offered": "For {feature}, {model} is no longer offered; tick it under Accounts or pick another model.",
   "ai.not_running": "{name} isn't reachable at {address}. Is it running?",
@@ -151,12 +164,22 @@
   "ai.picked_account_gone": "For {feature}, the picked model’s account is gone; pick another model.",
   "ai.spend_limit_above_zero": "The spend limit must be an amount above 0.",
   "ai.spend_limit_reached": "{name} has reached its spend limit of {limit} this month; raise it under Accounts.",
+  "ai.tick_then_pick": "For {feature}, tick a model under Accounts, then pick it.",
   "ai.timeout": "{name} didn't answer in time.",
   "ai.unreachable": "{name} isn't reachable: {why}",
+  "analysis.asked": {
+    "one": "{error} (asked once)",
+    "other": "{error} (asked {n} times)"
+  },
+  "analysis.cut_off": "The model ran out of room before it finished its answer (its context window or its output limit).",
+  "analysis.label.email": "Analysing email · {email}",
+  "analysis.not_json": "The answer wasn't the JSON object asked for.",
+  "analysis.notices.email": "Email analysis · {email}",
   "assistant.new": "New",
   "assistant.placeholder": "Ask anything…",
   "assistant.send": "Send (Enter)",
   "assistant.switch_title": "Conversations about what is shown",
+  "attachments.reading": "Reading attachments · {email}",
   "bank.count.bookings": {
     "one": "{n} booking",
     "other": "{n} bookings"
@@ -256,6 +279,7 @@
   "conflict.when_day": "on {date} at {time}",
   "conflict.when_today": "at {time}",
   "context.open": "Open",
+  "count.analysed": "{n} analysed",
   "count.conflicts": {
     "one": "{n} conflict",
     "other": "{n} conflicts"
@@ -278,6 +302,7 @@
     "one": "{n} item",
     "other": "{n} items"
   },
+  "count.left": "{n} left",
   "count.messages": {
     "one": "{n} message",
     "other": "{n} messages"
@@ -290,6 +315,7 @@
   "count.replaced": "{n} replaced",
   "count.restored": "{n} restored",
   "count.skipped": "{n} skipped",
+  "count.unchanged": "{n} unchanged",
   "count.updated": "{n} updated",
   "dash.all_closed": "All cards are closed.",
   "dash.card.conversations": "Recent conversations",
@@ -361,6 +387,9 @@
   "email.add_label_title": "Add a label",
   "email.all_must_match": "all conditions must match",
   "email.all_of": "all of",
+  "email.analysis_blocked": "The analysis is on: pick a model that works for it, or turn it off.",
+  "email.analysis_lite": "Sends each new email to {picker} for its kind, a clean title, and labels and projects from this vault.",
+  "email.analysis_off": "New emails keep their subject as title; nothing is sent to an AI.",
   "email.any_of": "any of",
   "email.attachments": "Attachments",
   "email.auto_sync_failed": "Email auto-sync of {email} failed.",
@@ -416,6 +445,7 @@
     "other": "{n} selected emails are already in the vault: fetching replaces their bodies, and edits to them are lost. Title, projects, labels and threads stay."
   },
   "email.search_failed": "Searching failed.",
+  "email.section.analysis": "2 · Analysis",
   "email.section.filter": "1 · Filter",
   "email.select.all": "All",
   "email.select.new": "New only",
@@ -454,6 +484,7 @@
   "event.moved_from": "moved from {from}",
   "event.tentative": "Tentative",
   "feature.conversations": "conversations",
+  "feature.email_analysis": "the email analysis",
   "feature.ocr": "OCR",
   "field.cancel": "Cancel",
   "field.checking": "Checking…",
@@ -491,9 +522,12 @@
     "one": "{n} file couldn't be read",
     "other": "{n} files couldn't be read"
   },
+  "item.write_failed": "could not be written.",
   "job.failed": "failed: {error}",
   "job.nothing_new": "nothing new",
+  "job.nothing_to_analyse": "nothing to analyse",
   "job.nothing_to_fetch": "nothing to fetch",
+  "job.notice": "{job}: {text}",
   "job.spend_limit": "spend limit reached",
   "job.stop": "Stop",
   "job.stopped": "stopped",
@@ -641,6 +675,8 @@
   "props.status": "Status",
   "props.when": "When",
   "props.where": "Where",
+  "reader.no_text": "The file has no text.",
+  "reader.unread": "Could not read the file.",
   "recurring.from": "from {day}",
   "save.account": "Could not save the account.",
   "save.change": "Could not save the change.",
@@ -835,6 +871,8 @@
   "vault_op.new": "New",
   "vault_op.trash": "Trash",
   "vault_op.vault": "Vault",
+  "watch.level.lite": "Lite",
+  "watch.off": "Off",
   "week.of": "Week of {day} · {what}",
   "workspace.accounts": "Accounts",
   "workspace.trash": "Trash",

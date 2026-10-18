@@ -126,24 +126,37 @@
   "accounts.test": "Testen",
   "accounts.testing": "Wird getestet …",
   "accounts.this_month": "Diesen Monat",
-  "accounts.ticked_note": "Angehakte Modelle werden überall angeboten, wo ein Modell gewählt wird: im Assistenten.",
+  "accounts.ticked_note": "Angehakte Modelle werden überall angeboten, wo ein Modell gewählt wird: im Assistenten, bei E-Mails abrufen.",
   "accounts.unknown": "Unbekannt",
   "accounts.unknown_account": "Unbekanntes Konto",
   "accounts.used_by": "Genutzt von",
+  "accounts.used_fetch": "E-Mails abrufen · {email}",
   "accounts.where_answers": "wo {name} antwortet",
   "accounts.works": {
     "one": "Funktioniert · {n} Modell",
     "other": "Funktioniert · {n} Modelle"
   },
+  "ai.account_gone": "Das KI-Konto gibt es nicht mehr.",
   "ai.add_provider": "Für {feature} füge unter Konten einen KI-Anbieter hinzu.",
   "ai.answered": "{name} antwortete {status}: {why}",
   "ai.check_failed": "Die Prüfung von {name} ist fehlgeschlagen: {error}",
   "ai.choose_provider": "Wähle einen KI-Anbieter.",
   "ai.enter_key": "Gib den API-Schlüssel ein.",
   "ai.failed": "{name} ist fehlgeschlagen: {error}",
+  "ai.failed.emails": {
+    "one": "Nicht analysiert: {failed} von {n} E-Mail",
+    "other": "Nicht analysiert: {failed} von {n} E-Mails"
+  },
+  "ai.failed.files": {
+    "one": "Nicht gelesen: {failed} von {n} Datei",
+    "other": "Nicht gelesen: {failed} von {n} Dateien"
+  },
+  "ai.failures": "{failed}; {error}",
+  "ai.item_failed": "„{title}“: {error}",
   "ai.key_again": "Für {feature} gib den Schlüssel von {name} unter Konten erneut ein.",
   "ai.key_rejected": "Der Schlüssel wurde abgelehnt.",
   "ai.key_rejected_why": "Der Schlüssel wurde abgelehnt: {why}",
+  "ai.limit_for": "Für {feature} hat {name} sein Ausgabenlimit erreicht; erhöhe es unter Konten.",
   "ai.no_key": "Das Konto hat keinen Schlüssel.",
   "ai.not_offered": "Für {feature} wird {model} nicht mehr angeboten; hake es unter Konten an oder wähle ein anderes Modell.",
   "ai.not_running": "{name} ist unter {address} nicht erreichbar. Läuft es?",
@@ -151,12 +164,22 @@
   "ai.picked_account_gone": "Für {feature} gibt es das Konto des gewählten Modells nicht mehr; wähle ein anderes Modell.",
   "ai.spend_limit_above_zero": "Das Ausgabenlimit muss ein Betrag über 0 sein.",
   "ai.spend_limit_reached": "{name} hat sein Ausgabenlimit von {limit} in diesem Monat erreicht; erhöhe es unter Konten.",
+  "ai.tick_then_pick": "Für {feature} hake unter Konten ein Modell an und wähle es dann.",
   "ai.timeout": "{name} hat nicht rechtzeitig geantwortet.",
   "ai.unreachable": "{name} ist nicht erreichbar: {why}",
+  "analysis.asked": {
+    "one": "{error} (einmal gefragt)",
+    "other": "{error} ({n}-mal gefragt)"
+  },
+  "analysis.cut_off": "Dem Modell ging der Platz aus, bevor es seine Antwort beendet hatte (sein Kontextfenster oder sein Ausgabelimit).",
+  "analysis.label.email": "E-Mails werden analysiert · {email}",
+  "analysis.not_json": "Die Antwort war nicht das angefragte JSON-Objekt.",
+  "analysis.notices.email": "E-Mail-Analyse · {email}",
   "assistant.new": "Neu",
   "assistant.placeholder": "Frag etwas …",
   "assistant.send": "Senden (Eingabe)",
   "assistant.switch_title": "Unterhaltungen über das Gezeigte",
+  "attachments.reading": "Anhänge werden gelesen · {email}",
   "bank.count.bookings": {
     "one": "{n} Buchung",
     "other": "{n} Buchungen"
@@ -256,6 +279,7 @@
   "conflict.when_day": "am {date} um {time}",
   "conflict.when_today": "um {time}",
   "context.open": "Öffnen",
+  "count.analysed": "{n} analysiert",
   "count.conflicts": {
     "one": "{n} Konflikt",
     "other": "{n} Konflikte"
@@ -278,6 +302,7 @@
     "one": "{n} Eintrag",
     "other": "{n} Einträge"
   },
+  "count.left": "{n} übrig",
   "count.messages": {
     "one": "{n} Nachricht",
     "other": "{n} Nachrichten"
@@ -290,6 +315,7 @@
   "count.replaced": "{n} ersetzt",
   "count.restored": "{n} wiederhergestellt",
   "count.skipped": "{n} übersprungen",
+  "count.unchanged": "{n} unverändert",
   "count.updated": "{n} aktualisiert",
   "dash.all_closed": "Alle Karten sind geschlossen.",
   "dash.card.conversations": "Neueste Unterhaltungen",
@@ -361,6 +387,9 @@
   "email.add_label_title": "Label hinzufügen",
   "email.all_must_match": "alle Bedingungen müssen passen",
   "email.all_of": "alle davon",
+  "email.analysis_blocked": "Die Analyse ist an: Wähle ein Modell, das dafür funktioniert, oder schalte sie aus.",
+  "email.analysis_lite": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor.",
+  "email.analysis_off": "Neue E-Mails behalten ihren Betreff als Titel; nichts wird an eine KI gesendet.",
   "email.any_of": "eines davon",
   "email.attachments": "Anhänge",
   "email.auto_sync_failed": "Der Auto-Sync der E-Mails von {email} ist fehlgeschlagen.",
@@ -416,6 +445,7 @@
     "other": "{n} ausgewählte E-Mails sind schon im Tresor: Abrufen ersetzt ihre Inhalte, und Änderungen daran gehen verloren. Titel, Projekte, Labels und Verläufe bleiben."
   },
   "email.search_failed": "Die Suche ist fehlgeschlagen.",
+  "email.section.analysis": "2 · Analyse",
   "email.section.filter": "1 · Filter",
   "email.select.all": "Alle",
   "email.select.new": "Nur neue",
@@ -454,6 +484,7 @@
   "event.moved_from": "verschoben von {from}",
   "event.tentative": "Vorläufig",
   "feature.conversations": "Unterhaltungen",
+  "feature.email_analysis": "die E-Mail-Analyse",
   "feature.ocr": "die Texterkennung (OCR)",
   "field.cancel": "Abbrechen",
   "field.checking": "Wird geprüft …",
@@ -491,9 +522,12 @@
     "one": "{n} Datei konnte nicht gelesen werden",
     "other": "{n} Dateien konnten nicht gelesen werden"
   },
+  "item.write_failed": "konnte nicht geschrieben werden.",
   "job.failed": "fehlgeschlagen: {error}",
   "job.nothing_new": "nichts Neues",
+  "job.nothing_to_analyse": "nichts zu analysieren",
   "job.nothing_to_fetch": "nichts abzurufen",
+  "job.notice": "{job}: {text}",
   "job.spend_limit": "Ausgabenlimit erreicht",
   "job.stop": "Stoppen",
   "job.stopped": "gestoppt",
@@ -636,6 +670,8 @@
   "props.status": "Status",
   "props.when": "Wann",
   "props.where": "Wo",
+  "reader.no_text": "Die Datei enthält keinen Text.",
+  "reader.unread": "Die Datei konnte nicht gelesen werden.",
   "recurring.from": "ab {day}",
   "save.account": "Das Konto konnte nicht gespeichert werden.",
   "save.change": "Die Änderung konnte nicht gespeichert werden.",
@@ -830,6 +866,8 @@
   "vault_op.new": "Neu",
   "vault_op.trash": "Papierkorb",
   "vault_op.vault": "Tresor",
+  "watch.level.lite": "Leicht",
+  "watch.off": "Aus",
   "week.of": "Woche vom {day} · {what}",
   "workspace.accounts": "Konten",
   "workspace.trash": "Papierkorb",

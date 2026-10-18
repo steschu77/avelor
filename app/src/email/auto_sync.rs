@@ -203,6 +203,7 @@ pub(super) fn on_sync_listed(
         replace: HashSet::new(),
         origin: Origin::AutoSync,
         started,
+        analysis: None,
     };
     start_fetch(app, Text::new("email.syncing").arg("email", email), plan);
     pump(app);

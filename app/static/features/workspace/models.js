@@ -1,6 +1,6 @@
 // The models features pick (accounts.md#model-choice): the AI providers, a
-// pick as the host checks it and the picker a feature shows. The way to the
-// Accounts page is the `accounts.open` action
+// pick as the host checks it, the picker a feature shows and what keeps a pick
+// from working. The way to the Accounts page is the `accounts.open` action
 // (features/workspace/accounts.js).
 
 import { accEl } from '../../core/dom.js';
@@ -59,6 +59,28 @@ export function aiLimitReached(account) {
 // Whether any AI account offers a model to pick.
 export function aiAnyOffered() {
   return [...accounts.values()].some(a => isAiAccount(a) && a.offered?.length);
+}
+
+// What `aiModelOf` found wrong (`ai.problem`) for `feature` (a `feature.` text:
+// OCR, the scan analysis), in the host's words, and a button to Accounts where the fix
+// is there: elements to put into a note beside the feature's picker.
+export function aiMissingHint(ai, feature) {
+  const name = ai.account ? aiProvider(ai.account.kind).name : '';
+  const pick = aiAnyOffered() ? t('ai.pick_model', { feature }) : t('ai.tick_then_pick', { feature });
+  const text = {
+    provider: t('ai.add_provider', { feature }),
+    pick,
+    gone: t('ai.picked_account_gone', { feature }),
+    key: t('ai.key_again', { feature, name }),
+    offered: t('ai.not_offered', { feature, model: ai.model }),
+    limit: t('ai.limit_for', { feature, name }),
+  }[ai.problem];
+  const atAccounts = ai.problem !== 'gone' && (ai.problem !== 'pick' || !aiAnyOffered());
+  if (!atAccounts) return [accEl('span', '', text)];
+  const open = accEl('button', 'btn btn--ghost', t('workspace.accounts'));
+  open.type = 'button';
+  open.addEventListener('click', () => aiOpenAccounts(ai.account?.id));
+  return [accEl('span', '', text), open];
 }
 
 // The picker of a feature's model: a button naming the model `choice` picks

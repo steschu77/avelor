@@ -18,6 +18,13 @@ use av_utils::text::unique_trimmed;
 
 pub(crate) mod accounts;
 pub(crate) mod context;
+pub(crate) mod queue;
+
+/// The context window Ollama runs the model with for the email analysis;
+/// one value, as Ollama loads the model anew when it changes. The largest
+/// analysis request comes to about 4,000 tokens; the answer and a thinking
+/// model's reasoning need the rest.
+pub const CONTEXT_TOKENS: u32 = 16_384;
 
 // ----------------------------------------------------------------------------
 /// Send the account `id` to the page, if there is one: the `account` event.

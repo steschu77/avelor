@@ -298,11 +298,11 @@ pub struct List {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Email {
     /// The subject as the email came, kept once the title differs from it
-    /// (the email analysis); absent: the title is the
+    /// (the email analysis, email.md#analysis); absent: the title is the
     /// subject.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject: Option<String>,
-    /// What kind of email it is, as the email analysis found:
+    /// What kind of email it is, as the email analysis found (email.md#analysis):
     /// `request`, `reply`, `notification`, `newsletter` or `other`. A string,
     /// so a value written by hand never keeps the file from being read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -339,7 +339,7 @@ pub struct ConversationMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     /// Questions offered to ask next, while the message ends the path shown
-    /// (the email analysis's chat).
+    /// (the email analysis's chat, email.md#analysis).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suggestions: Vec<String>,
 }
