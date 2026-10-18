@@ -7,5 +7,6 @@ pub mod id;
 pub mod logger;
 pub mod random;
 pub mod secret;
+pub mod sha256;
 pub mod text;
 pub mod url;

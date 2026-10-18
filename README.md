@@ -57,6 +57,10 @@ change its files; `git restore data/forged` undoes them):
 cargo run -- data/forged
 ```
 
+Signing in to Google needs the app's OAuth client (a Desktop client of a
+Google Cloud project) in the build's environment: `AVELOR_GOOGLE_CLIENT_ID` and
+`AVELOR_GOOGLE_CLIENT_SECRET`. A build without them fails.
+
 On Linux the desktop shows the app and its icon once they are installed:
 
 ```sh

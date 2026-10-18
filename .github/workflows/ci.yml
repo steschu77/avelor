@@ -8,6 +8,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # The Google OAuth client is taken from the build (av-google/auth.rs).
+  AVELOR_GOOGLE_CLIENT_ID: ${{ secrets.AVELOR_GOOGLE_CLIENT_ID }}
+  AVELOR_GOOGLE_CLIENT_SECRET: ${{ secrets.AVELOR_GOOGLE_CLIENT_SECRET }}
+  # Without them (a pull request from a fork gets none) the build hides Google.
+  HIDE_GOOGLE: ${{ (secrets.AVELOR_GOOGLE_CLIENT_ID == '' || secrets.AVELOR_GOOGLE_CLIENT_SECRET == '') && '--features av-google/hide-google' || '' }}
 
 jobs:
   build:
@@ -25,7 +30,7 @@ jobs:
         uses: ./.github/actions/linux-deps
 
       - name: Release Build
-        run: cargo build --release
+        run: cargo build --release ${{ env.HIDE_GOOGLE }}
 
   check:
     name: Check (Linux only)
@@ -47,7 +52,7 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets ${{ env.HIDE_GOOGLE }} -- -D warnings
 
   test:
     name: Test (Linux only)
@@ -60,4 +65,4 @@ jobs:
         uses: ./.github/actions/linux-deps
 
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --verbose ${{ env.HIDE_GOOGLE }}
