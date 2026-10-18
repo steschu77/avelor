@@ -1,10 +1,12 @@
 //! Ollama's native API (docs.ollama.com/api), on this computer or at
-//! ollama.com (with an API key).
+//! ollama.com (with an API key). No file store: images go inline.
 
 use std::io::Read;
 
 use av_http::Method;
+use av_utils::base64::to_base64;
 use av_utils::cancel::Cancel;
+use av_utils::error::Error;
 use av_utils::error::Result;
 use serde_json::Value;
 use serde_json::json;
@@ -12,6 +14,7 @@ use serde_json::json;
 use crate::client::{CHAT_TIMEOUT, count, cut_short, open, stream_error};
 use crate::client::{Client, send_json, string};
 use crate::stream::read_lines;
+use crate::types::FileData;
 use crate::types::ModelInfo;
 use crate::types::{ChatRequest, ChatResponse, Part, StopReason};
 use crate::usage::Usage;
@@ -59,12 +62,22 @@ pub(crate) fn chat_body(req: &ChatRequest) -> Result<Value> {
     }
     for message in &req.messages {
         let mut texts = Vec::new();
+        let mut images = Vec::new();
         for part in &message.parts {
             match part {
                 Part::Text(text) => texts.push(text.clone()),
+                Part::Inline(file) if file.is_image() => images.push(to_base64(&file.data)),
+                Part::Inline(FileData { mime_type, .. }) => {
+                    return Err(Error::Unsupported {
+                        what: format!("{mime_type} files on Ollama"),
+                    });
+                }
             }
         }
-        let entry = json!({"role": message.role, "content": texts.join("\n\n")});
+        let mut entry = json!({"role": message.role, "content": texts.join("\n\n")});
+        if !images.is_empty() {
+            entry["images"] = json!(images);
+        }
         messages.push(entry);
     }
     let mut body = json!({"model": req.model, "messages": messages, "stream": true});
@@ -184,7 +197,38 @@ fn split_thinking(text: &str) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use av_utils::error::Error;
+    use crate::types::Message;
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn chat_body_inlines_images() {
+        let req = ChatRequest::new("gemma3").system("Be brief.").message(
+            Message::user("Describe.").with(Part::Inline(FileData {
+                name: "a.png".into(),
+                mime_type: "image/png".into(),
+                data: vec![1, 2, 3],
+            })),
+        );
+        assert_eq!(
+            chat_body(&req).unwrap(),
+            json!({
+                "model": "gemma3",
+                "stream": true,
+                "messages": [
+                    {"role": "system", "content": "Be brief."},
+                    {"role": "user", "content": "Describe.", "images": ["AQID"]},
+                ],
+            })
+        );
+
+        let pdf =
+            ChatRequest::new("gemma3").message(Message::user("?").with(Part::Inline(FileData {
+                name: "a.pdf".into(),
+                mime_type: "application/pdf".into(),
+                data: vec![],
+            })));
+        assert!(matches!(chat_body(&pdf), Err(Error::Unsupported { .. })));
+    }
 
     // ------------------------------------------------------------------------
     #[test]

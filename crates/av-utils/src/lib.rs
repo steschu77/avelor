@@ -7,6 +7,7 @@ pub mod fnv;
 pub mod fs;
 pub mod id;
 pub mod logger;
+pub mod mime;
 pub mod random;
 pub mod secret;
 pub mod sha256;

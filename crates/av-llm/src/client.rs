@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use av_http::{Method, Request, Response};
+use av_utils::base64::to_base64;
 use av_utils::cancel::Cancel;
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -19,6 +20,7 @@ use serde_json::Value;
 
 use crate::types::{Auth, ModelInfo, Provider};
 use crate::types::{ChatRequest, ChatResponse};
+use crate::types::{FileData, Part, Role};
 use crate::usage::Ledger;
 use crate::usage::{Price, list_price};
 use crate::{anthropic, gemini, mistral, ollama, openai};
@@ -118,6 +120,7 @@ impl Client {
         req: &ChatRequest,
         on_delta: &mut dyn FnMut(&str),
     ) -> Result<ChatResponse> {
+        self.check_request(req)?;
         let body = by_provider!(self.provider, chat_body(req))?;
         let mut resp = by_provider!(
             self.provider,
@@ -141,6 +144,21 @@ impl Client {
             resp.cost
         );
         Ok(resp)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Files only in user turns.
+    fn check_request(&self, req: &ChatRequest) -> Result<()> {
+        for message in &req.messages {
+            for part in &message.parts {
+                if message.role == Role::Assistant && !matches!(part, Part::Text(_)) {
+                    return Err(Error::InvalidArgument {
+                        arg: "a file in an assistant message".to_string(),
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 
     // ------------------------------------------------------------------------
@@ -282,6 +300,12 @@ pub(crate) fn io_error(err: io::Error) -> Error {
     *inner
         .downcast::<Error>()
         .expect("checked to be a av_utils error")
+}
+
+// ----------------------------------------------------------------------------
+/// `data:<type>;base64,<data>`, for providers taking files as URLs.
+pub(crate) fn data_url(file: &FileData) -> String {
+    format!("data:{};base64,{}", file.mime_type, to_base64(&file.data))
 }
 
 // ----------------------------------------------------------------------------

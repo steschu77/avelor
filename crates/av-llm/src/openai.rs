@@ -11,6 +11,7 @@ use av_utils::error::Result;
 use serde_json::Value;
 use serde_json::json;
 
+use crate::client::data_url;
 use crate::client::{CHAT_TIMEOUT, cut_short, open, stream_error};
 use crate::client::{Client, count, send_json, string};
 use crate::stream::read_sse;
@@ -52,13 +53,14 @@ pub(crate) fn chat_body(req: &ChatRequest) -> Result<Value> {
                 let content: Vec<Value> = message.parts.iter().map(input_part).collect();
                 json!({"role": "user", "content": content})
             }
-            // Text only.
+            // Text only (checked by the client).
             Role::Assistant => {
                 let text: String = message
                     .parts
                     .iter()
-                    .map(|part| match part {
-                        Part::Text(text) => text.as_str(),
+                    .filter_map(|part| match part {
+                        Part::Text(text) => Some(text.as_str()),
+                        _ => None,
                     })
                     .collect();
                 json!({"role": "assistant", "content": text})
@@ -77,6 +79,12 @@ pub(crate) fn chat_body(req: &ChatRequest) -> Result<Value> {
 fn input_part(part: &Part) -> Value {
     match part {
         Part::Text(text) => json!({"type": "input_text", "text": text}),
+        Part::Inline(file) if file.is_image() => {
+            json!({"type": "input_image", "image_url": data_url(file), "detail": "auto"})
+        }
+        Part::Inline(file) => {
+            json!({"type": "input_file", "filename": file.name, "file_data": data_url(file)})
+        }
     }
 }
 
@@ -186,15 +194,21 @@ fn read_stream(body: impl Read, on_delta: &mut dyn FnMut(&str)) -> Result<ChatRe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::FileData;
     use crate::types::Message;
     use av_utils::error::Error;
 
     // ------------------------------------------------------------------------
     #[test]
     fn chat_body_has_input_items() {
+        let image = FileData {
+            name: "a.png".into(),
+            mime_type: "image/png".into(),
+            data: vec![1, 2, 3],
+        };
         let req = ChatRequest::new("gpt-6-sol")
             .system("Be brief.")
-            .message(Message::user("Hi"))
+            .message(Message::user("Hi").with(Part::Inline(image)))
             .message(Message::assistant("Hello."))
             .message(Message::user("And this?"));
         assert_eq!(
@@ -207,6 +221,8 @@ mod tests {
                 "input": [
                     {"role": "user", "content": [
                         {"type": "input_text", "text": "Hi"},
+                        {"type": "input_image", "image_url": "data:image/png;base64,AQID",
+                            "detail": "auto"},
                     ]},
                     {"role": "assistant", "content": "Hello."},
                     {"role": "user", "content": [
