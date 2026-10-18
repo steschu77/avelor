@@ -24,6 +24,9 @@ use av_utils::is_false;
 
 pub(crate) mod folders;
 
+/// The key of the reading step's model in `WatchSettings::models`.
+pub const READ_STEP: &str = "read";
+
 // ----------------------------------------------------------------------------
 /// What a watch takes, and so how it reads a file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,8 +80,8 @@ pub struct WatchSettings {
     /// Images only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collect: Option<Collect>,
-    /// The model each step that sends a file to an AI picked, by step
-    /// (accounts.md#model-choice).
+    /// The model each step that sends a file to an AI picked, by step:
+    /// `READ_STEP` for reading images (accounts.md#model-choice).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub models: BTreeMap<String, ModelChoice>,
     /// Off: the watch isn't listed under Sources.
@@ -124,6 +127,12 @@ impl WatchSettings {
         } else {
             self.name.clone()
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The model `step` picked, if it did.
+    pub fn model(&self, step: &str) -> Option<&ModelChoice> {
+        self.models.get(step)
     }
 
     // ------------------------------------------------------------------------

@@ -47,6 +47,8 @@
   "new.pick_date": "Wählen Sie zuerst ein Datum",
   "new.pick_start": "Wählen Sie zuerst ein Startdatum",
   "panel.select_hint": "Wählen Sie ein Dokument aus der Liste.",
+  "scans.blurb_together": "Nur die Dateien, die Sie lesen, werden zur OCR gesendet.",
+  "scans.read_running": "Ein anderer Ordner wird noch gelesen; stoppen Sie ihn oder warten Sie darauf.",
   "watch.enter_folder": "Geben Sie einen Ordner an.",
   "watch.no_vault": "Ordnerüberwachungen werden im Tresor aufbewahrt: Öffnen Sie einen Tresor, um sie zu sehen.",
   "watch.none_yet": "Noch wird kein Ordner überwacht. Wählen Sie Ordner überwachen und dann die Art der Dateien darin.",

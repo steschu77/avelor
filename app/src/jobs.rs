@@ -16,6 +16,7 @@ use crate::analysis;
 use crate::app::App;
 use crate::email;
 use crate::protocol::Req;
+use crate::scans;
 use crate::texts::Text;
 use crate::{api, chat};
 
@@ -25,6 +26,7 @@ pub enum JobKind {
     Indexing,
     EmailFetch,
     CalendarSync,
+    ScanRead,
     EmailAnalysis,
 }
 
@@ -39,11 +41,15 @@ impl JobKind {
     // ------------------------------------------------------------------------
     /// Whether it belongs to the open vault, so a vault switch stops it
     /// first: it writes into the vault (email fetch, calendar sync, email
-    /// analysis).
+    /// analysis), or reads for one of its watches with one of its AI
+    /// accounts (scan read).
     fn vault_bound(self) -> bool {
         matches!(
             self,
-            JobKind::EmailFetch | JobKind::CalendarSync | JobKind::EmailAnalysis
+            JobKind::EmailFetch
+                | JobKind::CalendarSync
+                | JobKind::ScanRead
+                | JobKind::EmailAnalysis
         )
     }
 
@@ -54,6 +60,7 @@ impl JobKind {
             JobKind::Indexing => "Indexing",
             JobKind::EmailFetch => "Email fetch",
             JobKind::CalendarSync => "Calendar sync",
+            JobKind::ScanRead => "Scan read",
             JobKind::EmailAnalysis => "Email analysis",
         }
     }
@@ -196,6 +203,23 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
+    /// `run_job`, with progress reported as `App::run_with_progress`
+    /// does.
+    pub fn run_job_with_progress<P, T>(
+        &self,
+        id: Id,
+        work: impl FnOnce(crate::app::Progress<P>, &Cancel) -> T + Send + 'static,
+        on_progress: impl FnMut(&mut App, P) + Send + 'static,
+        apply: impl FnOnce(&mut App, T) + Send + 'static,
+    ) where
+        P: Send + 'static,
+        T: Send + 'static,
+    {
+        let progress = self.progress(on_progress);
+        self.run_job(id, move |cancel| work(progress, cancel), apply);
+    }
+
+    // ------------------------------------------------------------------------
     /// The `Cancel` of the job `id`; a cancelled one if the job has ended,
     /// so late work stops at once.
     fn job_cancel(&self, id: Id) -> Cancel {
@@ -226,8 +250,8 @@ impl App {
     // ------------------------------------------------------------------------
     /// Open `root` once the work bound to the open vault has stopped: the
     /// assistant's replies being written keep what they have so far (as
-    /// Stop does), email fetch, calendar sync and the email analyses are
-    /// stopped, and a sync first records what it already did. A newer
+    /// Stop does), email fetch, calendar sync, the reading of scans and the
+    /// email analyses are stopped, and a sync first records what it already did. A newer
     /// switch replaces this one.
     pub fn switch_vault_when_stopped(&mut self, root: PathBuf) {
         chat::stop_all(self);
@@ -275,7 +299,7 @@ pub fn cancel_job(app: &mut App, req: Req, id: Id) {
 
 // ----------------------------------------------------------------------------
 /// Stop the job `id`: its requests are cancelled, and the job ends -- at once
-/// (email fetch, email analysis), or once it has kept what it did
+/// (email fetch, scan read, email analysis), or once it has kept what it did
 /// (calendar sync, whose continuation runs with what the sync returned).
 pub fn stop(app: &mut App, id: Id) {
     let Some(kind) = app.jobs.running.get(&id).map(|job| job.kind) else {
@@ -285,6 +309,7 @@ pub fn stop(app: &mut App, id: Id) {
     app.stop_job(id);
     match kind {
         JobKind::EmailFetch => email::stop(app),
+        JobKind::ScanRead => scans::stop_read(app),
         JobKind::EmailAnalysis => analysis::stop(app, id),
         JobKind::CalendarSync | JobKind::Indexing => {}
     }
@@ -421,10 +446,10 @@ mod tests {
         assert_eq!(reply(&sent, 2)["err"]["code"], "unsupported");
         assert!(!h.app.job_stopping(indexing));
 
-        let fetch = h
+        let read = h
             .app
-            .start_job(JobKind::EmailFetch, Text::new("email.fetching"), 2);
-        let request = json!({ "id": 3, "cmd": "cancel_job", "args": { "id": fetch } });
+            .start_job(JobKind::ScanRead, Text::new("email.fetching"), 2);
+        let request = json!({ "id": 3, "cmd": "cancel_job", "args": { "id": read } });
         let sent = h.send(&request.to_string());
         assert_eq!(reply(&sent, 3), json!({ "re": 3, "ok": null }));
         let last = events(&sent, "job").pop().unwrap();
@@ -478,6 +503,29 @@ mod tests {
         h.wait_indexed();
         let sent = h.take();
         assert!(!events(&sent, "vault").is_empty(), "{sent:?}");
+        assert_eq!(h.app.vault.root(), Some(other.as_path()));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_vault_switch_stops_the_reading_of_scans_too() {
+        let mut h = Harness::with_vault("switch-read", &[note_file(0)]);
+        let other = h.vault().parent().unwrap().join("other");
+        let (name, text) = note_file(1);
+        fs_write(&other.join(name), &text);
+
+        // Its watch and its AI account belong to the vault.
+        let read = h
+            .app
+            .start_job(JobKind::ScanRead, Text::new("email.fetching"), 2);
+        h.take();
+        api::switch_to(&mut h.app, other.clone());
+        h.run_queue();
+        assert_eq!(events(&h.take(), "job")[0]["state"], "stopping");
+        assert_eq!(h.app.vault.root(), Some(h.vault().as_path()));
+
+        h.app.end_job(read, vec![Text::new("job.stopped")]);
+        h.wait_indexed();
         assert_eq!(h.app.vault.root(), Some(other.as_path()));
     }
 

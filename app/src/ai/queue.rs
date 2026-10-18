@@ -45,6 +45,20 @@ impl<T> AiQueue<T> {
     }
 
     // ------------------------------------------------------------------------
+    /// `items` after those waiting.
+    pub fn extend(&mut self, items: impl IntoIterator<Item = T>) {
+        for item in items {
+            self.waiting.push_back(item);
+            self.total += 1;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn account(&self) -> Option<Id> {
+        self.account
+    }
+
+    // ------------------------------------------------------------------------
     pub fn is_busy(&self) -> bool {
         self.current.is_some()
     }
@@ -53,6 +67,16 @@ impl<T> AiQueue<T> {
     /// Whether no item waits.
     pub fn is_empty(&self) -> bool {
         self.waiting.is_empty()
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn current(&self) -> Option<&T> {
+        self.current.as_ref()
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn waiting(&self) -> impl Iterator<Item = &T> {
+        self.waiting.iter()
     }
 
     // ------------------------------------------------------------------------
