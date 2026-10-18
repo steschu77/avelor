@@ -101,6 +101,7 @@ enum Command {
     EmailSearch(email::SearchRequest),
     EmailHeaders(email::HeadersRequest),
     EmailFetch(email::FetchRequest),
+    SetEmailSync(email::SyncChange),
     // The assistant's conversations (`chat`).
     ChatOpen(Target),
     ChatSend(chat::SendRequest),
@@ -315,6 +316,7 @@ impl Command {
             "email_search" => Command::EmailSearch(from_value(args)?),
             "email_headers" => Command::EmailHeaders(from_value(args)?),
             "email_fetch" => Command::EmailFetch(from_value(args)?),
+            "set_email_sync" => Command::SetEmailSync(from_value(args)?),
             "chat_open" => Command::ChatOpen(from_value(args)?),
             "chat_send" => Command::ChatSend(from_value(args)?),
             "chat_stop" => Command::ChatStop(from_value(args)?),
@@ -397,6 +399,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::EmailSearch(a) => email::email_search(app, req, a),
         Command::EmailHeaders(a) => email::email_headers(app, req, a),
         Command::EmailFetch(a) => email::email_fetch(app, req, a),
+        Command::SetEmailSync(a) => email::set_email_sync(app, req, a),
         Command::ChatOpen(a) => chat::chat_open(app, req, a.id),
         Command::ChatSend(a) => chat::chat_send(app, req, a),
         Command::ChatStop(a) => chat::chat_stop(app, req, a.conversation),

@@ -192,6 +192,14 @@ pub fn shown(text: &Value) -> String {
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
+/// The reply among `sent` (`call`): the message with `re`, not the last one,
+/// as a worker's events may come after it.
+pub fn reply(sent: &[Value]) -> &Value {
+    let reply = sent.iter().find(|m| m.get("re").is_some());
+    reply.unwrap_or_else(|| panic!("no reply in {sent:?}"))
+}
+
+// ----------------------------------------------------------------------------
 /// Each message as its event's name, `reply` for an answer.
 pub fn shape(sent: &[Value]) -> Vec<&str> {
     sent.iter()

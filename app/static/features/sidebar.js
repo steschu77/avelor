@@ -195,6 +195,13 @@ function renderSidebar() {
         sidebarNavItem('nav-item nav-item--compact', source.name, 'nav-item__icon', source.icon, () => selectSource(source.key),
           source.kind === 'email' ? { icon: '#i-arrow-sync', title: `Sync ${source.name}`, onClick: () => syncSource(source) } : undefined));
       updateNavItem(row, sourceCounts.get(source.key) ?? 0, source.key === selected_source);
+      // A source that syncs on its own shows its button pressed.
+      const button = row.querySelector('.nav-item__action');
+      if (button) {
+        setAria(button, 'aria-pressed', source.autoSync);
+        const action = source.kind === 'email' ? t('sidebar.fetch_email') : `Sync ${source.name}`;
+        button.title = source.autoSync ? t('sidebar.auto_sync_on', { action }) : t('sidebar.sync', { name: source.name });
+      }
       sourceRows.push(row);
     }
   }
@@ -286,13 +293,16 @@ function toggleArchived() {
 
 // Sources: what a connected account feeds into the vault. Email follows the
 // granted access; calendars are the ones checked on the Accounts page
-// (`account.calendars`).
+// (`account.calendars`). `autoSync`: the host syncs it on its own.
 function accountSources(account) {
   if (account.kind !== 'google' || account.status !== 'connected') return [];
   const { id, scope = {}, email = t('sidebar.email') } = account;
   const sources = [];
   if (scope.email && scope.email !== 'off') {
-    sources.push({ key: `${id}\nemail`, kind: 'email', account: id, name: email, icon: KIND_ICONS.email.icon });
+    sources.push({
+      key: `${id}\nemail`, kind: 'email', account: id, name: email, icon: KIND_ICONS.email.icon,
+      autoSync: !!account.fetch_email?.auto_sync?.enabled,
+    });
   }
   if (scope.calendar && scope.calendar !== 'off') {
     for (const calendar of account.calendars ?? []) {

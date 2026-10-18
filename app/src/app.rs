@@ -12,6 +12,7 @@ use crate::chat::ChatState;
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
 use crate::documents::DocumentState;
+use crate::email;
 use crate::email::EmailState;
 use crate::google::accounts::GoogleAccounts;
 use crate::indexing::Indexing;
@@ -461,6 +462,14 @@ impl App {
             log::warn!("Could not save the settings: {e}");
             self.notice(Text::new("save.settings"));
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The clock ticked (the window's timer, every minute): start what the
+    /// app does on its own -- the email auto-syncs that are due.
+    pub fn on_clock(&mut self) {
+        let now = DateTime::now();
+        email::auto_sync(self, now);
     }
 
     // ------------------------------------------------------------------------
