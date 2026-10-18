@@ -23,6 +23,7 @@
   "ai.picked_account_gone": "Para {feature}, la cuenta del modelo elegido ya no existe; elija otro modelo.",
   "ai.spend_limit_reached": "{name} ha alcanzado su límite de gasto de {limit} este mes; súbalo en Cuentas.",
   "assistant.placeholder": "Pregunte lo que quiera…",
+  "calendar.reconnect": "vuelva a conectar la cuenta",
   "chat.ask_anything": "Pregunte lo que quiera…",
   "chat.click_to_edit": "Haga clic para editar y volver a enviar",
   "chat.guide.pick": "Elija el modelo con el que se responden las conversaciones.",

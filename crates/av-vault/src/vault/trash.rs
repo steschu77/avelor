@@ -12,7 +12,9 @@ use crate::schema::layout;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::error::Result;
+use av_utils::fs::write_atomic;
 use av_utils::id::Id;
+use av_utils::text::renormalize;
 
 // ----------------------------------------------------------------------------
 /// A file in the trash ([`Index::trashed`], vault.md#trash): where it
@@ -181,6 +183,33 @@ impl Index {
         self.insert(entry);
         changes.created = Some(id);
         Ok(id)
+    }
+
+    /// Apply `change` to the document of the trashed file `local` and write
+    /// it back if that changed anything -- e.g. a calendar sync marking an
+    /// event it deleted in Google. The file stays in the trash; a read-only
+    /// one, or one whose frontmatter didn't parse, isn't written
+    /// ([`Error::NotWritable`]).
+    pub fn edit_trashed(
+        &self,
+        local: &Path,
+        change: impl FnOnce(&mut Document),
+    ) -> Result<SaveOutcome> {
+        let (path, format) = self.trashed_file(local)?;
+        let readonly = fs::metadata(&path)?.permissions().readonly();
+        let mut entry = load(path, local.to_path_buf(), readonly, format)?;
+        if !entry.is_writable() {
+            return Err(Error::NotWritable {
+                path: local.to_path_buf(),
+            });
+        }
+        change(&mut entry.doc);
+        if !entry.doc.is_dirty() {
+            return Ok(SaveOutcome::Unchanged);
+        }
+        let text = renormalize(&entry.bom, entry.crlf, entry.doc.save());
+        write_atomic(&entry.path, text.as_bytes())?;
+        Ok(SaveOutcome::Saved)
     }
 
     /// Delete the trashed file `local` for good, also a read-only one, and

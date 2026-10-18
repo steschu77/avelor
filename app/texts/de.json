@@ -168,6 +168,18 @@
   },
   "cal.previous_month": "Vorheriger Monat",
   "cal.today": "Heute",
+  "calendar.count.skipped": {
+    "one": "{n} Wiederholung übersprungen",
+    "other": "{n} Wiederholungen übersprungen"
+  },
+  "calendar.create_failed": "Der Kalender konnte im Tresor nicht angelegt werden.",
+  "calendar.no_access": "Das Konto hat keinen Zugriff auf Kalender.",
+  "calendar.not_a_source": "Der Kalender ist keine Quelle des Kontos.",
+  "calendar.reconnect": "Konto neu verbinden",
+  "calendar.sync_failed": "{subject} konnte nicht abgeglichen werden.",
+  "calendar.sync_running": "Ein anderer Kalenderabgleich läuft noch.",
+  "calendar.syncing": "Kalender wird abgeglichen · {name}",
+  "calendar.write_failed": "Ein abgeglichener Termin konnte nicht geschrieben werden.",
   "card.chat": "Über das Dokument chatten",
   "card.delete": "Dokument löschen",
   "card.edit": "Dokument bearbeiten",
@@ -242,6 +254,11 @@
   "conflict.when_day": "am {date} um {time}",
   "conflict.when_today": "um {time}",
   "context.open": "Öffnen",
+  "count.conflicts": {
+    "one": "{n} Konflikt",
+    "other": "{n} Konflikte"
+  },
+  "count.deleted": "{n} gelöscht",
   "count.entities": {
     "one": "{n} Eintrag",
     "other": "{n} Einträge"
@@ -266,9 +283,12 @@
   "count.new": "{n} neu",
   "count.of_kind": "{kind}: {n}",
   "count.of_total": "{at} von {n}",
+  "count.pushed": "{n} übertragen",
   "count.read": "{n} gelesen",
   "count.replaced": "{n} ersetzt",
+  "count.restored": "{n} wiederhergestellt",
   "count.skipped": "{n} übersprungen",
+  "count.updated": "{n} aktualisiert",
   "dash.all_closed": "Alle Karten sind geschlossen.",
   "dash.card.conversations": "Neueste Unterhaltungen",
   "dash.card.files": "Neueste Dateien",
@@ -469,6 +489,8 @@
     "one": "{n} Datei konnte nicht gelesen werden",
     "other": "{n} Dateien konnten nicht gelesen werden"
   },
+  "job.failed": "fehlgeschlagen: {error}",
+  "job.nothing_new": "nichts Neues",
   "job.nothing_to_fetch": "nichts abzurufen",
   "job.spend_limit": "Ausgabenlimit erreicht",
   "job.stop": "Stoppen",
@@ -677,6 +699,7 @@
   "sidebar.star": "Mit Stern markieren",
   "sidebar.switch_vault": "Tresor wechseln …",
   "sidebar.sync": "{name} abgleichen",
+  "sidebar.sync_failed": "{name} konnte nicht abgeglichen werden: {error}",
   "sidebar.unstar": "Stern entfernen",
   "sidebar.workspace": "Arbeitsbereich",
   "signin.declined": "Die Anmeldung wurde abgelehnt.",

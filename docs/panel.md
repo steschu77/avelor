@@ -346,7 +346,8 @@ entity (`renderCardChips`, `features/panel/panel.js`).
 Every entity's title is set by the host through `set_title`
 (`Index::set_title`), whatever its kind (`architecture.md#conventions`):
 an empty title removes the `title` key, and the file keeps its name
-(`vault.md#filenames`).
+(`vault.md#filenames`). A synced event's new title waits to be pushed to
+Google like any other edit of it.
 
 - The pen at the end of a card's title line and the thread header's
   (`#thread-rename-btn`) make the title editable in place (`renameEntity`
