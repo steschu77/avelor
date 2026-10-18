@@ -7,6 +7,11 @@
 //! the vault, the engine lists and pushes on a worker, and its effects are
 //! applied through the vault edit.
 //!
+//! A calendar's auto-sync syncs it every 15 minutes, started by the clock
+//! (`App::on_clock`): a quiet list of Google's changes first, then -- only if
+//! there is something to pull or push -- a sync job like the sidebar's, with
+//! what was listed.
+//!
 //! A two-way sync deletes in Google the calendar's events deleted in the vault
 //! (their files in the trash), and marks each trashed file cancelled; one that
 //! Google changed since comes back from the trash.
@@ -17,11 +22,13 @@
 //! last synced.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use av_google::auth::ScopeAccess;
 use av_google::calendar::{Event as GoogleEvent, EventTime};
+use av_google::calendar_sync::Changes;
 use av_google::calendar_sync::{self, CalendarJob, Effect, LocalEvent, SyncJob, SyncOutput};
 use av_google::client::Client;
 use av_utils::datetime::DateTime;
@@ -38,6 +45,7 @@ use serde_json::json;
 use crate::app::App;
 use crate::documents;
 use crate::google;
+use crate::google::{SYNC_EVERY, first_due, later};
 use crate::google_accounts::CalendarSource;
 use crate::jobs::{self, JobKind};
 use crate::protocol::Req;
@@ -50,16 +58,28 @@ const CANCELLED: &str = "cancelled";
 /// How far back a calendar's first sync reaches, in seconds: a year.
 const FIRST_SYNC_SPAN: i64 = 365 * 86_400;
 
+// ----------------------------------------------------------------------------
+/// A calendar source: the account, and Google's id of the calendar.
+type SourceKey = (Id, String);
+
 /// Per event of a sync, by its vault-relative path: its id, and the
 /// snapshot it was planned with.
 type PlannedEvents = HashMap<PathBuf, (Id, String)>;
 
 // ----------------------------------------------------------------------------
 /// What the app keeps for the calendar sync: the sync in progress (one
-/// at a time).
+/// at a time), and the auto-syncs' schedule.
 #[derive(Default)]
 pub struct CalendarState {
     sync: Option<CalendarSync>,
+    /// Per calendar, when its auto-sync may run next; none: at the next
+    /// chance. Cleared when a vault opens.
+    next_sync: HashMap<SourceKey, DateTime>,
+    /// The calendar whose auto-sync list is in flight.
+    listing: Option<SourceKey>,
+    /// The calendars whose last auto-sync failed: only the first failure is
+    /// shown.
+    failing: HashSet<SourceKey>,
 }
 
 // ----------------------------------------------------------------------------
@@ -67,9 +87,14 @@ pub struct CalendarState {
 struct CalendarSync {
     job_id: Id,
     account: Id,
+    /// Google's id of the synced calendar.
+    source: String,
     /// The vault's calendar entity of the synced calendar.
     calendar: Id,
     events: PlannedEvents,
+    /// Started by the auto-sync: what failed is shown only if the calendar
+    /// isn't failing already (`CalendarState::failing`).
+    auto_sync: bool,
 }
 
 // ----------------------------------------------------------------------------
@@ -429,7 +454,7 @@ pub fn calendar_sync(app: &mut App, req: Req, request: SyncRequest) {
         }
     };
     let push = access == ScopeAccess::Full;
-    let built = build_job(app, account, calendar, &source, push);
+    let built = build_job(app, account, calendar, &source, push, None);
     let job_id = start(app, client, account, calendar, &source, built);
     req.ok(json!({ "job": job_id }));
 }
@@ -452,6 +477,50 @@ fn refuse_source(req: Req) {
 }
 
 // ----------------------------------------------------------------------------
+/// `set_calendar_sync`'s args.
+#[derive(Deserialize)]
+pub(crate) struct SyncSetting {
+    account: Id,
+    calendar: String,
+    enabled: bool,
+}
+
+// ----------------------------------------------------------------------------
+/// `set_calendar_sync {account, calendar, enabled}`: switch the auto-sync of
+/// one of the account's checked calendars on or off. Switched on, it is due
+/// at the clock's next tick. Answered after the `account` event.
+pub fn set_calendar_sync(app: &mut App, req: Req, setting: SyncSetting) {
+    let SyncSetting {
+        account,
+        calendar,
+        enabled,
+    } = setting;
+    if let Err(e) = app.google.get(account) {
+        return req.err(e);
+    }
+    if find_source(app, account, &calendar).is_none() {
+        return refuse_source(req);
+    }
+    let updated = app
+        .google
+        .update(account, |a| a.set_calendar_sync(&calendar, enabled));
+    match updated {
+        Ok(_) => {
+            log::info!("Calendar auto-sync of {calendar} ({account}): {enabled}");
+            if enabled {
+                app.calendar.next_sync.remove(&(account, calendar));
+            }
+            google::post(app, account);
+            req.ok(());
+        }
+        Err(e) => {
+            log::warn!("Could not save the account: {e}");
+            req.fail(e, "Could not save the account.");
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// The start of a calendar's first sync at `now`: a year back.
 fn first_sync_start(now: DateTime) -> DateTime {
     DateTime::from_unix_millis((now.as_unix() - FIRST_SYNC_SPAN) * 1000)
@@ -459,7 +528,9 @@ fn first_sync_start(now: DateTime) -> DateTime {
 
 // ----------------------------------------------------------------------------
 /// Sync `source` with its calendar entity `calendar` as a job, run on a
-/// worker: the job built from the vault (`build_job`). The job's id.
+/// worker: the job built from the vault (`build_job`). A job with changes
+/// listed already is an auto-sync's. The calendar's next auto-sync is then
+/// 15 minutes away. The job's id.
 fn start(
     app: &mut App,
     client: Arc<Client>,
@@ -470,17 +541,24 @@ fn start(
 ) -> Id {
     let label = format!("Syncing calendar · {}", source.name);
     let job_id = app.start_job(JobKind::CalendarSync, label, 1);
+    let auto_sync = job.calendars.iter().any(|c| c.listed.is_some());
     log::info!(
-        "Calendar sync {job_id}: {} of {account}, {} events, {}",
+        "Calendar sync {job_id}: {} of {account}, {} events, {}{}",
         source.id,
         events.len(),
-        if job.push { "two-way" } else { "pull only" }
+        if job.push { "two-way" } else { "pull only" },
+        if auto_sync { ", auto-sync" } else { "" }
     );
+    let key = (account, source.id.clone());
+    let next = later(DateTime::now(), SYNC_EVERY);
+    app.calendar.next_sync.insert(key, next);
     app.calendar.sync = Some(CalendarSync {
         job_id,
         account,
+        source: source.id.clone(),
         calendar,
         events,
+        auto_sync,
     });
     app.run_job(
         job_id,
@@ -488,6 +566,123 @@ fn start(
         move |app, result| apply(app, job_id, result),
     );
     job_id
+}
+
+// ----------------------------------------------------------------------------
+/// A vault opened: its calendars' auto-syncs are due as soon as its scan
+/// has ended.
+pub(crate) fn vault_opened(app: &mut App) {
+    app.calendar.next_sync.clear();
+    app.calendar.failing.clear();
+}
+
+// ----------------------------------------------------------------------------
+/// The calendars whose auto-sync may run, in the accounts' order: switched
+/// on, of a connected account with calendar access.
+fn auto_sync_sources(app: &App) -> Vec<SourceKey> {
+    app.google
+        .iter()
+        .filter(|account| {
+            let client = account.client.as_ref();
+            client.is_some_and(|c| c.scope().calendar != ScopeAccess::None)
+        })
+        .flat_map(|account| {
+            let sources = account.file.google.calendars.iter();
+            let on = sources.filter(|source| source.auto_sync);
+            on.map(|source| (account.id(), source.id.clone()))
+        })
+        .collect()
+}
+
+// ----------------------------------------------------------------------------
+/// The clock ticked, or the vault scan ended (`App::on_clock`): list
+/// the changes of the first calendar that is due -- one with auto-sync on,
+/// of a connected account with calendar access, last synced 15 minutes ago
+/// -- unless the
+/// scan, a sync or another auto-sync's list still runs. One at a time; the
+/// next tick takes the next calendar. The list writes nothing;
+/// `on_auto_listed` decides on a job.
+pub fn auto_sync(app: &mut App, now: DateTime) {
+    let state = &app.calendar;
+    if app.scanning() || state.sync.is_some() || state.listing.is_some() {
+        return;
+    }
+    let sources = auto_sync_sources(app);
+    let Some(key) = first_due(sources, &state.next_sync, now) else {
+        return;
+    };
+    let (account, calendar_id) = key.clone();
+    let client = app.google.connected(account);
+    let source = find_source(app, account, &calendar_id);
+    let (Ok(client), Some(source)) = (client, source) else {
+        return;
+    };
+
+    app.calendar
+        .next_sync
+        .insert(key.clone(), later(now, SYNC_EVERY));
+    app.calendar.listing = Some(key.clone());
+    let calendar = find_calendar(app, account, &calendar_id);
+    let cal = calendar_job(app, account, calendar, &source);
+    let time_min = first_sync_start(now).as_iso8601();
+    let root = app.vault.root().map(Path::to_path_buf);
+    log::info!("Calendar auto-sync of {calendar_id} ({account}): listing");
+    app.run(
+        move |cancel| calendar_sync::list_changes(&client, cancel, &cal, &time_min),
+        move |app, result| on_auto_listed(app, key, root, result),
+    );
+}
+
+// ----------------------------------------------------------------------------
+/// An auto-sync's list answered: sync the calendar as a job with what was
+/// listed -- or do nothing, if that changes nothing and nothing waits to be
+/// pushed (no job, no write). Dropped if another vault opened or the
+/// calendar's auto-sync was switched off meanwhile.
+fn on_auto_listed(app: &mut App, key: SourceKey, root: Option<PathBuf>, result: Result<Changes>) {
+    app.calendar.listing = None;
+    let (account, calendar_id) = key.clone();
+    let source = find_source(app, account, &calendar_id);
+    let on = auto_sync_sources(app).contains(&key);
+    let (Some(source), true) = (source, on && app.vault.root() == root.as_deref()) else {
+        return log::info!(
+            "Calendar auto-sync of {calendar_id}: dropped, the vault or setting changed"
+        );
+    };
+    let changes = match result {
+        Ok(changes) => changes,
+        Err(e) => return auto_sync_failed(app, key, &source.name, &e),
+    };
+    if app.calendar.sync.is_some() {
+        // A sync started meanwhile: again at the next tick.
+        app.calendar.next_sync.insert(key, DateTime::now());
+        return;
+    }
+    let Ok(client) = app.google.connected(account) else {
+        return;
+    };
+    // Without a calendar entity there was no sync token: the full list is
+    // work, and the entity is made for it.
+    let calendar = match calendar_entity(app, account, &source) {
+        Ok(calendar) => calendar,
+        Err(e) => return auto_sync_failed(app, key, &source.name, &e),
+    };
+    let push = client.scope().calendar == ScopeAccess::Full;
+    let built = build_job(app, account, calendar, &source, push, Some(changes));
+    if !built.0.has_work() {
+        app.calendar.failing.remove(&key);
+        return log::info!("Calendar auto-sync of {calendar_id}: nothing new");
+    }
+    start(app, client, account, calendar, &source, built);
+}
+
+// ----------------------------------------------------------------------------
+/// An auto-sync of `key` failed before its job: said once, not every 15
+/// minutes while offline.
+fn auto_sync_failed(app: &mut App, key: SourceKey, name: &str, error: &Error) {
+    log::warn!("Calendar auto-sync of {name} failed: {error}");
+    if app.calendar.failing.insert(key) {
+        app.notice(&format!("Calendar auto-sync of {name} failed."));
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -536,16 +731,17 @@ fn calendar_entity(app: &mut App, account: Id, source: &CalendarSource) -> Resul
 }
 
 // ----------------------------------------------------------------------------
-/// The job for the calendar entity `calendar`, two-way if `push`; and its
-/// events' ids and snapshots by path. Two-way, it also holds the calendar's
-/// events in the trash that Google still has, to delete there, under their
-/// path in `.trash`.
+/// The job for the calendar entity `calendar`, two-way if `push`, with the
+/// changes an auto-sync `listed` already; and its events' ids and snapshots
+/// by path. Two-way, it also holds the calendar's events in the trash that
+/// Google still has, to delete there, under their path in `.trash`.
 fn build_job(
     app: &App,
     account: Id,
     calendar: Id,
     source: &CalendarSource,
     push: bool,
+    listed: Option<Changes>,
 ) -> (SyncJob, PlannedEvents) {
     let mut events = HashMap::new();
     let mut locals: Vec<LocalEvent> = app
@@ -590,6 +786,7 @@ fn build_job(
         exception,
         calendars: vec![CalendarJob {
             events: locals,
+            listed,
             ..calendar_job(app, account, Some(calendar), source)
         }],
     };
@@ -721,11 +918,16 @@ fn apply(app: &mut App, job_id: Id, result: Result<SyncOutput>) {
         failed: failures.len(),
         ..Counts::default()
     };
+    // An auto-sync of a calendar that failed before says it only once.
+    let key = (sync.account, sync.source.clone());
+    let quiet = sync.auto_sync && app.calendar.failing.contains(&key);
     // The host's words in the status bar, the error in the log
     // (`App::notice`).
     let fail = |app: &App, message: &str, error: &Error| {
         log::warn!("{message}: {error}");
-        app.notice(&format!("{message}."));
+        if !quiet {
+            app.notice(&format!("{message}."));
+        }
     };
     for failure in failures {
         let message = format!("Could not sync {}", failure.subject);
@@ -748,6 +950,11 @@ fn apply(app: &mut App, job_id: Id, result: Result<SyncOutput>) {
                 fail(app, "Could not write a synced event", &e);
             }
         }
+    }
+    if counts.failed == 0 {
+        app.calendar.failing.remove(&key);
+    } else if sync.auto_sync {
+        app.calendar.failing.insert(key);
     }
     finish(app, sync, &counts);
 }
@@ -1200,6 +1407,7 @@ mod tests {
     use crate::testing::trashed;
     use crate::testing::{CONNECTED, DISCONNECTED, Harness, parse, shape, with_google};
     use av_google::calendar::Attendee;
+    use av_google::calendar_sync::Failure;
     use av_google::calendar_sync::Report;
     use serde_json::Value;
     use std::fs;
@@ -1249,11 +1457,32 @@ mod tests {
         h.app.calendar.sync = Some(CalendarSync {
             job_id,
             account: connected(),
+            source: "cal1".into(),
             calendar: Id::parse(CAL).unwrap(),
             events,
+            auto_sync: false,
         });
         h.take();
         job_id
+    }
+
+    // ------------------------------------------------------------------------
+    /// The auto-sync of `cal1`, switched on.
+    fn switch_on(h: &mut Harness) -> SourceKey {
+        let args = json!({ "account": CONNECTED, "calendar": "cal1", "enabled": true });
+        let sent = h.call("set_calendar_sync", args);
+        assert_eq!(sent.last().unwrap()["ok"], Value::Null, "{sent:?}");
+        (connected(), "cal1".to_string())
+    }
+
+    // ------------------------------------------------------------------------
+    fn listed(full: bool) -> Result<Changes> {
+        Ok(Changes {
+            deltas: Vec::new(),
+            next_sync_token: Some("token-2".into()),
+            time_min: "2025-10-07T00:00:00Z".into(),
+            full,
+        })
     }
 
     // ------------------------------------------------------------------------
@@ -1479,7 +1708,7 @@ mod tests {
     fn planned(h: &Harness, push: bool) -> (SyncJob, PlannedEvents) {
         let source = find_source(&h.app, connected(), "cal1").unwrap();
         let calendar = Id::parse(CAL).unwrap();
-        build_job(&h.app, connected(), calendar, &source, push)
+        build_job(&h.app, connected(), calendar, &source, push, None)
     }
 
     // ------------------------------------------------------------------------
@@ -1570,6 +1799,147 @@ mod tests {
         let text = fs::read_to_string(&file).unwrap();
         assert!(text.contains("status: cancelled"), "{text}");
         assert!(h.app.vault.index().entry(&id).is_none());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_calendars_auto_sync_is_switched_on_and_off() {
+        let mut h = with_google("calendar-auto-set", FULL, &[]);
+        let key = (connected(), "cal1".to_string());
+        let soon = later(DateTime::now(), 60);
+        h.app.calendar.next_sync.insert(key.clone(), soon);
+        let set =
+            |enabled: bool| json!({ "account": CONNECTED, "calendar": "cal1", "enabled": enabled });
+        let sent = h.call("set_calendar_sync", set(true));
+        assert_eq!(shape(&sent), ["account", "reply"]);
+        assert_eq!(sent[0]["data"]["calendars"][0]["auto_sync"], true);
+        let next = &h.app.calendar.next_sync;
+        assert!(!next.contains_key(&key), "due at the next tick");
+        let file = h.vault().join(".avelor/accounts/google_a.yaml");
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.contains("auto-sync: true"), "{text}");
+
+        let sent = h.call("set_calendar_sync", set(false));
+        assert_eq!(sent[0]["data"]["calendars"][0]["auto_sync"], false);
+        assert!(!fs::read_to_string(&file).unwrap().contains("auto-sync"));
+
+        let unknown = json!({ "account": Id::generate(), "calendar": "cal1", "enabled": true });
+        let sent = h.call("set_calendar_sync", unknown);
+        assert_eq!(sent[0]["err"]["code"], "not_found");
+        let other = json!({ "account": CONNECTED, "calendar": "cal2", "enabled": true });
+        let sent = h.call("set_calendar_sync", other);
+        assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn auto_sync_waits_for_its_time_a_sync_and_the_vault_scan() {
+        let mut h = with_google("calendar-auto-wait", FULL, &[calendar_file()]);
+        let now = DateTime::now();
+        auto_sync(&mut h.app, now);
+        assert!(h.app.calendar.listing.is_none(), "not switched on");
+
+        // The disconnected account's calendar doesn't count.
+        let key = switch_on(&mut h);
+        let args = json!({ "account": DISCONNECTED, "calendar": "cal1", "enabled": true });
+        h.call("set_calendar_sync", args);
+        assert_eq!(auto_sync_sources(&h.app), std::slice::from_ref(&key));
+
+        let soon = later(now, 60);
+        h.app.calendar.next_sync.insert(key.clone(), soon);
+        auto_sync(&mut h.app, now);
+        assert!(h.app.calendar.listing.is_none(), "not due yet");
+
+        h.app.calendar.next_sync.clear();
+        let job_id = begin(&mut h, HashMap::new());
+        auto_sync(&mut h.app, now);
+        assert!(h.app.calendar.listing.is_none(), "a sync runs");
+        apply(&mut h.app, job_id, Err(Error::Cancelled));
+
+        // Opening the vault again: the scan runs first.
+        let root = h.vault();
+        crate::api::switch_to(&mut h.app, root.clone());
+        assert!(h.app.scanning());
+        auto_sync(&mut h.app, now);
+        assert!(h.app.calendar.listing.is_none(), "the vault scan runs");
+        // Not due when the scan ends, so no list goes out in this test.
+        h.app.calendar.next_sync.insert(key, soon);
+        h.wait_scanned();
+        assert!(!h.app.scanning() && h.app.calendar.listing.is_none());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_listing_with_nothing_new_leaves_no_trace_and_a_failure_shows_once() {
+        let synced = format!(
+            "id: {CAL}\ntitle: Personal\nremote:\n  account: {CONNECTED}\n  remote:\n  - calendar-id: cal1\n  - sync-token: token-1\ncalendar: {{}}\n"
+        );
+        let file = "Calendar/personal.cal.yaml";
+        let mut h = with_google("calendar-auto-listed", FULL, &[(file, synced)]);
+        let key = switch_on(&mut h);
+        h.take();
+        let root = Some(h.vault());
+
+        on_auto_listed(&mut h.app, key.clone(), root.clone(), listed(false));
+        h.run_queue();
+        assert!(h.take().is_empty(), "nothing new: no job, no write");
+        assert!(h.app.calendar.sync.is_none());
+        let text = fs::read_to_string(h.vault().join(file)).unwrap();
+        assert!(text.contains("token-1"), "the token stays: {text}");
+
+        let other = Some(h.vault().with_file_name("other"));
+        on_auto_listed(&mut h.app, key.clone(), other, listed(true));
+        assert!(h.app.calendar.sync.is_none(), "another vault: dropped");
+
+        let error = || {
+            Err(Error::Network {
+                msg: "offline".into(),
+            })
+        };
+        on_auto_listed(&mut h.app, key.clone(), root.clone(), error());
+        on_auto_listed(&mut h.app, key.clone(), root.clone(), error());
+        let sent = parse(&h.take());
+        assert_eq!(shape(&sent), ["notice"], "shown once: {sent:?}");
+        on_auto_listed(&mut h.app, key.clone(), root.clone(), listed(false));
+        assert!(h.app.calendar.failing.is_empty(), "working again");
+
+        let manual = begin(&mut h, HashMap::new());
+        on_auto_listed(&mut h.app, key.clone(), root, listed(true));
+        let sync = h.app.calendar.sync.as_ref().unwrap();
+        assert_eq!(sync.job_id, manual, "the running sync goes on");
+        let next = h.app.calendar.next_sync[&key];
+        assert!(next <= DateTime::now(), "again at the next tick");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_auto_syncs_failures_are_shown_until_a_run_succeeds() {
+        let mut h = with_google("calendar-auto-failing", FULL, &[calendar_file()]);
+        let failed = || SyncOutput {
+            effects: Vec::new(),
+            report: Report {
+                failures: vec![Failure {
+                    subject: "Dentist".into(),
+                    error: Error::Network {
+                        msg: "offline".into(),
+                    },
+                }],
+                ..Report::default()
+            },
+        };
+        let run = |h: &mut Harness, output: SyncOutput| {
+            let job_id = begin(h, HashMap::new());
+            h.app.calendar.sync.as_mut().unwrap().auto_sync = true;
+            apply(&mut h.app, job_id, Ok(output));
+            h.run_queue();
+            let sent = parse(&h.take());
+            sent.iter().filter(|m| m["ev"] == "notice").count()
+        };
+        assert_eq!(run(&mut h, failed()), 1);
+        assert_eq!(run(&mut h, failed()), 0, "failing already");
+        assert_eq!(run(&mut h, SyncOutput::default()), 0);
+        assert!(h.app.calendar.failing.is_empty());
+        assert_eq!(run(&mut h, failed()), 1, "failing again");
     }
 
     // ------------------------------------------------------------------------

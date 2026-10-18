@@ -247,7 +247,8 @@ pub struct CalendarSource {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
-    /// Written only when on.
+    /// Synced every 15 minutes (`calendar::auto_sync`); written only when
+    /// on.
     #[serde(default, skip_serializing_if = "is_false")]
     pub auto_sync: bool,
     #[serde(flatten)]
@@ -303,6 +304,7 @@ pub struct CalendarMeta<'a> {
     pub id: &'a str,
     pub name: &'a str,
     pub color: Option<&'a str>,
+    pub auto_sync: bool,
 }
 
 impl<'a> From<&'a CalendarSource> for CalendarMeta<'a> {
@@ -311,6 +313,7 @@ impl<'a> From<&'a CalendarSource> for CalendarMeta<'a> {
             id: &source.id,
             name: &source.name,
             color: source.color.as_deref(),
+            auto_sync: source.auto_sync,
         }
     }
 }
@@ -420,6 +423,20 @@ impl Account {
             _ => return false,
         }
         true
+    }
+
+    // ------------------------------------------------------------------------
+    /// Switch the auto-sync of the checked calendar `id` on or off; whether
+    /// that changed anything (false for a calendar that isn't checked).
+    pub fn set_calendar_sync(&mut self, id: &str, enabled: bool) -> bool {
+        let calendars = &mut self.file.google.calendars;
+        match calendars.iter_mut().find(|c| c.id == id) {
+            Some(source) if source.auto_sync != enabled => {
+                source.auto_sync = enabled;
+                true
+            }
+            _ => false,
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -964,6 +981,39 @@ last-sync: 2026-09-27T10:30:00Z
         let account = accounts.get(id).unwrap();
         let family = calendar("fam@group", "Family");
         assert_eq!(account.meta().calendars, [CalendarMeta::from(&family)]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_calendars_auto_sync_is_written_only_while_on() {
+        let dirs = Dirs::new();
+        dirs.account("google_a.yaml", GOOGLE, Some("1//t"));
+        let mut accounts = dirs.accounts(&["google_a.yaml"]);
+        let id = accounts.iter().next().unwrap().id();
+        let mut set = |f: &dyn Fn(&mut Account) -> bool| accounts.update(id, f).unwrap();
+        assert!(set(
+            &|a| a.set_calendar(calendar("fam@group", "Family"), true)
+        ));
+        assert!(
+            !set(&|a| a.set_calendar_sync("other@group", true)),
+            "not checked"
+        );
+        assert!(set(&|a| a.set_calendar_sync("fam@group", true)));
+        assert!(
+            !set(&|a| a.set_calendar_sync("fam@group", true)),
+            "on already"
+        );
+
+        let text = fs::read_to_string(dirs.folder.join("google_a.yaml")).unwrap();
+        assert!(text.contains("auto-sync: true"), "{text}");
+        let saved = dirs.load("google_a.yaml").file.google.calendars;
+        assert!(saved[0].auto_sync);
+        assert!(accounts.get(id).unwrap().meta().calendars[0].auto_sync);
+
+        let off = accounts.update(id, |a| a.set_calendar_sync("fam@group", false));
+        assert!(off.unwrap());
+        let text = fs::read_to_string(dirs.folder.join("google_a.yaml")).unwrap();
+        assert!(!text.contains("auto-sync"), "{text}");
     }
 
     // ------------------------------------------------------------------------

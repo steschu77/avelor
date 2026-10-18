@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::ai_accounts::AiAccounts;
+use crate::calendar;
 use crate::calendar::CalendarState;
 use crate::chat::ChatState;
 use crate::close::CloseState;
@@ -237,7 +238,7 @@ pub struct App {
     pub mail: MailState,
 
     /// The calendar sync (`calendar`): the sync in progress, one at a
-    /// time.
+    /// time, and the auto-syncs' schedule.
     pub calendar: CalendarState,
 
     /// The close asked of the page (`close`).
@@ -485,10 +486,11 @@ impl App {
 
     // ------------------------------------------------------------------------
     /// The clock ticked (the window's timer, every minute): start what the
-    /// app does on its own -- the mail auto-syncs that are due.
+    /// app does on its own -- the mail and calendar auto-syncs that are due.
     pub fn on_clock(&mut self) {
         let now = DateTime::now();
         mail::auto_sync(self, now);
+        calendar::auto_sync(self, now);
     }
 
     // ------------------------------------------------------------------------

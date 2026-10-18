@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::accounts;
 use crate::app::App;
 use crate::app::Prefs;
+use crate::calendar;
 use crate::documents;
 use crate::mail;
 use crate::protocol::Req;
@@ -77,6 +78,7 @@ pub(crate) fn open_vault(app: &mut App, root: &Path) {
     accounts::open(app, root);
     vault_settings::open(app, root);
     mail::vault_opened(app);
+    calendar::vault_opened(app);
     app.run_scan(root.to_path_buf());
 }
 

@@ -1,7 +1,7 @@
 # Avelor — Calendar sync
 
 > Google Calendar ⟷ vault: syncing a checked calendar, the rules of the
-> two-way sync and how the sync is built. The account and its calendars are
+> two-way sync, the auto-sync and how the sync is built. The account and its calendars are
 > `accounts.md`; the event format, `vault.md#event` and `vault.md#remote`; the
 > calendar lens, `ui.md#calendar`.
 
@@ -53,6 +53,19 @@ named after the calendar beside it, e.g. `Calendar/Personal/`.
   delete stays in the vault, and the event comes back as a new one once it
   changes in Google. Emptying the trash before the sync means the event
   isn't deleted in Google.
+
+## Auto-sync <a id="auto-sync"></a>
+
+Each checked calendar in the account pane has an Auto-sync check. Ticked,
+the calendar syncs on its own as an account's mail does
+(`mail.md#mail-auto-sync`): one calendar at a time, never beside another
+sync; a sync from the sync button counts as a run.
+
+- Each run first asks Google what changed, writing nothing. A run with
+  nothing to fetch and nothing to write back leaves no trace; otherwise it
+  is a "Syncing calendar · <name>" job like the sync button's.
+- The calendar source's sync button is shown pressed while auto-sync is
+  on; it still syncs right away.
 
 ## Flows
 
@@ -114,3 +127,8 @@ sequenceDiagram
   takes a listed event whose id is `google_id_for` of an unsynced local
   event as that event's own earlier insert — recorded if equal, patched if
   it changed since, never written to the vault a second time.
+- **Auto-sync**: `calendar::auto_sync` runs from the clock
+  (`architecture.md#the-clock`) and after the vault scan, waiting for a
+  running fetch or sync: a quiet `list_changes` first (`on_auto_listed`),
+  and a job only if `SyncJob::has_work`. Its schedule (`SYNC_EVERY`,
+  `first_due`) is shared with the mail auto-sync in `google.rs`.

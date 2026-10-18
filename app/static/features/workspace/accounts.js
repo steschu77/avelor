@@ -188,6 +188,15 @@ function setCalendarSource(account, calendar, checked) {
   scheduleRenderAccounts();
 }
 
+// Switch a checked calendar's auto-sync; the pane follows the account.
+function setCalendarSync(account, calendar, enabled) {
+  rpcCall('set_calendar_sync', { account, calendar, enabled }).catch(e => {
+    const message = accountErrorText(e, account);
+    if (message) accountError = { account, message };
+    scheduleRenderAccounts();
+  });
+}
+
 // The levels a (re)connect asks for: the edited ones, else what is granted.
 function accountLevels(account) {
   return accountDrafts.get(account)
@@ -302,7 +311,8 @@ function renderAccessRows(account) {
 }
 
 // Checkboxes for the account's calendars: checked ones show as sources in
-// the sidebar. Loaded once per account (and again after a reconnect).
+// the sidebar, each with its auto-sync. Loaded once per account (and again
+// after a reconnect).
 function renderCalendarSources(account) {
   const list = accEl('div', 'accounts__sub');
   list.append(accEl('span', 'label', 'Calendars shown as sources'));
@@ -339,12 +349,27 @@ function renderCalendarSources(account) {
     if (calendar.primary) pick.append(accEl('span', 'label', 'primary'));
     if (missing.includes(calendar)) pick.append(accEl('span', 'label', 'not found on Google'));
     row.append(pick);
+    if (source && !calendarToggles.has(toggle)) row.append(renderCalendarSync(account, source));
     list.append(row);
   }
   if (!calendars.length && !missing.length) {
     list.append(accEl('span', 'page-text', 'This account has no calendars.'));
   }
   return list;
+}
+
+// A checked calendar's auto-sync: a check that has the host sync it every
+// 15 minutes (`set_calendar_sync`).
+function renderCalendarSync(account, source) {
+  const on = !!source.auto_sync;
+  const auto = accEl('label', 'accounts__auto');
+  const check = accEl('button', 'check', on ? '\u2713' : '');
+  check.type = 'button';
+  check.setAttribute('aria-pressed', String(on));
+  check.title = on ? 'Stop the auto-sync' : 'Sync this calendar every 15 minutes';
+  check.addEventListener('click', () => setCalendarSync(account, source.id, !on));
+  auto.append(check, accEl('span', 'label', 'Auto-sync'));
+  return auto;
 }
 
 // "Continue in your browser..." with Cancel, or the last error, if any.

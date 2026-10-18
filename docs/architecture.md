@@ -60,7 +60,7 @@ read by OCR.
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
 | `accounts.md` | Google and AI accounts: files, secrets, states, the Accounts page, AI uses and the spend limit |
 | `mail.md` | Fetch mail, the mail auto-sync |
-| `calendar.md` | calendar sync, its rules |
+| `calendar.md` | calendar sync, its rules, auto-sync |
 | `assistant.md` | the assistant: conversations, context, streaming |
 
 ## Doc conventions
@@ -200,11 +200,11 @@ this helper, not a slot with callbacks of its own.
 Work the app starts on its own goes through `App::on_clock`: the
 window's timer (`SetTimer`, once a minute; on Linux a GLib timeout) queues it through the UI queue
 as `WM_ACTIVATE` queues `on_activated`, so it runs like every other way
-in, with no thread or handle of its own. It starts the mail
-auto-syncs that are due (`mail::auto_sync`, which
-waits for the vault scan and for a running fetch); the end of a
-vault scan calls it too. Their schedule (`SYNC_EVERY`, `first_due`) is
-in `google.rs`.
+in, with no thread or handle of its own. It starts the mail and calendar
+auto-syncs that are due (`mail::auto_sync`, `calendar::auto_sync`, which
+wait for the vault scan and for a running fetch or sync); the end of a
+vault scan calls them too. Their schedule (`SYNC_EVERY`, `first_due`) is
+shared in `google.rs`.
 
 ### Closing
 
@@ -346,7 +346,7 @@ side never touches the vault side; `app` is the only bridge.
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked item; `create`, a new AI conversation; dispatch tests against a fake Ollama |
 | `ai_accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
 | `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); their tests |
-| `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; their dispatch tests |
+| `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`); their dispatch tests |
 
 ## Platforms <a id="platforms"></a>
 

@@ -104,6 +104,7 @@ enum Command {
     SetMailSync(mail::SyncChange),
     // Calendar sync (`calendar`).
     CalendarSync(calendar::SyncRequest),
+    SetCalendarSync(calendar::SyncSetting),
     // The assistant's chats (`chat`).
     ChatOpen(Target),
     ChatSend(chat::SendRequest),
@@ -320,6 +321,7 @@ impl Command {
             "mail_fetch" => Command::MailFetch(from_value(args)?),
             "set_mail_sync" => Command::SetMailSync(from_value(args)?),
             "calendar_sync" => Command::CalendarSync(from_value(args)?),
+            "set_calendar_sync" => Command::SetCalendarSync(from_value(args)?),
             "chat_open" => Command::ChatOpen(from_value(args)?),
             "chat_send" => Command::ChatSend(from_value(args)?),
             "chat_stop" => Command::ChatStop(from_value(args)?),
@@ -404,6 +406,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::MailFetch(a) => mail::mail_fetch(app, req, a),
         Command::SetMailSync(a) => mail::set_mail_sync(app, req, a),
         Command::CalendarSync(a) => calendar::calendar_sync(app, req, a),
+        Command::SetCalendarSync(a) => calendar::set_calendar_sync(app, req, a),
         Command::ChatOpen(a) => chat::chat_open(app, req, a.id),
         Command::ChatSend(a) => chat::chat_send(app, req, a),
         Command::ChatStop(a) => chat::chat_stop(app, req, a.conversation),

@@ -14,6 +14,7 @@ use av_vault::vault::{self, ScanControl, ScanEvent};
 use serde::Serialize;
 
 use crate::app::{App, Progress, Task};
+use crate::calendar;
 use crate::jobs::JobKind;
 use crate::mail;
 
@@ -179,8 +180,8 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// The scan `id` read every file: the vault knows its mails now, so
-    /// the auto-syncs may run.
+    /// The scan `id` read every file: the vault knows its mails and events
+    /// now, so the auto-syncs may run.
     fn end_scan(&mut self, id: Id) {
         if !self.scan.is_running(id) {
             return;
@@ -188,6 +189,7 @@ impl App {
         self.scan.running = None;
         let now = DateTime::now();
         mail::auto_sync(self, now);
+        calendar::auto_sync(self, now);
     }
 }
 

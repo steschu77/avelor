@@ -70,6 +70,8 @@ Every account file has:
     * `id`: Google's calendar id
     * `name`, `color`: as Google shows them, refreshed whenever the list is
       loaded
+    * `auto-sync`: `true` while the calendar syncs on its own
+      (`calendar.md#auto-sync`); absent when off
   * `connected`: when the account was first connected
   * `disconnected`: when the account was disconnected (`accounts.md#connection`)
   * `mail`: what the mail import remembers (`mail.md`), written on each
@@ -102,6 +104,7 @@ google:
     - id: jan@gmail.com
       name: Jan
       color: "#9fe1e7"
+      auto-sync: true
   connected: 2026-09-27T10:14:00Z
   mail:
     filter:
@@ -193,7 +196,8 @@ accounts with a detail pane.
   `disconnected`, so connecting the same Google account again keeps the
   account's `id` (and with it every document's `remote:` link). Removing
   a disconnected account deletes its file. The pane lists the account's
-  calendars; a checked one becomes a source (`calendar.md`); the Mail row has its own Auto-sync check and
+  calendars; a checked one becomes a source (`calendar.md`), with its
+  Auto-sync check beside it; the Mail row has its own Auto-sync check and
   filter (`mail.md#mail-auto-sync`).
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
   and Gemini with an API key, and Ollama by its address. A key or an address
