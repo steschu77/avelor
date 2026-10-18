@@ -405,6 +405,12 @@ mark {
   color: var(--c-label);
 }
 
+/* a short note at the right (a language in the run's words) */
+.menu__desc {
+  margin-left: auto;
+  padding-left: 18px;
+}
+
 /* Resize grip on a pane's left edge; --end puts it on the right edge. */
 .grip {
   position: absolute;
@@ -574,6 +580,36 @@ mark {
 
 .form-field>.seg {
   margin-left: auto;
+}
+
+/* a drop-down box in a field: what is picked, a hint, the caret at its
+   end; a click opens its menu (the email filter's date, a setting). */
+.drop-box {
+  width: 240px;
+  max-width: 100%;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-ink);
+  font: 400 var(--fs-body)/1 var(--f-serif);
+  text-align: left;
+  cursor: pointer;
+}
+
+.drop-box__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.drop-box__caret {
+  color: var(--c-label);
 }
 
 /* a text input in a field, without a box of its own; it fills the rest of

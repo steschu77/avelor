@@ -9,9 +9,10 @@ import { t } from '../core/text.js';
 import { store } from '../model/state.js';
 import { iconEl } from './icons.js';
 
-// The pages of the expanded vault area: op -> { close, submit? }. While one
-// is open, Esc closes it and Ctrl+Enter runs its main action (`submit`);
-// an open menu takes Esc first.
+// The pages of the expanded vault area: op -> { close, submit?, ofVault? }.
+// While one is open, Esc closes it and Ctrl+Enter runs its main action
+// (`submit`); an open menu takes Esc first. `ofVault: false`: it isn't about
+// the open vault, and stays when another opens.
 const vaultPages = new Map();
 
 export function registerVaultPage(op, page) {
@@ -82,6 +83,7 @@ const vaultOpTitles = {
   accounts: t('vault_op.accounts'),
   folders: t('vault_op.folders'),
   vault: t('vault_op.vault'),
+  settings: t('settings.name'),
   trash: t('vault_op.trash'),
 };
 const vaultAreaTitle = $("vault-area-title");
@@ -89,8 +91,8 @@ const vaultAreaTitle = $("vault-area-title");
 // Selecting an op titles the vault area and expands it. Each op renders
 // its own body (features/workspace/: accounts.js, folders.js, trash.js;
 // features/import/: email.js; features/new.js,
-// features/workspace/vault.js). Ops without a sidebar entry (Fetch email)
-// pass their title.
+// features/workspace/vault.js, features/workspace/settings.js). Ops without
+// a sidebar entry (Fetch email) pass their title.
 export function openVaultOp(op, title) {
   vaultAreaTitle.textContent = title ?? vaultOpTitles[op];
   if (store.getState().vault_op !== op) {

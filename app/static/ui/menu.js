@@ -24,11 +24,11 @@ function closeMenu() {
   }
 }
 
-// `items`: { label, hint?, icon?, checked?, separator?, dim?, run? } or
-// { head } -- `hint` is the small label on the right, `icon` an icon before
-// the label (`#i-<name>`), `checked` shows a check column, `separator` draws
-// a line above the item; `head` labels a section, the items up to the next
-// head. `options.head` is a label over the items; `options.matchWidth`
+// `items`: { label, hint?, desc?, icon?, checked?, separator?, dim?, run? }
+// or { head } -- `hint` is the small label on the right, `desc` a short note
+// there, `icon` an icon before the label (`#i-<name>`), `checked` shows a
+// check column, `separator` draws a line above the item; `head` labels a
+// section, the items up to the next head. `options.head` is a label over the items; `options.matchWidth`
 // makes the menu at least as wide as `anchor`. `options.filter`
 // ({ placeholder, extra(text) }) puts a text box over the items, focused:
 // typing keeps the items whose label contains the text (a head while an
@@ -74,6 +74,7 @@ export function showMenu(anchor, items, options = {}) {
       const hint = accEl('span', 'menu__hint', it.hint);
       mi.appendChild(hint);
     }
+    if (it.desc) mi.appendChild(accEl('span', 'note menu__desc', it.desc));
     if (it.run) mi.addEventListener('click', () => pick(it));
     return mi;
   };
@@ -165,6 +166,19 @@ export function showMenu(anchor, items, options = {}) {
   anchor.setAttribute('aria-expanded', 'true');
 }
 
+// ----------------------------------------------------------------------------
+// `button` as a drop-down box: what is picked (`label`), a `hint`, the caret;
+// its click opens its menu.
+export function dropBox(button, label, hint = '') {
+  button.type = 'button';
+  button.className = 'drop-box';
+  button.setAttribute('aria-haspopup', 'menu');
+  button.replaceChildren(accEl('span', 'drop-box__label', label), ...(hint ? [accEl('span', 'meta', hint)] : []),
+    iconEl('#i-chevron-down', 'drop-box__caret'));
+  return button;
+}
+
+// ----------------------------------------------------------------------------
 // close menu on outside click (a click on its anchor toggles it instead)
 document.addEventListener('mousedown', e => {
   if (openMenu && !e.target.closest('.menu') && !openMenuAnchor?.contains(e.target))

@@ -11,6 +11,7 @@ use crate::calendar;
 use crate::documents;
 use crate::email;
 use crate::protocol::Req;
+use crate::settings;
 use crate::sys;
 use crate::texts::{self, Text};
 use crate::vault_settings;
@@ -24,7 +25,8 @@ use serde_json::json;
 /// at start, and was set aside (`config::load_config`, which logs why), is
 /// told now, in the status bar. Opens the vault of the last session (or the
 /// command line's, `ConfigStore::vault`), with its accounts and watches;
-/// answers whether this build has Google (`App::has_google`).
+/// answers whether this build has Google (`App::has_google`), and the
+/// language (`settings::language`).
 pub fn ready(app: &mut App, req: Req) {
     if app.config.take_error().is_some() {
         app.notice(Text::new("config.unread"));
@@ -32,7 +34,7 @@ pub fn ready(app: &mut App, req: Req) {
     if let Some(root) = app.config.vault().map(Path::to_path_buf) {
         open_vault(app, &root);
     }
-    req.ok(json!({ "google": app.has_google }));
+    req.ok(json!({ "google": app.has_google, "language": settings::language(app) }));
 }
 
 // ----------------------------------------------------------------------------
@@ -203,7 +205,8 @@ mod tests {
     fn ready_answers_at_once() {
         let mut h = Harness::new("ready");
         let sent = h.call("ready", json!({}));
-        assert_eq!(sent, [json!({ "re": 1, "ok": { "google": true } })]);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0]["ok"]["google"], json!(true));
     }
 
     // ------------------------------------------------------------------------
@@ -215,12 +218,10 @@ mod tests {
 
         let sent = h.call("ready", json!({}));
         let notice = json!({ "level": "error", "text": { "key": "config.unread" } });
-        let ready = json!({ "re": 1, "ok": { "google": true } });
-        assert_eq!(
-            sent,
-            [json!({ "ev": "notice", "data": notice }), ready.clone()]
-        );
-        assert_eq!(h.call("ready", json!({})), [ready], "told once");
+        assert_eq!(sent.len(), 2, "{sent:?}");
+        assert_eq!(sent[0], json!({ "ev": "notice", "data": notice }));
+        assert_eq!(sent[1]["ok"]["google"], json!(true));
+        assert_eq!(h.call("ready", json!({})), [sent[1].clone()], "told once");
     }
 
     // ------------------------------------------------------------------------

@@ -21,15 +21,15 @@ Three panels:
 Both side panels can be extended to full width for focused work and have
 grips to resize them; the widths are remembered across restarts
 (`ui.md#preferences`). The right panel can also be half-open: a card's chat
-button puts the assistant beside the card, over the main view, as the
-full width does (`assistant.md#conversations`). Opening a panel never
-moves the main view's layout. The expanded vault area hosts the
-pages of the vault panel: the Workspace pages (Accounts, Folders, Vault,
-Trash), Fetch email and New. It is
-expanded only while one of them is shown: a page opens it (`openVaultOp`,
-`ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
-or a click on a filter closes it (`closeVaultArea`). Menus are popups
-(`showMenu`, `ui/menu.js`), which mark their anchor `aria-expanded`.
+button puts the assistant beside the card, over the main view, as the full
+width does (`assistant.md#conversations`). Opening a panel never moves the
+main view's layout. The expanded vault area hosts the pages of the vault
+panel: the Workspace pages (Accounts, Folders, Vault, Trash), Settings
+(`ui.md#settings`), Fetch email and New. It is expanded only while one of
+them is shown: a page opens it (`openVaultOp`, `ui/page.js`); its ×, Esc on
+a page that registers it (`registerVaultPage`) or a click on a filter closes
+it (`closeVaultArea`). Menus are popups (`showMenu`, `ui/menu.js`), which
+mark their anchor `aria-expanded`.
 
 ## Vault panel <a id="vault-panel"></a>
 
@@ -60,6 +60,8 @@ the page, once per frame (`panel.md#host-pushes`).
   is on, the sync button stays shown, pressed, in the count's place
   (`.nav-item__action[aria-pressed]`).
 - **Workspace**: Accounts, Folders, Vault, Trash.
+- **Help and settings**: at the foot, under what scrolls, a menu: the
+  keyboard shortcuts (`ui.md#go-to`) and Settings (`ui.md#settings`).
 
 **Labels** filter from the lens head, for every lens: after the project's
 name the active labels, each a label chip whose × takes it out of the
@@ -278,8 +280,9 @@ What a key, a menu, a button or Go to starts is a registered action
 (`ui.md#go-to`). The page keys, none of which acts behind an open dialog:
 
 - **Ctrl+Shift+P** opens Go to (`ui.md#go-to`).
+- **Ctrl+,** opens Settings (`ui.md#settings`).
 - **Esc** closes an open menu, else the page in the expanded vault area
-  (Fetch email, New); in an editor it leaves edit mode.
+  (Settings, Fetch email, New); in an editor it leaves edit mode.
 - **Ctrl+Enter** runs the open page's main action (Fetch, Create).
 - **Ctrl+N** opens New.
 - **Ctrl+Z** undoes the last edit, **Ctrl+Y** or **Ctrl+Shift+Z** does it
@@ -296,9 +299,10 @@ finds places, commands and keys by name (`features/palette.js`, the blocks
 of rows `features/palette-found.js`). With nothing typed it lists the
 commands: the actions that have a group and apply now
 (`architecture.md#actions`), under their groups: New, Assistant, Get things
-in, Go to (the lenses, the Workspace pages, the next and the previous area),
-Window, Vault and Help. What the vault has brings its own: an account's
-Email its Fetch email, a checked calendar its sync.
+in, Go to (the lenses, the Workspace pages, Settings, the next and the
+previous area), Window, Vault, Settings (a row of the page each, which it
+opens with the focus there) and Help. What the vault has brings its own: an
+account's Email its Fetch email, a checked calendar its sync.
 
 - **What is typed** is looked for in the names and in the other words one is
   found by: every word, in any order, case and accents aside (`fit`,
@@ -308,11 +312,11 @@ Email its Fetch email, a checked calendar its sync.
 - **What is found** stands in blocks, the one with the best fit first, and
   of two alike in this order; within a block the best fit first
   (`foundBlocks`):
-  - **Go to**: the places: the lenses and the Workspace pages, All Projects,
-    No project, each project (an archived one after the others), All Sources
-    and each source, with its entries counted. A project or a source is the
-    filter then, as a press on its row in the vault panel, and the lens
-    stays.
+  - **Go to**: the places: the lenses, the Workspace pages and Settings,
+    All Projects, No project, each project (an archived one after the
+    others), All Sources and each source, with its entries counted. A
+    project or a source is the filter then, as a press on its row in the
+    vault panel, and the lens stays.
   - **Commands**: those that are no place.
   - **Keys**: those that are no command, at most two, by a word of theirs
     begun.
@@ -347,6 +351,23 @@ into its type's folder (`vault.md#vault-layout`); the area closes and
 the new entity is selected. A failure stays on the page; Esc cancels. The
 Task tab of the context column uses the same form (`panel.md#context-column`).
 
+## Settings <a id="settings"></a>
+
+How Avelor works for the user on this PC, not for the vault: the page of Help
+and settings, of Ctrl+, and of Go to (`features/workspace/settings.js`). Its
+list names the page's parts with what they are set to now, a press goes to
+the part, and what is set on other pages, a press goes there; it stays while
+the parts scroll. A row is a setting's name over what it does, its controls
+at the end. A change takes effect at once, and one that waits for the next
+start says so in the row. Another vault opening leaves the page open.
+
+- **Look and language**, in every vault (`config.yaml`,
+  `architecture.md#storage`):
+  - **Language**: System, the language the system's take, or one of the
+    catalogs', each by its own name (`localization.md#language`); beside it
+    the form of address ("du" or "Sie"), where the language has both. From
+    the next start.
+
 ## Preferences <a id="preferences"></a>
 
 The page keeps its preferences as one JSON object of strings
@@ -379,6 +400,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | A5 | Panel widths | drag a grip → `saveWidth` → `savePrefs` | `set_prefs {prefs}` → `config.yaml` `prefs` | the width comes back on the next start, inside the page (`#prefs`), without easing |
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a summary) |
 | A8 | Stop a job | the card's Stop | `cancel_job` → the job's requests cancelled; it ends `stopped · …` | email fetch, calendar sync |
+| A9 | Language | Settings → the language or its form of address → `setLanguage` (`features/workspace/settings.js`) | `set_language {language, formal}` → `config.yaml` `language` | the row says what the next start shows (`localization.md#language`) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `<account>\nemail`, `<account>\ncalendar\n<id>` |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |

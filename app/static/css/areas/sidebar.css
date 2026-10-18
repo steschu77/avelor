@@ -1,6 +1,6 @@
 /* The sidebar (features/sidebar.js): the vault panel's sections and items,
-   the expanded vault area (ui/page.js), and the jobs panel
-   (features/jobs.js). */
+   Help and settings at its foot, the expanded vault area (ui/page.js), and
+   the jobs panel (features/jobs.js). */
 
 .sidebar {
   grid-area: sidebar;
@@ -40,6 +40,13 @@
 .sidebar__scroll>* {
   flex-shrink: 0;
   direction: ltr;
+}
+
+/* Help and settings, under what scrolls */
+.sidebar__foot {
+  flex: none;
+  padding: 5px 0;
+  border-top: 1px solid var(--c-line);
 }
 
 .sidebar__area {

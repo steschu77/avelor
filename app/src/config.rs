@@ -23,8 +23,8 @@ pub struct AppConfig {
     pub vault: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowState>,
-    /// The language the user picked (`de`, `es-MX`), and how its texts
-    /// address the user (`de, informal`), else the system's
+    /// The language the user picked (`de`, `es-MX`, `system`), and how its
+    /// texts address the user (`de, informal`), else the system's
     /// (`localization.md#language`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
@@ -115,6 +115,14 @@ impl ConfigStore {
     // ------------------------------------------------------------------------
     pub fn language(&self) -> Option<&str> {
         self.config.language.as_deref()
+    }
+
+    // ------------------------------------------------------------------------
+    /// Remember the language of the next start, as `language` writes it,
+    /// none for the system's, and write the file.
+    pub fn set_language(&mut self, language: Option<String>) -> Result<()> {
+        self.config.language = language;
+        self.save()
     }
 
     // ------------------------------------------------------------------------

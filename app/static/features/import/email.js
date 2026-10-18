@@ -23,7 +23,7 @@ import { shortcutText } from '../../core/actions.js';
 import { parts, t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
-import { showMenu } from '../../ui/menu.js';
+import { dropBox, showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
 import {
   closeVaultArea, openVaultOp, registerVaultPage,
@@ -531,11 +531,8 @@ function renderEmailDate(form) {
   };
   const lastFetch = accounts.get(form.account)?.fetch_email?.last_fetch;
 
-  const button = accEl('button', 'email__date');
-  button.type = 'button';
   const [, name] = EMAIL_DATE_PRESETS.find(([key]) => key === (form.filter.since ?? null)) ?? EMAIL_DATE_PRESETS[0];
-  button.append(accEl('span', '', name), accEl('span', 'meta email__date-hint', hint(form.filter.since)),
-    iconEl('#i-chevron-down', 'email__date-caret'));
+  const button = dropBox(accEl('button'), name, hint(form.filter.since));
   button.addEventListener('click', ev => {
     ev.stopPropagation();
     showMenu(button, EMAIL_DATE_PRESETS.map(([key, label]) => {

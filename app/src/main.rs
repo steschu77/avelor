@@ -18,6 +18,7 @@ mod indexing;
 mod jobs;
 mod page;
 mod protocol;
+mod settings;
 mod shell;
 mod structure;
 mod sys;

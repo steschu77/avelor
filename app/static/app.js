@@ -30,6 +30,7 @@ import './features/workspace/folders.js';
 import './features/import/email.js';
 import './features/workspace/accounts.js';
 import './features/workspace/trash.js';
+import './features/workspace/settings.js';
 import './features/assistant/assistant.js';
 import './features/new.js';
 import './features/linked.js';
@@ -89,9 +90,10 @@ store.subscribe(
 // Another vault opens (`forgetVault`, model/events.js): a page about the
 // old one (New, Fetch email) closes.
 rpcOn('vault', ({ state }) => {
-  if (state === 'indexing') shownVaultPage()?.close();
+  const page = shownVaultPage();
+  if (state === 'indexing' && page && page.ofVault !== false) page.close();
 });
 
 // The page listens: the host opens the vault of the last session, and
-// says whether this build has Google.
-rpcCall('ready').then(({ google }) => store.setState({ google }));
+// says whether this build has Google, and the language.
+rpcCall('ready').then(({ google, language }) => store.setState({ google, language }));

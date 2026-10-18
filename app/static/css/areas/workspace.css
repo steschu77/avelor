@@ -1,5 +1,5 @@
-/* The pages of the expanded vault area: New (features/new.js) and the
-   Workspace pages (features/workspace/: accounts, folders, vault, trash).
+/* The pages of the expanded vault area: New (features/new.js), the Workspace
+   pages (features/workspace/: accounts, folders, vault, trash) and Settings.
    The page itself and the list + detail page are components. */
 
 /* New (features/new.js): the sheet of the entity being
@@ -367,6 +367,134 @@
 .vault__file {
   --cols: minmax(0, 2fr) minmax(0, 3fr);
   min-height: var(--h-row);
+}
+
+/* Settings (features/workspace/settings.js): the list, what can be set and
+   where, which stays while the parts scroll */
+.settings__list {
+  position: sticky;
+  top: var(--p-page-y);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings__links {
+  margin-top: -4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings__link {
+  --cols: minmax(0, 1fr) auto;
+  width: 100%;
+  min-height: var(--h-row);
+  padding: 0;
+  border-width: 0 0 1px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings__link:hover {
+  background: var(--c-hover);
+}
+
+.settings__link>.meta {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* opens another page: a menu's caret, sideways */
+.settings__place {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings__place>.icon {
+  width: 10px;
+  height: 10px;
+}
+
+/* the parts, one under the other */
+.settings__parts {
+  gap: 34px;
+  container-type: inline-size;
+}
+
+.settings__part {
+  max-width: 780px;
+  display: flex;
+  flex-direction: column;
+  scroll-margin-top: var(--p-page-y);
+}
+
+/* a row: its name over what it does, its controls at the end, under them
+   where there is no room */
+.setting {
+  min-height: 58px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--c-line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+}
+
+.setting__text {
+  flex: 1 1 250px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.setting__name {
+  font: 400 var(--fs-sub)/1.25 var(--f-serif);
+  color: var(--c-ink);
+}
+
+/* what is from the next start, in the place of what the row does */
+.setting__next {
+  color: var(--c-ink);
+}
+
+.setting__control {
+  flex: none;
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.setting__control>.drop-box {
+  width: 200px;
+}
+
+@media (max-width: 1240px) {
+  .list-detail--settings {
+    grid-template-columns: 264px minmax(0, 1fr);
+  }
+
+  .list-detail--settings>.page {
+    padding-inline: 24px;
+  }
+}
+
+/* no room beside the text: every row's controls under it */
+@container (max-width: 480px) {
+  .setting__text {
+    flex-basis: 100%;
+  }
+
+  .setting__control {
+    justify-content: flex-start;
+  }
 }
 
 /* Trash (Workspace -> Trash, features/workspace/trash.js): the files in the vault's trash,

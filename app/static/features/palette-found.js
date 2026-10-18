@@ -15,6 +15,7 @@ const GROUPS = [
   ['go', t('palette.name')],
   ['window', t('palette.window')],
   ['vault', t('workspace.vault')],
+  ['settings', t('settings.name')],
   ['help', t('palette.help')],
 ];
 

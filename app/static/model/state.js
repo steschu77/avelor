@@ -11,6 +11,10 @@ export const store = createStore({
   vault_state: 'none', // 'none' | 'indexing' | 'open' (the `vault` event)
   vault_errors: [], // [{ path, error }] the indexing couldn't read (`vault_error`); always replaced, never mutated
   google: true, // whether this build has Google (`ready`)
+  // the language picked for the next start and the run's (`ready`,
+  // features/workspace/settings.js): { picked, formal, run, run_formal,
+  // system, all: [{ id, forms: [{ name, says }] }] }; always replaced
+  language: null,
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
   // level: 'error' | 'info', entity? }; always replaced
   notices: [],

@@ -12,10 +12,14 @@ use crate::sys;
 // ----------------------------------------------------------------------------
 /// A language's catalog, its texts over English's, as JSON: the page reads
 /// it, and the host once it needs a text of its own (`text`). A formal one
-/// has the formal texts over its language's.
+/// has the formal texts over its language's. `form` is how it addresses the
+/// user as the language itself calls it ("du", "Sie"), `says` a sentence in
+/// that form.
 pub struct Catalog {
     pub language: &'static str,
     pub formal: bool,
+    form: &'static str,
+    says: &'static str,
     pub json: &'static str,
 }
 
@@ -41,7 +45,26 @@ pub enum Address {
     Formal,
 }
 
+/// The config's `language` that is the system's, to say how it addresses the
+/// user (`system, formal`); no catalog has it.
+const SYSTEM: &str = "system";
+
 static LOCALE: OnceLock<Locale> = OnceLock::new();
+
+// ----------------------------------------------------------------------------
+/// A language to pick (`settings.rs`): the forms its texts address the user
+/// in, the informal one first, none where the language has one.
+#[derive(Serialize)]
+pub struct Language {
+    pub id: &'static str,
+    forms: Vec<Form>,
+}
+
+#[derive(Serialize)]
+struct Form {
+    name: &'static str,
+    says: &'static str,
+}
 
 // ----------------------------------------------------------------------------
 /// Choose the run's language, once, at the start: `configured`, the
@@ -62,14 +85,71 @@ pub fn init(configured: Option<&str>) {
 /// The run's language: the system's before `init` (a start that failed
 /// before it), English in the tests.
 pub fn locale() -> &'static Locale {
-    LOCALE.get_or_init(|| {
-        let system = if cfg!(test) {
-            Vec::new()
-        } else {
-            sys::languages()
-        };
-        choose(None, &system)
-    })
+    LOCALE.get_or_init(|| choose(None, &system_languages()))
+}
+
+/// The system's languages, none in the tests.
+fn system_languages() -> Vec<String> {
+    if cfg!(test) {
+        Vec::new()
+    } else {
+        sys::languages()
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The languages of the catalogs, English first.
+pub fn languages() -> Vec<Language> {
+    let informal = CATALOGS.iter().filter(|catalog| !catalog.formal);
+    informal.map(|catalog| language(catalog.language)).collect()
+}
+
+fn language(id: &'static str) -> Language {
+    let catalogs = CATALOGS.iter().filter(|catalog| catalog.language == id);
+    let mut forms: Vec<Form> = catalogs
+        .map(|catalog| Form {
+            name: catalog.form,
+            says: catalog.says,
+        })
+        .collect();
+    if forms.len() < 2 {
+        forms.clear();
+    }
+    Language { id, forms }
+}
+
+// ----------------------------------------------------------------------------
+/// The language the system's take.
+pub fn system() -> &'static str {
+    choose(None, &system_languages()).catalog.language
+}
+
+// ----------------------------------------------------------------------------
+/// The language `configured`, the config's `language`, picks, none where it
+/// is the system's, and how it addresses the user.
+pub fn picked(configured: Option<&str>) -> (Option<&'static str>, Address) {
+    let (tag, address) = parsed(configured);
+    let language = tag.map(|tag| primary(&normalized(tag)));
+    let mut catalogs = CATALOGS.iter();
+    let catalog = catalogs.find(|catalog| Some(catalog.language) == language.as_deref());
+    (catalog.map(|catalog| catalog.language), address)
+}
+
+// ----------------------------------------------------------------------------
+/// The config's `language` that picks `language`, none for the system's, and
+/// addresses the user as `address`. `before`, what it was, keeps its region
+/// (`de-CH`) while the language stays.
+pub fn configured(
+    before: Option<&str>,
+    language: Option<&str>,
+    address: Address,
+) -> Option<String> {
+    let kept = parsed(before).0.filter(|_| picked(before).0 == language);
+    let tag = language.map(|language| kept.unwrap_or(language));
+    match address {
+        Address::Formal => Some(format!("{}, formal", tag.unwrap_or(SYSTEM))),
+        Address::Informal => tag.map(str::to_string),
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -213,13 +293,7 @@ impl std::fmt::Display for Text {
 /// languages a catalog has, else English. A configured language without a
 /// region takes the system's for it.
 fn choose(configured: Option<&str>, system: &[String]) -> Locale {
-    let (configured, address) = match configured.map(|c| c.split_once(',')) {
-        Some(Some((tag, address))) if address.trim().eq_ignore_ascii_case("formal") => {
-            (Some(tag), Address::Formal)
-        }
-        Some(Some((tag, _))) => (Some(tag), Address::Informal),
-        _ => (configured, Address::Informal),
-    };
+    let (configured, address) = parsed(configured);
     let catalog_of = |tag: &str| {
         let language = primary(tag);
         let of = |formal| {
@@ -262,6 +336,19 @@ fn choose(configured: Option<&str>, system: &[String]) -> Locale {
         catalog,
         tag: "en".to_string(),
         address,
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The config's `language` in its parts: the tag, and how it addresses the
+/// user.
+fn parsed(configured: Option<&str>) -> (Option<&str>, Address) {
+    match configured.map(|c| c.split_once(',')) {
+        Some(Some((tag, address))) if address.trim().eq_ignore_ascii_case("formal") => {
+            (Some(tag), Address::Formal)
+        }
+        Some(Some((tag, _))) => (Some(tag), Address::Informal),
+        _ => (configured, Address::Informal),
     }
 }
 
@@ -310,6 +397,45 @@ mod tests {
 
         let locale = choose(Some("de"), &tags(&["en-US"]));
         assert_eq!(locale.tag, "de");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_system_s_language_may_be_taken_formally() {
+        let locale = choose(Some("system, formal"), &tags(&["fy-NL", "de-AT"]));
+        assert_eq!(
+            (locale.tag.as_str(), locale.catalog.formal),
+            ("de-AT", true)
+        );
+        let locale = choose(Some("system, formal"), &tags(&["en-US"]));
+        assert_eq!(
+            (locale.tag.as_str(), locale.catalog.formal),
+            ("en-US", false)
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn what_the_config_picks_is_a_catalog_s_language() {
+        assert_eq!(picked(Some("de-AT, formal")), (Some("de"), Address::Formal));
+        assert_eq!(picked(Some("ES")), (Some("es"), Address::Informal));
+        assert_eq!(picked(Some("system, formal")), (None, Address::Formal));
+        assert_eq!(picked(Some("tlh, informal")), (None, Address::Informal));
+        assert_eq!(picked(None), (None, Address::Informal));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_language_picked_keeps_the_region_it_had() {
+        let of = configured;
+        let (formal, informal) = (Address::Formal, Address::Informal);
+        let de = Some("de");
+        assert_eq!(of(Some("de-CH"), de, formal).unwrap(), "de-CH, formal");
+        assert_eq!(of(Some("de-CH, formal"), de, informal).unwrap(), "de-CH");
+        assert_eq!(of(Some("de-CH"), Some("es"), formal).unwrap(), "es, formal");
+        assert_eq!(of(Some("tlh"), None, informal), None);
+        assert_eq!(of(Some("tlh"), None, formal).unwrap(), "system, formal");
+        assert_eq!(of(None, None, informal), None);
     }
 
     // ------------------------------------------------------------------------

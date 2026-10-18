@@ -61,28 +61,6 @@
   content: "\2713\00a0";
 }
 
-.email__date {
-  width: 240px;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--c-line);
-  background: var(--c-card);
-  color: var(--c-ink);
-  font: 400 var(--fs-body)/1 var(--f-serif);
-  text-align: left;
-  cursor: pointer;
-}
-
-.email__date-hint {
-  margin-left: auto;
-}
-
-.email__date-caret {
-  color: var(--c-label);
-}
-
 .email__range {
   display: flex;
   align-items: center;

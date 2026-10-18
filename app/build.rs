@@ -427,6 +427,13 @@ fn build_pages(root: &Path, out_dir: &Path) {
 }
 
 // ----------------------------------------------------------------------------
+/// How a catalog addresses the user, in its language's own word, and a
+/// sentence in that form: what the host lists a language's forms by
+/// (`texts.rs`).
+const FORM: &str = "language.form";
+const FORM_SAYS: &str = "language.form_says";
+
+// ----------------------------------------------------------------------------
 /// The catalogs (`app/texts/*.json`, `localization.md`), checked against
 /// the keys the page's markup `html` and script `js` and the host's
 /// sources use; a problem fails the build, each one
@@ -473,6 +480,7 @@ fn build_texts(root: &Path, out_dir: &Path, html: &str, js: &str) {
         used.page.extend(host.page);
         used.host.extend(host.host);
     }
+    used.host.extend([FORM, FORM_SAYS].map(str::to_string));
     let problems = av_texts::check(&english, &catalogs, OWN_LANGUAGES, &used);
     if !problems.is_empty() {
         failed(&problems);
@@ -496,8 +504,14 @@ fn build_texts(root: &Path, out_dir: &Path, html: &str, js: &str) {
             (true, Some(base)) => catalog.over(&base.over(&english)),
             (true, None) => panic!("{file}: there is no app/texts/{language}.json"),
         };
+        assert!(
+            !formal || catalog.plain(FORM).is_some(),
+            "{file}: no \"{FORM}\", what its language calls the formal address"
+        );
         rows.push_str(&format!(
-            "    Catalog {{ language: {language:?}, formal: {formal}, json: {:?} }},\n",
+            "    Catalog {{ language: {language:?}, formal: {formal}, form: {:?}, says: {:?}, json: {:?} }},\n",
+            texts.plain(FORM).unwrap_or_default(),
+            texts.plain(FORM_SAYS).unwrap_or_default(),
             texts.to_json(),
         ));
     }
