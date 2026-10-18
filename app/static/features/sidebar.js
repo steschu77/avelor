@@ -14,14 +14,18 @@ import { showError } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
 import { projects } from '../model/entities.js';
 import { accounts, sourceKeyOf } from '../model/entities.js';
+import { watchSourceKey, watches } from '../model/entities.js';
 import { structureCall } from '../model/structure.js';
 import { joinProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
 import { KIND_ICONS } from '../ui/icons.js';
+import { IMPORT_ICON } from '../ui/icons.js';
 import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
+import { watchType } from './workspace/folders.js';
+import { openScanImport } from './import/scans.js';
 import { openMailFetch } from './import/mail.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
@@ -184,6 +188,23 @@ function renderSidebar() {
       { icon: '#i-add', title: 'New (Ctrl+N)', onClick: (_row, button) => runAction('new', button) }));
   updateNavItem(createdRow, sourceCounts.get('created') ?? 0, selected_source === 'created');
   sourceRows.push(createdRow);
+
+  // Per enabled folder watch, under its name: what it imported. Its button
+  // opens the import page of its type.
+  for (const watch of watches.values()) {
+    if (!watch.enabled) continue;
+    const key = watchSourceKey(watch.id);
+    const action = {
+      icon: IMPORT_ICON,
+      title: `Import from ${watch.name}`,
+      onClick: () => openScanImport(watch.id),
+    };
+    const row = rowFor(`source:${key}`, watch.name, () =>
+      sidebarNavItem('nav-item nav-item--compact', watch.name, 'nav-item__icon', watchType(watch.type).icon,
+        () => selectSource(key), action));
+    updateNavItem(row, sourceCounts.get(key) ?? 0, key === selected_source);
+    sourceRows.push(row);
+  }
 
   // Per connected account, under its email: mail, the checked calendars. A
   // row click filters by it; its button syncs it.

@@ -46,7 +46,8 @@ the page, once per frame (`panel.md#host-pushes`).
   folded under an "Archived" row at the end, still selectable
   (`projectsInOrder`). Creating and editing projects, and dropping rows on
   them, is `panel.md#projects`.
-- **Sources**: "Created Here" (with a "+" that opens New); per
+- **Sources**: "Created Here" (with a "+" that opens New); each enabled
+  folder watch under its name (`import.md#folder-watches`); per
   connected Google account a Mail source (unless its access is off), one
   source per checked calendar. A source
   counts and filters the entities that came through it (`sourceKeyOf`);
@@ -320,7 +321,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
 | A8 | Stop a job | the card's Stop | `cancel_job` → the job's requests cancelled; it ends `stopped · …` | mail fetch, calendar sync |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
-| B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `<account>\nemail`, `<account>\ncalendar\n<id>` |
+| B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `watch:<id>`, `<account>\nemail`, `<account>\ncalendar\n<id>` |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
 | B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |

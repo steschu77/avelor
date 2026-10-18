@@ -27,7 +27,10 @@ user chose.
 Watches belong to a vault, like accounts: the documents a watch imported
 name it by its `id` (`scan.watch`). Opening another vault switches to its
 watches (`folders::open`, on every vault open), and without an open vault
-there are none.
+there are none. Each enabled watch is listed in the vault panel's Sources
+under its name; the source counts and filters the documents imported from
+it. Its Import button, like the one on the watch's pane, opens Import
+scans for an images watch.
 
 ### Watch files <a id="watch-files"></a>
 
@@ -55,7 +58,8 @@ account file is (`accounts.md#vault-accounts`). The file contains:
     `{account, model}` (`accounts.md#model-choice`), by step: `read` for
     reading images (`watches::READ_STEP`). A step without an entry has no
     pick yet
-  * `enabled`: `false` while the watch is off
+  * `enabled`: `false` while the watch is off; it isn't listed under
+    Sources then
   * `added`: when the watch was added
 
 ```yaml
@@ -84,8 +88,9 @@ vault), following the Accounts page:
   suggested per type, typed or picked with Browse (`pick_folder`). The
   folder is looked for before the watch is saved; the new watch takes its
   type's file types (and Collect: taken within 2 min, for images).
-- A watch's pane changes its name, folder, subfolders, file types, and
-  its import process: the reading step. A step that sends the file to an
+- A watch's pane changes its name, folder, subfolders, file types, whether
+  it is a source, and its import process: the reading step. A step that
+  sends the file to an
   AI has the picker of the model it runs with in its row
   (`accounts.md#model-choice`): the reading step of images (`models`). A
   step without a pick shows "Pick a model". What keeps a picked model from
@@ -152,10 +157,10 @@ folder again and keeps the documents as arranged.
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| J1 | Add a watch | "Watch a folder" → type → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card |
-| J2 | Edit | name, folder, subfolders, patterns, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
+| J1 | Add a watch | "Watch a folder" → type → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card and source |
+| J2 | Edit | name, folder, subfolders, patterns, source on/off, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
 | J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |
-| K1 | Open Import scans | the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files, job}`; `scan_previews` → `scan_preview` per file | file list, large preview |
+| K1 | Open Import scans | the watch source's Import or the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files, job}`; `scan_previews` → `scan_preview` per file | file list, large preview |
 | K2 | Read (OCR) | per file or Read all → `scanRead` | `scan_read {watch, files, again}` → the host checks the watch's OCR model → `ok {job}`; one file after another on workers → `scan_page` queued / reading (words) / read (words, title) / failed; job events; `account` | text per page |
 | K3 | Stop reading | Stop (or the job card's Stop) | `cancel_job {id: job}` → remaining pages `stopped`, job ends | — |
 | K4 | Arrange | drag pages, merge with previous/next, split, edit titles, tick | page only (`scanPlace`, `features/import/scans.js`) | documents as arranged |

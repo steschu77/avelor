@@ -3,9 +3,10 @@
 // PC. The page follows Workspace -> Accounts: a card per watch, a menu of
 // the watch types, and a new watch's pane that asks for its folder first.
 // Once the host has found the folder, the watch is saved with its type's
-// file types, and its full pane shows. Import, here, opens the import page
-// of its type (images: features/import/scans.js, through the
-// `watch.import` action).
+// file types, and its full pane shows. Import, here and on the watch's
+// source in the sidebar, opens the import page of its type (images:
+// features/import/scans.js, through the `watch.import` action). The
+// sidebar follows `watches_rev` (app.js).
 
 import { accEl } from '../../core/dom.js';
 import { oncePerFrame } from '../../core/dom.js';
@@ -51,7 +52,7 @@ const watchDrafts = sentDrafts(); // watch id -> the changes sent, shown until d
 let watchError = null; // { watch, message } from the last failed op
 const knownWatches = new Set(); // the ids of the watches the page knows
 
-function watchType(type) {
+export function watchType(type) {
   return WATCH_TYPES.find(t => t.type === type);
 }
 
@@ -336,7 +337,7 @@ function renderWatchPane(watch) {
   return pane;
 }
 
-// Where to look and which files to take.
+// Where to look and which files to take, and whether the watch is a source.
 function renderWatchFolderPart(id, settings) {
   const part = accEl('div', 'watch__part');
   const [grid, row] = watchFormGrid();
@@ -346,6 +347,9 @@ function renderWatchFolderPart(id, settings) {
     accSeg([[true, 'Include'], [false, 'Ignore']], settings.subfolders,
       subfolders => watchSet(id, { subfolders })));
   row('File types', ...renderWatchPatterns(id, settings.patterns));
+  row('Source',
+    accEl('span', 'note', settings.enabled ? 'Listed under Sources, with its Import button' : 'Not listed under Sources'),
+    accSeg([[true, 'On'], [false, 'Off']], settings.enabled, enabled => watchSet(id, { enabled })));
   part.append(accEl('div', 'section-head', 'Folder'), grid);
   return part;
 }

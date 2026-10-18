@@ -1,6 +1,6 @@
 // Import scans (import.md#import-scans;
 // api.md#scans): the import of an images folder watch, opened by the Import
-// button of its pane (features/workspace/folders.js,
+// button of its source (features/sidebar.js) or of its pane (features/workspace/folders.js,
 // through the `watch.import` action), and rendered
 // into the expanded vault area while its op is "scans". The host lists the
 // watch's files, reads the ones asked for with the model the watch picked

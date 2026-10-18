@@ -163,11 +163,13 @@ function sourceKind(source) {
 
 // ----------------------------------------------------------------------------
 // The source `doc` came from, as the sidebar keys it: `created` for an
-// entity made in the app; as `accountSources` keys them, mail
+// entity made in the app; a scan by its folder watch (`watchSourceKey`,
+// from `scan.watch`); as `accountSources` keys them, mail
 // by their account, events by their calendar entity, whose remote block
 // names the Google calendar (`calendar-id`, vault.md#remote).
 export function sourceKeyOf(doc) {
   if (sourceKind(doc.source) === 'created') return 'created';
+  if (doc.source?.scan?.watch) return watchSourceKey(doc.source.scan.watch);
   const account = doc.source?.remote?.account;
   if (doc.kind === 'email' && account) return `${account}\nemail`;
   if (doc.kind === 'event') {
@@ -178,6 +180,11 @@ export function sourceKeyOf(doc) {
     if (calendarAccount && calendarId) return `${calendarAccount}\ncalendar\n${calendarId}`;
   }
   return null;
+}
+
+// The key of a watch's source in the sidebar (`selected_source`).
+export function watchSourceKey(id) {
+  return `watch:${id}`;
 }
 
 // ----------------------------------------------------------------------------

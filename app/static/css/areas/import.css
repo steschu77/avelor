@@ -1,6 +1,6 @@
 /* The import pages (features/import/): Import scans and Fetch mail. */
 
-/* Import scans (the Import button, features/import/scans.js): the
+/* Import scans (the Import button of an images source, features/import/scans.js): the
    files not read yet, then the documents ready for import, their pages
    arranged by drag and drop */
 .scans__where {
