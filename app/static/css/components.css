@@ -655,7 +655,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 /* A page of the expanded vault area (ui/page.js): the Workspace pages,
-   Fetch email and New. */
+   Fetch email, Import scans and New. */
 .page {
   padding: var(--p-page-y) var(--p-page-x);
   display: flex;

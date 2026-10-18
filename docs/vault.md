@@ -608,7 +608,7 @@ Well-known properties (named in `av_vault::schema::remote`):
 * `snapshot`: a hash of the event's synced fields at the last sync; an
   event whose fields hash differently has been changed in the vault since.
 
-### Scan
+### Scan <a id="scan"></a>
 
 Block: `scan:`
 
@@ -616,7 +616,7 @@ Block: `scan:`
   (`import.md#folder-watches`); absent for a scan that came another way,
 * `origin`: string or list of strings, the scanned files (jpg, png, webp
   or pdf), in page order; relative to the watch's folder when `watch` is
-  given.
+  given. The import knows a file as in the vault by its watch and origin.
 
 ```yaml
 scan:
@@ -689,7 +689,8 @@ the indexing skips like every dot-folder:
   assistant reply the AI account it came through. The secrets stay with the
   app and never enter the vault. `accounts.md#account-files`.
 - `.avelor/watches/` (`av_vault::schema::layout::WATCHES`): one YAML file per
-  folder watch. `import.md#watch-files`.
+  folder watch; the documents a watch imported name it in `scan.watch`.
+  `import.md#watch-files`.
 - `.avelor/vault.yaml` (`av_vault::schema::layout::VAULT_SETTINGS`): the
   vault's own settings, read when it opens (`vault_settings.rs`; changed
   with `set_vault_settings`, pushed as `vault_settings`). `chat-model`, the model the assistant answers with, `{account, model}`
@@ -830,8 +831,8 @@ page's vault over (`forgetVault`, `model/events.js`). The page forgets:
   (`switchVault`).
 - the conflicts;
 - the selection and the filter;
-- a page about the old vault: New, Fetch email, and the Task tab's
-  drafts (`features/new.js`).
+- a page about the old vault: New, Fetch email, Import scans, and the Task
+  tab's drafts (`features/new.js`).
 
 The lens, the calendar's day, the panel's size and the Vault page stay.
 The accounts and folder watches arrive before the indexing as the new
