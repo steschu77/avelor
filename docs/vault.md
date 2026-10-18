@@ -789,7 +789,8 @@ one. The UI thread puts each batch into the index and tells the page, so
 a file that is slow to read (a network share, an online-only file of a
 cloud folder) never blocks the window. The page gets one `entity` per
 file, as from any edit. When it ends, the log says how many files the
-indexing read in how many milliseconds.
+indexing read in how many milliseconds, and the auto-syncs that are due
+start.
 
 An indexing can't be stopped; a new one replaces it (a vault switch). An
 indexing is named by an id: the one replaced is aborted, and the batches and
@@ -798,7 +799,7 @@ may write a file the walk then finds too (New, a restore): `Index::apply`
 skips an entry whose id the index already has, since the app's own entry
 is the newer one. Until the indexing ends (`App::indexing`), the index holds
 the files read so far: a command for an entity not read yet answers
-`not_found`.
+`not_found`, and the auto-syncs wait.
 
 An indexing starts only when a vault opens, so `vault` (indexing) starts the
 page's vault over (`forgetVault`, `model/events.js`). The page forgets:

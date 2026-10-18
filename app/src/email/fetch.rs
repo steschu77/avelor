@@ -12,6 +12,7 @@ use av_utils::id::Id;
 use serde::Deserialize;
 use serde_json::json;
 
+use super::Origin;
 use super::apply::{Stored, apply_email};
 use super::entities::Downloaded;
 use crate::app::App;
@@ -30,7 +31,7 @@ const FETCH_PARALLEL: usize = 4;
 /// An email fetch in progress: the ids still to download, and what the
 /// finished ones came to. Stepped by `pump` / `on_downloaded`.
 pub(super) struct EmailFetch {
-    job_id: Id,
+    pub(super) job_id: Id,
     pub(super) account: Id,
     pub(super) client: Arc<Client>,
     pub(super) queue: VecDeque<String>,
@@ -41,19 +42,22 @@ pub(super) struct EmailFetch {
     total: usize,
     done: usize,
     counts: FetchCounts,
-    /// When the fetch started: what it fetched covers the email up to then.
-    started: DateTime,
+    pub(super) origin: Origin,
+    /// When the fetch (an auto-sync: its search) started: what it fetched
+    /// covers the email up to then.
+    pub(super) started: DateTime,
 }
 
 // ----------------------------------------------------------------------------
 /// A fetch to start: what `start_fetch` makes a `EmailFetch` and a job of.
-struct FetchPlan {
+pub(super) struct FetchPlan {
     pub(super) account: Id,
     pub(super) client: Arc<Client>,
     pub(super) queue: VecDeque<String>,
     pub(super) skipped: usize,
     pub(super) replace: HashSet<String>,
-    started: DateTime,
+    pub(super) origin: Origin,
+    pub(super) started: DateTime,
 }
 
 // ----------------------------------------------------------------------------
@@ -64,7 +68,7 @@ struct FetchCounts {
     created: Vec<Id>,
     pub(super) replaced: usize,
     pub(super) skipped: usize,
-    failed: usize,
+    pub(super) failed: usize,
 }
 
 impl FetchCounts {
@@ -133,6 +137,7 @@ pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
         queue,
         skipped,
         replace,
+        origin: Origin::Manual,
         started: DateTime::now(),
     };
     let label = Text::new("email.fetching").arg("email", email.as_str());
@@ -149,12 +154,13 @@ pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
 // ----------------------------------------------------------------------------
 /// Start the fetch of `plan` as a job shown as `label`; its id. The caller
 /// starts the downloads (`pump`), or finishes an empty fetch.
-fn start_fetch(app: &mut App, label: Text, plan: FetchPlan) -> Id {
+pub(super) fn start_fetch(app: &mut App, label: Text, plan: FetchPlan) -> Id {
     let (skipped, account) = (plan.skipped, plan.account);
     let total = plan.queue.len() + skipped;
     let job_id = app.start_job(JobKind::EmailFetch, label, total);
     log::info!(
-        "Email fetch {job_id}: {total} emails from {account}, {skipped} in the vault already"
+        "Email fetch {job_id} ({:?}): {total} emails from {account}, {skipped} in the vault already",
+        plan.origin
     );
     app.email.fetch = Some(EmailFetch {
         job_id,
@@ -169,6 +175,7 @@ fn start_fetch(app: &mut App, label: Text, plan: FetchPlan) -> Id {
             skipped,
             ..FetchCounts::default()
         },
+        origin: plan.origin,
         started: plan.started,
     });
     if skipped > 0 {
@@ -199,7 +206,7 @@ pub(super) fn plan_fetch(
 }
 
 // ----------------------------------------------------------------------------
-fn find_account_email(app: &App, account: Id) -> String {
+pub(super) fn find_account_email(app: &App, account: Id) -> String {
     app.google
         .get(account)
         .ok()
@@ -236,7 +243,7 @@ fn remember_settings(app: &mut App, account: Id, remembered: Remembered) {
 
 // ----------------------------------------------------------------------------
 /// Start downloads until `FETCH_PARALLEL` are in flight.
-fn pump(app: &mut App) {
+pub(super) fn pump(app: &mut App) {
     let Some(fetch) = &mut app.email.fetch else {
         return;
     };
@@ -322,16 +329,17 @@ pub fn stop(app: &mut App) {
 
 // ----------------------------------------------------------------------------
 /// The fetch is done or stopped: finish the account's sync -- remembering
-/// when it started (the page's "Since last time") only if it fetched all
-/// and nothing failed, so the next one still covers what it didn't write --
-/// and end the job with its summary.
-fn finish(app: &mut App) {
+/// when it started (the page's "Since last time", or where the next
+/// auto-sync starts) only if it fetched all and nothing failed, so the next
+/// one still covers what it didn't write -- and end the job with its
+/// summary.
+pub(super) fn finish(app: &mut App) {
     let Some(fetch) = app.email.fetch.take() else {
         return;
     };
     let stopped = app.job_stopping(fetch.job_id);
     let complete = fetch.counts.failed == 0 && !stopped;
-    let started = fetch.started;
+    let (started, origin) = (fetch.started, fetch.origin);
     google::finish_sync(app, fetch.account, |account| {
         let Some(email) = account
             .file
@@ -342,7 +350,11 @@ fn finish(app: &mut App) {
         else {
             return;
         };
-        email.last_fetch = Some(started);
+        match (origin, &mut email.auto_sync) {
+            (Origin::Manual, _) => email.last_fetch = Some(started),
+            (Origin::AutoSync, Some(sync)) => sync.since = started,
+            (Origin::AutoSync, None) => {}
+        }
     });
 
     let counts = &fetch.counts;

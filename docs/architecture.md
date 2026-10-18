@@ -109,7 +109,8 @@ The rules the code follows, and every change to it:
    with tests; I/O sits at the edges.
 7. **One coordinator.** `App` (`app.rs`) is the only place that runs
    background work and posts to the page; no worker gets a path of its own to the webview. Each new
-   coordination primitive (`Req`, the re-entrancy net) is designed with
+   coordination primitive (`Req`, `on_ui`, the re-entrancy net, the jobs
+   helper, the clock) is designed with
    the user before it is built.
 8. **The UI thread never waits for the page.** The page is reached only
    through the UI thread's message queue, so a wait for it there needs a
@@ -196,6 +197,17 @@ stops the jobs bound to the vault and the
 assistant's replies, and opens the new vault once they have ended
 (`switch_vault_when_stopped`). A new long operation becomes a job through
 this helper, not a slot with callbacks of its own.
+
+### The clock <a id="the-clock"></a>
+
+Work the app starts on its own goes through `App::on_clock`: the
+window's timer (`SetTimer`, once a minute; on Linux a GLib timeout) queues it through the UI queue
+as `WM_ACTIVATE` queues `on_activated`, so it runs like every other way
+in, with no thread or handle of its own. It starts the email
+auto-syncs that are due (`email::auto_sync`, which
+waits for the indexing and for a running fetch); the end of an
+indexing calls it too. Their schedule (`SYNC_EVERY`, `first_due`) is
+in `google.rs`.
 
 ### Closing
 
@@ -317,12 +329,12 @@ side never touches the vault side; `app` is the only bridge.
 | `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`, `Text::render`), a text the page shows (`Text`: a key and its arguments, money among them); its tests |
 | `sys.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
 | `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); folder picker, message boxes, ShellExecute |
-| `sys/win32.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
+| `sys/win32.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; the clock's timer (`WM_TIMER` → `App::on_clock`); `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
 | `sys/win32/webview.rs` | WebView2 environment/controller, message handler, `NavigateToString`; App's outbox (`PostWebMessageAsString`) |
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
-| `sys/linux.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`); Close to `App` |
+| `sys/linux.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; the clock (a GLib timeout); `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit` and `edit_written`, `run*`, `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes, the pending sign-in |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit` and `edit_written`, `run*`, `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes, the pending sign-in, `on_clock` |
 | `indexing.rs` | the indexing (`vault.md#opening`): `run_indexing` with av-vault's `index_vault` on a worker, its batches into the index (`Vault::apply_indexed`) and to the page (`vault`, `entity`, `vault_error`, the indexing's `job`), a replaced scan's batches dropped, `indexing`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
@@ -334,13 +346,13 @@ side never touches the vault side; `app` is the only bridge.
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 | `accounts.rs` | both kinds of account: the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
-| `google/accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account |
+| `google/accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account; the auto-syncs' schedule, `SYNC_EVERY` and `AutoSyncs` |
 | `config/files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai/context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file, within a budget; its tests |
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked entity; `create`, a new AI conversation; dispatch tests against a fake Ollama |
 | `ai/accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
-| `email.rs`, `email/` | Fetch email: `email_labels`, `email_search`, `email_headers`, `email_fetch`; `EmailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); their tests; its parts in `email/`: `preview.rs`, `fetch.rs`, `entities.rs`, `apply.rs`, the tests in `email/tests.rs` |
+| `email.rs`, `email/` | Fetch email: `email_labels`, `email_search`, `email_headers`, `email_fetch`, `set_email_sync`; `EmailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); their tests; its parts in `email/`: `preview.rs`, `fetch.rs`, `entities.rs`, `apply.rs`, `auto_sync.rs`, the tests in `email/tests.rs` |
 
 ## Platforms <a id="platforms"></a>
 
@@ -385,6 +397,7 @@ the only `cfg(target_os)` in `app/src`:
   `architecture.md#one-way-in`);
 - close, the app's own close and the session end;
 - the window active again (`App::on_activated`);
+- the clock (`App::on_clock`);
 - the window state.
 
 Each platform's window only turns its native events into calls on it,
@@ -394,6 +407,7 @@ so the subtle part is written once:
 |---|---|---|
 | Close | `WM_CLOSE` | `close-request` |
 | Activation | `WM_ACTIVATE` | `notify::is-active` |
+| Clock | `WM_TIMER` | `timeout_add_seconds_local(60)` |
 | Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
 
 **The page's bridge.** `page.rs` builds the page for both platforms:
@@ -423,7 +437,7 @@ nothing imports `app.js`.
 | File | Role |
 |---|---|
 | `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `addDays`, `sameDay`, `weekStartOf`, `monthStartOf`, `monthEndOf`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page (`TIME_FORMAT`, `MONTH_YEAR`, …, `shortDate`, `pageDate`), and counts with their noun (`plural`) |
-| `core/text.js` | the page's texts: `t`, a text of the run's catalog, `textOf`, one the host sent, and the run's `locale` (`localization.md`) |
+| `core/text.js` | the page's texts: `t`, a text of the run's catalog, `parts`, one with an element in it, `textOf`, one the host sent, and the run's `locale` (`localization.md`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`, which makes its parts for each editor (`editor/selection.js`, `editor/blocks.js`, `editor/tables.js`, `editor/shortcuts.js`, `editor/paste.js`); `isLink` (`editor/links.js`); the tags both read (`editor/tags.js`); `serializeMarkdown` |
@@ -444,7 +458,7 @@ nothing imports `app.js`.
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`); its way to the Accounts page is the `accounts.open` action |
 | `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts, Google and AI; the trash |
-| `features/import/email.js` | Fetch email |
+| `features/import/email.js` | Fetch email, and an account's email auto-sync |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event, with Stop |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |

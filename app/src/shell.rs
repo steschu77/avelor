@@ -122,6 +122,14 @@ impl Shell {
     }
 
     // ------------------------------------------------------------------------
+    /// The clock ticked: the app starts what is due, from the UI queue
+    /// like every other way in (`App::on_clock`); before `App` is up
+    /// nothing is due.
+    pub fn on_clock(&self) {
+        let _ = self.queue(App::on_clock);
+    }
+
+    // ------------------------------------------------------------------------
     /// Whether a dialog or a handler is running further up the stack: a
     /// modal loop dispatched this message. The window's Close is refused
     /// then.

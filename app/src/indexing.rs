@@ -8,11 +8,13 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use av_utils::cancel::Cancel;
+use av_utils::datetime::DateTime;
 use av_utils::id::Id;
 use av_vault::vault::{self, IndexControl, IndexEvent};
 use serde::Serialize;
 
 use crate::app::{App, Progress, Task};
+use crate::email;
 use crate::jobs::JobKind;
 use crate::texts::Text;
 
@@ -70,7 +72,6 @@ impl App {
     // ------------------------------------------------------------------------
     /// Whether the indexing still runs: until it ends, the index doesn't
     /// know every entity.
-    #[cfg(test)]
     pub fn indexing(&self) -> bool {
         self.indexing.running.is_some()
     }
@@ -178,12 +179,15 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// The indexing `id` read every file.
+    /// The indexing `id` read every file: the vault knows its emails now, so
+    /// the auto-syncs may run.
     fn end_indexing(&mut self, id: Id) {
         if !self.indexing.is_running(id) {
             return;
         }
         self.indexing.running = None;
+        let now = DateTime::now();
+        email::auto_sync(self, now);
     }
 }
 

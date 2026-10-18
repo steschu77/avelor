@@ -173,7 +173,7 @@ pub struct GoogleAccount {
 // ----------------------------------------------------------------------------
 /// What the email import remembers per account: the filter of the last
 /// fetch, the preview's update mode, and when email was last fetched (the
-/// "Since last time" preset).
+/// "Since last time" preset); and the account's auto-sync.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FetchEmail {
@@ -183,6 +183,9 @@ pub struct FetchEmail {
     pub auto_update: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_fetch: Option<DateTime>,
+    /// Absent until auto-sync is first switched on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_sync: Option<AutoSync>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
 }
@@ -193,6 +196,7 @@ impl Default for FetchEmail {
             filter: EmailFilter::default(),
             auto_update: auto_update_default(),
             last_fetch: None,
+            auto_sync: None,
             rest: BTreeMap::new(),
         }
     }
@@ -200,6 +204,36 @@ impl Default for FetchEmail {
 
 fn auto_update_default() -> bool {
     true
+}
+
+// ----------------------------------------------------------------------------
+/// The account's email auto-sync (`email::auto_sync`): every 15 minutes, the
+/// email that matches `filter` and arrived since `since` is fetched.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct AutoSync {
+    pub enabled: bool,
+    /// Fetch email's filter without its dates: the host sets `after` itself.
+    #[serde(default)]
+    pub filter: EmailFilter,
+    /// Email from then on is fetched: when auto-sync was switched on, then
+    /// the start of the last complete run.
+    pub since: DateTime,
+    #[serde(flatten)]
+    rest: BTreeMap<String, Value>,
+}
+
+impl AutoSync {
+    // ------------------------------------------------------------------------
+    /// Off, fetching the email from `since` on once it is switched on.
+    pub fn new(since: DateTime) -> Self {
+        Self {
+            enabled: false,
+            filter: EmailFilter::default(),
+            since,
+            rest: BTreeMap::new(),
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -288,6 +322,7 @@ pub struct FetchEmailMeta<'a> {
     pub filter: &'a EmailFilter,
     pub auto_update: bool,
     pub last_fetch: Option<DateTime>,
+    pub auto_sync: Option<&'a AutoSync>,
 }
 
 impl Account {
@@ -370,6 +405,7 @@ impl Account {
                     filter: &email.filter,
                     auto_update: email.auto_update,
                     last_fetch: email.last_fetch,
+                    auto_sync: email.auto_sync.as_ref(),
                 }),
         }
     }
@@ -730,6 +766,22 @@ last-sync: 2026-09-27T10:30:00Z
         let again: AccountFile =
             serde_yaml_ng::from_str(&serde_yaml_ng::to_string(&file).unwrap()).unwrap();
         assert_eq!(again.google.fetch_email, file.google.fetch_email);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_settings_keep_the_keys_the_app_doesnt_know() {
+        let calendars = "  calendars:\n    - id: c\n      name: C\n      custom: kept\n";
+        let sync = "    auto-sync:\n      enabled: true\n      since: 2026-09-22T12:10:00Z\n      custom: kept\n";
+        let email = format!("  fetch-email:\n    custom: kept\n{sync}");
+        let yaml = GOOGLE.replacen(
+            "  custom: kept\n",
+            &format!("  custom: kept\n{calendars}{email}"),
+            1,
+        );
+        let file: AccountFile = serde_yaml_ng::from_str(&yaml).unwrap();
+        let text = serde_yaml_ng::to_string(&file).unwrap();
+        assert_eq!(text.matches("custom: kept").count(), 4, "{text}");
     }
 
     // ------------------------------------------------------------------------

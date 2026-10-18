@@ -25,6 +25,7 @@ use crate::protocol::Req;
 
 // ----------------------------------------------------------------------------
 /// An account file, read.
+#[allow(clippy::large_enum_variant)]
 enum Loaded {
     Google(Account),
     Ai(AiAccount),
