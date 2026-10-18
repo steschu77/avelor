@@ -23,9 +23,18 @@
   box-shadow: var(--shadow-raise);
 }
 
-/* expanded, the panel has its context column */
-.panel.is-expanded {
+/* expanded or half-open (chat), the panel has its context column */
+.panel.is-expanded,
+.panel.is-chat {
   grid-template-columns: 1fr var(--w-expanded-context);
+}
+
+/* half-open, the panel opens over the main view as it does at full width,
+   by the context column beside the card; the main view keeps its layout
+   (its padding stays --w-panel), the vault list stays uncovered, and if
+   the window is too narrow, the card gives way */
+.panel.is-chat {
+  width: min(calc(var(--w-panel) + var(--w-expanded-context)), calc(100vw - var(--w-vault-list)));
 }
 
 .panel__toolbar {
@@ -49,7 +58,7 @@
   grid-area: context;
   /* anchors its .grip to the context's left edge */
   position: relative;
-  /* the column is 0px wide until the panel is expanded */
+  /* the column is 0px wide until the panel is expanded or half-open */
   min-width: 0;
   overflow: hidden;
   display: flex;
@@ -63,7 +72,8 @@
 }
 
 /* open, the context column's shadow falls onto the panel's body */
-.panel.is-expanded .panel__context {
+.panel.is-expanded .panel__context,
+.panel.is-chat .panel__context {
   opacity: 1;
   pointer-events: auto;
   overflow: visible;

@@ -123,6 +123,7 @@
   },
   "cal.previous_month": "Vorheriger Monat",
   "cal.today": "Heute",
+  "card.chat": "Über das Dokument chatten",
   "card.delete": "Dokument löschen",
   "card.edit": "Dokument bearbeiten",
   "card.leave_thread": "Aus dem Verlauf entfernen",
@@ -468,6 +469,10 @@
   "palette.which_key": "Was sie tut, oder die Taste",
   "palette.window": "Fenster",
   "panel.add_project_label": "Zu einem Projekt oder Label hinzufügen",
+  "panel.chat_count": {
+    "one": "Über das Dokument chatten · {n} Unterhaltung",
+    "other": "Über das Dokument chatten · {n} Unterhaltungen"
+  },
   "panel.close": "Details schließen",
   "panel.close_panel": "Seitenbereich schließen",
   "panel.delete_armed": "Zum Löschen erneut klicken",

@@ -1,6 +1,6 @@
 // The assistant (assistant.md): conversations with the model picked for them
 // (the vault's settings, picked in the head: accounts.md#model-choice),
-// in the panel's context column (expanded), its Conversation tab
+// in the panel's context column (expanded or half-open), its Conversation tab
 // (features/context.js). A conversation is an entity in
 // the vault, linked to the document or thread the panel showed when it
 // started; the switcher lists the conversations linked to what is shown. The host
@@ -10,7 +10,8 @@
 // (`chat_open`, `chat_send`, `chat_stop`, `chat_select`; the events
 // `conversation` and `ai_delta`); the page shows the path from the first
 // message to `active`, and lets the user edit a message and send it again,
-// which starts a branch.
+// which starts a branch. A card's chat button opens the chat beside the
+// card (`toggleCardChat`).
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { titled } from '../../core/dom.js';
@@ -297,7 +298,7 @@ registerAction({
   id: 'chat.new', group: 'assistant', title: t('chat.new_conversation'), icon: '#i-chat', also: t('chat.also'),
   when: vaultOpen,
   run: () => {
-    store.setState({ panel_size: 'expanded' });
+    if (store.getState().panel_size !== 'expanded') store.setState({ panel_size: 'chat' });
     selectContextTab('conversation', true);
     assistantOpenChat(null);
     assistantInput.focus();
@@ -600,6 +601,23 @@ store.subscribe([
 ], (_values, state) => assistantShow(state));
 
 store.subscribe([state => state.accounts_rev, state => state.settings_rev], () => renderAssistant());
+
+// An AI conversation selected, in a lens, on the dashboard or through Go to,
+// opens beside what it is about: the panel half-open (at full width it
+// stays so) on the Conversation tab, the focus where it was. Only a new
+// selection opens it, so a chat closed stays closed.
+store.subscribe(state => state.selected_entity, id => {
+  if (!isAiConversation(entities.get(id))) return;
+  if (store.getState().panel_size !== 'expanded') store.setState({ panel_size: 'chat' });
+  selectContextTab('conversation');
+});
+
+// The cards' chat buttons are pressed while the chat is open beside them.
+store.subscribe(state => state.panel_size, panel_size => {
+  for (const btn of document.querySelectorAll('#panel-body [data-cmd="chat"]')) {
+    btn.setAttribute('aria-pressed', String(panel_size === 'chat'));
+  }
+});
 
 // A conversation written (or deleted) changes the switcher's count; the conversation shown
 // leaving the vault is gone.
