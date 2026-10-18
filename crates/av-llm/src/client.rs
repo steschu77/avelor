@@ -2,18 +2,29 @@
 //! requests through.
 //!
 //! Provider modules build a request, send it, and turn the answer into the
-//! shared types. `Client` runs them under the caller's `Cancel`. HTTP failures
-//! become `Error::Http` here, whatever the provider's error body looks like.
+//! shared types. `Client` runs them under the caller's `Cancel`, and prices
+//! every answer. HTTP failures become `Error::Http` here, whatever the
+//! provider's error body looks like.
+
+use std::io;
+use std::time::Duration;
 
 use av_http::{Method, Request, Response};
 use av_utils::cancel::Cancel;
+use av_utils::error::Error;
 use av_utils::error::Result;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::types::{Auth, ModelInfo, Provider};
+use crate::types::{ChatRequest, ChatResponse};
 use crate::usage::{Price, list_price};
 use crate::{anthropic, gemini, mistral, ollama, openai};
+
+/// Limits each phase of a chat request, waiting for the first byte
+/// included: reasoning models and a local model still loading take a
+/// while. A stream that keeps coming never times out.
+pub(crate) const CHAT_TIMEOUT: Duration = Duration::from_secs(600);
 
 // ----------------------------------------------------------------------------
 /// `$provider::$f(args…)` for the client's provider.
@@ -71,6 +82,47 @@ impl Client {
     /// The models this account can chat with.
     pub fn models(&self, cancel: &Cancel) -> Result<Vec<ModelInfo>> {
         by_provider!(self.provider, models(self, cancel))
+    }
+
+    // ------------------------------------------------------------------------
+    /// Cancelling `cancel` stops the answer.
+    pub fn chat_stream(
+        &self,
+        cancel: &Cancel,
+        req: &ChatRequest,
+        mut on_delta: impl FnMut(&str),
+    ) -> Result<ChatResponse> {
+        self.run_chat(cancel, req, &mut on_delta)
+    }
+
+    // ------------------------------------------------------------------------
+    fn run_chat(
+        &self,
+        cancel: &Cancel,
+        req: &ChatRequest,
+        on_delta: &mut dyn FnMut(&str),
+    ) -> Result<ChatResponse> {
+        let body = by_provider!(self.provider, chat_body(req))?;
+        let mut resp = by_provider!(
+            self.provider,
+            chat(self, cancel, &req.model, body, on_delta)
+        )?;
+        if resp.model.is_empty() {
+            resp.model = req.model.clone();
+        }
+        resp.cost = self
+            .price(&req.model)
+            .or_else(|| self.price(&resp.model))
+            .map(|price| price.cost(&resp.usage));
+        log::debug!(
+            "{} {}: {:?}, {:?}, cost {:?}",
+            self.provider,
+            resp.model,
+            resp.stop,
+            resp.usage,
+            resp.cost
+        );
+        Ok(resp)
     }
 
     // ------------------------------------------------------------------------
@@ -135,6 +187,19 @@ fn reason(body: &[u8]) -> Option<(String, String)> {
 }
 
 // ----------------------------------------------------------------------------
+/// An error object in a stream (a failure after the 2xx status):
+/// `Error::InvalidResponse` with its type and message.
+pub(crate) fn stream_error(json: &Value) -> Option<Error> {
+    let (reason, msg) = error_parts(json)?;
+    let msg = if reason.is_empty() {
+        msg
+    } else {
+        format!("{reason}: {msg}")
+    };
+    Some(Error::InvalidResponse { msg })
+}
+
+// ----------------------------------------------------------------------------
 /// The error type/code and the message of a provider's error body, if it is
 /// one:
 /// - Anthropic `{"type": "error", "error": {"type", "message"}}`
@@ -190,6 +255,18 @@ fn text(value: &Value) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// The `av_utils` error a response's `Read` wrapped, or the I/O error.
+pub(crate) fn io_error(err: io::Error) -> Error {
+    if !err.get_ref().is_some_and(|inner| inner.is::<Error>()) {
+        return Error::FileIo { err };
+    }
+    let inner = err.into_inner().expect("checked to wrap an error");
+    *inner
+        .downcast::<Error>()
+        .expect("checked to be a av_utils error")
+}
+
+// ----------------------------------------------------------------------------
 /// A string field, empty if absent.
 pub(crate) fn string(value: &Value) -> String {
     value.as_str().unwrap_or_default().to_string()
@@ -208,6 +285,14 @@ pub(crate) fn count(value: &Value) -> u64 {
 /// A token limit a provider reports; `None` if absent or 0 (unknown).
 pub(crate) fn limit(value: &Value) -> Option<u64> {
     Some(count(value)).filter(|n| *n > 0)
+}
+
+// ----------------------------------------------------------------------------
+/// `Error::InvalidResponse` for a stream that ended before its last event.
+pub(crate) fn cut_short() -> Error {
+    Error::InvalidResponse {
+        msg: "the answer broke off".to_string(),
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -365,11 +450,38 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn stream_errors_carry_type_and_message() {
+        let json = serde_json::json!({"type": "error", "error":
+            {"type": "overloaded_error", "message": "Overloaded"}});
+        match stream_error(&json) {
+            Some(Error::InvalidResponse { msg }) => assert_eq!(msg, "overloaded_error: Overloaded"),
+            other => panic!("unexpected {other:?}"),
+        }
+        let openai = serde_json::json!({"type": "error", "code": "server_error",
+            "message": "Try again."});
+        match stream_error(&openai) {
+            Some(Error::InvalidResponse { msg }) => assert_eq!(msg, "server_error: Try again."),
+            other => panic!("unexpected {other:?}"),
+        }
+        assert!(stream_error(&serde_json::json!({"type": "message_stop"})).is_none());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn loopback_hosts_are_local() {
         assert!(is_loopback("http://localhost:11434"));
         assert!(is_loopback("http://127.0.0.1:11434/"));
         assert!(is_loopback("http://[::1]:11434"));
         assert!(!is_loopback("https://ollama.com"));
         assert!(!is_loopback("http://192.168.1.5:11434"));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn io_errors_give_back_the_wrapped_error() {
+        let wrapped = io::Error::other(Error::Cancelled);
+        assert!(matches!(io_error(wrapped), Error::Cancelled));
+        let plain = io::Error::new(io::ErrorKind::InvalidData, "bad utf-8");
+        assert!(matches!(io_error(plain), Error::FileIo { .. }));
     }
 }
