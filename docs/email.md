@@ -99,7 +99,7 @@ header pages are fetched 8 in parallel (av-google's `gmail::get_headers`, scoped
 threads). The fetch's state lives in `EmailState`; a newer search
 supersedes a running one on the page's `email-preview` channel. The
 auto-sync (`auto_sync`, `sync_query`) runs from the clock with the
-schedule (`SYNC_EVERY`, `first_due` in
+schedule it shares with the calendar (`SYNC_EVERY`, `AutoSyncs` in
 `google.rs`): a quiet search first, and a fetch job only for new email. A
 404 from Gmail is read by matching `Error::Http { status, .. }` in
 `email.rs`.

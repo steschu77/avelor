@@ -248,7 +248,7 @@ pub struct App {
     pub email: EmailState,
 
     /// The calendar sync (`calendar`): the sync in progress, one at a
-    /// time.
+    /// time, and the auto-syncs' schedule.
     pub calendar: CalendarState,
 
     /// The close asked of the page (`close`).
@@ -496,10 +496,11 @@ impl App {
 
     // ------------------------------------------------------------------------
     /// The clock ticked (the window's timer, every minute): start what the
-    /// app does on its own -- the email auto-syncs that are due.
+    /// app does on its own -- the email and calendar auto-syncs that are due.
     pub fn on_clock(&mut self) {
         let now = DateTime::now();
         email::auto_sync(self, now);
+        calendar::auto_sync(self, now);
     }
 
     // ------------------------------------------------------------------------

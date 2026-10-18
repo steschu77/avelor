@@ -348,6 +348,7 @@ function accountSources(account) {
         key: `${id}\ncalendar\n${calendar.id}`, kind: 'calendar', account: id,
         calendar: calendar.id, name: calendar.name, icon: KIND_ICONS.calendar.icon,
         also: t('sidebar.sync_also'),
+        autoSync: !!calendar.auto_sync,
       });
     }
   }

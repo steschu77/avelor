@@ -7,6 +7,11 @@
 //! the vault, the engine lists and pushes on a worker, and its effects are
 //! applied through the vault edit.
 //!
+//! A calendar's auto-sync syncs it every 15 minutes, started by the clock
+//! (`App::on_clock`): a quiet list of Google's changes first, then -- only if
+//! there is something to pull or push -- a sync job like the sidebar's, with
+//! what was listed.
+//!
 //! A two-way sync deletes in Google the calendar's events deleted in the vault
 //! (their files in the trash), and marks each trashed file cancelled; one that
 //! Google changed since comes back from the trash.
@@ -24,6 +29,7 @@ use av_google::auth::ScopeAccess;
 use av_google::calendar::KEPT_TYPES;
 use av_google::calendar_sync::{self, SyncJob};
 use av_google::client::Client;
+use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::id::Id;
 use av_vault::document::Document;
@@ -34,6 +40,7 @@ use serde_json::json;
 
 use crate::app::App;
 use crate::google;
+use crate::google::AutoSyncs;
 use crate::google::accounts::CalendarSource;
 use crate::jobs::JobKind;
 use crate::protocol::Req;
@@ -42,12 +49,19 @@ use apply::apply;
 use plan::{build_job, calendar_entity};
 
 mod apply;
+mod auto_sync;
 mod mapping;
 mod plan;
+
+pub(crate) use auto_sync::auto_sync;
 
 // ----------------------------------------------------------------------------
 /// The status of an event deleted in Google.
 const CANCELLED: &str = "cancelled";
+
+// ----------------------------------------------------------------------------
+/// A calendar source: the account, and Google's id of the calendar.
+type SourceKey = (Id, String);
 
 /// Per event of a sync, by its vault-relative path: its id, and the
 /// snapshot it was planned with.
@@ -55,10 +69,12 @@ type PlannedEvents = HashMap<PathBuf, (Id, String)>;
 
 // ----------------------------------------------------------------------------
 /// What the app keeps for the calendar sync: the sync in progress (one
-/// at a time).
+/// at a time), and the auto-syncs' schedule.
 #[derive(Default)]
 pub struct CalendarState {
     sync: Option<CalendarSync>,
+    /// The calendars' auto-syncs.
+    auto: AutoSyncs<SourceKey>,
 }
 
 // ----------------------------------------------------------------------------
@@ -66,9 +82,14 @@ pub struct CalendarState {
 struct CalendarSync {
     job_id: Id,
     account: Id,
+    /// Google's id of the synced calendar.
+    source: String,
     /// The vault's calendar entity of the synced calendar.
     calendar: Id,
     events: PlannedEvents,
+    /// Started by the auto-sync: what failed is shown only if the calendar
+    /// isn't failing already (`AutoSyncs::is_failing`).
+    auto_sync: bool,
 }
 
 /// `calendar_sync`'s args: Google's id of one of the account's checked
@@ -117,7 +138,7 @@ pub fn calendar_sync(app: &mut App, req: Req, request: SyncRequest) {
         }
     };
     let push = two_way(access, &source);
-    let built = build_job(app, account, calendar, &source, push);
+    let built = build_job(app, account, calendar, &source, push, None);
     let job_id = start(app, client, account, calendar, &source, built);
     req.ok(json!({ "job": job_id }));
 }
@@ -259,8 +280,51 @@ fn refuse_source(req: Req) {
 }
 
 // ----------------------------------------------------------------------------
+/// `set_calendar_sync`'s args.
+#[derive(Deserialize)]
+pub(crate) struct SyncSetting {
+    account: Id,
+    calendar: String,
+    enabled: bool,
+}
+
+// ----------------------------------------------------------------------------
+/// `set_calendar_sync {account, calendar, enabled}`: switch the auto-sync of
+/// one of the account's checked calendars on or off. Switched on, it is due
+/// at the clock's next tick. Answered after the `account` event.
+pub fn set_calendar_sync(app: &mut App, req: Req, setting: SyncSetting) {
+    let SyncSetting {
+        account,
+        calendar,
+        enabled,
+    } = setting;
+    if let Err(e) = app.google.get(account) {
+        return req.err(e);
+    }
+    if find_source(app, account, &calendar).is_none() {
+        return refuse_source(req);
+    }
+    let updated = app
+        .google
+        .update(account, |a| a.set_calendar_sync(&calendar, enabled));
+    match updated {
+        Ok(_) => {
+            log::info!("Calendar auto-sync of {calendar} ({account}): {enabled}");
+            if enabled {
+                app.calendar.auto.due(&(account, calendar));
+            }
+            google::post(app, account);
+            req.ok(());
+        }
+        Err(e) => req.save_failed(e, Text::new("save.account")),
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// Sync `source` with its calendar entity `calendar` as a job, run on a
-/// worker: the job built from the vault (`build_job`). The job's id.
+/// worker: the job built from the vault (`build_job`). A job with changes
+/// listed already is an auto-sync's. The calendar's next auto-sync is then
+/// 15 minutes away. The job's id.
 fn start(
     app: &mut App,
     client: Arc<Client>,
@@ -271,17 +335,23 @@ fn start(
 ) -> Id {
     let label = Text::new("calendar.syncing").arg("name", source.name.as_str());
     let job_id = app.start_job(JobKind::CalendarSync, label, 1);
+    let auto_sync = job.calendars.iter().any(|c| c.listed.is_some());
     log::info!(
-        "Calendar sync {job_id}: {} of {account}, {} events, {}",
+        "Calendar sync {job_id}: {} of {account}, {} events, {}{}",
         source.id,
         events.len(),
-        if job.push { "two-way" } else { "pull only" }
+        if job.push { "two-way" } else { "pull only" },
+        if auto_sync { ", auto-sync" } else { "" }
     );
+    let key = (account, source.id.clone());
+    app.calendar.auto.ran(key, DateTime::now());
     app.calendar.sync = Some(CalendarSync {
         job_id,
         account,
+        source: source.id.clone(),
         calendar,
         events,
+        auto_sync,
     });
     app.run_job(
         job_id,
@@ -289,6 +359,13 @@ fn start(
         move |app, result| apply(app, job_id, result),
     );
     job_id
+}
+
+// ----------------------------------------------------------------------------
+/// A vault opened: its calendars' auto-syncs are due as soon as its indexing
+/// has ended.
+pub(crate) fn vault_opened(app: &mut App) {
+    app.calendar.auto.clear();
 }
 
 #[cfg(test)]

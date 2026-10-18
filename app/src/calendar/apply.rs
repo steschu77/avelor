@@ -96,11 +96,16 @@ pub(super) fn apply(app: &mut App, job_id: Id, result: Result<SyncOutput>) {
         failed: failures.len(),
         ..Counts::default()
     };
+    // An auto-sync of a calendar that failed before says it only once.
+    let key = (sync.account, sync.source.clone());
+    let quiet = sync.auto_sync && app.calendar.auto.is_failing(&key);
     // The host's words in the status bar, the error in the log
     // (`App::notice`).
     let fail = |app: &App, text: Text, error: &Error| {
         log::warn!("{text}: {error}");
-        app.notice(text);
+        if !quiet {
+            app.notice(text);
+        }
     };
     for failure in failures {
         let text = Text::new("calendar.sync_failed").arg("subject", failure.subject.as_str());
@@ -123,6 +128,11 @@ pub(super) fn apply(app: &mut App, job_id: Id, result: Result<SyncOutput>) {
                 fail(app, Text::new("calendar.write_failed"), &e);
             }
         }
+    }
+    if counts.failed == 0 {
+        app.calendar.auto.worked(&key);
+    } else if sync.auto_sync {
+        app.calendar.auto.failed(key);
     }
     finish(app, sync, &counts);
 }

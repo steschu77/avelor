@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use av_google::calendar_sync::Changes;
 use av_google::calendar_sync::{self, CalendarJob, LocalEvent, SyncJob};
 use av_utils::datetime::DateTime;
 use av_utils::error::Result;
@@ -74,16 +75,19 @@ pub(super) fn calendar_entity(app: &mut App, account: Id, source: &CalendarSourc
 }
 
 // ----------------------------------------------------------------------------
-/// The job for the calendar entity `calendar`, two-way if `push`; and its
-/// events' ids and snapshots by path. Two-way, it also holds the calendar's
-/// events in the trash that Google still has, to delete there, under their
-/// path in `.trash`.
+/// The job for the calendar entity `calendar`, two-way if `push`, with the
+/// changes an auto-sync `listed` already; and its events' ids and snapshots
+/// by path. Two-way, it also holds the calendar's events in the trash that
+/// Google still has, to delete there, under their path in `.trash`. The
+/// events last synced with it that are another calendar's now are left to
+/// that one (`CalendarJob::elsewhere`), whose sync moves them.
 pub(super) fn build_job(
     app: &App,
     account: Id,
     calendar: Id,
     source: &CalendarSource,
     push: bool,
+    listed: Option<Changes>,
 ) -> (SyncJob, PlannedEvents) {
     let mut events = HashMap::new();
     let mut locals: Vec<LocalEvent> = app
@@ -142,6 +146,7 @@ pub(super) fn build_job(
         calendars: vec![CalendarJob {
             events: locals,
             elsewhere,
+            listed,
             ..calendar_job(app, account, Some(calendar), source)
         }],
     };
@@ -158,7 +163,7 @@ fn of_calendar(doc: &Document, calendar: Id) -> bool {
 // ----------------------------------------------------------------------------
 /// The job's part for `source` without its events: the calendar entity's
 /// path and bookkeeping, if it has one yet.
-fn calendar_job(
+pub(super) fn calendar_job(
     app: &App,
     account: Id,
     calendar: Option<Id>,

@@ -145,6 +145,12 @@ impl<K: Eq + Hash + Clone> AutoSyncs<K> {
     }
 
     // ------------------------------------------------------------------------
+    /// `key` is due at once.
+    pub fn due(&mut self, key: &K) {
+        self.next.remove(key);
+    }
+
+    // ------------------------------------------------------------------------
     /// The auto-sync of `key` failed; whether that is new, to be said.
     pub fn failed(&mut self, key: K) -> bool {
         self.failing.insert(key)
@@ -153,6 +159,11 @@ impl<K: Eq + Hash + Clone> AutoSyncs<K> {
     // ------------------------------------------------------------------------
     pub fn worked(&mut self, key: &K) {
         self.failing.remove(key);
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn is_failing(&self, key: &K) -> bool {
+        self.failing.contains(key)
     }
 
     // ------------------------------------------------------------------------
@@ -535,6 +546,8 @@ mod tests {
         assert_eq!(syncs.first_due([a, b], now), Some(b), "due at its time");
         syncs.next.insert(b, now.plus_seconds(1));
         assert_eq!(syncs.first_due([a, b], now), None);
+        syncs.due(&b);
+        assert_eq!(syncs.first_due([a, b], now), Some(b), "made due");
         syncs.listed();
         assert!(!syncs.is_listing());
     }
@@ -546,8 +559,10 @@ mod tests {
         let mut syncs = AutoSyncs::default();
         assert!(syncs.failed(a), "said");
         assert!(!syncs.failed(a), "not again");
+        assert!(syncs.is_failing(&a));
         syncs.worked(&a);
         assert!(syncs.failed(a), "said again");
         syncs.clear();
+        assert!(!syncs.is_failing(&a));
     }
 }
