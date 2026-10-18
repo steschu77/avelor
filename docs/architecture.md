@@ -408,7 +408,7 @@ side never touches the vault side; `app` is the only bridge.
 | `analysis.rs`, `analysis/` | the email analysis (`email.md#analysis`): the vault's `context`, the request per level, its parser and its writes (pure: `request_for`, `parse`, `apply_lite`, `medium_messages`), the analysis job one email at a time (`analyse`, `AnalysisState`); its tests against a fake Ollama; its parts in `analysis/`: `context.rs`, `request.rs`, `answer.rs`, `apply.rs`, `job.rs`, the tests in `analysis/tests.rs` |
 | `calendar.rs`, `calendar/` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests; its parts in `calendar/`: `mapping.rs`, `auto_sync.rs`, `plan.rs`, `apply.rs`, the tests in `calendar/tests.rs` |
 | `watches.rs`, `watches/folders.rs` | watch files in `.avelor/watches/`, the `Watches` sub-state, globbing, listing; the watch commands, the events `watches` / `watch` / `watch_removed`, their dispatch tests |
-| `scans.rs`, `scans/` | Import scans: `scan_list`, `scan_read`, `scan_previews`, `scan_open`, the events `scan_page` / `scan_preview`, OCR as a job (the account and model resolved, the spend limit checked per page); their dispatch tests; its parts in `scans/`: `read.rs`, `previews.rs`, the tests in `scans/tests.rs` |
+| `scans.rs`, `scans/` | Import scans: `scan_list`, `scan_read`, `scan_previews`, `scan_open`, `scan_import`, the events `scan_page` / `scan_preview`, OCR as a job (the account and model resolved, the spend limit checked per page), `scan_document` (pages → document); their dispatch tests; its parts in `scans/`: `read.rs`, `import.rs`, `previews.rs`, the tests in `scans/tests.rs` |
 
 ## Platforms <a id="platforms"></a>
 
@@ -715,8 +715,10 @@ abort. Where the bundle lands and how to measure the size:
   the vault (what is there, what to ask for) → *run* on a worker (remote
   I/O, no vault access) → *apply* on the UI thread through the vault edit
   (`App::edit`). Calendar sync (`build_job`, the engine, `apply`) and
-  email fetch (`plan_fetch`, the downloads, `fetch_action`) work this way. The mapping between remote data and
-  entities is a pure function with tests (`event_entity`, `email_entity`).
+  email fetch (`plan_fetch`, the downloads, `fetch_action`) work this way;
+  the scan import has its plan and its apply. The mapping between remote
+  data and entities is a pure function with tests (`event_entity`,
+  `email_entity`, `scan_document`).
 
   ```mermaid
   flowchart LR

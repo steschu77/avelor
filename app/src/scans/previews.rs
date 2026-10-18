@@ -12,7 +12,7 @@ use crate::sys;
 use crate::watches::FolderFile;
 
 /// The previews' size: twice the page's large preview (180 x 254), so they
-/// stay sharp on a high-DPI screen.
+/// stay sharp on a high-DPI screen; thumbnails show them smaller.
 const PREVIEW_W: u32 = 360;
 const PREVIEW_H: u32 = 508;
 

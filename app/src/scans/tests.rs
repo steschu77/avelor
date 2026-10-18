@@ -1,6 +1,8 @@
 use super::*;
+use av_vault::envelope::Source;
 use serde_json::json;
 
+use super::import::{ScanPage, scan_document};
 use super::read::{
     PageEvent, PageStatus, ReadCounts, TITLE_LEN, clean_ocr, is_image, title_of, word_count,
 };
@@ -10,6 +12,7 @@ use crate::testing::{FakeOllama, parse, reply, shape, shown, words};
 use serde_json::Value;
 use std::fs;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 const WATCH_ID: &str = "01a0e1cc-a24c-7490-82fe-e75669985b40";
 const IMPORTED_ID: &str = "01a0e1cc-a24c-7490-82fe-e75669985b41";
@@ -63,8 +66,104 @@ fn read_page(h: &mut Harness, folder: &Path, name: &str, text: &str) {
         stamp: Stamp::of(&file),
         words: word_count(text),
         title: title_of(text),
+        text: text.to_string(),
     };
     h.app.scans.cache.insert(file.path, ocr);
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn pages_become_one_document() {
+    let watch = Id::generate();
+    let first = DateTime::from_system_time(SystemTime::UNIX_EPOCH + Duration::from_secs(1 << 30));
+    let later = DateTime::from_system_time(SystemTime::UNIX_EPOCH + Duration::from_secs(1 << 31));
+    let sub = Path::new("2026")
+        .join("scan_0806.jpg")
+        .to_string_lossy()
+        .into_owned();
+    let page = |title| ScanPage {
+        file: &sub,
+        taken: first,
+        text: "# Bill",
+        title,
+    };
+    let second = ScanPage {
+        file: "scan_0807.jpg",
+        taken: later,
+        text: "Page two",
+        title: "Page two",
+    };
+    let pages = [page("Bill"), second];
+
+    let doc = scan_document(watch, "  ", &pages);
+    assert_eq!(doc.title(), "Bill", "the first page's title");
+    assert_eq!(doc.date(), Some(first));
+    assert_eq!(doc.content(), "# Bill\n\nPage two\n");
+    assert!(doc.roles().document.is_some());
+    let Some(Source::Scan(scan)) = doc.source() else {
+        panic!("{:?}", doc.source());
+    };
+    assert_eq!(scan.watch, Some(watch));
+    assert_eq!(
+        scan.origin.as_slice(),
+        [sub.clone(), "scan_0807.jpg".into()]
+    );
+
+    let doc = scan_document(watch, " Taxes ", &pages);
+    assert_eq!(doc.title(), "Taxes", "the title given, trimmed");
+    let doc = scan_document(watch, "", &[page("")]);
+    assert_eq!(doc.title(), "scan_0806", "the first file's name");
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn import_writes_read_pages_and_says_why_not_the_others() {
+    let (mut h, folder) = with_scans("scan-import");
+    read_page(&mut h, &folder, "a.jpg", "# Bill 4711\n\nPay now.");
+    read_page(&mut h, &folder, "c.jpg", "# Old");
+    let docs = json!([
+        { "title": "", "files": ["a.jpg"] },
+        { "title": "B", "files": ["b.jpg"] },
+        { "files": ["c.jpg"] },
+        { "files": [] },
+    ]);
+    let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+    assert_eq!(shape(&sent), ["entity", "reply"]);
+    let entity = &sent[0]["data"];
+    assert_eq!(entity["title"], "Bill 4711");
+    let reply = &sent[1]["ok"];
+    assert_eq!(
+        reply["imported"],
+        json!([{ "files": ["a.jpg"], "id": entity["id"] }])
+    );
+    let failed: Vec<String> = reply["failed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| shown(&f["error"]))
+        .collect();
+    assert_eq!(
+        failed,
+        [
+            "b.jpg isn't read, or changed since; read it again.",
+            "c.jpg is in the vault already.",
+            "A document needs a page.",
+        ]
+    );
+    let path = h.vault().join(entity["path"].as_str().unwrap());
+    let text = fs::read_to_string(path).unwrap();
+    assert!(
+        text.contains(&format!("watch: {WATCH_ID}")) && text.contains("origin: a.jpg"),
+        "{text}"
+    );
+    assert!(text.ends_with("# Bill 4711\n\nPay now.\n"), "{text}");
+
+    let again = json!({ "watch": WATCH_ID, "docs": [{ "files": ["a.jpg"] }] });
+    let sent = h.call("scan_import", again);
+    assert_eq!(
+        shown(&sent[0]["ok"]["failed"][0]["error"]),
+        "a.jpg is in the vault already."
+    );
 }
 
 // ------------------------------------------------------------------------
@@ -145,6 +244,7 @@ fn requests_for_unknown_watches_accounts_and_files_are_refused() {
         ("scan_read", json!({ "watch": unknown, "files": [] })),
         ("scan_previews", json!({ "watch": unknown, "files": [] })),
         ("scan_open", json!({ "watch": unknown, "file": "a.jpg" })),
+        ("scan_import", json!({ "watch": unknown, "docs": [] })),
     ];
     for (cmd, args) in requests {
         let sent = h.call(cmd, args);
