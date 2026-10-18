@@ -589,7 +589,8 @@ Well-known properties (named in `av_vault::schema::remote`):
   headers,
 * `calendar-id`: on a calendar entity, the Google calendar it syncs with;
   its events belong to that source. On an event, the Google calendar it was
-  last synced with,
+  last synced with; another than its calendar's is a move waiting to be
+  pushed,
 * `sync-token`, `time-min`: on a calendar entity, where the next sync
   continues (Google's sync token), and the start of the window its first
   sync covered,
