@@ -7,6 +7,10 @@
 //! the vault, the engine lists and pushes on a worker, and its effects are
 //! applied through the vault edit.
 //!
+//! A two-way sync deletes in Google the calendar's events deleted in the vault
+//! (their files in the trash), and marks each trashed file cancelled; one that
+//! Google changed since comes back from the trash.
+//!
 //! The bookkeeping lives in the files' `remote:` blocks (vault.md#remote): a
 //! calendar entity names its Google calendar, sync token and time-min; an
 //! event its Google id and calendar, its etag, and the snapshot of what was

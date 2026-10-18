@@ -75,7 +75,9 @@ pub(super) fn calendar_entity(app: &mut App, account: Id, source: &CalendarSourc
 
 // ----------------------------------------------------------------------------
 /// The job for the calendar entity `calendar`, two-way if `push`; and its
-/// events' ids and snapshots by path.
+/// events' ids and snapshots by path. Two-way, it also holds the calendar's
+/// events in the trash that Google still has, to delete there, under their
+/// path in `.trash`.
 pub(super) fn build_job(
     app: &App,
     account: Id,
@@ -84,7 +86,7 @@ pub(super) fn build_job(
     push: bool,
 ) -> (SyncJob, PlannedEvents) {
     let mut events = HashMap::new();
-    let locals: Vec<LocalEvent> = app
+    let mut locals: Vec<LocalEvent> = app
         .vault
         .index()
         .all()
@@ -99,6 +101,25 @@ pub(super) fn build_job(
             local
         })
         .collect();
+    if push {
+        for trashed in app.vault.index().trashed() {
+            let Ok(doc) = &trashed.doc else {
+                continue;
+            };
+            if !of_calendar(doc, calendar) {
+                continue;
+            }
+            let path = Path::new(layout::TRASH).join(&trashed.local);
+            let local = LocalEvent {
+                deleted: true,
+                ..local_event(doc, &path, account)
+            };
+            if local.remote_event_id.is_some() && !local.cancelled {
+                events.insert(path, (doc.id(), local.snapshot.clone()));
+                locals.push(local);
+            }
+        }
+    }
 
     let job = SyncJob {
         time_min: first_sync_start(DateTime::now()).as_iso8601(),
