@@ -103,7 +103,8 @@ selected one is marked, every occurrence of a recurring event (`markSelection`).
 - **Recent files**: the six newest dated entities that aren't events,
   tasks, calendars or conversations with an AI.
 - **Recent conversations**: the four newest conversations with an AI, with their
-  projects.
+  projects; + New conversation in the head starts one linked to nothing
+  (`assistant.md#conversations`).
 
 The cards (`features/dashboard/cards.js`) are drawn by the lens
 (`features/dashboard/dashboard.js`), again when the entities, the filter,

@@ -14,6 +14,7 @@
 
 import { accEl } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
+import { runAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
 import { DAY_LONG_MONTH, DAY_MONTH, DAY_SHORT_MONTH, MONTH, TIME_FORMAT, WEEKDAY, addDays, compareText, dayStart, sameDay, shortDate, weekStartOf } from '../../core/format.js';
 import { savePrefs, store } from '../../model/state.js';
@@ -318,8 +319,14 @@ function renderFiles() {
 }
 
 // ----------------------------------------------------------------------------
-// Recent conversations: the newest conversations with an AI, with their projects.
+// Recent conversations: the newest conversations with an AI, with their
+// projects; + New conversation starts one linked to nothing, the selection
+// cleared first (`chat.new`, features/assistant/assistant.js).
 const CHATS_SHOWN = 4;
+const newChatBtn = toolButton('tool', t('dash.new_conversation'), '', () => {
+  store.setState({ selected_entity: null, selected_thread: null, selected_transaction: null, selected_leg: null });
+  runAction('chat.new');
+});
 
 function renderConversations() {
   const conversations = [...entities.values()]
@@ -335,7 +342,7 @@ function renderConversations() {
       accEl('span', 'meta', [projectNames(doc), when].filter(Boolean).join(' \u00b7 ')));
     return row;
   });
-  return { head: [], body: [feed(rows, t('dash.no_conversations'))] };
+  return { head: [newChatBtn], body: [feed(rows, t('dash.no_conversations'))] };
 }
 
 // ----------------------------------------------------------------------------

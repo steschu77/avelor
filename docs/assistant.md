@@ -86,7 +86,7 @@ the server's default applies.
 | L3 | Stop | Stop | `chat_stop` → partial reply written, `conversation`, `ok` | — |
 | L4 | Retry, edit and resend | click own message, edit, Enter → `assistantResend` | `chat_send {retry}` or `{text, parent}` | sibling branch |
 | L5 | Switch sibling | ‹ › | `chat_select` → `active` written → `conversation`, `ok` | — |
-| L6 | Switch / new conversation | switcher menu | `chat_open`, or a first `chat_send` | — |
+| L6 | Switch / new conversation | switcher menu; Go to's New conversation (`chat.new`), and the dashboard's + New conversation, which clears the selection first | `chat_open`, or a first `chat_send` | — |
 | L7 | Pick the model, setup guide | the head's picker, or the guide's button → `aiShowModels` → a model → `assistantPickModel`; without a provider or key, the guide's button opens Accounts | `set_vault_settings {chat_model}` → `vault_settings`, `ok` | chats answered by the picked model |
 | L8 | Chat from a card | card's chat button → `toggleCardChat` → `selectDocument`, `panel_size: 'chat'` (not at full width), `selectContextTab('conversation', true)` | then L1 | the chat beside the card, the input focused; pressed, the button goes back to the normal panel |
 
