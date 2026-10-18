@@ -1,8 +1,9 @@
 # Avelor — Accounts
 
 > The accounts the app works with: Google accounts (Gmail, Calendar,
-> Contacts, Tasks) and AI providers (chat) — their files, secrets and states, the
-> Accounts page, and how a feature picks its AI model. The assistant is in
+> Contacts, Tasks) and AI providers (chat) — their files, secrets and
+> states, the Accounts page, and how a feature picks its AI model. What a
+> Google account syncs is in `mail.md` and `calendar.md`; the assistant,
 > `assistant.md`.
 
 ## Accounts in a vault
@@ -192,7 +193,7 @@ accounts with a detail pane.
   `disconnected`, so connecting the same Google account again keeps the
   account's `id` (and with it every document's `remote:` link). Removing
   a disconnected account deletes its file. The pane lists the account's
-  calendars; a checked one becomes a source; the Mail row has its own Auto-sync check and
+  calendars; a checked one becomes a source (`calendar.md`); the Mail row has its own Auto-sync check and
   filter (`mail.md#mail-auto-sync`).
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
   and Gemini with an API key, and Ollama by its address. A key or an address

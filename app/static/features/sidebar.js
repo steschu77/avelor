@@ -7,8 +7,10 @@
 
 import { $ } from '../core/dom.js';
 import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
+import { rpcCall } from '../core/rpc.js';
 import { runAction } from '../core/actions.js';
 import { store } from '../model/state.js';
+import { showError } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
 import { projects } from '../model/entities.js';
 import { accounts, sourceKeyOf } from '../model/entities.js';
@@ -184,20 +186,18 @@ function renderSidebar() {
   sourceRows.push(createdRow);
 
   // Per connected account, under its email: mail, the checked calendars. A
-  // row click filters by it.
+  // row click filters by it; its button syncs it.
   for (const account of accounts.values()) {
     for (const source of accountSources(account)) {
       const row = rowFor(`source:${source.key}`, source.name, () =>
         sidebarNavItem('nav-item nav-item--compact', source.name, 'nav-item__icon', source.icon, () => selectSource(source.key),
-          source.kind === 'email' ? { icon: '#i-arrow-sync', title: `Sync ${source.name}`, onClick: () => syncSource(source) } : undefined));
+          { icon: '#i-arrow-sync', title: `Sync ${source.name}`, onClick: () => syncSource(source) }));
       updateNavItem(row, sourceCounts.get(source.key) ?? 0, source.key === selected_source);
       // A source that syncs on its own shows its button pressed.
       const button = row.querySelector('.nav-item__action');
-      if (button) {
-        setAria(button, 'aria-pressed', source.autoSync);
-        const action = source.kind === 'email' ? 'Fetch mail' : `Sync ${source.name}`;
-        button.title = source.autoSync ? `${action} \u00b7 auto-sync on` : `Sync ${source.name}`;
-      }
+      setAria(button, 'aria-pressed', source.autoSync);
+      const action = source.kind === 'email' ? 'Fetch mail' : `Sync ${source.name}`;
+      button.title = source.autoSync ? `${action} \u00b7 auto-sync on` : `Sync ${source.name}`;
       sourceRows.push(row);
     }
   }
@@ -302,16 +302,29 @@ function accountSources(account) {
   }
   if (scope.calendar && scope.calendar !== 'off') {
     for (const calendar of account.calendars ?? []) {
-      sources.push({ key: `${id}\ncalendar\n${calendar.id}`, name: calendar.name, icon: KIND_ICONS.calendar.icon });
+      sources.push({
+        key: `${id}\ncalendar\n${calendar.id}`, kind: 'calendar', account: id,
+        calendar: calendar.id, name: calendar.name, icon: KIND_ICONS.calendar.icon,
+      });
     }
   }
   return sources;
 }
 
 // The sync button of a source: Mail opens the Fetch mail page
-// (features/import/mail.js).
+// (features/import/mail.js); a calendar syncs right away, its progress and
+// summary in the jobs panel.
 function syncSource(source) {
-  return openMailFetch(source.account);
+  if (source.kind === 'email') return openMailFetch(source.account);
+  if (source.kind === 'calendar') return syncCalendar(source);
+}
+
+// The sync runs as a job (the jobs panel); a refused one is said in the
+// status bar.
+function syncCalendar(source) {
+  rpcCall('calendar_sync', { account: source.account, calendar: source.calendar }).catch(e => {
+    if (e.code !== 'cancelled') showError(`Could not sync ${source.name}: ${e.message}`);
+  });
 }
 
 // ----------------------------------------------------------------------------

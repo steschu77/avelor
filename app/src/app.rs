@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::ai_accounts::AiAccounts;
+use crate::calendar::CalendarState;
 use crate::chat::ChatState;
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
@@ -173,7 +174,7 @@ impl Vault {
     }
 
     // ------------------------------------------------------------------------
-    /// For writers that can't let the user choose (the assistant):
+    /// For writers that can't let the user choose (a sync, the assistant):
     /// a conflict as a failure, `Error::ChangedOutside`.
     pub fn require_written(&self, outcome: SaveOutcome) -> Result<()> {
         match outcome {
@@ -235,6 +236,10 @@ pub struct App {
     /// Fetch mail (`mail`): the fetch in progress; one at a time.
     pub mail: MailState,
 
+    /// The calendar sync (`calendar`): the sync in progress, one at a
+    /// time.
+    pub calendar: CalendarState,
+
     /// The close asked of the page (`close`).
     pub close: CloseState,
 
@@ -263,6 +268,7 @@ impl App {
             jobs: Jobs::default(),
             documents: DocumentState::default(),
             mail: MailState::default(),
+            calendar: CalendarState::default(),
             close: CloseState::default(),
             chat: ChatState::default(),
         }

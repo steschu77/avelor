@@ -63,6 +63,29 @@ pub fn slug(title: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// A readable folder name for `title` (e.g. a calendar's events folder):
+/// the title as is, with characters Windows doesn't allow in names
+/// replaced by `-` and trailing dots and spaces trimmed; [`slug`] if
+/// nothing is left.
+pub fn folder_name(title: &str) -> String {
+    let name: String = title
+        .trim()
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '-',
+            c if c.is_control() => '-',
+            c => c,
+        })
+        .collect();
+    let name = name.trim_end_matches(['.', ' ']);
+    if name.trim_matches(['-', '.', ' ']).is_empty() {
+        slug(title)
+    } else {
+        name.to_string()
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// One lowercase character as ASCII slug characters; empty for a separator.
 fn fold(c: char) -> &'static str {
     const ALNUM: &str = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -119,6 +142,20 @@ mod tests {
             "no trailing dash"
         );
         assert_eq!(slug("???"), "untitled");
+    }
+
+    #[test]
+    fn folder_names_stay_readable() {
+        assert_eq!(folder_name("Personal"), "Personal");
+        assert_eq!(folder_name("alex@example.com"), "alex@example.com");
+        assert_eq!(
+            folder_name(" Feiertage in Deutschland "),
+            "Feiertage in Deutschland"
+        );
+        assert_eq!(folder_name("Work: Team/Ops"), "Work- Team-Ops");
+        assert_eq!(folder_name("Trailing..."), "Trailing");
+        assert_eq!(folder_name("???"), "untitled");
+        assert_eq!(folder_name(""), "untitled");
     }
 
     #[test]

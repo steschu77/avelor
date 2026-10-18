@@ -358,18 +358,18 @@ An event is a markdown file with the following additional fields:
 
 * `calendar`: Calendar ID,
 * `status`: string (`confirmed`, `tentative`; `cancelled` once deleted in
-  Google),
+  Google -- the file stays, the calendar doesn't show it),
 * `start`: Date, a date without a time for an all-day event,
 * `end`: Date; for an all-day event the day after the last (as Google
   keeps it),
 * `timeZone`: string, the IANA time zone the times are meant in (e.g.
   `Europe/Berlin`); a series repeats in it. Optional,
 * `recurrence`: [string], a series' RFC 5545 lines as Google keeps them
-  (`RRULE:FREQ=WEEKLY;BYDAY=MO`, `EXDATE:…`). A series is one entity.
-  Optional,
+  (`RRULE:FREQ=WEEKLY;BYDAY=MO`, `EXDATE:…`). A series is one entity; the
+  calendar shows its occurrences. Optional,
 * `location`: string,
 * `attendees`: [ContactRef]; on an event synced from Google, Google's guest
-  list (`Name <email>`),
+  list (`Name <email>`), replaced whenever Google's version is taken,
 * `exceptions`: [Exception], the occurrences of a series that Google
   reports changed, each with only what differs from the series:
   * `original`: Date, the start the series gives the occurrence,
@@ -377,7 +377,9 @@ An event is a markdown file with the following additional fields:
   * `start`, `end`: Date, where it was moved to (also for another length),
   * `title`, `location`: string, its own.
 
-  Optional.
+  Taken from Google only and never written back; an occurrence that
+  differs in nothing kept here (e.g. only its description or guests) isn't
+  listed. Optional.
 
 The markdown content describes the event. The `date` of an event is its
 start.
@@ -709,7 +711,7 @@ Vault/
   Records/             # *.yaml (IDs, passports, …)
   Tasks/               # *.md per task
   Lists/               # *.yaml
-  Calendar/
+  Calendar/            # *.yaml calendar descriptors + subfolders of *.md events each
     Created Here/      # *.md events made with New, in no calendar
   Mail/                # *.md emails fetched from an account
   .trash/              # deleted entities, at their vault-relative path (§ Trash)
@@ -720,7 +722,8 @@ New in the app (`create_entity`, `Index::create_new`) writes a document into
 `Documents/`, a task into `Tasks/`, an event into `Calendar/Created Here/`,
 a contact into `Contacts/`, a list into `Lists/` and a record into
 `Records/`, each with its generated name (`vault.md#filenames`). A new
-thread goes beside its first member.
+thread goes beside its first member; calendar sync writes a calendar's
+events into `Calendar/<calendar>/`.
 
 ## The forged vault
 

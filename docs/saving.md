@@ -225,8 +225,9 @@ its file and when the file changed, or that it was deleted.
   through or it is reloaded. If no one is left to answer the dialog —
   Windows ends the session, another vault opens — it is kept as a new
   entity beside the file, made here and tagged `conflict`
-  (`documents::keep_conflict_copy`), so the edits survive and the file keeps
-  the other program's version.
+  (`documents::keep_conflict_copy`, as calendar sync keeps its local
+  version), so the edits survive and the file keeps the other program's
+  version.
 
 ### Atomic writes <a id="atomic-writes"></a>
 
@@ -246,6 +247,9 @@ the status bar).
   for files no editor shows.
 - Typing in the very instant a taken-in file arrives (one round trip)
   loses those keystrokes to the file's version.
+- Writers that can't ask (calendar sync, mail fetch, the assistant) report
+  a conflict as a failure of that item ("changed outside the app",
+  `Error::ChangedOutside` through `Vault::require_written`).
 
 ## Closing the app <a id="closing-the-app"></a>
 

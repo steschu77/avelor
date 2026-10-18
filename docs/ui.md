@@ -50,7 +50,7 @@ the page, once per frame (`panel.md#host-pushes`).
   connected Google account a Mail source (unless its access is off), one
   source per checked calendar. A source
   counts and filters the entities that came through it (`sourceKeyOf`);
-  its sync button syncs it: Mail
+  its sync button syncs it: a calendar right away (`calendar.md`), Mail
   opens Fetch mail (`mail.md`). While auto-sync
   is on, the sync button stays shown, pressed, in the count's place
   (`.nav-item__action[aria-pressed]`).
@@ -253,7 +253,7 @@ of the others.
 ## Jobs panel <a id="jobs-panel"></a>
 
 A card per job from the `job` event (`features/jobs.js`, `renderJob`): its label,
-its progress, a Stop button while it is `stoppable` (a mail fetch; a vault scan can't be stopped), and its note when it ends. A card is removed 1.5 s after its job is done, 8 s
+its progress, a Stop button while it is `stoppable` (a mail fetch, a calendar sync; a vault scan can't be stopped), and its note when it ends. A card is removed 1.5 s after its job is done, 8 s
 when it has a note. How jobs run on the host: `architecture.md#jobs`.
 
 ## Keys and actions <a id="keys-and-actions"></a>
@@ -314,7 +314,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 |---|---|---|---|---|
 | A5 | Panel widths | drag a grip → `saveWidth` → `savePrefs` | `set_prefs {prefs}` → `config.yaml` `prefs` | the width comes back on the next start, inside the page (`#prefs`), without easing |
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
-| A8 | Stop a job | the card's Stop | `cancel_job` → the job's requests cancelled; it ends `stopped · …` | mail fetch |
+| A8 | Stop a job | the card's Stop | `cancel_job` → the job's requests cancelled; it ends `stopped · …` | mail fetch, calendar sync |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `<account>\nemail`, `<account>\ncalendar\n<id>` |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |

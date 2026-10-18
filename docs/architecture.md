@@ -59,7 +59,8 @@ read by OCR.
 | `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
 | `accounts.md` | Google and AI accounts: files, secrets, states, the Accounts page, AI uses and the spend limit |
-| `mail.md` | Fetch mail |
+| `mail.md` | Fetch mail, the mail auto-sync |
+| `calendar.md` | calendar sync, its rules |
 | `assistant.md` | the assistant: conversations, context, streaming |
 
 ## Doc conventions
@@ -138,7 +139,7 @@ the OAuth wait and AI streams block for minutes. `Task(Cancel)` aborts (`av-util
 dropping a `Task` leaves its work running. A sign-in runs under a
 `Cancel` of its own, the pending connect's (`App::begin_connect`), from
 the OAuth wait to the last request. Continuations re-check identity themselves
-(`writing.id`, batch ids), because an already queued `apply`
+(`writing.id`, `job_id`, batch ids), because an already queued `apply`
 still runs, and so does progress queued before the abort.
 
 ### Coalesced progress <a id="progress"></a>
@@ -185,9 +186,10 @@ dialog waits in its modal loop.
 `App::start_job` / `update_job` / `end_job` / `run_job` (`jobs.rs`): a
 card per job in the jobs panel (the `job` event, `ui.md#jobs-panel`),
 its requests under one `Cancel`, Stop through `cancel_job {id}`. A stopped
-job's `apply` still runs. Feature slots that hold snapshots for
-`apply` (`mail.fetch`) stay in their sub-states. A
-failure of one item (a mail) is a `notice` plus the job's
+job's `apply` still runs, so a calendar sync records the pushes it made
+before the stop and ends itself. Feature slots that hold snapshots for
+`apply` (`mail.fetch`, `calendar.sync`) stay in their sub-states. A
+failure of one item (a mail, an event) is a `notice` plus the job's
 summary. A vault switch stops the jobs bound to the vault and the
 assistant's replies, and opens the new vault once they have ended
 (`switch_vault_when_stopped`). A new long operation becomes a job through
@@ -283,8 +285,8 @@ side never touches the vault side; `app` is the only bridge.
   `vault.md#vault-layout`).
 
   ```rust
-  pub mod remote { pub const GMAIL_ID: &str = "gmail-id"; pub const MESSAGE_ID: &str = "message-id"; }
-  pub mod layout { pub const PROJECTS: &str = "Projects"; pub const MAIL: &str = "Mail"; /* the folders New writes to, Conversations, .trash, .avelor/accounts */ }
+  pub mod remote { pub const GMAIL_ID: &str = "gmail-id"; pub const MESSAGE_ID: &str = "message-id"; /* calendar-id, sync-token, time-min, event-id, etag, snapshot */ }
+  pub mod layout { pub const PROJECTS: &str = "Projects"; pub const MAIL: &str = "Mail"; /* the folders New writes to, Calendar, Conversations, .trash, .avelor/accounts */ }
   ```
 
 - **One copy of the truth in `Document`**: the envelope holds the metadata,
@@ -344,6 +346,7 @@ side never touches the vault side; `app` is the only bridge.
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked item; `create`, a new AI conversation; dispatch tests against a fake Ollama |
 | `ai_accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
 | `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); their tests |
+| `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync`; `CalendarState`; the sync job as plan → run → apply; their dispatch tests |
 
 ## Platforms <a id="platforms"></a>
 
@@ -610,9 +613,9 @@ abort. Where the bundle lands and how to measure the size:
 - **Every import or sync has the same shape**: *plan* on the UI thread from
   the vault (what is there, what to ask for) → *run* on a worker (remote
   I/O, no vault access) → *apply* on the UI thread through the vault edit
-  (`App::edit`). The
-  mail fetch (`plan_fetch`, the downloads, `fetch_action`) works this way. The mapping between remote data and
-  entities is a pure function with tests (`email_entity`).
+  (`App::edit`). Calendar sync (`build_job`, the engine, `apply`) and
+  mail fetch (`plan_fetch`, the downloads, `fetch_action`) work this way. The mapping between remote data and
+  entities is a pure function with tests (`event_entity`, `email_entity`).
 
   ```mermaid
   flowchart LR
@@ -649,6 +652,8 @@ abort. Where the bundle lands and how to measure the size:
   refused.
 - **Google access** is Off / Read / Full per service, and nothing else
   (`accounts.md#access-levels`).
+- **Remote versions are compared in one place**: the calendar sync
+  engine's two hooks (`calendar.md#design`).
 - **Reuse before writing**: `av_vault::markdown::plain_title`,
   `jobs::count_summary`,
   `DateTime::from_system_time`, `OneOrMany::{as_slice, from_vec}`; on the

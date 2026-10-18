@@ -18,6 +18,7 @@ use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::id::Id;
 use av_vault::document::Document;
+use av_vault::envelope::Roles;
 use av_vault::envelope::{Empty, Source};
 use av_vault::vault::Refresh;
 use av_vault::vault::SaveOutcome;
@@ -158,21 +159,30 @@ pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overw
 
 // ----------------------------------------------------------------------------
 /// Keep a version of `id` that a conflict would lose as a new entity beside
-/// it, made here and tagged `conflict`, with `content` as its body. The new
-/// entity's id.
-pub(crate) fn keep_conflict_copy(app: &mut App, id: Id, content: String) -> Result<Id> {
+/// it, made here and tagged `conflict`: with `content` as its body (none:
+/// the entity's own), and its roles as `roles` leaves them. Calendar sync
+/// keeps the vault's version of an event Google changed too
+/// (`calendar::keep_local_version`). The new entity's id.
+pub(crate) fn keep_conflict_copy(
+    app: &mut App,
+    id: Id,
+    content: Option<String>,
+    roles: impl FnOnce(&mut Roles),
+) -> Result<Id> {
     let Some(entry) = app.vault.index().entry(&id) else {
         return Err(Error::NotFound);
     };
     let doc = &entry.doc;
+    let mut kept = doc.roles().clone();
+    roles(&mut kept);
     let mut copy = Document::create(
-        doc.roles().clone(),
+        kept,
         Source::Created(Empty {}),
         doc.title().to_string(),
         doc.projects().to_vec(),
         doc.format(),
     );
-    copy.set_content(content);
+    copy.set_content(content.unwrap_or_else(|| doc.content().to_string()));
     if let Some(date) = doc.date() {
         copy.set_date(date);
     }
@@ -192,7 +202,7 @@ pub(crate) fn keep_conflict_copy(app: &mut App, id: Id, content: String) -> Resu
 /// (`close::on_session_end`), another vault opens (`api::open_vault`).
 pub(crate) fn keep_held(app: &mut App) {
     for (id, markdown) in std::mem::take(&mut app.documents.held) {
-        match keep_conflict_copy(app, id, markdown) {
+        match keep_conflict_copy(app, id, Some(markdown), |_| {}) {
             Ok(copy) => log::info!("Kept the edits of {id} held for a conflict as {copy}"),
             Err(e) => log::warn!("Could not keep the edits of {id} held for a conflict: {e}"),
         }

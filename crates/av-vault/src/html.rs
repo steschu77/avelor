@@ -1,4 +1,4 @@
-//! HTML mail bodies as canonical
+//! HTML mail bodies (and Google Calendar descriptions) as canonical
 //! markdown: paragraphs and line breaks kept, bold, italic and struck-out
 //! text as `**`, `*` and `~~`, lists bulleted, numbered and nested, links as
 //! `[text](href)`, quoted replies as blockquotes; headings, code, tables,

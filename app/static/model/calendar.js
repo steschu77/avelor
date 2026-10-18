@@ -1,8 +1,8 @@
-// What the calendar shows: the dated events in the vault panel's filter,
-// each series expanded into its occurrences (the RFC 5545 lines Google
-// keeps, with their exceptions), and the open tasks on their due day --
-// for the grid (features/lenses/calendar.js), the panel's day view
-// (features/panel/panel.js) and the selection (`calendarDayOf`,
+// What the calendar shows (calendar.md): the dated events in the vault
+// panel's filter, each series expanded into its occurrences (the RFC 5545
+// lines Google keeps, with their exceptions), and the open tasks on their
+// due day -- for the grid (features/lenses/calendar.js), the panel's day
+// view (features/panel/panel.js) and the selection (`calendarDayOf`,
 // features/selection.js).
 
 import { dayStart, parseDate } from '../core/format.js';

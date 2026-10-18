@@ -9,6 +9,20 @@ pub mod remote {
     /// A mail's id in the Gmail account, so a fetch knows the mails it
     /// already has without reading their headers.
     pub const GMAIL_ID: &str = "gmail-id";
+    /// On a calendar entity, the Google calendar it syncs with; on an event,
+    /// the one it was last synced with.
+    pub const CALENDAR_ID: &str = "calendar-id";
+    /// On a calendar entity, where the next sync continues (Google's sync
+    /// token).
+    pub const SYNC_TOKEN: &str = "sync-token";
+    /// On a calendar entity, the start of the window its first sync covered.
+    pub const TIME_MIN: &str = "time-min";
+    /// An event's id in its Google calendar.
+    pub const EVENT_ID: &str = "event-id";
+    /// The version of the Google event last seen.
+    pub const ETAG: &str = "etag";
+    /// A hash of the event's synced fields at the last sync.
+    pub const SNAPSHOT: &str = "snapshot";
 }
 
 /// The folders the app writes entities into, relative to the vault's root
@@ -31,6 +45,9 @@ pub mod layout {
     pub const RECORDS: &str = "Records";
     /// Mails fetched from an account.
     pub const MAIL: &str = "Mail";
+    /// Calendar entities; each calendar's events in a subfolder named after
+    /// it.
+    pub const CALENDAR: &str = "Calendar";
     /// Conversations with the assistant.
     pub const CONVERSATIONS: &str = "Conversations";
     /// Deleted entities, kept at their vault-relative path; the scan skips

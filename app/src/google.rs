@@ -52,7 +52,7 @@ pub fn refuse_account(req: Req, error: Error) {
 }
 
 // ----------------------------------------------------------------------------
-/// A sync of the account `id` ended (a mail fetch): its
+/// A sync of the account `id` ended (a mail fetch, a calendar sync): its
 /// `last_sync` is now, `record` notes what else it did (a mail fetch's
 /// `last_fetch`), the account file is saved, and the page gets the account.
 /// A failed save is logged; what the sync wrote stays in the vault.

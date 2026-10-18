@@ -724,6 +724,23 @@ custom_key: kept
     }
 
     #[test]
+    fn remote_properties_are_read_and_set() {
+        let yaml = "remote:\n  account: 01a077f7-7e89-7263-b36d-ad63c20809e2\n  remote: [{event-id: abc}, {etag: '\"1\"'}, {other: [1, 2]}]\n";
+        let Some(Source::Remote(mut remote)) = Envelope::parse(yaml).unwrap().source else {
+            panic!("no remote source");
+        };
+        assert_eq!(remote.get("event-id"), Some("abc"));
+        assert_eq!(remote.get("missing"), None);
+
+        remote.set("etag", "\"2\"");
+        remote.set("snapshot", "00ff");
+        assert_eq!(remote.get("etag"), Some("\"2\""));
+        assert_eq!(remote.values("etag").count(), 1, "replaced, not appended");
+        assert_eq!(remote.get("snapshot"), Some("00ff"));
+        assert_eq!(remote.remote.len(), 4, "unknown properties are kept");
+    }
+
+    #[test]
     fn the_link_is_a_top_level_field() {
         let yaml = format!("tags:\n- a\nlinked-to: {ID}\ntask:\n  status: todo\n");
         let env = Envelope::parse(&yaml).unwrap();
