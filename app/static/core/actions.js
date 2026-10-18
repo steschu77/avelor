@@ -11,7 +11,7 @@ import { typing } from './dom.js';
 import { t } from './text.js';
 
 const actions = []; // { id, title, shortcut, outsideFields, when, run, group, place, icon, also, page, end, archived }, in registration order
-const sources = []; // functions, each giving the places the vault has
+const sources = []; // functions, each giving the actions of what the vault has
 
 // `shortcut`: the key with its modifiers, like 'Ctrl+N', 'Ctrl+Enter' or
 // 'Escape' (see `shortcutOf`), or several that do the same;
@@ -28,8 +28,8 @@ export function registerAction(action) {
   actions.push(action);
 }
 
-// The places the vault has, a project's: `list()` gives them as they are when
-// Go to asks; none has a shortcut.
+// The actions of what the vault has, a source's, a project's: `list()` gives
+// them as they are when Go to asks; none has a shortcut.
 export function registerActions(list) {
   sources.push(list);
 }

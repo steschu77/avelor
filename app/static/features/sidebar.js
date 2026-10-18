@@ -1,7 +1,7 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
 // archived folded) after No project, and the sources, with their counts,
 // each a filter; renaming, adding, starring and dropping onto projects;
-// the vault's name and menu. It renders at most
+// the sources' sync buttons; the vault's name and menu. It renders at most
 // once per frame (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
@@ -23,6 +23,7 @@ import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
+import { openEmailFetch } from './import/email.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
 const projectsContainer = $('projects');
@@ -175,12 +176,12 @@ function renderSidebar() {
     editProject(editRow.dataset.id, editRow);
   }
 
-  // A row click filters by the source; Created Here's button opens the New
-  // menu.
+  // A row click filters by the source; its button opens the New menu or syncs
+  // an account's.
   const sourceRows = vaultSources().map(source => {
-    const { key, name, icon, button } = source;
+    const { key, name, icon } = source;
     const row = rowFor(`source:${key}`, name, () =>
-      sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', icon, () => selectSource(key), button));
+      sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', icon, () => selectSource(key), sourceButton(source)));
     updateNavItem(row, sourceCounts.get(key) ?? 0, key === selected_source);
     return row;
   });
@@ -281,12 +282,18 @@ function toggleArchived() {
 // connected account's.
 function vaultSources() {
   return [
-    {
-      key: 'created', name: t('sidebar.created_here'), icon: '#i-home',
-      button: { icon: '#i-add', title: t('sidebar.new_title'), onClick: (_row, button) => runAction('new', button) },
-    },
+    { key: 'created', name: t('sidebar.created_here'), icon: '#i-home' },
     ...[...accounts.values()].flatMap(accountSources),
   ];
+}
+
+// A source's button: Created Here's opens the New menu, an account's email
+// syncs.
+function sourceButton(source) {
+  const { key, name, account } = source;
+  if (key === 'created') return { icon: '#i-add', title: t('sidebar.new_title'), onClick: (_row, button) => runAction('new', button) };
+  if (!account) return null;
+  return { icon: '#i-arrow-sync', title: `Sync ${name}`, onClick: () => syncSource(source) };
 }
 
 // The vault panel's rows as places Go to finds: each filters by its project
@@ -306,8 +313,8 @@ registerActions(() => [
   { id: 'place.no_project', place: 'project', title: t('sidebar.no_project'), icon: KIND_ICONS.project.icon, run: () => selectFilter({ selected_project: NO_PROJECT }) },
   ...projectsInOrder().map(projectPlace),
   { id: 'place.all_sources', place: 'source', title: t('sidebar.all_sources'), icon: '#i-arrow-import', run: () => selectFilter({ selected_source: null }) },
-  ...vaultSources().map(({ key, name, icon }) => ({
-    id: `place.source.${key}`, place: 'source', title: name, icon,
+  ...vaultSources().map(({ key, name, icon, also }) => ({
+    id: `place.source.${key}`, place: 'source', title: name, icon, also,
     end: () => t('palette.source_n', { n: [...entities.values()].filter(doc => sourceKeyOf(doc) === key).length }),
     run: () => selectFilter({ selected_source: key }),
   })),
@@ -321,7 +328,10 @@ function accountSources(account) {
   const { id, scope = {}, email = t('sidebar.email') } = account;
   const sources = [];
   if (scope.email && scope.email !== 'off') {
-    sources.push({ key: `${id}\nemail`, name: email, icon: KIND_ICONS.email.icon });
+    sources.push({
+      key: `${id}\nemail`, kind: 'email', account: id, name: email, icon: KIND_ICONS.email.icon,
+      also: t('sidebar.fetch_also'),
+    });
   }
   if (scope.calendar && scope.calendar !== 'off') {
     for (const calendar of account.calendars ?? []) {
@@ -330,6 +340,18 @@ function accountSources(account) {
   }
   return sources;
 }
+
+// The sync button of a source: Email opens the Fetch email page
+// (features/import/email.js).
+function syncSource(source) {
+  return openEmailFetch(source.account);
+}
+
+registerActions(() => [...accounts.values()].flatMap(accountSources).filter(source => source.kind === 'email').map(source => ({
+  id: `sync.${source.key}`, group: 'get', title: t('sidebar.fetch_email_for', { name: source.name }),
+  icon: '#i-arrow-import', also: source.also, page: true,
+  run: () => syncSource(source),
+})));
 
 // ----------------------------------------------------------------------------
 store.subscribe(state => state.vault_name,

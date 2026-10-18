@@ -263,11 +263,6 @@ impl FileStep {
         }
     }
 
-    /// The entity whose file it is.
-    pub fn id(&self) -> Id {
-        self.id
-    }
-
     /// Where `op` expects the file, and where it leaves it.
     fn transition(&self, op: Op) -> (&Place, &Place) {
         match op {
@@ -282,11 +277,6 @@ impl FileStep {
             Op::Undo => &mut self.before,
             Op::Redo => &mut self.after,
         }
-    }
-
-    /// Whether the step changed the file's body where it is.
-    pub fn writes_body(&self) -> bool {
-        matches!((&self.before, &self.after), (Place::Vault(_), Place::Vault(state)) if state.body.is_some())
     }
 
     /// The steps `files` and `later` as one step: a file written in both

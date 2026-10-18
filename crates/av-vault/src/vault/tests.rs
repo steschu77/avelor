@@ -1433,7 +1433,9 @@ fn a_body_is_a_step_and_steps_join_into_one() {
     let mut second = Changes::default();
     let saved = index.save_content(&ids[0], "Two\n".into(), false, &mut second);
     assert_eq!(saved.unwrap(), SaveOutcome::Saved);
-    assert!(first.files[0].writes_body() && !title.files[0].writes_body());
+    let keeps_body =
+        |files: &[FileStep]| matches!(&files[0].after, Place::Vault(state) if state.body.is_some());
+    assert!(keeps_body(&first.files) && !keeps_body(&title.files));
     let after = fs::read_to_string(&path).unwrap();
 
     let files = FileStep::joined(first.files, title.files);

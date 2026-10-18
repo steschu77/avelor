@@ -7,6 +7,9 @@
 //! Needs `GoogleScope::gmail` access; an account connected without it gets
 //! 403s here until reconnected.
 
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::thread;
+
 use av_utils::base64::from_base64;
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
@@ -22,6 +25,8 @@ const BASE: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
 
 /// The most ids one `messages.list` page returns.
 const PAGE_MAX: usize = 500;
+/// Header requests `get_headers` has in flight.
+const HEADER_PARALLEL: usize = 8;
 
 // ----------------------------------------------------------------------------
 /// What the import page filters by: every set condition must match.
@@ -292,6 +297,49 @@ pub fn get_header(client: &Client, cancel: &Cancel, id: &str) -> Result<EmailHea
         size: msg.size_estimate,
         id: id.to_string(),
     })
+}
+
+// ----------------------------------------------------------------------------
+/// The preview headers of `ids`, in order, `HEADER_PARALLEL` requests at a
+/// time. An email deleted since the search (404) is left out. The first
+/// failure ends the walk: no more requests start, the ones in flight finish.
+pub fn get_headers(client: &Client, cancel: &Cancel, ids: &[String]) -> Result<Vec<EmailHeader>> {
+    let next = AtomicUsize::new(0);
+    let failed = AtomicBool::new(false);
+    // Each worker takes the next id until none is left or one failed.
+    let worker = || -> Result<Vec<(usize, EmailHeader)>> {
+        let mut got = Vec::new();
+        while !failed.load(Ordering::Relaxed) {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            let Some(id) = ids.get(i) else {
+                break;
+            };
+            match get_header(client, cancel, id) {
+                Ok(header) => got.push((i, header)),
+                Err(Error::Http { status: 404, .. }) => {}
+                Err(e) => {
+                    failed.store(true, Ordering::Relaxed);
+                    return Err(e);
+                }
+            }
+        }
+        Ok(got)
+    };
+    let results: Vec<_> = thread::scope(|scope| {
+        let workers: Vec<_> = (0..HEADER_PARALLEL.min(ids.len()))
+            .map(|_| scope.spawn(worker))
+            .collect();
+        workers.into_iter().map(|w| w.join()).collect()
+    });
+    let mut headers = Vec::new();
+    for result in results {
+        let got = result.map_err(|_| Error::Network {
+            msg: "a header request panicked".to_string(),
+        })??;
+        headers.extend(got);
+    }
+    headers.sort_by_key(|(i, _)| *i);
+    Ok(headers.into_iter().map(|(_, header)| header).collect())
 }
 
 // ----------------------------------------------------------------------------

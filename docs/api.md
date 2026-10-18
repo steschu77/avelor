@@ -13,6 +13,14 @@ message handler `host`, both behind the page's `window.host`,
 a reply or an event from the host (`app/src/protocol.rs`,
 `app/static/core/rpc.js`).
 
+```text
+page → host  {"id": 17, "cmd": "set_title", "args": {"id": "01a0…", "title": "Taxes"}}
+host → page  {"re": 17, "ok": {…}}                          exactly one reply per request
+             {"re": 17, "err": {"code": "not_writable", "text": {…}}}
+             {"re": 17, "ok": {"job": "01a1…"}}             a long operation started
+             {"ev": "entity", "data": {…}}                  a push
+```
+
 The host decodes a message in `protocol::on_message` into a `Command` (one
 enum variant per command) and routes it to its feature module's function,
 which answers through a `Req`.
@@ -38,9 +46,13 @@ which answers through a `Req`.
 - **Events before replies**: the events a command causes are posted before
   its reply (`PostWebMessageAsString` keeps order), so the page's data is
   current when the reply arrives.
+- **Long operations answer once they have started**: a job (email fetch)
+  with `{job}`, then reports through `job`
+  events; `chat_send` once the user's message is written, its reply
+  following as events.
 - **Error codes** are the names of `av_utils::Error`'s variants in
   snake_case (`Error::code()`): `bad_request`, `invalid_argument`,
-  `cancelled`, `not_found` (no entity, account or message with that id), `wrong_kind` (the id
+  `cancelled`, `not_found` (no entity, account, job or message with that id), `wrong_kind` (the id
   names something of another kind than the command takes), `not_writable`,
   `changed_outside`, `file_not_found`, `file_write`, `file_exists`, `spend_limit`, `win32`, `gtk`, `http`, …. `Req::fail` answers in the host's own
   words where the page shows them, `Req::err` with the code's own text.
@@ -67,7 +79,8 @@ which answers through a `Req`.
   an `RpcError {cmd, code, message}`.
 - Of the calls on one channel only the latest counts: the one before is
   rejected as `superseded` at once (a code the page adds), and its late
-  reply is ignored.
+  reply is ignored. Channels in use: `connect_ai`, `email-preview`,
+  `chat-open`.
 - `rpcOn(event, fn)` listens for the pushes.
 - A failed call nobody handles is shown in the status bar as an error that
   stays until dismissed, unless it is `superseded` or `cancelled`, so no
@@ -85,7 +98,7 @@ Host modules: `api.rs`, `indexing.rs`, `vault_settings.rs`.
 | Command | Args | Reply and pushes |
 |---|---|---|
 | `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one (`vault.md#flows`, A1), unless its format is newer (`vault.md#vault-config`: a `notice`, nothing opened): its accounts and settings (`accounts`, `vault_settings`), then the indexing (`vault`, an `entity` per file, `vault_error`, the indexing's `job` events; `vault.md#opening`). `{google}` once the indexing has started: whether this build has Google (`accounts.md#design`). |
-| `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and indexed as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault; `unsupported` for a vault of a newer format ("This vault was written by a newer Avelor …", `vault.md#vault-config`), which keeps it too and isn't remembered. The page sends its unsaved edits first. |
+| `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), opened once the work bound to the open vault has stopped (`architecture.md#jobs`), and indexed as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault; `unsupported` for a vault of a newer format ("This vault was written by a newer Avelor …", `vault.md#vault-config`), which keeps it too and isn't remembered. The page sends its unsaved edits first. |
 | `set_vault_settings` | `{ chat_model? }` | Change the open vault's settings (`.avelor/vault.yaml`, `vault.md#vault-config`); only the fields given change. `chat_model` is `{account, model}`, the model the assistant answers with, checked when it is used (`accounts.md#model-choice`). Pushes `vault_settings`, then `null`; `invalid_path` (no vault is open), or the failed save ("Could not save the vault's settings."). |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
 | `reveal_vault` | — | Open the vault's folder in Explorer (on Linux the file manager) once the handler has returned. `null`; `invalid_path` ("No vault is open."), or the shell's error ("Could not show the vault's folder."). |
@@ -141,10 +154,11 @@ Host module: `undo.rs`. Each edit of the commands above is a step
 
 ### Jobs and closing
 
-Host module: `close.rs`.
+Host module: `jobs.rs`, `close.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
+| `cancel_job` | `{ id }` | Stop the job `id`: its requests are cancelled and it ends through its `job` events — an email fetch at once, writing nothing more. `null` once the stop is under way; `not_found` for a job that isn't running, `unsupported` for an indexing. |
 | `close_ready` | `{ id, ready }` | The page's answer to the `close` event `id`, sent once every save it sent is answered (`saving.md#closing-the-app`): `ready` closes the window; not ready keeps it. An answer to an earlier close changes nothing. `null`. |
 
 ### Trash commands <a id="trash"></a>
@@ -181,6 +195,19 @@ Host module: `ai.rs`. `accounts.md`.
 | `list_ai_models` | `{ account }` | `ok {models: [{id, name, context_window, price: {input, output} \| null}]}`, the price in USD per million tokens (0 for a local Ollama, null if unknown). Pushes `account` first: an Ollama account's status follows the listing. A failed listing answers as a failed `connect_ai` check; `not_connected` for a key provider without its key, `not_found`. |
 | `set_ai_settings` | `{ account, offered?, spend_limit? }` | Only the fields given change: `offered` replaces the models offered in the pickers, `spend_limit: null` removes the limit. Pushes `account`, then `null`; `invalid_argument` for a limit that isn't above 0, `not_found`. |
 
+### Email commands <a id="email"></a>
+
+Host module: `email.rs`. `email.md`. The errors of every `email_*`:
+`not_found` (no such account), `not_connected`, and Gmail's (`http`,
+`network`, …) in the host's words ("Searching failed: …").
+
+| Command | Args | Reply and pushes |
+|---|---|---|
+| `email_labels` | `{ account }` | The account's own Gmail labels: `ok {labels: [{ id, name }]}`, by name. |
+| `email_search` | `{ account, filter }` | `ok {matches: [{ id, in_vault }], truncated, headers}`: every match's Gmail id, newest first (at most 2000; `truncated` if there are more), `in_vault` if an entity from this account names it as `gmail-id`, and the first page's `headers` (as `email_headers`). A newer `email_search` or `email_headers` supersedes a running one: its work is aborted and it answers `cancelled` (channel `email-preview`). |
+| `email_headers` | `{ account, ids }` | The preview headers of up to 50 emails, a page: `ok {headers: [{ id, date, from, subject, in_vault }]}`, `in_vault` also by Message-ID from any source. Supersedes like `email_search`. |
+| `email_fetch` | `{ account, ids, replace?, filter?, auto_update? }` | Fetch the emails `ids` into `Email/` as a job, `ok {job}` once it started; `filter` and `auto_update` are remembered in the account first. An email already in the vault (by Gmail id from this account, else by Message-ID) is skipped — without a download if its Gmail id is known — or has its body replaced if its id is in `replace`. Every email written arrives as `entity`, a replaced body also as `content`; each failed email as a `notice`; at the end `account` (`last_sync`, and `email.last_fetch` if all were fetched and none failed), then the job's end with the summary ("3 new · 1 skipped"). One fetch at a time: `unsupported` ("Another fetch is still running."). |
+
 ### Chat commands <a id="chat"></a>
 
 Host module: `chat.rs`. `assistant.md`.
@@ -203,13 +230,13 @@ What the host pushes; the page listens with `rpcOn`.
 | `vault_error` | `{ path, error }` | A file of the indexing couldn't be read; it stays out of the index. The indexing's job ends with the count as its summary. |
 | `activated` | `null` | The window is active again: the page saves its unsaved edits and looks at the files of the others (`check_files`). |
 | `close` | `{ id }` | The window's Close (`saving.md#closing-the-app`). |
-| `job` | `{ id, label, state: "running"\|"done", done, total, summary, stoppable }`, `label` a text and `summary` a list of them (`localization.md#host-texts`) | A job started, made progress, or ended: an indexing. `summary` is an ended job's summary (what it did, what failed, or why it failed); a job that ended did all its steps (`done` = `total`). |
-| `entity` | `{ id, kind, title, path, source, type, date, projects, labels, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during an indexing, and for every entity an edit created or rewrote, whatever the edit (a structural command, the assistant, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
+| `job` | `{ id, label, state: "running"\|"stopping"\|"done", done, total, summary, stoppable }`, `label` a text and `summary` a list of them (`localization.md#host-texts`) | A job started, made progress, is stopping, or ended: an indexing, an email fetch. `summary` is an ended job's summary (what it did, what failed, or why it failed); a job that ended without a stop did all its steps (`done` = `total`). |
+| `entity` | `{ id, kind, title, path, source, type, date, projects, labels, linked_to, starred, archived, threads, editable, writable, deletable }` plus the role blocks, flattened | An entity as it is on disk now, one shape for every kind: once per entity during an indexing, and for every entity an edit created or rewrote, whatever the edit (a structural command, an email fetch, the assistant, a file read again). `kind` is the derived type (kebab-case, e.g. `bank-account`); `threads` is `message.threads`. A thread carries no member list: members are derived from their `threads`. |
 | `entity_deleted` | `{ id }` | The entity left the vault: its file was moved to `.trash` (a delete, a dissolved thread) or is gone. |
-| `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: an undo or a redo rewrote it, or its file was read again. `load_doc_content` answers with the same `source` and `html`. |
+| `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: an edit rewrote it (an email fetched again, an undo or a redo), or its file was read again. `load_doc_content` answers with the same `source` and `html`. |
 | `accounts` | `{ items: [account…] }` | A vault opened: its accounts, from `.avelor/accounts/`, replacing the ones the page has. Each item is an `account`'s data. |
-| `account` | Google: `{ id, kind: "google", email, scope: { email, calendar, contacts, tasks }, connected, status, calendars: [{ id, name, color }] }`; AI: `{ id, kind: "anthropic"\|"openai"\|"mistral"\|"gemini"\|"ollama", key, address, status, connected, offered, spend_limit, spent: { cost, calls, unpriced } }` | An account was connected, changed, used or disconnected. Each `scope` level is `off`/`read`/`full`; `status` is `connected`, `disconnected` or `reconnect`, an Ollama account's `running`/`not running`/`unknown` (`accounts.md#connection`). `key` is only the key's ends (`sk-…4f2a`) or null; `spent` is what the account's calls cost this month (UTC): USD of the priced calls, all calls, and the calls whose price is unknown. |
+| `account` | Google: `{ id, kind: "google", email, scope: { email, calendar, contacts, tasks }, connected, last_sync, status, calendars: [{ id, name, color }], email: { filter, auto_update, last_fetch } \| null }`; AI: `{ id, kind: "anthropic"\|"openai"\|"mistral"\|"gemini"\|"ollama", key, address, status, connected, offered, spend_limit, spent: { cost, calls, unpriced } }` | An account was connected, changed, used or disconnected. Each `scope` level is `off`/`read`/`full`; `status` is `connected`, `disconnected` or `reconnect`, an Ollama account's `running`/`not running`/`unknown` (`accounts.md#connection`). `key` is only the key's ends (`sk-…4f2a`) or null; `spent` is what the account's calls cost this month (UTC): USD of the priced calls, all calls, and the calls whose price is unknown. |
 | `account_removed` | `{ id }` | The account was removed (`remove_account`); its files are gone. |
 | `conversation` | `{ id, title, linked_to, active, messages: [{ id, parent, role: "user"\|"assistant", model, date, content, html, status: "done"\|"writing"\|"stopped"\|"failed", error?, suggestions? }] }` | A conversation changed without the page asking: a reply done, failed or stopped, a branch selected. `chat_open` and `chat_send` answer with the same shape. `suggestions` are questions offered to ask next (`vault.md#conversation`). `messages` are the file's plus the reply being written and the failed ones, which are never written. The page shows the path from the first message to `active`, then on down the newest children, and derives the siblings from `parent`. |
 | `ai_delta` | `{ conversation, message, html }` | The reply being written, all of it so far, rendered from its markdown. Coalesced: at most one per run of the host's queue, however fast the model writes. The page ignores it for a conversation it doesn't show. |
-| `notice` | `{ level, text }` | `error`: the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), `config.yaml` couldn't be read at start (on `ready`), or a step wasn't undone or redone. `info`: what an undo or a redo did. A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |
+| `notice` | `{ level, text }` | `error`: one item of a job failed (an email; the job's summary counts it too), the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), `config.yaml` couldn't be read at start (on `ready`), or a step wasn't undone or redone. `info`: what an undo or a redo did. A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |

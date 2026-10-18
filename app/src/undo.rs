@@ -117,11 +117,6 @@ pub fn replay(app: &mut App, req: Req, op: Op) {
     };
     let result = app.edit(|index, changes| index.replay(&mut step.files, op, changes));
     let name = step.name.clone();
-    if result.is_ok() {
-        for file in step.files.iter().filter(|file| file.writes_body()) {
-            app.post_content(&file.id());
-        }
-    }
     match result {
         Ok(SaveOutcome::Saved | SaveOutcome::Unchanged) => {
             app.vault.history.taken(op, step);

@@ -10,6 +10,7 @@ mod chat;
 mod close;
 mod config;
 mod documents;
+mod email;
 mod google;
 mod indexing;
 mod jobs;

@@ -11,6 +11,7 @@ import { KEY_GROUPS } from './keys.js';
 const GROUPS = [
   ['new', t('new.head')],
   ['assistant', t('palette.assistant')],
+  ['get', t('palette.get')],
   ['go', t('palette.name')],
   ['window', t('palette.window')],
   ['vault', t('workspace.vault')],

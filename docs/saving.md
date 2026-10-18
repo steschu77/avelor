@@ -286,7 +286,8 @@ leaving edit mode: its saves name the editing session
 back into the editor (`content`). Ctrl+Z outside the editor leaves edit
 mode first, saving, so the session is the last step.
 What the app writes on its own is no step: a conflict copy
-(`#held-saves`); nor are a conversation with the assistant
+(`#held-saves`), what a job writes (Fetch email,
+`email.md#fetch-email`); nor are a conversation with the assistant
 (`assistant.md`), Delete for good and Empty trash (`vault.md#trash`).
 
 ## Closing the app <a id="closing-the-app"></a>

@@ -23,3 +23,7 @@ test("the host's text, its arguments texts too", () => {
   equal(textOf({ key: 'test.named', args: { name: { key: 'test.plain' }, n: { key: 'test.count', args: { n: 2 } } } }), 'plain of 2 entries');
   equal([textOf(null), textOf({})], ['', '']);
 });
+
+test("a list of the host's texts is joined", () => {
+  equal(textOf([{ key: 'test.plain' }, { key: 'test.count', args: { n: 1 } }]), 'plain \u00b7 1 entry');
+});
