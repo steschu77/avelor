@@ -80,6 +80,17 @@ impl Index {
         self.update(id, changes, |d| d.set_archived(archived))
     }
 
+    /// Replace the markdown body of `id`, keeping its frontmatter.
+    pub fn set_content(
+        &mut self,
+        id: &Id,
+        content: String,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        self.update(id, changes, |d| d.set_content(content))
+    }
+
     /// Apply `change` to `id`, which may be any entity, as one write: for
     /// edits that touch several properties at once. Nothing is written if
     /// nothing changed.

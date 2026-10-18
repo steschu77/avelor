@@ -451,6 +451,30 @@ pub struct Remote {
     pub remote: Vec<serde_yaml_ng::Value>,
 }
 
+impl Remote {
+    // ------------------------------------------------------------------------
+    /// The values of the property `key` (vault.md#remote: a list of
+    /// `{key: value}` maps), in order.
+    pub fn values<'a>(&'a self, key: &'a str) -> impl Iterator<Item = &'a str> + 'a {
+        self.remote
+            .iter()
+            .filter_map(move |property| property.get(key)?.as_str())
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the property `key` to `value`: the first `{key: …}` entry is
+    /// replaced, or a new one appended.
+    pub fn set(&mut self, key: &str, value: &str) {
+        let mut map = serde_yaml_ng::Mapping::new();
+        map.insert(key.into(), value.into());
+        let property = serde_yaml_ng::Value::Mapping(map);
+        match self.remote.iter_mut().find(|p| p.get(key).is_some()) {
+            Some(existing) => *existing = property,
+            None => self.remote.push(property),
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Scan {

@@ -232,7 +232,7 @@ the assistant's run against a fake Ollama (`testing::FakeOllama`).
 flowchart BT
     utils["av-utils<br/>error, datetime, base64, sha256,<br/>secret (DPAPI), logger, text, url, fs, cancel"]
     http["av-http<br/>WinHTTP / libsoup client"]
-    vault["av-vault<br/>envelope, document, index, schema,<br/>filenames, markdown, conversation"]
+    vault["av-vault<br/>envelope, document, index, schema,<br/>filenames, markdown, email, html, conversation"]
     google["av-google<br/>OAuth, Calendar"]
     llm["av-llm<br/>5 providers, streaming, usage, prices"]
     bundle["av-bundle<br/>the page's scripts: dependency check<br/>(build only)"]
@@ -251,9 +251,9 @@ flowchart BT
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), DPAPI `secret`, logger, random (BCrypt), url (the link schemes, `is_link`), text normalization, unique names and a text cut with a marker (`text`), a file's stamp and atomic writes (`fs`: `FileStamp`, `write_atomic`), cross-thread `Cancel` | |
+| av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), DPAPI `secret`, logger, random (BCrypt), url (the link schemes, `is_link`), text normalization, unique names and a text cut with a marker (`text`), charsets, a file's stamp and atomic writes (`fs`: `FileStamp`, `write_atomic`), cross-thread `Cancel` | |
 | av-http | blocking `Client` / `Request` / `Response`; the process's one session (`Client::shared`); `Request::send_logged`, the one way the APIs are called: logged as `METHOD host/path`, timed, a non-2xx status as `Error::Http` with the reason the caller's parser reads from the body | WinHTTP; libsoup 3 on Linux, one session per worker thread; WinHTTP's IPv6 fast fallback on (a network whose IPv6 goes nowhere cost 21 s per new connection); a streamed read takes what has arrived (`WinHttpQueryDataAvailable`) |
-| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes` (`vault.rs`, its parts in `vault/`: `indexing.rs`, `create.rs`, `structure.rs`, `properties.rs`, `trash.rs`, the tests in `vault/tests.rs`), the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the indexing (`index_vault`, events applied by `Index::apply`), filenames, `to_html`, `plain_title`, conversation trees | no network, no UI |
+| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes` (`vault.rs`, its parts in `vault/`: `indexing.rs`, `create.rs`, `structure.rs`, `properties.rs`, `trash.rs`, the tests in `vault/tests.rs`), the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the indexing (`index_vault`, events applied by `Index::apply`), filenames, `to_html`, `MdWriter`, `plain_title`, HTML → markdown, MIME parser, conversation trees | no network, no UI; also hosts email parsing |
 | av-google | OAuth loopback + PKCE (the wait under a `av_utils::cancel::Cancel`), token refresh, Calendar v3 subset; Google's error bodies (`reason`) | sends through `send_logged` |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
@@ -613,7 +613,7 @@ abort. Where the bundle lands and how to measure the size:
 |---|---|---|
 | av-utils | primitives with no domain (dates, ids, encodings, hashing, DPAPI, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | av-http | transport, cancellation | know any API |
-| av-vault | the vault's schema, files, index, rules | do network or UI; start threads (the app decides where indexing runs) |
+| av-vault | the vault's schema, files, index, rules, conversions | do network or UI; start threads (the app decides where indexing runs) |
 | av-google / av-llm | their remote APIs, pricing logic | touch the vault or the page's presets |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
 | page | rendering, user input, the page's copy of the data | resolve filenames, conflicts or structural rules |
