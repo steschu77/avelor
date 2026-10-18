@@ -312,10 +312,12 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// Show `text` in the page's status bar for a while (the event `notice`,
-    /// level info): what an undo or a redo did.
-    pub fn inform(&self, text: Text) {
-        let notice = serde_json::json!({ "level": "info", "text": text });
+    /// Tell the page `text` in its status bar (the event `notice`, level
+    /// info), and log it: what an undo or a redo did, what a job brought,
+    /// e.g. new email; `entity` is the one a click on it shows.
+    pub fn inform(&self, text: Text, entity: Option<Id>) {
+        log::info!("{text:?}");
+        let notice = serde_json::json!({ "level": "info", "text": text, "entity": entity });
         self.post_event("notice", notice);
     }
 

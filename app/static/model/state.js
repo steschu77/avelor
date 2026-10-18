@@ -11,7 +11,7 @@ export const store = createStore({
   vault_state: 'none', // 'none' | 'indexing' | 'open' (the `vault` event)
   google: true, // whether this build has Google (`ready`)
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
-  // level: 'error' | 'info' }; always replaced
+  // level: 'error' | 'info', entity? }; always replaced
   notices: [],
   // files changed outside the app, oldest first, each asked about in the
   // conflict dialog (features/conflict.js): { id, content, changed }; always replaced
@@ -64,7 +64,8 @@ export function savePrefs(patch) {
 }
 
 // ----------------------------------------------------------------------------
-// Show `notice`, replacing the one with the same key.
+// Show `notice`, replacing the one with the same key. An info notice goes
+// on its own (`showInfo`, ui/statusbar.js).
 export function setNotice(notice) {
   const notices = store.getState().notices.filter(n => n.key !== notice.key);
   store.setState({ notices: [...notices, notice] });

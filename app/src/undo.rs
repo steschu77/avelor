@@ -109,10 +109,11 @@ impl App {
 /// failed. Answers `null`.
 pub fn replay(app: &mut App, req: Req, op: Op) {
     let Some(mut step) = app.vault.history.take(op) else {
-        app.inform(match op {
+        let nothing = match op {
             Op::Undo => Text::new("undo.nothing"),
             Op::Redo => Text::new("undo.nothing_redo"),
-        });
+        };
+        app.inform(nothing, None);
         return req.ok(());
     };
     let result = app.edit(|index, changes| index.replay(&mut step.files, op, changes));
@@ -120,10 +121,11 @@ pub fn replay(app: &mut App, req: Req, op: Op) {
     match result {
         Ok(SaveOutcome::Saved | SaveOutcome::Unchanged) => {
             app.vault.history.taken(op, step);
-            app.inform(match op {
+            let done = match op {
                 Op::Undo => Text::new("undo.undone").arg("step", name),
                 Op::Redo => Text::new("undo.redone").arg("step", name),
-            });
+            };
+            app.inform(done, None);
         }
         Ok(SaveOutcome::Conflict(id)) => {
             log::info!("Step not replayed: {id} changed since");

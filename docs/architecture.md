@@ -460,7 +460,7 @@ nothing imports `app.js`.
 | `features/lenses/registry.js` | the lens registry: the tabs, the lenses' elements and renders (`registerLens`), at most one render per frame of the shown lens (`invalidateLenses`), the lens shown last on start (`restoreLens`) |
 | `features/panel/details.js`, `features/panel/panel.js` | what a card shows of its event, task, email or document, a task's fields and a type editable in place; the side panel renderer (day view, thread, standalone card), its chips, the structural edits it starts, its subscriptions |
 | `features/dashboard/dashboard.js`, `features/dashboard/cards.js` | the Dashboard lens: its cards' order and the closed ones, the Cards menu, dragging a card; the cards Week, Tasks (a task dragged to another column), Upcoming, Recent files and Recent conversations |
-| `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
+| `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`showInDocuments`, `revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`); its way to the Accounts page is the `accounts.open` action |
 | `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts, Google and AI; the trash |
@@ -534,8 +534,10 @@ don't apply now too. The commands and places of what the vault has come from
 functions asked each time it opens (`registerActions(list)`), a source's
 import or sync, a project, a source. A global command is registered beside
 what it runs. The pages of the expanded vault area register what Esc and
-Ctrl+Enter do on them (`registerVaultPage`, `ui/page.js`). The keys in use:
-`ui.md#keys-and-actions`.
+Ctrl+Enter do on them (`registerVaultPage`, `ui/page.js`). An action is also
+how a lower layer starts something above it: a new email's notice in the
+status bar runs `documents.show` (`showInDocuments`,
+`features/lenses/documents.js`). The keys in use: `ui.md#keys-and-actions`.
 
 ### CSS <a id="css"></a>
 

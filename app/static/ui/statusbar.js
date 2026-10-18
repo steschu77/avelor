@@ -4,16 +4,21 @@
 // something the host reported:
 // - an error (`showError`, model/state.js; the `notice` event at level
 //   error, or a failed call nobody handled, below): a failed save,
-//   settings it couldn't write. It stays until its x dismisses it; the same
-//   text again doesn't stack up (autosave retries a failed save every 4 s).
-// - what an undo or a redo did (the `notice` event at level info). It goes
-//   on its own after `NOTICE_INFO_MS`, not while the mouse is over the bar.
+//   settings it couldn't write, an email a fetch couldn't write. It stays
+//   until its x dismisses it; the same text again doesn't stack up (autosave
+//   retries a failed save every 4 s).
+// - what an undo or a redo did, or what a job brought (the `notice` event
+//   at level info): new email. It goes on its own after `NOTICE_INFO_MS`,
+//   not while the mouse is over the bar; one about a single entity shows
+//   that entity in the Documents lens on a click (the `documents.show`
+//   action, features/lenses/documents.js's `showInDocuments`).
 // A file changed outside the app is asked about in a dialog instead
 // (features/conflict.js).
 
 import { accEl } from '../core/dom.js';
 import { titled } from '../core/dom.js';
 import { RpcError, rpcOn } from '../core/rpc.js';
+import { runAction } from '../core/actions.js';
 import { t, textOf } from '../core/text.js';
 import { showError, store } from '../model/state.js';
 import { setNotice } from '../model/state.js';
@@ -36,10 +41,11 @@ function clearNotice(key) {
   }
 }
 
-// What an undo or a redo did.
-function showInfo(text) {
+// What an undo or a redo did, or what a job brought; `entity`: the one a
+// click on it shows in Documents.
+function showInfo(text, entity = null) {
   const key = `info\n${text}`;
-  setNotice({ key, text, level: 'info' });
+  setNotice({ key, text, level: 'info', entity });
   startNoticeTimer(key);
 }
 
@@ -72,8 +78,19 @@ function renderStatusbar(notices) {
 
   statusbarEl.replaceChildren();
   const el = accEl('div', notice.level === 'info' ? 'statusbar__notice' : 'statusbar__notice error-note');
-  const text = accEl('span', 'statusbar__text', notice.text);
-  text.title = notice.text;
+  let text;
+  if (notice.entity) {
+    text = accEl('button', 'statusbar__text statusbar__link', notice.text);
+    text.type = 'button';
+    text.title = t('status.show_in_documents');
+    text.addEventListener('click', () => {
+      clearNotice(notice.key);
+      runAction('documents.show', notice.entity);
+    });
+  } else {
+    text = accEl('span', 'statusbar__text', notice.text);
+    text.title = notice.text;
+  }
   const dismiss = accEl('button', 'tool', '\u00d7');
   dismiss.type = 'button';
   titled(dismiss, t('status.dismiss'));
@@ -84,8 +101,8 @@ function renderStatusbar(notices) {
 }
 
 store.subscribe(state => state.notices, renderStatusbar);
-rpcOn('notice', ({ level, text }) => {
-  if (level === 'info') showInfo(textOf(text));
+rpcOn('notice', ({ level, text, entity }) => {
+  if (level === 'info') showInfo(textOf(text), entity);
   else showError(textOf(text));
 });
 

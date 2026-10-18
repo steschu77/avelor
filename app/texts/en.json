@@ -304,8 +304,10 @@
   "day.new_event_title": "A new event on this day",
   "docs.date": "Date",
   "docs.fold_thread": "Fold the thread",
+  "docs.gone": "That entity is no longer in the vault.",
   "docs.hidden_count": "{n} hidden",
   "docs.name": "Name",
+  "docs.show_in_documents": "Show it in Documents",
   "docs.unfold_thread": "Unfold the thread",
   "docs.unsaved": "Unsaved changes",
   "documents.reload_failed": "Could not load the version on disk.",
@@ -367,6 +369,11 @@
     "other": "{n} matches"
   },
   "email.never_fetched": "never fetched",
+  "email.new_many": {
+    "one": "{n} new email · {email}",
+    "other": "{n} new emails · {email}"
+  },
+  "email.new_one": "New email: {title}",
   "email.next_page": "Next page",
   "email.no_matches": "No email matches this filter.",
   "email.no_more_labels": "No more labels",
@@ -768,6 +775,7 @@
   "start.failed": "An error occurred.\n\nCheck the log file for more information.",
   "status.dismiss": "Dismiss",
   "status.more": "+{n} more",
+  "status.show_in_documents": "Show it in Documents",
   "structure.invalid_argument": "it can’t take this change",
   "structure.not_found": "it is no longer in the vault",
   "structure.not_writable": "its file is read-only or its frontmatter can’t be read",

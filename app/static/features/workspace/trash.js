@@ -1,17 +1,19 @@
 // Workspace -> Trash: the files a delete moved to the vault's `.trash`
 // (vault.md#trash), rendered into the expanded vault area while its
 // op is "trash". Each can be restored -- it comes back where it was, and is
-// selected -- or deleted for good; Empty trash deletes them all. The list
+// made ready where it lives under the page -- or deleted for good; Empty trash deletes them all. The list
 // is asked for (`list_trash`) when the page opens, after each of its own
 // commands, and when an entity leaves the vault while it is shown, or one
 // it lists comes back (an undone delete). A failure shows in the host's
 // words.
 
+import { runAction } from '../../core/actions.js';
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { DATE_FORMAT, parseDate } from '../../core/format.js';
 import { t, textOf } from '../../core/text.js';
 import { showError, store } from '../../model/state.js';
+import { entities } from '../../model/entities.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { armedButton } from '../../ui/confirm.js';
 import { replaceVaultPage } from '../../ui/page.js';
@@ -92,11 +94,13 @@ function trashRow(item) {
   return row;
 }
 
-// Put `item` back into the vault and select it; the host pushes the entity
-// before it answers.
+// Put `item` back into the vault, an entity made ready where it lives under
+// the page, which stays for the next (`documents.show_made`), anything else
+// selected; the host pushes the entity before it answers.
 function restoreTrashed(item) {
   rpcCall('restore_entity', { path: item.path }).then(({ id }) => {
-    selectById(id);
+    if (entities.has(id)) runAction('documents.show_made', id, { behind: true });
+    else selectById(id);
     loadTrash();
   }, e => {
     showError(e.message);

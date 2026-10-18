@@ -4,7 +4,9 @@
 // and thread folding (the projects folded kept in the `doc_folded`
 // preference), an entity dropped on either joining it; its own type selection (features/lenses/types.js; the
 // `doc_hidden` and `doc_types_bar` preferences); and one entity shown on
-// request (`revealInDocuments`, the selection restored on start). This
+// request (`showInDocuments`, the `documents.show` action; what was made or
+// restored, `documents.show_made`; `revealInDocuments`, the selection
+// restored on start). This
 // file owns the rows, the folds and the sort-state UI, model/entities.js
 // the entities and features/selection.js the selection.
 
@@ -13,23 +15,28 @@ import { setAria } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
 import { DATE_FORMAT, compareText } from '../../core/format.js';
 import { shortDate } from '../../core/format.js';
-import { t } from '../../core/text.js';
 
+import { registerAction } from '../../core/actions.js';
+import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { savePrefs } from '../../model/state.js';
+import { showError } from '../../model/state.js';
 import { isDirty } from '../../model/documents.js';
 import { entities } from '../../model/entities.js';
 import { matchesFilter } from '../../model/entities.js';
 import { projects, projectsInOrder, projectsOf } from '../../model/entities.js';
 import { knownThreads, threads } from '../../model/entities.js';
+import { calendarDayOf } from '../../model/calendar.js';
 import { joinProjectLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
+import { closeVaultArea } from '../../ui/page.js';
 import {
   dropTarget, endDragPreview, startDragPreview, takeMemberDrops,
 } from '../../ui/dropzone.js';
 import { markSelection, selectById, selectDocument } from '../selection.js';
 import { selectFilter } from '../selection.js';
+import { selectLens } from '../selection.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
 import { invalidateLenses, registerLens } from './registry.js';
 
@@ -497,6 +504,50 @@ export function initDocumentsLens() {
     btn.addEventListener('click', () => onSortClick(btn.dataset.sort));
   }
   renderSortHead();
+}
+
+// ----------------------------------------------------------------------------
+// Show the entity `id` in the lens (a new email's notice, through the
+// `documents.show` action): without a filter or a type selection that
+// would hide it, the entity selected and its row unfolded and scrolled
+// into view. `behind`: under the open vault page, which stays.
+function showInDocuments(id, { behind = false } = {}) {
+  const doc = entities.get(id);
+  if (!doc) return showError(t('docs.gone'));
+  showingAny([doc]);
+  docTypes.show(typeOf(doc));
+  showLens('documents', behind);
+  selectDocument(id);
+  revealInDocuments(id);
+}
+registerAction({ id: 'documents.show', title: t('docs.show_in_documents'), run: showInDocuments });
+
+// Show the entity `id` just made or restored where it lives (the
+// `documents.show_made` action): an event with a day on that day in the
+// Calendar, without a filter that would hide it, as is a task due on a day
+// while the Calendar is the lens; anything else as `showInDocuments` does.
+function showMade(id, { behind = false } = {}) {
+  const doc = entities.get(id);
+  if (doc?.kind === 'event') showingAny([doc]);
+  const inCalendar = doc?.kind === 'event' || store.getState().selected_lens === 'calendar';
+  if (!inCalendar || !calendarDayOf(doc)) return showInDocuments(id, { behind });
+  showLens('calendar', behind);
+  selectDocument(id);
+}
+registerAction({ id: 'documents.show_made', run: showMade });
+
+// A filter that would hide every one of `members` cleared.
+function showingAny(members) {
+  if (members.some(doc => matchesFilter(doc))) return;
+  store.setState({ selected_project: null, selected_source: null, selected_labels: [] });
+}
+
+// The lens `lens` shown, the open vault page closed; `behind`: under it (a
+// restore in Trash), the page staying.
+function showLens(lens, behind) {
+  if (behind) return store.setState({ selected_lens: lens });
+  closeVaultArea();
+  selectLens(lens);
 }
 
 showHeader(store.getState().selected_lens);

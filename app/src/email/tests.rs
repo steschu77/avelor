@@ -11,7 +11,7 @@ use serde_json::json;
 use super::apply::{Action, Stored, apply_email, fetch_action};
 use super::auto_sync::{on_sync_listed, sync_query};
 use super::entities::{Downloaded, email_entity};
-use super::fetch::{FetchPlan, finish, plan_fetch, start_fetch};
+use super::fetch::{FetchPlan, finish, new_email_notice, plan_fetch, start_fetch};
 use crate::testing::Harness;
 use crate::testing::{CONNECTED, DISCONNECTED, parse, reply, shape, shown, with_google};
 use crate::texts::Text;
@@ -479,4 +479,75 @@ fn a_complete_auto_sync_moves_its_start_on() {
         "the page's stays"
     );
     assert!(account["last_sync"].is_string());
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn new_email_is_told_by_its_title_or_its_count() {
+    let (a, b) = (Id::generate(), Id::generate());
+    let title_of = |id: Id| (id == a).then(|| "Nebenkosten 2026".to_string());
+    let told = |created: &[Id]| {
+        let told = new_email_notice(created, title_of, "jan@example.com");
+        told.map(|(text, entity)| (text.render(), entity))
+    };
+    assert_eq!(told(&[]), None);
+    assert_eq!(
+        told(&[a]),
+        Some(("New email: Nebenkosten 2026".to_string(), Some(a)))
+    );
+    assert_eq!(
+        told(&[b]),
+        Some(("New email: No subject".to_string(), Some(b))),
+        "gone meanwhile"
+    );
+    assert_eq!(
+        told(&[a, b]),
+        Some(("2 new emails · jan@example.com".to_string(), None))
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_fetch_that_wrote_email_tells_the_page_after_its_end() {
+    let known = format!(
+        "---\nid: 01a0e1cc-a24c-7490-82fe-e75669985b32\ntitle: Nebenkosten 2026\nremote:\n  account: {CONNECTED}\n  remote:\n  - gmail-id: g1\nemail: {{}}\n---\nBody\n"
+    );
+    let mut h = with_google("email-new-notice", EMAIL, &[("Email/n.md", known)]);
+    let account = connected_id();
+    let email = Id::parse("01a0e1cc-a24c-7490-82fe-e75669985b32").unwrap();
+    let client = h.app.google.connected(account).unwrap();
+    let plan = FetchPlan {
+        account,
+        client,
+        queue: VecDeque::new(),
+        skipped: 0,
+        replace: HashSet::new(),
+        origin: Origin::Manual,
+        started: DateTime::now(),
+    };
+    start_fetch(&mut h.app, Text::new("email.fetching"), plan);
+    h.app
+        .email
+        .fetch
+        .as_mut()
+        .unwrap()
+        .counts
+        .created
+        .push(email);
+    finish(&mut h.app);
+    let sent = parse(&h.take());
+    assert_eq!(
+        shape(&sent),
+        ["job", "account", "job", "notice"],
+        "{sent:?}"
+    );
+    assert_eq!(shown(&sent[2]["data"]["summary"]), "1 new");
+    assert_eq!(
+        (&sent[3]["data"]["level"], &sent[3]["data"]["entity"]),
+        (&json!("info"), &json!(email))
+    );
+    assert_eq!(
+        shown(&sent[3]["data"]["text"]),
+        "New email: Nebenkosten 2026"
+    );
 }

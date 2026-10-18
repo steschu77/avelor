@@ -41,7 +41,7 @@ pub(super) struct EmailFetch {
     in_flight: usize,
     total: usize,
     done: usize,
-    counts: FetchCounts,
+    pub(super) counts: FetchCounts,
     pub(super) origin: Origin,
     /// When the fetch (an auto-sync: its search) started: what it fetched
     /// covers the email up to then.
@@ -63,9 +63,9 @@ pub(super) struct FetchPlan {
 // ----------------------------------------------------------------------------
 /// What a fetch came to: the job's summary.
 #[derive(Default)]
-struct FetchCounts {
+pub(super) struct FetchCounts {
     /// The emails written, new.
-    created: Vec<Id>,
+    pub(super) created: Vec<Id>,
     pub(super) replaced: usize,
     pub(super) skipped: usize,
     pub(super) failed: usize,
@@ -359,4 +359,40 @@ pub(super) fn finish(app: &mut App) {
 
     let counts = &fetch.counts;
     app.end_job_with(fetch.job_id, counts.summary(), false);
+
+    let email = find_account_email(app, fetch.account);
+    let title_of = |id: Id| {
+        app.vault
+            .index()
+            .entry(&id)
+            .map(|e| e.doc.title().to_string())
+    };
+    if let Some((text, entity)) = new_email_notice(&counts.created, title_of, &email) {
+        app.inform(text, entity);
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// What the status bar says about the emails a fetch wrote (`created`):
+/// nothing for none; the title of one, which a click shows; the count of
+/// more, and whose they are.
+pub(super) fn new_email_notice(
+    created: &[Id],
+    title_of: impl Fn(Id) -> Option<String>,
+    email: &str,
+) -> Option<(Text, Option<Id>)> {
+    match created {
+        [] => None,
+        [id] => {
+            let text = match title_of(*id) {
+                Some(title) => Text::new("email.new_one").arg("title", title),
+                None => Text::new("email.new_one").arg("title", Text::new("email.no_subject")),
+            };
+            Some((text, Some(*id)))
+        }
+        many => {
+            let text = Text::new("email.new_many").arg("n", many.len());
+            Some((text.arg("email", email), None))
+        }
+    }
 }
