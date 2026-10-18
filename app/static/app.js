@@ -49,14 +49,14 @@ restoreLens();
 restoreSelection(revealInDocuments);
 
 // The lenses and the sidebar follow the model (model/events.js): the
-// entities as they are now, the projects and accounts the
+// entities as they are now, the projects, accounts and folder watches the
 // sidebar lists, the threads and projects the Documents lens groups by
 // (`commitThreadChange`), and the projects the Timeline lens's rows name.
 store.subscribe(state => state.entities_rev, () => {
   invalidateLenses();
   scheduleRenderSidebar();
 });
-store.subscribe([state => state.projects_rev, state => state.accounts_rev],
+store.subscribe([state => state.projects_rev, state => state.accounts_rev, state => state.watches_rev],
   () => scheduleRenderSidebar());
 store.subscribe([state => state.threads_rev, state => state.projects_rev], () => invalidateLenses('documents', 'timeline'));
 
