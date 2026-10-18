@@ -106,6 +106,8 @@ enum Command {
     PickFolder(PickFolder),
     // Import scans (`scans`).
     ScanList(OfWatch),
+    ScanPreviews(scans::PreviewRequest),
+    ScanOpen(scans::OpenRequest),
     // Fetch mail (`mail`).
     MailLabels(OfAccount),
     MailSearch(mail::SearchRequest),
@@ -344,6 +346,8 @@ impl Command {
             "remove_watch" => Command::RemoveWatch(from_value(args)?),
             "pick_folder" => Command::PickFolder(from_value(args)?),
             "scan_list" => Command::ScanList(from_value(args)?),
+            "scan_previews" => Command::ScanPreviews(from_value(args)?),
+            "scan_open" => Command::ScanOpen(from_value(args)?),
             "mail_labels" => Command::MailLabels(from_value(args)?),
             "mail_search" => Command::MailSearch(from_value(args)?),
             "mail_headers" => Command::MailHeaders(from_value(args)?),
@@ -435,6 +439,8 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::RemoveWatch(a) => folders::remove_watch(app, req, a.watch),
         Command::PickFolder(a) => folders::pick_folder(app, req, a.title),
         Command::ScanList(a) => scans::scan_list(app, req, a.watch),
+        Command::ScanPreviews(a) => scans::scan_previews(app, req, a),
+        Command::ScanOpen(a) => scans::scan_open(app, req, a),
         Command::MailLabels(a) => mail::mail_labels(app, req, a.account),
         Command::MailSearch(a) => mail::mail_search(app, req, a),
         Command::MailHeaders(a) => mail::mail_headers(app, req, a),

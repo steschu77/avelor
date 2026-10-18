@@ -3,10 +3,13 @@
 // button of its pane (features/workspace/folders.js,
 // through the `watch.import` action), and rendered
 // into the expanded vault area while its op is "scans". The host lists the
-// watch's files. On the page, Esc closes it (`registerVaultPage`).
+// watch's files. The files are shown as previews: the host renders them
+// (`scan_previews`), and a double-click opens one in its default app
+// (`scan_open`). On the page, Esc closes it (`registerVaultPage`).
 
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { rpcCall } from '../../core/rpc.js';
+import { rpcOn } from '../../core/rpc.js';
 import { TIME_FORMAT, pageDate, parseDate } from '../../core/format.js';
 import { registerAction } from '../../core/actions.js';
 import { store } from '../../model/state.js';
@@ -33,6 +36,11 @@ export function openScanImport(watch_id) {
       listError: null,
       // file -> { file, size, taken, in_vault }
       files: new Map(),
+      error: null, // a refused open
+      current: null, // the file shown large in "Files in folder"
+      // `file|size|modified` -> { url, img }: a file's preview once the host
+      // sent it (`url` empty: none), its <img> made once
+      previews: new Map(),
     };
   }
   openVaultOp('scans', 'Import scans');
@@ -45,7 +53,7 @@ registerVaultPage('scans', {
 registerAction({ id: 'watch.import', title: 'Import from the folder', run: openScanImport });
 
 // ----------------------------------------------------------------------------
-// host answers
+// host answers and events
 
 // The files as listed (`scan_list`'s answer) replace the ones shown.
 function onScanFiles(listing) {
@@ -58,23 +66,87 @@ function onScanFiles(listing) {
       file: f.file,
       size: f.size,
       taken: parseDate(f.taken),
+      modified: f.modified,
       in_vault: f.in_vault,
     });
   }
   scan.files = files;
+  scanRequestPreviews();
   scheduleRenderScans();
 }
 
+// A file's preview: a JPEG `data:` URL, or empty if it has none.
+rpcOn('scan_preview', ({ watch, file, url }) => {
+  const f = scan?.watch === watch ? scan.files.get(file) : null;
+  if (!f) return;
+  scan.previews.set(scanPreviewKey(f), { url, img: null });
+  scheduleRenderScans();
+});
+
 // ----------------------------------------------------------------------------
 // files
+
+function scanFile(file) {
+  return scan.files.get(file);
+}
 
 // The files not in the vault, by when they were taken.
 function scanUnread() {
   return [...scan.files.values()].filter(f => !f.in_vault).sort(scanByTaken);
 }
 
+// The file shown large: the one chosen, else the first of `unread`.
+function scanCurrent(unread = scanUnread()) {
+  return unread.find(f => f.file === scan.current) ?? unread[0];
+}
+
 function scanByTaken(a, b) {
   return a.taken - b.taken || a.file.localeCompare(b.file);
+}
+
+// ----------------------------------------------------------------------------
+// previews
+
+// The key of `f`'s preview: a changed file needs a new one.
+function scanPreviewKey(f) {
+  return `${f.file}|${f.size}|${f.modified}`;
+}
+
+// Ask for the previews the page lacks: the file shown large first, then
+// the other files not in the vault.
+function scanRequestPreviews() {
+  const order = [scanCurrent()?.file, ...scan.files.keys()];
+  const files = [...new Set(order)].filter(file => {
+    const f = file && scanFile(file);
+    return f && !f.in_vault && !scan.previews.has(scanPreviewKey(f));
+  });
+  if (files.length) rpcCall('scan_previews', { watch: scan.watch, files });
+}
+
+// The <img> of `f`'s preview, or null while there is none. It is made once
+// and moved into every render, so it isn't decoded again.
+function scanPreviewImg(f) {
+  const preview = scan.previews.get(scanPreviewKey(f));
+  if (!preview?.url) return null;
+  if (!preview.img) {
+    preview.img = accEl('img', 'scan-preview__img');
+    preview.img.alt = '';
+    preview.img.draggable = false;
+    preview.img.src = preview.url;
+  }
+  return preview.img;
+}
+
+// A box (`tag`, `className`) with `f`'s preview: striped until it came, and
+// a double-click opens the file in its default app.
+function scanPreviewBox(tag, className, f, title) {
+  const box = accEl(tag, className);
+  const img = scanPreviewImg(f);
+  if (img) box.append(img);
+  const none = scan.previews.get(scanPreviewKey(f))?.url === '';
+  box.title = `${title} \u00b7 ${none ? 'no preview' : 'double-click to open it'}`;
+  box.addEventListener('dblclick', () => scanOpen(f.file));
+  return box;
 }
 
 // ----------------------------------------------------------------------------
@@ -93,6 +165,16 @@ function scanList() {
     scheduleRenderScans();
   });
   scheduleRenderScans();
+}
+
+// Open `file` in its default app; a refusal shows on the page.
+function scanOpen(file) {
+  const s = scan;
+  rpcCall('scan_open', { watch: s.watch, file }).catch(e => {
+    if (scan !== s) return;
+    s.error = e.message;
+    scheduleRenderScans();
+  });
 }
 
 // ----------------------------------------------------------------------------
@@ -145,23 +227,42 @@ function renderScanFiles() {
     const columns = accEl('div', 'list-row scans__file scans__file--head label');
     columns.append(accEl('span', '', 'File'), accEl('span', '', 'Taken'), accEl('span', '', 'Size'));
     list.append(columns);
-    for (const f of unread) list.append(renderScanFile(f));
-    part.append(list);
+    const current = scanCurrent(unread);
+    for (const f of unread) list.append(renderScanFile(f, f === current));
+    const box = accEl('div', 'scans__unread');
+    box.append(list, renderScanFigure(current));
+    part.append(box);
   } else if (scan.listed) {
     part.append(accEl('div', 'page-text scans__empty', files.length
       ? 'Every file here is in the vault.'
       : 'No file in this folder matches the watch.'));
   }
+  if (scan.error) part.append(accEl('div', 'error-note', scan.error));
   return part;
 }
 
-function renderScanFile(f) {
+function renderScanFile(f, current) {
   const row = accEl('div', 'list-row scans__file');
+  if (current) row.setAttribute('aria-current', 'true');
+  row.addEventListener('click', () => {
+    scan.current = f.file;
+    scheduleRenderScans();
+  });
   const name = accEl('span', 'mono mono--small import__file', f.file);
   name.title = f.file;
   row.append(name, accEl('span', 'meta', pageDate(f.taken, true)),
     accEl('span', 'meta', scanSize(f.size)));
   return row;
+}
+
+// The file selected in "Files in folder", large.
+function renderScanFigure(f) {
+  const figure = accEl('figure', 'scans__preview');
+  const name = accEl('span', 'mono mono--small import__file', f.file);
+  name.title = f.file;
+  figure.append(scanPreviewBox('span', 'scan-preview scan-preview--large', f, f.file), name,
+    accEl('span', 'meta', `taken ${pageDate(f.taken, true)}`));
+  return figure;
 }
 
 // "812 KB", "2.4 MB".

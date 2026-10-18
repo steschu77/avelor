@@ -9,6 +9,24 @@
   margin-top: 24px;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
+}
+
+/* the files not read yet, beside the selected one, large */
+.scans__unread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--w-preview-lg);
+  gap: 0 24px;
+  align-items: start;
+}
+
+.scans__preview {
+  margin: 0;
+  padding-top: 10px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .scans__files {
@@ -20,10 +38,23 @@
   --cols: minmax(0, 1fr) 150px 80px;
   min-height: var(--h-row);
   padding: 0 8px;
+  cursor: pointer;
 }
 
-.scans__file--head {
+.scans__file:hover {
+  background: var(--c-hover);
+}
+
+.scans__file[aria-current="true"] {
+  background: var(--c-card);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+.scans__file--head,
+.scans__file--head:hover {
   min-height: 28px;
+  background: none;
+  cursor: default;
 }
 
 .scans__empty {
@@ -34,6 +65,38 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* A page's preview: striped until its image came */
+.scan-preview {
+  flex: none;
+  display: block;
+  border: 1px solid var(--c-line);
+  background: repeating-linear-gradient(135deg, var(--c-hover) 0 3px, transparent 3px 6px), var(--c-card);
+}
+
+.scan-preview--large {
+  width: var(--w-preview-lg);
+  height: var(--h-preview-lg);
+}
+
+.scan-preview__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--c-card);
+}
+
+/* narrow: the large preview over the files */
+@container (max-width: 560px) {
+  .scans__unread {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scans__preview {
+    order: -1;
+  }
 }
 
 /* Fetch mail (sync button of a Mail source, features/import/mail.js): the filter form, then

@@ -112,6 +112,9 @@
   /* the dashboard: an event's time in the Week card, the day in Upcoming */
   --w-week-time: 34px;
   --w-feed-when: 62px;
+  /* image previews (Import scans): the large one */
+  --w-preview-lg: 180px;
+  --h-preview-lg: 254px;
 
   /* the only radius */
   --r-pill: 99px;

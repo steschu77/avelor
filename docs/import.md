@@ -92,6 +92,12 @@ The Import button of an images watch opens Import scans
   file keeps its modified time). The section counts the files already in
   the vault and says when the folder was listed; the folder can be listed
   again.
+- **Previews**: the selected file of "Files in folder" (a click on its row
+  selects it; the first one at first) is shown large beside the list. A
+  double-click on a preview opens the file
+  in its default app (the image viewer). Previews are upright by the
+  image's EXIF orientation; a file Windows (on Linux gdk-pixbuf) can't
+  decode keeps a striped box ("no preview").
 
 Escape closes the page; opening it again for the same watch lists the
 folder again.
@@ -103,7 +109,8 @@ folder again.
 | J1 | Add a watch | "Watch a folder" → type → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card |
 | J2 | Edit | name, folder, subfolders, patterns, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
 | J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |
-| K1 | Open Import scans | the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files}` | file list |
+| K1 | Open Import scans | the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files}`; `scan_previews` → `scan_preview` per file | file list, large preview |
+| K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
 
 ## Design <a id="design"></a>
 
@@ -111,3 +118,14 @@ folder again.
   subfolders, globbing); `scan_list` lists on a worker.
   A file counts as in the vault by its watch and origin (`scan.watch` +
   `scan.origin` in the index).
+- **Previews**: the host renders a preview per file with WIC (Windows
+  Imaging Component, through the `windows` crate: no new dependency,
+  `sys/win32/images.rs`; on Linux gdk-pixbuf, which comes with GTK,
+  `sys/linux/images.rs`): decoded, turned upright by its EXIF orientation,
+  scaled down to fit 360 x 508 (twice the large preview, sharp on a high-DPI
+  screen), encoded as JPEG (about 80 KB for a scanned page) and sent as a
+  `data:` URL. Previews are made on a
+  worker, the file shown large first, and kept per file while it doesn't
+  change (size and modified time); a newer request
+  stops what is left of the one before. The page keeps one `<img>` per
+  file and moves it into each render, so a preview is decoded once.

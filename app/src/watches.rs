@@ -9,6 +9,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
@@ -337,21 +338,34 @@ pub struct FolderFile {
     /// name it (`scan.jpg`, or `2026` + separator + `scan.jpg` in a
     /// subfolder).
     pub name: String,
+    pub path: PathBuf,
     pub size: u64,
     /// When the file was made: its creation time, or its modified time if
     /// that is earlier (a copied file keeps the original's modified time).
     pub taken: DateTime,
+    /// Tells a changed file from the one read before.
+    pub modified: SystemTime,
 }
 
 impl FolderFile {
     // ------------------------------------------------------------------------
-    fn new(name: String, _path: PathBuf, meta: &fs::Metadata) -> Result<Self> {
+    /// The file `name` (relative) in the folder `root`, as it is now.
+    pub fn read(root: &Path, name: &str) -> Result<Self> {
+        let path = root.join(name);
+        let meta = fs::metadata(&path)?;
+        Self::new(name.to_string(), path, &meta)
+    }
+
+    // ------------------------------------------------------------------------
+    fn new(name: String, path: PathBuf, meta: &fs::Metadata) -> Result<Self> {
         let modified = meta.modified()?;
         let created = meta.created().unwrap_or(modified);
         Ok(Self {
             name,
+            path,
             size: meta.len(),
             taken: DateTime::from_system_time(created.min(modified)),
+            modified,
         })
     }
 }
@@ -665,7 +679,10 @@ note: top-level kept
             .into_owned();
         assert_eq!(names(&all), [sub.as_str(), "a.PNG", "b.jpg"]);
         let c = all.iter().find(|f| f.name == sub).unwrap();
-        assert_eq!(c.size, 3);
+        assert_eq!(
+            (c.size, c.path.clone()),
+            (3, dir.join("2026").join("c.jpg"))
+        );
         assert!(c.taken <= DateTime::now());
         assert!(matches!(missing, Err(Error::FileNotFound { .. })));
     }
