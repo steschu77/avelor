@@ -47,6 +47,7 @@ function applyVaultLayout() {
 function applyPanelLayout() {
   const { panel_size } = store.getState();
   panel.classList.toggle("is-expanded", panel_size === "expanded");
+  panel.classList.toggle("is-chat", panel_size === "chat");
   if (panel_size === "closed") {
     root.style.setProperty("--w-panel", "0px");
     root.style.setProperty("--o-panel", `${panelWidth}px`);
@@ -62,6 +63,8 @@ function applyPanelLayout() {
     panelDivider.style.display = "none";
   }
   else {
+    /* normal or half-open: half-open, the panel opens wider over the main
+       view by its context column (.panel.is-chat), as it does at full width */
     root.style.setProperty("--w-panel", `${panelWidth}px`);
     root.style.setProperty("--o-panel", "0px");
     panelDivider.style.display = "";
@@ -118,7 +121,8 @@ sidebarDivider.addEventListener('mousedown', e => {
 });
 
 panelDivider.addEventListener('mousedown', e => {
-  if (store.getState().panel_size === "normal") {
+  const { panel_size } = store.getState();
+  if (panel_size === "normal" || panel_size === "chat") {
     draggingPanel = true;
     panel.classList.add("is-resizing");
     main.classList.add("is-resizing");
@@ -128,7 +132,8 @@ panelDivider.addEventListener('mousedown', e => {
 });
 
 contextDivider.addEventListener('mousedown', e => {
-  if (store.getState().panel_size === "expanded") {
+  const { panel_size } = store.getState();
+  if (panel_size === "expanded" || panel_size === "chat") {
     draggingContext = true;
     panel.classList.add("is-resizing");
     document.body.style.cursor = "col-resize";
@@ -138,7 +143,8 @@ contextDivider.addEventListener('mousedown', e => {
 
 document.addEventListener('mousemove', e => {
   if (draggingContext) {
-    /* the panel ends at the window's right edge, so the context's width is the distance to it */
+    /* the panel ends at the window's right edge, so the context's width is the distance to it;
+       half-open, the panel grows with it (.panel.is-chat) */
     contextWidth = clampContextWidth(window.innerWidth - e.clientX);
     root.style.setProperty("--w-expanded-context", `${contextWidth}px`);
   }
@@ -147,7 +153,9 @@ document.addEventListener('mousemove', e => {
     applyVaultLayout();
   }
   if (draggingPanel) {
-    panelWidth = clampPanelWidth(window.innerWidth - e.clientX);
+    /* half-open, the context column is right of the card */
+    const beside = store.getState().panel_size === "chat" ? contextWidth : 0;
+    panelWidth = clampPanelWidth(window.innerWidth - e.clientX - beside);
     applyPanelLayout();
   }
 });

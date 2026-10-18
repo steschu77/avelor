@@ -124,6 +124,7 @@
     "other": "{n} tareas vencidas"
   },
   "cal.today": "Hoy",
+  "card.chat": "Conversar sobre el documento",
   "card.delete": "Eliminar documento",
   "card.edit": "Editar documento",
   "card.leave_thread": "Quitar del hilo",
@@ -404,6 +405,10 @@
   "page.retry": "Reintentar",
   "page.submit": "Ejecutar la acción principal de la página",
   "panel.add_project_label": "Añadir a un proyecto o una etiqueta",
+  "panel.chat_count": {
+    "one": "Conversar sobre el documento · {n} conversación",
+    "other": "Conversar sobre el documento · {n} conversaciones"
+  },
   "panel.delete_armed": "Haz clic otra vez para eliminar",
   "panel.edit_message": "Editar mensaje",
   "panel.filter_or_label": "Filtrar, o una etiqueta nueva",

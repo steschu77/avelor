@@ -121,6 +121,7 @@
     "other": "{n} überfällige Aufgaben"
   },
   "cal.today": "Heute",
+  "card.chat": "Über das Dokument chatten",
   "card.delete": "Dokument löschen",
   "card.edit": "Dokument bearbeiten",
   "card.leave_thread": "Aus dem Verlauf entfernen",
@@ -392,6 +393,10 @@
   "page.retry": "Erneut versuchen",
   "page.submit": "Hauptaktion der Seite ausführen",
   "panel.add_project_label": "Zu einem Projekt oder Label hinzufügen",
+  "panel.chat_count": {
+    "one": "Über das Dokument chatten · {n} Unterhaltung",
+    "other": "Über das Dokument chatten · {n} Unterhaltungen"
+  },
   "panel.delete_armed": "Zum Löschen erneut klicken",
   "panel.edit_message": "Nachricht bearbeiten",
   "panel.filter_or_label": "Filtern oder neues Label",
