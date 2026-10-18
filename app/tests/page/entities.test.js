@@ -2,14 +2,14 @@ import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import {
   NO_PROJECT, assistantConversations, entities, knownThreads, matchesFilter, projectNames, projectScope, projectsFor,
-  projectsInOrder, projectsOf, threadMatchesFilter, threadMembers, threadOf, threadProjects, threads,
+  projectsInOrder, projectsOf, sourceKeyOf, threadMatchesFilter, threadMembers, threadOf, threadProjects, threads,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
 const project = (id, more = {}) => ({ id, kind: 'project', title: id, ...more });
 const doc = (id, more = {}) => ({ id, kind: 'document', title: id, ...more });
 const ids = list => list.map(one => one.id);
-const FILTER = { selected_project: null, selected_labels: [] };
+const FILTER = { selected_project: null, selected_source: null, selected_labels: [] };
 const shown = filter => [...entities.values()].filter(one => matchesFilter(one, { ...FILTER, ...filter })).map(one => one.id);
 
 test('the starred projects come first, the archived last, else as they arrived', () => {
@@ -96,6 +96,22 @@ test("the names of an entity's projects, while none is the filter", () => {
   vault(project('p'), project('q'));
   equal(projectNames({ projects: ['p', 'q', 'deleted'] }, { selected_project: null }), 'p \u00b7 q');
   equal(projectNames({ projects: ['p'] }, { selected_project: 'p' }), '');
+});
+
+test('the source of what was made in the app, and of what none brought', () => {
+  equal([sourceKeyOf({ source: { created: {} } }), sourceKeyOf({ source: 'created' }), sourceKeyOf({ source: { web: {} } }), sourceKeyOf({})], ['created', 'created', null, null]);
+});
+
+test("the source of an email is its account's", () => {
+  equal([sourceKeyOf({ kind: 'email', source: { remote: { account: 'g' } } }), sourceKeyOf({ kind: 'email', source: null })], ['g\nemail', null]);
+});
+
+test("the source of an event is the Google calendar its own syncs with", () => {
+  vault(
+    { id: 'family', kind: 'calendar', source: { remote: { account: 'g', remote: [{ 'calendar-id': 'fam@google' }] } } },
+    { id: 'own', kind: 'calendar', source: { created: {} } }, { id: 'half', kind: 'calendar', source: { remote: { account: 'g', remote: [] } } },
+  );
+  equal(['family', 'own', 'half', 'gone'].map(id => sourceKeyOf({ kind: 'event', event: { calendar: id }, source: null })), ['g\ncalendar\nfam@google', null, null, null]);
 });
 
 test('the conversations with an AI on an entity, the newest first', () => {

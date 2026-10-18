@@ -5,7 +5,7 @@
 // address checks out. A required field (the key, Ollama's address) stays an
 // input until the host has checked it; then it shows as text with a pencil.
 // A model picker's way here is the `accounts.open` action
-// (`openAccountsPage`).
+// (`openAccountsPage`). The sidebar follows `accounts_rev` (app.js).
 
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { titled } from '../../core/dom.js';
@@ -296,8 +296,8 @@ function renderAccessRows(account) {
   return rows;
 }
 
-// Checkboxes for the account's calendars. Loaded once per account (and
-// again after a reconnect).
+// Checkboxes for the account's calendars: checked ones show as sources in
+// the sidebar. Loaded once per account (and again after a reconnect).
 function renderCalendarSources(account) {
   const list = accEl('div', 'accounts__sub');
   list.append(accEl('span', 'label', t('accounts.calendars_shown')));

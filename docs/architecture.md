@@ -414,7 +414,7 @@ nothing imports `app.js`.
 | `core/actions.js`, `core/match.js` | the action registry, the commands and the keys Go to lists (`listedActions`, `keyedActions`), the one global key handler and the keys' names (`shortcutKeys`, `shortcutText`); names found by words typed (`fit`) |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`, which makes its parts for each editor (`editor/selection.js`, `editor/blocks.js`, `editor/tables.js`, `editor/shortcuts.js`, `editor/paste.js`); `isLink` (`editor/links.js`); the tags both read (`editor/tags.js`); `serializeMarkdown` |
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `setNotice`, `showError` |
-| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the conversations with an AI); the selection published minus what is gone (`commitExistingSelection`) |
+| `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `sourceKeyOf`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the conversations with an AI); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/calendar.js` | what the calendar shows: the events in the filter with their recurring events expanded (RFC 5545 lines), the tasks due, the day an entity shows on (`calendarDayOf`) |
 | `model/schedule.js` | the schedules, an event's: their RFC 5545 lines read (`parseSchedule`, `ruleSupported`) and expanded from a first start (`scheduleStarts`) |
 | `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, an editing session's group (`beginEditSession`), the conflicts (`editorRoots`) |
@@ -436,7 +436,7 @@ nothing imports `app.js`.
 | `features/palette-found.js` | what Go to finds: the places, the commands and the keys, as blocks of rows |
 | `features/keys.js` | the keys that are no command, by where they work (Go to's Keys) |
 | `features/undo.js` | Ctrl+Z and Ctrl+Y as the actions `undo` and `redo` |
-| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
+| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |
 | `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
 | `features/assistant/tree.js`, `features/assistant/assistant.js` | conversation tree helpers; the assistant |
@@ -491,8 +491,8 @@ editor has the focus, and none acts behind an open dialog. An action with a
 `group` is a command Go to lists by its `title`, found by `also` too, while
 its `when` holds; one with a `place` is a place it goes to, with `end()` at
 its row's end. Its list of keys has the commands with a shortcut, those that
-don't apply now too. The places the vault has, a project each, come from
-functions asked each time it opens (`registerActions(list)`). A global
+don't apply now too. The places the vault has, a project, a source, come
+from functions asked each time it opens (`registerActions(list)`). A global
 command is registered beside what it runs. The pages of the expanded vault
 area register what Esc and Ctrl+Enter do on them (`registerVaultPage`,
 `ui/page.js`). The keys in use: `ui.md#keys-and-actions`.

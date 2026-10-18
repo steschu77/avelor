@@ -30,6 +30,7 @@ export const store = createStore({
   entities_rev: 0,
   settings_rev: 0,
   selected_project: null, // project filter: one, NO_PROJECT (in none) or null (all), see matchesFilter
+  selected_source: null, // source filter: one or none (all), keyed as `sourceKeyOf`
   vault_op: null, // the Workspace op shown in the expanded vault area ("accounts", "new", "trash")
   vault_expanded: false, // the vault area is open
   // the panel's width: 'closed', 'normal', 'chat' (the normal panel with the

@@ -1,18 +1,20 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
-// archived folded) after No project, with their counts, each a filter;
-// renaming, adding, starring and dropping onto projects; the vault's name and menu. It renders at most once per frame
-// (`scheduleRenderSidebar`), following the model (app.js).
+// archived folded) after No project, and the sources, with their counts,
+// each a filter; renaming, adding, starring and dropping onto projects;
+// the vault's name and menu. It renders at most
+// once per frame (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
 import { $ } from '../core/dom.js';
 import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
 import { titled } from '../core/dom.js';
-import { registerAction, registerActions } from '../core/actions.js';
+import { registerAction, registerActions, runAction } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store, vaultOpen } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
 import { projects } from '../model/entities.js';
+import { accounts, sourceKeyOf } from '../model/entities.js';
 import { structureCall } from '../model/structure.js';
 import { joinProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
@@ -24,21 +26,24 @@ import { selectFilter } from './selection.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
 const projectsContainer = $('projects');
+const sourcesContainer = $('sources');
 const allProjectsEl = $('all-projects');
 const noProjectEl = $('no-project');
+const allSourcesEl = $('all-sources');
 
 // ----------------------------------------------------------------------------
 // The sidebar's per-project counts are derived, never sent (vault.md#thread:
 // membership is always computed): the entities whose `projects` list the
-// project, those in none for No project, and every one for All Projects --
-// the entries, as the lenses count them; the files only on the Vault
-// page. Re-rendered at most once per frame, since every `entity` event of
-// a scan may change it.
+// project, those in none for No project, and every one for All Projects
+// and All Sources -- the entries, as the lenses count them; the files only
+// on the Vault page. Re-rendered at most once per frame, since every
+// `entity` event of a scan may change it.
 export const scheduleRenderSidebar = oncePerFrame(renderSidebar);
 
 // A sidebar row without its count and highlight, which `updateNavItem` sets.
 // `action` ({ icon, title, onClick }) becomes a circular icon button at the
-// row's right end, shown while the row is hovered; `onClick` gets the row.
+// row's right end, shown while the row is hovered or has the focus;
+// `onClick` gets the row and the button.
 function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
   const el = pressable(accEl('a', className));
   const elName = accEl('span', 'nav-item__name', name);
@@ -54,7 +59,7 @@ function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
     btn.append(iconEl(action.icon));
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      action.onClick(el);
+      action.onClick(el, btn);
     });
     el.appendChild(btn);
   }
@@ -62,8 +67,8 @@ function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
   return el;
 }
 
-// `current`: the row is the selected project; `starred`: a project is
-// starred.
+// `current`: the row is the selected project or source; `starred`: a
+// project is starred.
 function updateNavItem(row, count, current, starred) {
   const countEl = row.querySelector('.nav-item__count');
   if (countEl.textContent !== String(count)) countEl.textContent = count;
@@ -97,9 +102,9 @@ function editSidebarName(row, name, commit) {
   input.select();
 }
 
-// The sidebar's rows by key (`project:<id>`), kept across renders:
-// `renderSidebar` patches counts and highlights in place and rebuilds a row
-// only when its name changed. A scan re-renders the sidebar every frame,
+// The sidebar's rows by key (`project:<id>`, `source:<key>`), kept across
+// renders: `renderSidebar` patches counts and highlights in place and
+// rebuilds a row only when its name changed. A scan re-renders the sidebar every frame,
 // and a replaced row would lose its hover (flickering its action button)
 // and its drop-target highlight.
 let sidebarRows = new Map();
@@ -108,12 +113,15 @@ function renderSidebar() {
   if (sidebarEditing) return;
   const projectCounts = new Map();
   let noProjectCount = 0;
+  const sourceCounts = new Map();
   for (const doc of entities.values()) {
     for (const id of doc.projects ?? []) projectCounts.set(id, (projectCounts.get(id) ?? 0) + 1);
     if (!projectsOf(doc).length) noProjectCount++;
+    const key = sourceKeyOf(doc);
+    if (key) sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
   }
 
-  const { selected_project } = store.getState();
+  const { selected_project, selected_source } = store.getState();
 
   // The row for `key`: the last render's if it was built for `name`,
   // otherwise a new one from `build`. Rows not asked for are dropped.
@@ -167,21 +175,39 @@ function renderSidebar() {
     editProject(editRow.dataset.id, editRow);
   }
 
+  // A row click filters by the source; Created Here's button opens the New
+  // menu.
+  const sourceRows = vaultSources().map(source => {
+    const { key, name, icon, button } = source;
+    const row = rowFor(`source:${key}`, name, () =>
+      sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', icon, () => selectSource(key), button));
+    updateNavItem(row, sourceCounts.get(key) ?? 0, key === selected_source);
+    return row;
+  });
+  placeChildren(sourcesContainer, sourceRows);
+
   sidebarRows = rows;
 
-  // a row is marked while it narrows the list; All Projects, the default,
-  // never is
+  // a row is marked while it narrows the list; All Projects and All Sources,
+  // the default, never are
   updateNavItem(allProjectsEl, entities.size, false);
   updateNavItem(noProjectEl, noProjectCount, selected_project === NO_PROJECT);
+  updateNavItem(allSourcesEl, entities.size, false);
 }
 
-// Filter actions: one project, No project or all (clicking the selected one
-// again, or its "All" row, selects all). Every filter row is a non-page
-// item: a click on it closes the open vault page (`selectFilter`,
-// features/selection.js), even if the filter stays the same.
+// Filter actions: one project, No project or all, one source or all
+// (clicking the selected one again, or its "All" row, selects all). Every
+// filter row is a non-page item: a click on it closes the open vault page
+// (`selectFilter`, features/selection.js), even if the filter stays the
+// same.
 function selectProject(project_id) {
   const current = store.getState().selected_project;
   selectFilter({ selected_project: project_id === current ? null : project_id });
+}
+
+function selectSource(key) {
+  const current = store.getState().selected_source;
+  selectFilter({ selected_source: key === current ? null : key });
 }
 
 // Rename a project in place; the host writes the new title (an empty one
@@ -232,6 +258,7 @@ dropTarget(projectsContainer, {
 
 allProjectsEl.addEventListener('click', () => selectFilter({ selected_project: null }));
 noProjectEl.addEventListener('click', () => selectProject(NO_PROJECT));
+allSourcesEl.addEventListener('click', () => selectFilter({ selected_source: null }));
 
 // The star on a project pill: the host writes `starred` (unstarring removes
 // it) and pushes the project back as `entity`, which re-sorts the pills.
@@ -250,8 +277,20 @@ function toggleArchived() {
   scheduleRenderSidebar();
 }
 
-// The vault panel's rows as places Go to finds: each filters by its project,
-// the lens shown stays.
+// The sources as the vault panel lists them: what was made in the app; each
+// connected account's.
+function vaultSources() {
+  return [
+    {
+      key: 'created', name: t('sidebar.created_here'), icon: '#i-home',
+      button: { icon: '#i-add', title: t('sidebar.new_title'), onClick: (_row, button) => runAction('new', button) },
+    },
+    ...[...accounts.values()].flatMap(accountSources),
+  ];
+}
+
+// The vault panel's rows as places Go to finds: each filters by its project
+// or its source, the lens shown stays.
 function projectPlace({ id, name, starred, archived }) {
   const n = () => [...entities.values()].filter(doc => doc.projects?.includes(id)).length;
   return {
@@ -266,7 +305,31 @@ registerActions(() => [
   { id: 'place.all_projects', place: 'project', title: t('sidebar.all_projects'), icon: '#i-layer', run: () => selectFilter({ selected_project: null }) },
   { id: 'place.no_project', place: 'project', title: t('sidebar.no_project'), icon: KIND_ICONS.project.icon, run: () => selectFilter({ selected_project: NO_PROJECT }) },
   ...projectsInOrder().map(projectPlace),
+  { id: 'place.all_sources', place: 'source', title: t('sidebar.all_sources'), icon: '#i-arrow-import', run: () => selectFilter({ selected_source: null }) },
+  ...vaultSources().map(({ key, name, icon }) => ({
+    id: `place.source.${key}`, place: 'source', title: name, icon,
+    end: () => t('palette.source_n', { n: [...entities.values()].filter(doc => sourceKeyOf(doc) === key).length }),
+    run: () => selectFilter({ selected_source: key }),
+  })),
 ].map(place => ({ ...place, when: vaultOpen })));
+
+// Sources: what a connected account feeds into the vault. Email follows the
+// granted access; calendars are the ones checked on the Accounts page
+// (`account.calendars`).
+function accountSources(account) {
+  if (account.kind !== 'google' || account.status !== 'connected') return [];
+  const { id, scope = {}, email = t('sidebar.email') } = account;
+  const sources = [];
+  if (scope.email && scope.email !== 'off') {
+    sources.push({ key: `${id}\nemail`, name: email, icon: KIND_ICONS.email.icon });
+  }
+  if (scope.calendar && scope.calendar !== 'off') {
+    for (const calendar of account.calendars ?? []) {
+      sources.push({ key: `${id}\ncalendar\n${calendar.id}`, name: calendar.name, icon: KIND_ICONS.calendar.icon });
+    }
+  }
+  return sources;
+}
 
 // ----------------------------------------------------------------------------
 store.subscribe(state => state.vault_name,

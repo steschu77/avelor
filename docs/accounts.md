@@ -211,7 +211,7 @@ why, with a button to Accounts where the fix is there.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | H1 | Open the page | Workspace → Accounts → `openVaultOp('accounts')` → `renderAccounts` | — (the accounts came with the vault: `accounts`) | list + detail pane; without a vault, a hint |
-| H2 | Connect Google | Off/Read/Full per service → "Sign in with Google" → `connectGoogle` | `connect_google {levels}` → the browser opened after the handler → consent (loopback, PKCE) → code redeemed and user info fetched on workers → `GoogleAccounts::connect`: account YAML in `.avelor/accounts/` + DPAPI token `<id>.token` → `account`, `ok {id}` | card |
+| H2 | Connect Google | Off/Read/Full per service → "Sign in with Google" → `connectGoogle` | `connect_google {levels}` → the browser opened after the handler → consent (loopback, PKCE) → code redeemed and user info fetched on workers → `GoogleAccounts::connect`: account YAML in `.avelor/accounts/` + DPAPI token `<id>.token` → `account`, `ok {id}` | card; sidebar sources |
 | H3 | Reconnect / change access | same with the account id | as H2 with `{account, levels}`; must be the same email (`wrong_account`) | id kept |
 | H4 | Cancel sign-in | Cancel | `cancel_connect` → `ok`; the connect answers `cancelled` | — |
 | H5 | Calendars as sources | account pane renders → `list_calendars`; checkbox → `set_calendar_source {account, calendar, selected}` | `ok {calendars}` (after `account` if names changed); `account`, `ok` | checked calendars become sources |
