@@ -2,9 +2,9 @@
 
 > The vault's file format and its life cycle: what an entity file holds,
 > identity, roles, types and sources, file names, the layout; opening,
-> switching and scanning a vault, the trash. The account files in `.avelor/`
-> are described in `accounts.md`, how an edited document reaches its file
-> in `saving.md`.
+> switching and scanning a vault, the trash, the Vault page. The account
+> files in `.avelor/` are described in `accounts.md`, how an edited document
+> reaches its file in `saving.md`.
 
 ## Principles <a id="principles"></a>
 
@@ -754,9 +754,10 @@ These are the ID card thread's entities; the whole vault has every type.
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its settings (`vault_settings`), then the scan: `vault` (scanning), the scan's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a note if files failed); answered `{google}` once the scan has started | sidebar, lens and counts fill while scanning |
-| A2 | Switch vault | vault menu → "Switch vault…" → `switchVault`: every editor leaves edit mode (`leaveEditModes`), `save_doc_content` per unsaved edit, then `switch_vault` (no path) | modal folder picker (cancel: `path: null`, nothing else happens); the old vault's jobs and the assistant's replies stopped, the new vault opened once they have ended (`architecture.md#jobs`); `config.vault` saved; new scan as A1 | `vault` (scanning) → `forgetVault`: the page forgets the old vault, the scan fills it with the new one; the next start opens the new vault |
-| A3 | Show in folder | vault menu → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
+| A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its settings (`vault_settings`), then the scan: `vault` (scanning), the scan's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a note if files failed); answered `{google}` once the scan has started | sidebar, lens and counts fill while scanning; the Vault page lists unreadable files |
+| A2 | Switch vault | vault menu → "Switch vault…", or the Vault page → `switchVault`: every editor leaves edit mode (`leaveEditModes`), `save_doc_content` per unsaved edit, then `switch_vault` (no path) | modal folder picker (cancel: `path: null`, nothing else happens); the old vault's jobs and the assistant's replies stopped, the new vault opened once they have ended (`architecture.md#jobs`); `config.vault` saved; new scan as A1 | `vault` (scanning) → `forgetVault`: the page forgets the old vault, the scan fills it with the new one; the next start opens the new vault |
+| A3 | Show in folder | vault menu or Vault page → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
+| A4 | Vault page | Workspace → Vault (op `settings`) → `renderVault` (`features/workspace/vault.js`) | — | name, path, file count ("Scanning" until `vault` says `open`), Show in folder, Switch vault, the unreadable files |
 | E6 | Restore | Workspace > Trash, Restore → `restore_entity` | `Index::restore` moves the file back → `entity` | the restored entity selected; a thread the delete dissolved stays dissolved |
 
 ## Opening and scanning <a id="opening"></a>
@@ -816,5 +817,6 @@ page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 - a page about the old vault: New, Fetch mail, and the Task tab's
   drafts (`features/new.js`).
 
+The lens, the calendar's day, the panel's size and the Vault page stay.
 The accounts arrive before the scan as the new vault's (`accounts`), so
 they aren't touched.

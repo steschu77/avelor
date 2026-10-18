@@ -78,14 +78,16 @@ export function draftKind(selected) {
 const vaultOpTitles = {
   new: "New",
   accounts: "Account Setup",
+  settings: "Vault",
   trash: "Trash",
 };
 const vaultAreaTitle = $("vault-area-title");
 
 // Selecting an op titles the vault area and expands it. Each op renders
 // its own body (features/workspace/: accounts.js, trash.js;
-// features/import/: mail.js; features/new.js). Ops without a sidebar entry
-// (Fetch mail) pass their title.
+// features/import/: mail.js; features/new.js,
+// features/workspace/vault.js). Ops without a sidebar entry (Fetch mail)
+// pass their title.
 export function openVaultOp(op, title) {
   vaultAreaTitle.textContent = title ?? vaultOpTitles[op];
   if (store.getState().vault_op !== op) {

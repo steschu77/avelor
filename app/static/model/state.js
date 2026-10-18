@@ -9,6 +9,7 @@ export const store = createStore({
   vault_name: '', // the open vault's folder name and path (the `vault` event)
   vault_path: '',
   vault_state: 'none', // 'none' | 'scanning' | 'open' (the `vault` event)
+  vault_errors: [], // [{ path, error }] the scan couldn't read (`vault_error`); always replaced, never mutated
   google: true, // whether this build has Google (`ready`)
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
   // level: 'error' | 'info', entity? }; always replaced
