@@ -61,7 +61,8 @@ Every account file has:
     address (Ollama: `http://localhost:11434`)
   * `offered`: the models offered wherever a model is picked (ticked on
     the Accounts page; `accounts.md#model-choice`)
-  * `spend-limit`: USD a month
+  * `spend-limit`: USD a month; once this month's calls cost that much,
+    the account takes no more until the next month or a higher limit
   * `connected`: when the account was first connected
   * `disconnected`: when its key was forgotten
 
@@ -71,6 +72,34 @@ openai:
   offered: [gpt-5, gpt-5-mini, gpt-5-nano]
   spend-limit: 10
   connected: 2026-09-30T10:00:00Z
+```
+
+### Spend file <a id="spend-file"></a>
+
+What an AI account's calls cost is kept beside its file, in
+`<name>.spend.yaml` (`openai.yaml` → `openai.spend.yaml`): per month (UTC,
+as the providers bill) and per model, the calls, the calls whose price the
+app doesn't know (they count as free), the cost in USD from the price
+table, and the tokens. It is written after every assistant reply
+(`ai::account_used` → `AiAccounts::record_spend`), so the
+Accounts page's "This month" survives a restart; a stopped reply records
+nothing. The file names the account's `id`; one that names another
+account (left by a removed account of the same name) is not taken over.
+Disconnecting keeps it; removing the account deletes it.
+
+```yaml
+account: 0193a7c1-4b0e-7c1a-9d2f-3a51c8e05be0
+months:
+  2026-10:
+    gpt-5-mini:
+      calls: 12
+      unpriced-calls: 0
+      cost: 0.0123
+      input: 3400
+      output: 1200
+      cache-read: 0
+      cache-write: 0
+      reasoning: 0
 ```
 
 ## The Accounts page <a id="accounts-page"></a>
@@ -85,14 +114,16 @@ accounts with a detail pane.
   million tokens: ticking one offers it in the features' pickers, and "Used
   by" names, read only, what picked it (`accounts.md#model-choice`): Chats;
   an unticked model still names them, as they are refused until they pick
-  another. An Ollama account shows whether the server answers. Disconnecting forgets the key
+  another. A key provider's pane shows what its calls cost this month
+  (`accounts.md#spend-file`); an Ollama account shows whether the server
+  answers instead. Disconnecting forgets the key
   but keeps the account and its id, marked `disconnected`; removing
   deletes its files (Ollama accounts are removed directly).
 - The page widgets the Workspace pages share are `ui/`'s (`ui/page.js`,
   `ui/field.js`); the model picker every feature uses is
   `features/workspace/models.js` (`accounts.md#model-choice`).
 
-## Model choice <a id="model-choice"></a>
+## Model choice and the spend limit <a id="model-choice"></a>
 
 Every feature that calls an AI picks its model: one of the models the
 vault's AI accounts offer, `{account, model}` (a `ModelChoice`), kept with
@@ -103,7 +134,7 @@ the feature's own settings:
 | The assistant | the vault's settings, `.avelor/vault.yaml` `chat-model` (`vault.md#vault-config`; `set_vault_settings`) | the assistant's head |
 
 The host reads the pick where it is kept and checks it,
-`AiAccounts::choose(choice, what)`: a `Resolved` (account, model,
+`AiAccounts::choose(choice, what, now)`: a `Resolved` (account, model,
 client) or a `Refusal` in the host's words. The page sends no model with
 a request; `aiModelOf(choice)` mirrors the check for its hints. Refused:
 
@@ -114,7 +145,10 @@ a request; `aiModelOf(choice)` mirrors the check for its hints. Refused:
 - its key missing: "enter OpenAI's key again under Accounts."
   (`not_connected`);
 - the model no longer offered (unticked): "gpt-5 is no longer offered;
-  tick it under Accounts or pick another model."
+  tick it under Accounts or pick another model.";
+- the spend limit reached: the assistant shows "has reached its spend
+  limit" and takes no input; a call already running finishes
+  (`Error::SpendLimit`).
 
 No other model is ever tried in place of the pick: it could send a
 document to another provider. The picker (`aiModelPicker`, `aiShowModels`
@@ -132,9 +166,10 @@ why, with a button to Accounts where the fix is there.
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |
 | I3 | Offer a model | tick | `set_ai_settings {account, offered}` → `account`, `ok` | pickers offer it |
 | I8 | Pick a model | a feature's picker → `aiShowModels` → a model | the feature's own command: `set_vault_settings {chat_model}` → `vault_settings`, `ok` | the feature uses it; "Used by" names the feature |
-| I4 | Spend limit | edit field | `set_ai_settings {account, spend_limit}` → `account`, `ok` | — |
+| I4 | Spend limit | edit field | `set_ai_settings {account, spend_limit}` → `account`, `ok` | enforced: at the limit a chat is refused |
 | I5 | Replace key | edit key | `connect_ai {account, key}` | — |
 | I6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` / `remove_account` | — |
+| I7 | Spending | an assistant reply | `ai::account_used`: what the ledger recorded → this month in `<name>.spend.yaml` → `account` | "This month", also after a restart |
 
 ## Design <a id="design"></a>
 
@@ -160,7 +195,7 @@ plus `load_config_files` and `free_stem` (the next free file name).
 
 av-llm's `Client` speaks to Anthropic, OpenAI (Responses API, not Chat
 Completions), Mistral, Gemini and Ollama, with streaming (SSE/NDJSON), a
-normalized `Usage` and the price table (`architecture.md#crates`). What the app knows of
+normalized `Usage`, the price table and a `Ledger` (`architecture.md#crates`). What the app knows of
 each provider is one table, `PROVIDERS` (`av-llm/types.rs`): its name in
 files (`claude` as an alias of `anthropic`), the name the Accounts page
 shows, the default address, whether it takes a key (Ollama is addressed

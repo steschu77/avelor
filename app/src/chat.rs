@@ -180,7 +180,8 @@ pub fn chat_open(app: &mut App, req: Req, id: Id) {
 /// worker starts, so the page knows the conversation before its first
 /// `ai_delta`. Refused in the host's words if nothing could be done --
 /// also when the picked model can't answer (none picked, its account gone
-/// or without its key, no longer offered), before anything is written.
+/// or without its key, no longer offered, the spend limit), before anything
+/// is written.
 pub fn chat_send(app: &mut App, req: Req, request: SendRequest) {
     let existing = match request.conversation {
         None => None,
@@ -194,7 +195,8 @@ pub fn chat_send(app: &mut App, req: Req, request: SendRequest) {
         return refuse(req, Error::Unsupported { what }, Text::new("chat.writing"));
     }
     let picked = app.settings.chat_model();
-    let resolved = match app.ai.choose(picked, Text::new("feature.conversations")) {
+    let what = Text::new("feature.conversations");
+    let resolved = match app.ai.choose(picked, what, DateTime::now()) {
         Ok(resolved) => resolved,
         Err(refusal) => return refuse(req, refusal.error, refusal.text),
     };
@@ -492,7 +494,7 @@ fn on_delta(app: &mut App, id: Id, reply: Id, text: String) {
 
 // ----------------------------------------------------------------------------
 /// The reply `reply` is complete or failed: write it, or record the
-/// failure; then send the conversation.
+/// failure; then send the conversation and the account's spending.
 fn on_done(
     app: &mut App,
     id: Id,
@@ -536,6 +538,7 @@ fn on_done(
         }
     }
     post_conversation(app, id);
+    ai::account_used(app, writing.account);
 }
 
 // ----------------------------------------------------------------------------
@@ -888,7 +891,7 @@ mod tests {
         let args = json!({ "text": " What do I owe? ", "linked_to": NOTE_ID });
         let request = json!({ "id": 1, "cmd": "chat_send", "args": args });
         h.app.on_web_message(request.to_string());
-        let is_done = |t: &String| t.contains(r#""ev":"conversation""#);
+        let is_done = |t: &String| t.contains(r#""ev":"account""#);
         let sent = parse(&h.wait_for(|sent| sent.iter().any(is_done)));
 
         // The question is written, then the answer shows the reply writing.
@@ -909,7 +912,7 @@ mod tests {
         let reply = messages[1]["id"].clone();
 
         // The reply streams in, is written, and ends the conversation's
-        // change.
+        // change; the account's spending follows.
         let deltas = events(&sent, "ai_delta");
         let last = deltas.last().expect("at least one delta");
         assert_eq!(
@@ -930,7 +933,7 @@ mod tests {
             (&messages[1]["status"], &messages[1]["content"]),
             (&json!("done"), &json!("Pay 40 EUR by Friday."))
         );
-        assert_eq!(shape(&sent).last(), Some(&"conversation"));
+        assert_eq!(shape(&sent).last(), Some(&"account"));
 
         let written = conversation(&h, id);
         assert_eq!(written.messages.len(), 2);
@@ -1054,6 +1057,35 @@ mod tests {
             testing::shown(&sent[0]["err"]["text"]),
             "For conversations, pick a model."
         );
+
+        // The picked account at its spend limit this month: no other is
+        // tried.
+        let (year, month, _) = DateTime::now().date.to_ymd();
+        let limited = format!(
+            "id: {OLLAMA_ID}\nollama:\n  address: http://127.0.0.1:9\n  offered: [m]\n  spend-limit: 1\n"
+        );
+        let spend = format!(
+            "account: {OLLAMA_ID}\nmonths:\n  {year:04}-{month:02}:\n    m:\n      calls: 3\n      cost: 1.5\n"
+        );
+        let other = format!(
+            "id: {}\nollama:\n  address: http://127.0.0.1:9\n  offered: [m]\n",
+            Id::generate()
+        );
+        let accounts = [
+            (".avelor/accounts/ollama.yaml", limited),
+            (".avelor/accounts/ollama.spend.yaml", spend),
+            (".avelor/accounts/ollama_2.yaml", other),
+            picked(),
+        ];
+        let mut h = with_accounts("chat-limit", &accounts);
+        let sent = h.call("chat_send", args);
+        assert_eq!(shape(&sent), ["reply"], "nothing written");
+        assert_eq!(sent[0]["err"]["code"], "spend_limit");
+        assert_eq!(
+            testing::shown(&sent[0]["err"]["text"]),
+            "Ollama has reached its spend limit of $1.00 this month; raise it under Accounts."
+        );
+        assert_eq!(conversation(&h, id).messages.len(), 3);
     }
 
     // ------------------------------------------------------------------------

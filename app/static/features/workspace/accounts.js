@@ -11,7 +11,7 @@ import { titled } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { pageDate } from '../../core/format.js';
 import { registerAction } from '../../core/actions.js';
-import { t } from '../../core/text.js';
+import { locale, t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
 import { vaultSettings } from '../../model/entities.js';
@@ -24,6 +24,7 @@ import {
 import { openVaultOp } from '../../ui/page.js';
 import { fieldEditKey, fieldEdits, renderEditField } from '../../ui/field.js';
 import { AI_PROVIDERS, aiHost, aiProvider, aiTitle, aiUsd } from './models.js';
+import { aiLimitReached } from './models.js';
 
 let selectedAccount = null; // an account id, or 'new:<kind>' for a new AI account
 let accountError = null; // { account, message } from the last failed op
@@ -312,10 +313,23 @@ function aiToggleOffered(account, modelId, on) {
 // ----------------------------------------------------------------------------
 // formatting
 
+// What was spent: "$3.18".
+function aiCost(n) {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(n ?? 0);
+}
+
 function aiPrice(price) {
   if (!price) return '\u2014';
   if (price.input === 0 && price.output === 0) return t('accounts.free');
   return `${aiUsd(price.input)} / ${aiUsd(price.output)}`;
+}
+
+// "12 calls this month, 2 not priced": what "This month" counts; calls of a
+// model the price table doesn't know cost nothing there.
+function aiSpentNote(spent) {
+  const calls = spent?.calls ?? 0;
+  const note = t('accounts.calls_this_month', { n: calls });
+  return spent?.unpriced ? t('accounts.not_priced', { note, n: spent.unpriced }) : note;
 }
 
 function aiOfferedText(count) {
@@ -336,7 +350,7 @@ function renderAiCard(account) {
   const meta = provider.local
     ? `${aiHost(account.address)} \u00b7 ${offered}`
     : account.key
-      ? `${account.key} \u00b7 ${offered}`
+      ? `${account.key} \u00b7 ${offered} \u00b7 ${t('accounts.spent_this_month', { amount: aiCost(account.spent?.cost) })}`
       : `${t('accounts.no_key')} \u00b7 ${offered}`;
   return itemCard({
     kind: provider.name,
@@ -436,7 +450,9 @@ function renderAiSpendStat(account) {
     },
     rerender: scheduleRenderAccounts,
   });
-  const hint = t('accounts.limit_stops');
+  const hint = aiLimitReached(account)
+    ? t('accounts.limit_reached')
+    : t('accounts.limit_stops');
   return stat(t('accounts.spend_limit'), field, note ?? hint);
 }
 
@@ -448,8 +464,12 @@ function renderAiStats(id, kind, account) {
     : stat(t('accounts.account_id'), '\u2014', t('accounts.given_on_connect'));
 
   if (!provider.local) {
+    const spent = account?.spent;
     return stats(
       renderAiKeyStat(id, kind, account),
+      account
+        ? stat(t('accounts.this_month'), aiCost(spent?.cost), aiSpentNote(spent))
+        : stat(t('accounts.this_month'), '\u2014'),
       account ? renderAiSpendStat(account) : stat(t('accounts.spend_limit'), '\u2014'),
       accountId);
   }

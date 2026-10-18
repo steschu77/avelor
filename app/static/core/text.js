@@ -25,7 +25,8 @@ export function t(key, args = {}) {
 export const ordinal = n => t('ordinal', { n, ordinal: true });
 
 // ----------------------------------------------------------------------------
-// A text the host sent (texts.rs): `{ key, args }`, an argument a text too.
+// A text the host sent (texts.rs): `{ key, args }`, an argument a text too, a
+// sum of money (`{ amount, currency }`).
 export function textOf(text) {
   if (!text?.key) return '';
   const args = {};
@@ -35,6 +36,10 @@ export function textOf(text) {
 
 function argOf(value) {
   if (value?.key) return textOf(value);
+  if (value?.currency) {
+    const money = new Intl.NumberFormat(locale, { style: 'currency', currency: value.currency });
+    return money.format(value.amount);
+  }
   return value;
 }
 

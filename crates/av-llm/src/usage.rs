@@ -1,10 +1,14 @@
-//! Token usage and prices.
+//! Token usage, prices, and the ledger summing both.
 //!
 //! `Usage` is normalized across providers so that a call's cost is a plain
 //! sum of tokens times prices: `input` is only the input billed at the full
 //! rate (providers that count cache reads into their prompt tokens have them
 //! subtracted), and `output` includes reasoning (providers that count it
 //! apart have it added).
+
+use std::collections::BTreeMap;
+use std::ops::AddAssign;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +26,16 @@ pub struct Usage {
     pub cache_write: u64,
     /// The part of `output` spent on reasoning, where the provider tells.
     pub reasoning: u64,
+}
+
+impl AddAssign for Usage {
+    fn add_assign(&mut self, other: Self) {
+        self.input += other.input;
+        self.output += other.output;
+        self.cache_read += other.cache_read;
+        self.cache_write += other.cache_write;
+        self.reasoning += other.reasoning;
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -251,6 +265,75 @@ fn matches_id(model: &str, id: &str) -> bool {
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('-'))
 }
 
+// ----------------------------------------------------------------------------
+/// What the calls to one model added up to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+pub struct Totals {
+    pub calls: u64,
+    pub usage: Usage,
+    /// USD, of the calls whose price was known.
+    pub cost: f64,
+    /// Calls whose price was unknown (not in `cost`).
+    pub unpriced_calls: u64,
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct LedgerEntry {
+    pub provider: Provider,
+    pub model: String,
+    #[serde(flatten)]
+    pub totals: Totals,
+}
+
+// ----------------------------------------------------------------------------
+/// Usage and cost per provider and model, summed over the calls of every
+/// `Client` sharing it. In memory only.
+#[derive(Default)]
+pub struct Ledger {
+    totals: Mutex<BTreeMap<(Provider, String), Totals>>,
+}
+
+impl Ledger {
+    // ------------------------------------------------------------------------
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn record(&self, provider: Provider, model: &str, usage: &Usage, cost: Option<f64>) {
+        let mut totals = lock(&self.totals);
+        let entry = totals.entry((provider, model.to_string())).or_default();
+        entry.calls += 1;
+        entry.usage += *usage;
+        match cost {
+            Some(cost) => entry.cost += cost,
+            None => entry.unpriced_calls += 1,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Every model called since the last `drain`, taken out: the ledger
+    /// starts over. For whoever keeps the totals elsewhere, e.g. per month
+    /// on disk.
+    pub fn drain(&self) -> Vec<LedgerEntry> {
+        std::mem::take(&mut *lock(&self.totals))
+            .into_iter()
+            .map(|((provider, model), totals)| LedgerEntry {
+                provider,
+                model,
+                totals,
+            })
+            .collect()
+    }
+}
+
+// ----------------------------------------------------------------------------
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    // Sums stay consistent per update; a poisoned lock is usable.
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +386,24 @@ mod tests {
         let price = anthropic(3.0, 15.0, 0.3);
         // 3 + 7.5 + 0.6 + 0.375; reasoning is part of output.
         assert!((price.cost(&usage) - 11.475).abs() < 1e-9);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn drain_takes_the_totals() {
+        let ledger = Ledger::new();
+        let usage = Usage {
+            input: 10,
+            ..Usage::default()
+        };
+        ledger.record(Provider::OpenAi, "gpt-5", &usage, Some(0.5));
+
+        let drained = ledger.drain();
+        assert_eq!(drained.len(), 1);
+        assert_eq!(
+            (drained[0].model.as_str(), drained[0].totals.calls),
+            ("gpt-5", 1)
+        );
+        assert!(ledger.drain().is_empty());
     }
 }
