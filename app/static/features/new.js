@@ -7,6 +7,8 @@
 // vault's roles (vault.md#well-known-roles).
 // A draft's form is built once, so its inputs keep focus; only its chips,
 // the list's items, the notes and the buttons are built again.
+// "+ Task from this" of an assistant reply runs the `task.with` action
+// (`openTaskWith`).
 
 import { $, accEl } from '../core/dom.js';
 import { rpcCall, rpcOn } from '../core/rpc.js';
@@ -195,6 +197,18 @@ function renderTaskTab(focus = false) {
   }
   if (focus) taskTabEl.querySelector('.new__title')?.focus({ preventScroll: true });
 }
+
+// An assistant reply's "+ Task from this" (features/assistant/assistant.js,
+// the `task.with` action): the Task tab for
+// what the panel shows, with `markdown` in its body, below what is typed
+// there already. The context column is open beside the chat already.
+function openTaskWith(markdown) {
+  const d = taskDraft(contextTarget(store.getState()));
+  d.body = d.body.trim() ? `${d.body.trimEnd()}\n\n${markdown}` : markdown;
+  taskShown = null; // the form is built again, with the body
+  selectContextTab('task', true);
+}
+registerAction({ id: 'task.with', title: 'A new task with this', run: openTaskWith });
 
 store.subscribe(contextTarget, () => {
   if (shownContextTab() === 'task') renderTaskTab();

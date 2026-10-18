@@ -141,7 +141,8 @@ export function threadProjects(threadId) {
 // The projects something new for `target` (an entity or thread id, or
 // none) starts in: its own (a thread's, its members'), else the one
 // selected in the sidebar (`projectScope`), which is then its `scope`. A
-// task's in the Task tab.
+// task's in the Task tab, a reply's saved as a document
+// (features/assistant/assistant.js).
 export function projectsFor(target) {
   const doc = target ? getMeta(target) : null;
   const own = doc ? doc.projects ?? [] : threads.has(target) ? threadProjects(target) : [];

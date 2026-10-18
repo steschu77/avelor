@@ -290,8 +290,9 @@ A tab picked by its button focuses its first field.
   (`assistant.md#conversations`).
 - **Task** — the New form for a task `linked-to` the selected card, else
   the shown thread (`features/new.js`); a draft per card. The card's Task button
-  (`openTaskTab`) selects the card, expands the panel and opens the tab.
-  The projects are
+  (`openTaskTab`) selects the card, expands the panel and opens the tab;
+  an assistant reply's "+ Task from this" (`openTaskWith`) opens it with
+  the reply in the body (`assistant.md#conversations`). The projects are
   the card's, else the sidebar's (`projectsFor`). Create or Ctrl+Enter
   (focus in the tab) creates the task; the card stays shown, and the form
   clears and notes the new task, with Open (`createdNote`).

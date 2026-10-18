@@ -167,12 +167,17 @@
   border-color: var(--c-ink-mute);
 }
 
-/* below a message: an edited one's Cancel and Send */
+/* below a message: an edited one's Cancel and Send; a written reply's
+   "+ Task from this" and Save as document, or the note of the document */
 .chat__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+
+.chat__actions>.new__created {
+  margin-top: 0;
 }
 
 .chat__reply {

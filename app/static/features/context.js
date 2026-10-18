@@ -88,7 +88,8 @@ export function toggleCardChat(doc_id) {
 
 // ----------------------------------------------------------------------------
 // The note that `id` was made -- `text`, and Open, which shows it (`hint`
-// its tooltip): the Task tab's.
+// its tooltip): the Task tab's, and an assistant reply's saved as a
+// document (features/assistant/assistant.js).
 export function createdNote(text, id, hint) {
   const note = accEl('div', 'note new__created', text);
   const open = accEl('button', 'tool', 'Open');

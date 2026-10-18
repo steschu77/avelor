@@ -11,21 +11,28 @@
 // `conversation` and `ai_delta`); the page shows the path from the first
 // message to `active`, and lets the user edit a message and send it again,
 // which starts a branch. A card's chat button opens the chat beside the
-// card (`toggleCardChat`).
+// card (`toggleCardChat`). A written reply can be saved as a document, or
+// start a task (`assistantSaveReply`; the `task.with` action,
+// features/new.js).
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { DAY_SHORT_MONTH, TIME_FORMAT } from '../../core/format.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
+import { runAction } from '../../core/actions.js';
 import { createEditor } from '../../editor/editor.js';
 import { serializeMarkdown } from '../../editor/markdown.js';
 import { store } from '../../model/state.js';
+import { showError } from '../../model/state.js';
 import {
   assistantChats, entities, isAiConversation, threads, vaultSettings,
 } from '../../model/entities.js';
+import { projectsFor } from '../../model/entities.js';
 import { iconEl } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
 import { dayShows, openLink, panelMode } from '../selection.js';
 import { registerContextTab } from '../context.js';
+import { createdNote } from '../context.js';
+import { linkTarget } from '../panel/panel.js';
 import {
   aiAnyOffered, aiModelOf, aiModelPicker, aiOpenAccounts, aiProvider,
   aiShowModels,
@@ -58,6 +65,9 @@ let assistantNotice = null; // what went wrong with the last send, stop or switc
 const assistantLastOpen = new Map();
 // message id -> { el, label, body, role, editor?, actions, html, ... }
 const assistantNodes = new Map();
+// a reply's message id -> the document it was saved as, { id, title }, or
+// { busy: true } while it is saved; this session's
+const assistantSaved = new Map();
 
 function assistantItemTitle(item) {
   if (!item) return '';
@@ -291,6 +301,51 @@ function assistantSwitch() {
   showMenu(assistantSwitchEl, items, { matchWidth: false });
 }
 
+// Save as document: the reply of `node` becomes a document -- its markdown
+// the body, titled by its first line, linked to what the chat is about and
+// in its projects (`projectsFor`). The chat stays; the reply notes the
+// document.
+function assistantSaveReply(node) {
+  const content = node.content.trim();
+  const saved = assistantSaved.get(node.id);
+  if (!content || saved?.busy || (saved && entities.has(saved.id))) return;
+  const item = assistantConversation?.linked_to ?? null;
+  const linked = item && linkTarget(item) ? item : null;
+  const title = assistantTitleOf(content) || assistantConversation?.title || 'Assistant reply';
+  const args = { roles: { document: { genre: 'note' } }, title, content, projects: projectsFor(linked).projects };
+  if (linked) args.linked_to = linked;
+  assistantSaved.set(node.id, { busy: true });
+  renderAssistantReplyActions(node);
+  rpcCall('create_entity', args).then(({ id }) => {
+    assistantSaved.set(node.id, { id, title });
+    renderAssistantReplyActions(node);
+  }, e => {
+    assistantSaved.delete(node.id);
+    renderAssistantReplyActions(node);
+    const message = `Could not save the reply as a document: ${e.message}`;
+    if (assistantNodes.get(node.id) !== node) return showError(message);
+    assistantNotice = message;
+    renderAssistant();
+  });
+}
+
+// The title of a document made of `markdown`: its first line that gives
+// one, by the host's rule for a chat's title (`markdown::plain_title`) --
+// without its block marker and inline marks, cut at a word to at most 80
+// characters and an ellipsis. '' if no line gives one.
+function assistantTitleOf(markdown, max = 80) {
+  for (const raw of markdown.split('\n')) {
+    const line = raw.trim().replace(/^[#>*+\- ]+/, '').replace(/^\d+\. /, '').replace(/[*_`]/g, '').trim();
+    if (!line) continue;
+    if (line.length <= max) return line;
+    let cut = line.slice(0, max);
+    const space = cut.lastIndexOf(' ');
+    if (space > max / 2) cut = cut.slice(0, space);
+    return `${cut.replace(/[ ,.;:]+$/, '')}\u2026`;
+  }
+  return '';
+}
+
 // ----------------------------------------------------------------------------
 // rendering
 
@@ -492,12 +547,40 @@ function createAssistantUserNode(message) {
   return { el, label, body, role: 'user', editor, actions, send, html: null };
 }
 
+// A reply, and below it once written: "+ Task from this" and Save as
+// document (`renderAssistantReplyActions`).
 function createAssistantReplyNode(message) {
   const el = accEl('div', 'chat__msg');
   const label = accEl('div', 'chat__label label');
   const body = accEl('div', 'editor prose chat__reply');
-  el.append(label, body);
-  return { id: message.id, el, label, body, role: 'assistant', html: null };
+  const actions = accEl('div', 'chat__actions');
+  actions.hidden = true;
+  const task = accEl('button', 'btn', '+ Task from this');
+  task.type = 'button';
+  task.title = 'A new task with this reply, in the Task tab';
+  el.append(label, body, actions);
+  const node = { id: message.id, el, label, body, role: 'assistant', actions, task, saved: null, content: '', html: null };
+  task.addEventListener('click', () => runAction('task.with', node.content));
+  return node;
+}
+
+// The reply's Save as document -- "Saving..." while it is saved -- or, once
+// saved, the note of the document, while it is in the vault.
+function renderAssistantReplyActions(node) {
+  const saved = assistantSaved.get(node.id);
+  const key = saved?.busy ? 'busy' : saved && entities.has(saved.id) ? saved.id : '';
+  if (node.saved === key) return;
+  node.saved = key;
+  if (key && key !== 'busy') {
+    node.actions.replaceChildren(node.task, createdNote(`Saved \u201c${saved.title}\u201d`, saved.id, 'Show the document'));
+    return;
+  }
+  const save = accEl('button', 'btn', key ? 'Saving\u2026' : 'Save as document');
+  save.type = 'button';
+  save.disabled = !!key;
+  save.title = 'A new document with this reply, linked to what the chat is about';
+  save.addEventListener('click', () => assistantSaveReply(node));
+  node.actions.replaceChildren(node.task, save);
 }
 
 function updateAssistantNode(node, message, children) {
@@ -518,6 +601,9 @@ function updateAssistantNode(node, message, children) {
     node.body.innerHTML = html;
   }
   node.html = html;
+  node.content = message.content ?? '';
+  node.actions.hidden = !['done', 'stopped'].includes(message.status) || !node.content.trim();
+  if (!node.actions.hidden) renderAssistantReplyActions(node);
 }
 
 // The input's button: send (dimmed without text), or stop while the reply
@@ -595,10 +681,14 @@ store.subscribe(state => state.panel_size, panel_size => {
 });
 
 // A chat written (or deleted) changes the switcher's count; the chat shown
-// leaving the vault is gone.
+// leaving the vault is gone; a reply's saved document leaving it brings
+// back Save as document.
 store.subscribe(state => state.entities_rev, () => {
   if (assistantConversation && !entities.has(assistantOpen)) onConversation(assistantOpen, null);
   scheduleRenderAssistantHead();
+  for (const node of assistantNodes.values()) {
+    if (node.role === 'assistant' && !node.actions.hidden) renderAssistantReplyActions(node);
+  }
 });
 
 rpcOn('conversation', conversation => onConversation(conversation.id, conversation));

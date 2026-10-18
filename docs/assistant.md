@@ -1,8 +1,8 @@
 # Avelor — Assistant
 
 > The AI assistant: conversations about the shown document or thread, also
-> beside a card in the half-open panel, the context it sends, and how a
-> reply streams. The model that answers is
+> beside a card in the half-open panel, a reply kept as a document or a
+> task, the context it sends, and how a reply streams. The model that answers is
 > picked in the
 > assistant's head (`accounts.md#model-choice`); the conversation format,
 > `vault.md#conversation`; the commands, `api.md#chat`.
@@ -40,6 +40,22 @@ when it started.
   leaf (`chat_select`).
 - The switcher menu changes to another linked conversation or starts a new
   one (`assistantSwitch`).
+- Under a written reply (done or stopped) are "+ Task from this" and Save
+  as document; a reply being written or a failed one has neither.
+  - **Save as document** (`assistantSaveReply`) makes a document of the
+    reply (`create_entity`, genre note): its markdown is the body, its
+    first line that gives a title is the title (`assistantTitleOf`, the
+    host's rule for a chat's title, at most 80 characters; else the
+    conversation's title). It is `linked-to` the conversation's item and
+    in its projects, else in the project selected in the sidebar
+    (`projectsFor`, `model/entities.js`). The chat stays; the reply notes "Saved"
+    and the title, with Open, for this session, while the document is in
+    the vault. The card shows the document among its links; its title can
+    be changed there.
+  - **+ Task from this** (the `task.with` action: `openTaskWith`,
+    `features/new.js`) opens the Task tab for
+    what the panel shows, with the reply in the draft's body, below
+    anything typed there; the title is focused.
 - The head names the model that answers, picked there from the models the
   AI accounts offer (`aiModelPicker`), and kept in the vault's settings
   (`chat-model`, `set_vault_settings`). With no model picked, or one the
@@ -85,6 +101,8 @@ the server's default applies.
 | L6 | Switch / new conversation | switcher menu | `chat_open`, or a first `chat_send` | — |
 | L7 | Pick the model, setup guide | the head's picker, or the guide's button → `aiShowModels` → a model → `assistantPickModel`; without a provider or key, the guide's button opens Accounts | `set_vault_settings {chat_model}` → `vault_settings`, `ok` | chats answered by the picked model |
 | L8 | Chat from a card | card's chat button → `toggleCardChat` → `selectDocument`, `panel_size: 'chat'` (not at full width), `selectContextTab('conversation', true)` | then L1 | the chat beside the card, the input focused; pressed, the button goes back to the normal panel |
+| L9 | Save a reply as a document | Save as document under a written reply → `assistantSaveReply` | `create_entity {roles: {document}, title, content, projects, linked_to?}` → `entity`, `ok {id}` | the chat stays; the reply notes the document, with Open; the card lists it among its links |
+| L10 | Task from a reply | "+ Task from this" → `openTaskWith` → `selectContextTab('task', true)` | — (Create: D8, `panel.md`) | the Task tab for what the panel shows, the reply in its body, the title focused |
 
 ## Design <a id="design"></a>
 
