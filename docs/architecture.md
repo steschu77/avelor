@@ -233,7 +233,7 @@ the assistant's run against a fake Ollama (`testing::FakeOllama`).
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes` (`vault.rs`, its parts in `vault/`: `indexing.rs`, `create.rs`, `structure.rs`, `properties.rs`, `trash.rs`, the tests in `vault/tests.rs`), the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the indexing (`index_vault`, events applied by `Index::apply`), filenames, `to_html`, `plain_title`, conversation trees | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
-| av-llm | `Client` over Anthropic, OpenAI (Responses API, not Chat Completions), Mistral, Gemini, Ollama; the providers' facts in one table (`ProviderSpec`, `PROVIDERS`: names, alias, default URL, key, uploads, auth) and one request builder from it (`Client::request`); streaming (SSE/NDJSON); normalized `Usage`, price table; the providers' error bodies | sends through `send_logged`; dispatch by macro, no trait |
+| av-llm | `Client` over Anthropic, OpenAI (Responses API, not Chat Completions), Mistral, Gemini, Ollama; the providers' facts in one table (`ProviderSpec`, `PROVIDERS`: names, alias, default URL, key, uploads, auth) and one request builder from it (`Client::request`); streaming (SSE/NDJSON); normalized `Usage`, price table, `Ledger`; the providers' error bodies | sends through `send_logged`; dispatch by macro, no trait |
 
 ### av-vault's core
 
@@ -268,7 +268,7 @@ the assistant's run against a fake Ollama (`testing::FakeOllama`).
 | `main.rs` | logger, panic hook, the config (`load_config`), the run's language (`texts::init`) |
 | `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net, Close to `App` (`architecture.md#platforms`) |
 | `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences, the texts in the run's language, its own filled in (`worded`), and the platform's `BRIDGE_JS` |
-| `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`, `Text::render`), a text the page shows (`Text`: a key and its arguments); its tests |
+| `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`, `Text::render`), a text the page shows (`Text`: a key and its arguments, money among them); its tests |
 | `sys.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
 | `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); folder picker, message boxes, ShellExecute |
 | `sys/win32.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
@@ -292,7 +292,7 @@ the assistant's run against a fake Ollama (`testing::FakeOllama`).
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai/context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file, within a budget; its tests |
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked entity; `create`, a new AI conversation; dispatch tests against a fake Ollama |
-| `ai/accounts.rs`, `ai.rs` | AI account files and key, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked); the AI commands (connect, models, settings) |
+| `ai/accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
 
 ## Platforms <a id="platforms"></a>
 

@@ -97,6 +97,13 @@ pub fn of(key: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// `amount` in `currency`, an ISO code, for a text's placeholder: the page
+/// writes it as the locale writes money.
+pub fn money(amount: f64, currency: &str) -> Value {
+    serde_json::json!({ "amount": amount, "currency": currency })
+}
+
+// ----------------------------------------------------------------------------
 /// A text the page shows in its language (`localization.md#host-texts`):
 /// a key of the catalogs and what its placeholders are given, each a
 /// string, a number or a text itself. The page gets `{key, args}`.

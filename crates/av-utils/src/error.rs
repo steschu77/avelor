@@ -43,6 +43,9 @@ pub enum Error {
     /// The account has no usable credential: disconnected, or its secret is
     /// missing or can't be decrypted here.
     NotConnected,
+    /// An AI account has spent its monthly limit; it takes no more calls
+    /// this month.
+    SpendLimit,
     /// The entity was created in the app and has no file yet.
     Unsaved,
     /// The entity's file can't be written: read-only, or its frontmatter
@@ -126,6 +129,7 @@ impl Error {
             Error::InvalidResponse { .. } => "invalid_response",
             Error::Unsupported { .. } => "unsupported",
             Error::NotConnected => "not_connected",
+            Error::SpendLimit => "spend_limit",
             Error::Unsaved => "unsaved",
             Error::NotWritable { .. } => "not_writable",
             Error::ChangedOutside { .. } => "changed_outside",

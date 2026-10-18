@@ -14,6 +14,7 @@
   "ai.not_offered": "Für {feature} wird {model} nicht mehr angeboten; haken Sie es unter Konten an oder wählen Sie ein anderes Modell.",
   "ai.pick_model": "Für {feature} wählen Sie ein Modell.",
   "ai.picked_account_gone": "Für {feature} gibt es das Konto des gewählten Modells nicht mehr; wählen Sie ein anderes Modell.",
+  "ai.spend_limit_reached": "{name} hat sein Ausgabenlimit von {limit} in diesem Monat erreicht; erhöhen Sie es unter Konten.",
   "assistant.placeholder": "Fragen Sie etwas …",
   "chat.ask_anything": "Fragen Sie irgendwas …",
   "chat.guide.pick": "Wählen Sie das Modell, mit dem Unterhaltungen beantwortet werden.",

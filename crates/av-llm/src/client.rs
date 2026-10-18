@@ -3,10 +3,11 @@
 //!
 //! Provider modules build a request, send it, and turn the answer into the
 //! shared types. `Client` runs them under the caller's `Cancel`, and prices
-//! every answer. HTTP failures become `Error::Http` here, whatever the
-//! provider's error body looks like.
+//! and records every answer. HTTP failures become `Error::Http` here, whatever
+//! the provider's error body looks like.
 
 use std::io;
+use std::sync::Arc;
 use std::time::Duration;
 
 use av_http::{Method, Request, Response};
@@ -18,6 +19,7 @@ use serde_json::Value;
 
 use crate::types::{Auth, ModelInfo, Provider};
 use crate::types::{ChatRequest, ChatResponse};
+use crate::usage::Ledger;
 use crate::usage::{Price, list_price};
 use crate::{anthropic, gemini, mistral, ollama, openai};
 
@@ -42,12 +44,13 @@ macro_rules! by_provider {
 
 // ----------------------------------------------------------------------------
 /// One AI account: a provider, its key, and where its API lives. Cheap to
-/// clone.
+/// clone; clones share the ledger.
 #[derive(Clone)]
 pub struct Client {
     provider: Provider,
     api_key: Option<String>,
     base_url: String,
+    ledger: Arc<Ledger>,
 }
 
 impl Client {
@@ -59,6 +62,7 @@ impl Client {
             provider,
             api_key: api_key.filter(|key| !key.is_empty()),
             base_url: provider.spec().default_url.to_string(),
+            ledger: Arc::new(Ledger::new()),
         }
     }
 
@@ -68,6 +72,18 @@ impl Client {
     pub fn with_base_url(mut self, url: &str) -> Self {
         self.base_url = url.trim_end_matches('/').to_string();
         self
+    }
+
+    // ------------------------------------------------------------------------
+    /// Record into `ledger`, e.g. one shared by every account.
+    pub fn with_ledger(mut self, ledger: Arc<Ledger>) -> Self {
+        self.ledger = ledger;
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn ledger(&self) -> &Arc<Ledger> {
+        &self.ledger
     }
 
     // ------------------------------------------------------------------------
@@ -114,6 +130,8 @@ impl Client {
             .price(&req.model)
             .or_else(|| self.price(&resp.model))
             .map(|price| price.cost(&resp.usage));
+        self.ledger
+            .record(self.provider, &req.model, &resp.usage, resp.cost);
         log::debug!(
             "{} {}: {:?}, {:?}, cost {:?}",
             self.provider,
