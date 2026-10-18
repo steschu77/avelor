@@ -1,6 +1,7 @@
 //! The Windows backend: Win32 through the `windows` crate.
 
 mod dialogs;
+mod images;
 mod paths;
 mod webview;
 mod window;
@@ -14,6 +15,7 @@ use windows::core::PWSTR;
 pub use dialogs::open_url;
 pub use dialogs::show_error;
 pub use dialogs::{Owner, open_path, pick_folder};
+pub use images::{ComThread as ImageThread, preview};
 pub use paths::Paths;
 pub use paths::paths;
 pub use paths::{collapse_env, expand_env};
