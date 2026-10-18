@@ -307,8 +307,13 @@ pub fn delete_entity(app: &mut App, req: Req, id: Id) {
     if let Some(err) = calendar::kept_by_google(app, &id) {
         return req.fail(err, Text::new("calendar.read_only"));
     }
+    // A synced event's calendar deletes it in Google: due once it is gone.
+    let calendar = calendar::waiting_delete(app, &id);
     let step = Text::new("undo.delete_entity").arg("title", named(app, &id, ""));
     let result = app.step(&req, step, |index, changes| index.delete(&id, changes));
+    if let (Ok(SaveOutcome::Saved), Some(key)) = (&result, calendar) {
+        calendar::deleted(app, &id, key);
+    }
     answer(app, req, result, None);
 }
 

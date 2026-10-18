@@ -32,7 +32,7 @@ import { assistantConversations, isAiConversation } from '../../model/entities.j
 import { dayOccurrences, dayTasks, googleLocked } from '../../model/calendar.js';
 import { bindDocContent } from '../../model/documents.js';
 import { editorRoots, isDirty, onEdited, trySave } from '../../model/documents.js';
-import { beginEditSession, endEditSession } from '../../model/documents.js';
+import { beginEditSession, endEditSession, reportEditing } from '../../model/documents.js';
 import { structureCall } from '../../model/structure.js';
 import {
   joinProjectLocal, leaveProjectLocal, setLinkLocal, setLabelsLocal,
@@ -318,9 +318,9 @@ function renderCardLinks(doc_id, row) {
 }
 
 // The cards' heads, event details, links and threads lines follow every
-// entity change -- a task made for the card, a title changed, a thread
-// restored -- without rebuilding the cards (and their editors); subscribed
-// below.
+// entity change -- a task made for the card, a title changed, an event
+// synced, a thread restored -- without rebuilding the cards (and their
+// editors); subscribed below.
 const refreshCardChips = oncePerFrame(() => {
   renderThreadProjects();
   for (const controller of msgControllers.values()) {
@@ -877,6 +877,7 @@ function setMessageEditMode(doc_id, on) {
 
   if (on) activeEditId = doc_id;
   else if (activeEditId === doc_id) activeEditId = null;
+  reportEditing();
 }
 
 // ----------------------------------------------------------------------------
@@ -884,7 +885,8 @@ function destroyMessageController(doc_id) {
   const controller = msgControllers.get(doc_id);
   if (!controller) return;
 
-  if (controller.editor.isEditable()) {
+  const editing = controller.editor.isEditable();
+  if (editing) {
     trySave(doc_id);
     endEditSession(doc_id);
   }
@@ -894,6 +896,7 @@ function destroyMessageController(doc_id) {
   editorRoots.delete(doc_id);
   msgControllers.delete(doc_id);
   if (activeEditId === doc_id) activeEditId = null;
+  if (editing) reportEditing();
 }
 
 // ----------------------------------------------------------------------------
