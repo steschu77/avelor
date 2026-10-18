@@ -1,8 +1,9 @@
 use super::trash::untrashed;
 use super::*;
 use crate::change::Change;
+use crate::envelope::Conversation;
 use crate::envelope::DocumentType;
-use crate::envelope::{Roles, Source};
+use crate::envelope::{Empty, Roles, Source};
 use crate::schema::layout;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
@@ -1108,6 +1109,64 @@ fn read_only_and_broken_files_are_not_written() {
     );
 
     fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn conversations_are_written_and_read_back() {
+    use crate::envelope::ConversationMessage;
+    let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
+    let mut index = Index::default();
+    index.begin(&root);
+
+    let (question, answer, linked) = (Id::generate(), Id::generate(), Id::generate());
+    let mut conversation = Conversation {
+        messages: vec![ConversationMessage {
+            id: Some(question),
+            content: Some("What is due?".into()),
+            ..Default::default()
+        }],
+        active: Some(question),
+    };
+    let roles = Roles {
+        conversation: Some(conversation.clone()),
+        ..Default::default()
+    };
+    let mut doc = Document::create(
+        roles,
+        Source::Ai(Empty {}),
+        "What is due?".into(),
+        Vec::new(),
+        FileFormat::YAML,
+    );
+    doc.set_link(Some(linked));
+    let mut changes = Changes::default();
+    let id = index
+        .create(doc, Path::new("Conversations"), &mut changes)
+        .unwrap();
+    let local = index.entry(&id).unwrap().local.clone();
+    assert!(local.starts_with("Conversations"));
+    assert!(local.to_string_lossy().ends_with(".cvn.yaml"), "{local:?}");
+
+    conversation.messages.push(ConversationMessage {
+        id: Some(answer),
+        parent: Some(question),
+        model: Some("gpt-5-mini".into()),
+        content: Some("Nothing.".into()),
+        ..Default::default()
+    });
+    conversation.active = Some(answer);
+    let mut changes = Changes::default();
+    let set = index.set_conversation(&id, Some(conversation.clone()), &mut changes);
+    assert_eq!(set.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [id]);
+
+    let again = Index::build(&root);
+    fs::remove_dir_all(&root).unwrap();
+    let doc = again.get(&id).expect("indexed back");
+    assert_eq!(doc.kind(), DocumentType::Conversation);
+    assert_eq!(doc.source(), Some(&Source::Ai(Empty {})));
+    assert_eq!(doc.roles().conversation.as_ref(), Some(&conversation));
+    assert_eq!(doc.linked_to(), Some(linked));
 }
 
 /// Replace `id`'s file in `thread_vault` as another program would.
