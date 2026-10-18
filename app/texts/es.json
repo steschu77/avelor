@@ -860,14 +860,20 @@
   "types.show_tasks": "Mostrar tareas",
   "types.tasks": "Tareas",
   "untitled": "Sin título",
+  "vault.indexing": "Indexando · {files}",
   "vault.newer_format": "Esta bóveda la escribió un Avelor más reciente (formato {format}; este lee {reads}), así que no se abre.",
   "vault.none_open": "No hay ninguna bóveda abierta.",
+  "vault.none_text": "No hay ninguna bóveda abierta. Una bóveda es una carpeta: cada archivo Markdown y YAML que contiene es un elemento.",
+  "vault.open_dots": "Abrir una bóveda…",
   "vault.pick": "Seleccionar bóveda",
   "vault.show_failed": "No se pudo mostrar la carpeta de la bóveda.",
+  "vault.unreadable_files": "Archivos que no se pudieron leer",
   "vault_op.accounts": "Configurar cuentas",
   "vault_op.new": "Nuevo",
   "vault_op.trash": "Papelera",
+  "vault_op.vault": "Bóveda",
   "week.of": "Semana del {day} · {what}",
   "workspace.accounts": "Cuentas",
-  "workspace.trash": "Papelera"
+  "workspace.trash": "Papelera",
+  "workspace.vault": "Bóveda"
 }

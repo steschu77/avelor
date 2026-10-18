@@ -818,14 +818,20 @@
   "types.show_tasks": "Aufgaben zeigen",
   "types.tasks": "Aufgaben",
   "untitled": "Ohne Titel",
+  "vault.indexing": "Indizierung · {files}",
   "vault.newer_format": "Dieser Tresor wurde von einem neueren Avelor geschrieben (Tresorformat {format}; dieses liest {reads}), daher wird er nicht geöffnet.",
   "vault.none_open": "Es ist kein Tresor geöffnet.",
+  "vault.none_text": "Kein Tresor ist geöffnet. Ein Tresor ist ein Ordner: Jede Markdown- und YAML-Datei darin ist ein Eintrag.",
+  "vault.open_dots": "Tresor öffnen …",
   "vault.pick": "Tresor auswählen",
   "vault.show_failed": "Der Ordner des Tresors konnte nicht angezeigt werden.",
+  "vault.unreadable_files": "Dateien, die nicht gelesen werden konnten",
   "vault_op.accounts": "Konten einrichten",
   "vault_op.new": "Neu",
   "vault_op.trash": "Papierkorb",
+  "vault_op.vault": "Tresor",
   "week.of": "Woche vom {day} · {what}",
   "workspace.accounts": "Konten",
-  "workspace.trash": "Papierkorb"
+  "workspace.trash": "Papierkorb",
+  "workspace.vault": "Tresor"
 }

@@ -823,14 +823,20 @@
   "types.show_tasks": "Show tasks",
   "types.tasks": "Tasks",
   "untitled": "Untitled",
+  "vault.indexing": "Indexing · {files}",
   "vault.newer_format": "This vault was written by a newer Avelor (vault format {format}; this one reads {reads}), so it isn't opened.",
   "vault.none_open": "No vault is open.",
+  "vault.none_text": "No vault is open. A vault is a folder: every markdown and YAML file in it is one entity.",
+  "vault.open_dots": "Open a vault…",
   "vault.pick": "Select Vault",
   "vault.show_failed": "Could not show the vault's folder.",
+  "vault.unreadable_files": "Files that couldn't be read",
   "vault_op.accounts": "Account Setup",
   "vault_op.new": "New",
   "vault_op.trash": "Trash",
+  "vault_op.vault": "Vault",
   "week.of": "Week of {day} · {what}",
   "workspace.accounts": "Accounts",
-  "workspace.trash": "Trash"
+  "workspace.trash": "Trash",
+  "workspace.vault": "Vault"
 }
