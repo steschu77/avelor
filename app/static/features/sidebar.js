@@ -179,10 +179,16 @@ function renderSidebar() {
   // A row click filters by the source; its button opens the New menu or syncs
   // an account's.
   const sourceRows = vaultSources().map(source => {
-    const { key, name, icon } = source;
+    const { key, name, icon, account } = source;
     const row = rowFor(`source:${key}`, name, () =>
       sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', icon, () => selectSource(key), sourceButton(source)));
     updateNavItem(row, sourceCounts.get(key) ?? 0, key === selected_source);
+    if (account) {
+      // A source that syncs on its own shows its button pressed.
+      const button = row.querySelector('.nav-item__action');
+      setAria(button, 'aria-pressed', source.autoSync);
+      button.title = source.autoSync ? t('sidebar.auto_sync_on', { action: t('sidebar.fetch_email') }) : t('sidebar.sync', { name });
+    }
     return row;
   });
   placeChildren(sourcesContainer, sourceRows);
@@ -293,7 +299,7 @@ function sourceButton(source) {
   const { key, name, account } = source;
   if (key === 'created') return { icon: '#i-add', title: t('sidebar.new_title'), onClick: (_row, button) => runAction('new', button) };
   if (!account) return null;
-  return { icon: '#i-arrow-sync', title: `Sync ${name}`, onClick: () => syncSource(source) };
+  return { icon: '#i-arrow-sync', title: t('sidebar.sync', { name }), onClick: () => syncSource(source) };
 }
 
 // The vault panel's rows as places Go to finds: each filters by its project
@@ -322,7 +328,7 @@ registerActions(() => [
 
 // Sources: what a connected account feeds into the vault. Email follows the
 // granted access; calendars are the ones checked on the Accounts page
-// (`account.calendars`).
+// (`account.calendars`). `autoSync`: the host syncs it on its own.
 function accountSources(account) {
   if (account.kind !== 'google' || account.status !== 'connected') return [];
   const { id, scope = {}, email = t('sidebar.email') } = account;
@@ -331,6 +337,7 @@ function accountSources(account) {
     sources.push({
       key: `${id}\nemail`, kind: 'email', account: id, name: email, icon: KIND_ICONS.email.icon,
       also: t('sidebar.fetch_also'),
+      autoSync: !!account.fetch_email?.auto_sync?.enabled,
     });
   }
   if (scope.calendar && scope.calendar !== 'off') {

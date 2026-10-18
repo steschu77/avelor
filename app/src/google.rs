@@ -4,6 +4,8 @@
 //! `google::accounts`.
 
 use std::collections::BTreeMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::path::PathBuf;
 
 use av_google::auth::{self, PendingConsent};
@@ -23,6 +25,10 @@ use crate::sys;
 use crate::texts::{self, Text};
 
 pub(crate) mod accounts;
+
+// ----------------------------------------------------------------------------
+/// How often an auto-sync runs (an account's email, a calendar), in seconds.
+pub const SYNC_EVERY: i64 = 15 * 60;
 
 // ----------------------------------------------------------------------------
 /// Send `account` to the page: the `account` event.
@@ -62,6 +68,110 @@ pub fn finish_sync(app: &mut App, id: Id, record: impl FnOnce(&mut Account)) {
     match updated {
         Ok(_) => post(app, id),
         Err(e) => log::warn!("Saving the last sync of {id} failed: {e}"),
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The auto-syncs of one kind (an account's email, a calendar), by key: when
+/// each may run next, the one whose look at Google is in flight, and those
+/// whose last run failed, which said so once.
+pub struct AutoSyncs<K> {
+    /// When each may run next; none: at the next chance. Cleared when a
+    /// vault opens.
+    pub(crate) next: HashMap<K, DateTime>,
+    /// The one whose list or search is in flight.
+    pub(crate) listing: Option<K>,
+    /// Those whose last auto-sync failed: only the first failure is shown.
+    pub(crate) failing: HashSet<K>,
+}
+
+impl<K> Default for AutoSyncs<K> {
+    fn default() -> Self {
+        Self {
+            next: HashMap::new(),
+            listing: None,
+            failing: HashSet::new(),
+        }
+    }
+}
+
+impl<K: Eq + Hash + Clone> AutoSyncs<K> {
+    // ------------------------------------------------------------------------
+    /// The first of `keys` whose auto-sync is due at `now`: never run, or
+    /// its time has come.
+    pub fn first_due(&self, keys: impl IntoIterator<Item = K>, now: DateTime) -> Option<K> {
+        keys.into_iter()
+            .find(|key| self.next.get(key).is_none_or(|at| *at <= now))
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn is_listing(&self) -> bool {
+        self.listing.is_some()
+    }
+
+    // ------------------------------------------------------------------------
+    /// The auto-sync of `key` looks at Google now; it runs next
+    /// `SYNC_EVERY` later.
+    pub fn listing(&mut self, key: K, now: DateTime) {
+        self.ran(key.clone(), now);
+        self.listing = Some(key);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The look at Google answered.
+    pub fn listed(&mut self) {
+        self.listing = None;
+    }
+
+    // ------------------------------------------------------------------------
+    /// `key` was synced at `at`: it runs next `SYNC_EVERY` later.
+    pub fn ran(&mut self, key: K, at: DateTime) {
+        self.next.insert(key, at.plus_seconds(SYNC_EVERY));
+    }
+
+    // ------------------------------------------------------------------------
+    /// `key` runs again at the next tick.
+    pub fn again(&mut self, key: K) {
+        self.next.insert(key, DateTime::now());
+    }
+
+    // ------------------------------------------------------------------------
+    /// The auto-sync of `key` failed; whether that is new, to be said.
+    pub fn failed(&mut self, key: K) -> bool {
+        self.failing.insert(key)
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn worked(&mut self, key: &K) {
+        self.failing.remove(key);
+    }
+
+    // ------------------------------------------------------------------------
+    /// A vault opened: every auto-sync is due, and no failure said.
+    pub fn clear(&mut self) {
+        self.next.clear();
+        self.failing.clear();
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// What the browser's tab shows at the end of a sign-in, in the run's
+/// language.
+fn sign_in_pages() -> auth::SignInPages {
+    let page = |heading: &str, line: &str| (heading.to_string(), line.to_string());
+    auth::SignInPages {
+        connected: page(
+            texts::text("google.page.connected"),
+            texts::text("google.page.connected_line"),
+        ),
+        failed: page(
+            texts::text("google.page.failed"),
+            texts::text("google.page.failed_line"),
+        ),
+        outdated: page(
+            texts::text("google.page.outdated"),
+            texts::text("google.page.outdated_line"),
+        ),
     }
 }
 
@@ -347,23 +457,38 @@ fn revoke(cancel: &Cancel, id: Id, token: Option<String>) {
     }
 }
 
-// ----------------------------------------------------------------------------
-/// What the browser's tab shows at the end of a sign-in, in the run's
-/// language.
-fn sign_in_pages() -> auth::SignInPages {
-    let page = |heading: &str, line: &str| (heading.to_string(), line.to_string());
-    auth::SignInPages {
-        connected: page(
-            texts::text("google.page.connected"),
-            texts::text("google.page.connected_line"),
-        ),
-        failed: page(
-            texts::text("google.page.failed"),
-            texts::text("google.page.failed_line"),
-        ),
-        outdated: page(
-            texts::text("google.page.outdated"),
-            texts::text("google.page.outdated_line"),
-        ),
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_first_due_is_one_never_run_or_whose_time_has_come() {
+        let (a, b) = (Id::generate(), Id::generate());
+        let now = DateTime::from_unix_millis(1_790_000_000_000);
+        let mut syncs = AutoSyncs::default();
+        assert_eq!(syncs.first_due([a, b], now), Some(a), "never run: due");
+        syncs.listing(a, now);
+        assert!(syncs.is_listing());
+        assert_eq!(syncs.next[&a], now.plus_seconds(SYNC_EVERY));
+        assert_eq!(syncs.first_due([a, b], now), Some(b));
+        syncs.next.insert(b, now);
+        assert_eq!(syncs.first_due([a, b], now), Some(b), "due at its time");
+        syncs.next.insert(b, now.plus_seconds(1));
+        assert_eq!(syncs.first_due([a, b], now), None);
+        syncs.listed();
+        assert!(!syncs.is_listing());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_failure_is_said_once_until_it_works_again() {
+        let a = Id::generate();
+        let mut syncs = AutoSyncs::default();
+        assert!(syncs.failed(a), "said");
+        assert!(!syncs.failed(a), "not again");
+        syncs.worked(&a);
+        assert!(syncs.failed(a), "said again");
+        syncs.clear();
     }
 }

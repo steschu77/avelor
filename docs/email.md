@@ -1,6 +1,6 @@
 # Avelor — Email
 
-> Email from a Google account into the vault: Fetch email. The
+> Email from a Google account into the vault: Fetch email and the auto-sync. The
 > account and its `fetch-email:` keys are `accounts.md`; the commands,
 > `api.md#email`.
 
@@ -29,11 +29,31 @@ the expanded vault area, filled with the account's last filter
   Fetch email reads its matches again when the job ends. Esc closes the
   page.
 
+## Email auto-sync <a id="email-auto-sync"></a>
+
+The Email row of a connected account's access (Workspace → Accounts) has an
+Auto-sync check. Ticked, the account fetches new email on its own: the email
+that matches the filter set up underneath (Fetch email's filter form,
+`renderEmailFilterForm`, without the date) and arrived since auto-sync was
+switched on, then since its last complete run.
+
+- It runs once the vault is open and indexed, then every 15 minutes while
+  the app runs, one account at a time and never beside a fetch of the page
+  (`architecture.md#the-clock`).
+- A run that finds nothing new leaves no trace; one that does is a
+  "Syncing email · <email>" job, and the account's `last-sync` moves on.
+- Emails already in the vault are skipped, never replaced.
+- A failed run is shown once in the status bar, not again until a run
+  succeeds.
+- The Email source's sync button stays shown, pressed, while auto-sync is
+  on; it still opens Fetch email.
+
 ## Flows
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | G3 | Fetch email | Email source sync button → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `account`; the job's end reads the matches again | emails in `Email/`; filter remembered |
+| G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce) | `set_email_sync {account, enabled?, filter?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email, `account` | emails in `Email/` on their own |
 
 ## Design <a id="design"></a>
 
@@ -70,6 +90,9 @@ The fetch is plan → run → apply (`architecture.md#conventions`):
 from the same account, or by Message-ID from any source. The preview's
 header pages are fetched 8 in parallel (av-google's `gmail::get_headers`, scoped
 threads). The fetch's state lives in `EmailState`; a newer search
-supersedes a running one on the page's `email-preview` channel. A
+supersedes a running one on the page's `email-preview` channel. The
+auto-sync (`auto_sync`, `sync_query`) runs from the clock with the
+schedule (`SYNC_EVERY`, `first_due` in
+`google.rs`): a quiet search first, and a fetch job only for new email. A
 404 from Gmail is read by matching `Error::Http { status, .. }` in
 `email.rs`.
