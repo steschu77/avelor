@@ -16,10 +16,11 @@ use crate::app::App;
 use crate::config_files::unique_names;
 use crate::protocol::Req;
 
-/// The context window Ollama runs the model with for the mail analysis;
-/// one value, as Ollama loads the model anew when it changes. The largest
-/// analysis request comes to about 4,000 tokens; the answer and a thinking
-/// model's reasoning need the rest.
+/// The context window Ollama runs the model with for the mail analysis and
+/// the reading of scans; one value, as Ollama loads the model anew when it
+/// changes. A scanned page alone comes to about 4,100 tokens, the largest
+/// analysis request to about 4,000; the answer and a thinking model's
+/// reasoning need the rest. Ollama's default of 4,096 refuses the page.
 pub const CONTEXT_TOKENS: u32 = 16_384;
 
 // ----------------------------------------------------------------------------
@@ -312,7 +313,7 @@ pub fn set_ai_settings(app: &mut App, req: Req, change: SettingsChange) {
 }
 
 // ----------------------------------------------------------------------------
-/// The account `id` was used (a chat reply): what it spent is
+/// The account `id` was used (a chat reply, a page read): what it spent is
 /// added to its spend file, and the account follows as the `account` event.
 pub fn account_used(app: &mut App, id: Id) {
     match app.ai.record_spend(id) {

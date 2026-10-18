@@ -117,7 +117,8 @@ the server's default applies (the mail analysis sends
 
 ## Design <a id="design"></a>
 
-An AI reply: `run_with_progress` streams from av-llm on a worker; what it has so far is
+An AI reply and an OCR read (`import.md#import-scans`) share one shape:
+`run_with_progress` streams from av-llm on a worker; what it has so far is
 queued to the UI thread with `Progress::send_latest`, which replaces what
 hasn't arrived yet, so there is at most one update per run of the UI queue
 (`architecture.md#progress`).
@@ -128,16 +129,16 @@ sequenceDiagram
     participant S as App
     participant W as worker
     participant L as LLM provider
-    P->>S: chat_send
+    P->>S: scan_read / chat_send
     S->>W: chat_stream(request)
     loop deltas
         L-->>W: SSE / NDJSON chunk
-        W-->>S: Progress::send_latest (text so far)
-        S-->>P: ai_delta(full HTML so far)
+        W-->>S: Progress::send_latest (words / text so far)
+        S-->>P: scan_page(reading) / ai_delta(full HTML so far)
     end
     W-->>S: final response + usage
-    S->>S: write the reply
-    S-->>P: conversation, account
+    S->>S: write the reply / keep the page text
+    S-->>P: scan_page(read) / conversation, account
 ```
 
 - The reply's worker sends the whole reply so far, rendered from its

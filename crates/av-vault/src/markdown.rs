@@ -316,9 +316,9 @@ fn escape_into(out: &mut String, text: &str) {
 }
 
 // ----------------------------------------------------------------------------
-/// A title made of the markdown line `line` (a chat's first line): without
-/// its block marker (`#`, `>`, `-`, `1.`, …) and inline marks, cut at a word
-/// to at most `max` characters and an ellipsis.
+/// A title made of the markdown line `line` (a chat's first line, a scanned
+/// page's heading): without its block marker (`#`, `>`, `-`, `1.`, …) and
+/// inline marks, cut at a word to at most `max` characters and an ellipsis.
 pub fn plain_title(line: &str, max: usize) -> String {
     let line = line
         .trim()

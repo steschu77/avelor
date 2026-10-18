@@ -685,7 +685,7 @@ impl AiAccounts {
 
     // ------------------------------------------------------------------------
     /// The account, model and client of `choice`, the model a feature picked
-    /// for `what` ("chats"; accounts.md#model-choice), as the page's
+    /// for `what` ("chats", "OCR"; accounts.md#model-choice), as the page's
     /// `aiModelOf` shows it. Refused in words if nothing is picked, the
     /// account is gone or has no key, the model isn't offered any more, or
     /// the account has reached its spend limit in the month of `now` (UTC).

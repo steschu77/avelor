@@ -40,7 +40,8 @@ account file is (`accounts.md#vault-accounts`). The file contains:
     per image)
   * `models`: the model each step that sends a file to an AI picked,
     `{account, model}` (`accounts.md#model-choice`), by step: `read` for
-    reading images. A step without an entry has no pick yet
+    reading images (`watches::READ_STEP`). A step without an entry has no
+    pick yet
   * `enabled`: `false` while the watch is off
   * `added`: when the watch was added
 
@@ -84,8 +85,8 @@ vault), following the Accounts page:
 The Import button of an images watch opens Import scans
 (`features/import/scans.js`) in the expanded vault area:
 
-- **Files in folder** lists the watch's files that aren't in the vault: the
-  files in its folder (and subfolders, if the
+- **Files in folder** lists the watch's files that aren't read yet and
+  aren't in the vault: the files in its folder (and subfolders, if the
   watch says so) whose names match one of its patterns (`*` and `?`, in
   any case), with their date and size. A file's date is when it was made:
   its creation time, or its modified time if that is earlier (a copied
@@ -98,6 +99,15 @@ The Import button of an images watch opens Import scans
   in its default app (the image viewer). Previews are upright by the
   image's EXIF orientation; a file Windows (on Linux gdk-pixbuf) can't
   decode keeps a striped box ("no preview").
+- **Read** sends a file to the model the watch picked for reading it
+  (`models.read`, picked in the page's foot, "Read by", or in the
+  watch's pane; `accounts.md#model-choice`),
+  with the instruction to transcribe the page into Markdown, one file after
+  the other, as a job in the jobs panel that can be stopped. The page shows
+  each file as queued, then the words read so far. A file that fails shows
+  why, and can be read again. Only JPEG, PNG, GIF and WebP images are read.
+  What a file read to is kept while the app runs, as long as the file
+  doesn't change.
 
 Escape closes the page; opening it again for the same watch lists the
 folder again.
@@ -109,7 +119,9 @@ folder again.
 | J1 | Add a watch | "Watch a folder" → type → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card |
 | J2 | Edit | name, folder, subfolders, patterns, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
 | J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |
-| K1 | Open Import scans | the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files}`; `scan_previews` → `scan_preview` per file | file list, large preview |
+| K1 | Open Import scans | the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files, job}`; `scan_previews` → `scan_preview` per file | file list, large preview |
+| K2 | Read (OCR) | per file or Read all → `scanRead` | `scan_read {watch, files}` → the host checks the watch's OCR model → `ok {job}`; one file after another on workers → `scan_page` queued / reading (words) / read (words, title) / failed; job events; `account` | text per page |
+| K3 | Stop reading | Stop (or the job card's Stop) | `cancel_job {id: job}` → remaining pages `stopped`, job ends | — |
 | K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
 
 ## Design <a id="design"></a>
@@ -126,6 +138,15 @@ folder again.
   screen), encoded as JPEG (about 80 KB for a scanned page) and sent as a
   `data:` URL. Previews are made on a
   worker, the file shown large first, and kept per file while it doesn't
-  change (size and modified time); a newer request
+  change (size and modified time), like the read text; a newer request
   stops what is left of the one before. The page keeps one `<img>` per
   file and moves it into each render, so a preview is decoded once.
+- **Reading**: OCR is a job (`App::run_job_with_progress`, `jobs.rs`)
+  streaming from av-llm with `Part::Inline` images; the words so far reach
+  the page coalesced (`assistant.md#design` shows the shared streaming
+  shape). The watch's pick is checked once (`AiAccounts::choose`),
+  the spend limit checked before each page (`check_limit`). The read text
+  is kept in memory while the app runs. Ollama runs the model with a
+  context of 16,384 tokens (`ai::CONTEXT_TOKENS`, shared with the mail
+  analysis, so the model isn't loaded anew between them): a scanned page
+  alone came to 4,118 tokens, which its default of 4,096 refuses.

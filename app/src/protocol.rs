@@ -106,6 +106,7 @@ enum Command {
     PickFolder(PickFolder),
     // Import scans (`scans`).
     ScanList(OfWatch),
+    ScanRead(scans::ReadRequest),
     ScanPreviews(scans::PreviewRequest),
     ScanOpen(scans::OpenRequest),
     // Fetch mail (`mail`).
@@ -346,6 +347,7 @@ impl Command {
             "remove_watch" => Command::RemoveWatch(from_value(args)?),
             "pick_folder" => Command::PickFolder(from_value(args)?),
             "scan_list" => Command::ScanList(from_value(args)?),
+            "scan_read" => Command::ScanRead(from_value(args)?),
             "scan_previews" => Command::ScanPreviews(from_value(args)?),
             "scan_open" => Command::ScanOpen(from_value(args)?),
             "mail_labels" => Command::MailLabels(from_value(args)?),
@@ -439,6 +441,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::RemoveWatch(a) => folders::remove_watch(app, req, a.watch),
         Command::PickFolder(a) => folders::pick_folder(app, req, a.title),
         Command::ScanList(a) => scans::scan_list(app, req, a.watch),
+        Command::ScanRead(a) => scans::scan_read(app, req, a),
         Command::ScanPreviews(a) => scans::scan_previews(app, req, a),
         Command::ScanOpen(a) => scans::scan_open(app, req, a),
         Command::MailLabels(a) => mail::mail_labels(app, req, a.account),

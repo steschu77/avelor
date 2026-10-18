@@ -1,4 +1,5 @@
-//! MIME types of the files the app hands on: to a model.
+//! MIME types of the files the app hands on: to a model, or to Import
+//! scans (is this an image).
 
 use std::path::Path;
 

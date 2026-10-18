@@ -56,7 +56,7 @@ function watchType(type) {
 }
 
 // The watch's settings, with what was sent but isn't confirmed yet.
-function watchSettings(id) {
+export function watchSettings(id) {
   return { ...watches.get(id), ...watchDrafts.get(id) };
 }
 
@@ -144,11 +144,13 @@ function watchSaveFolder(watch, folder) {
 }
 
 // Change some settings of `watch`; they show at once, and the host's
-// `watch` event confirms them. A refusal shows in the watch's pane.
+// `watch` event confirms them. A refusal shows in the watch's pane, or goes
+// to `onError` (Import scans picking its model).
 function watchSet(watch, change, onError = null) {
   watchError = null;
   watchSetCall(watch, change, change).catch(e => {
-    watchError = { watch, message: watchErrorText(e) };
+    if (onError) onError(e);
+    else watchError = { watch, message: watchErrorText(e) };
   });
   scheduleRenderFolders();
 }
@@ -414,7 +416,7 @@ function watchModel(id, settings, step, what) {
 
 // Pick `step`'s model. The whole map is sent, so the watch shows the other
 // steps' picks while this one is unconfirmed (`watchSettings`).
-function watchSetModel(id, step, choice, onError = null) {
+export function watchSetModel(id, step, choice, onError = null) {
   const models = { ...watchSettings(id).models, [step]: choice };
   watchSet(id, { models }, onError);
 }

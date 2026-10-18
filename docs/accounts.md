@@ -1,7 +1,7 @@
 # Avelor — Accounts
 
 > The accounts the app works with: Google accounts (Gmail, Calendar,
-> Contacts, Tasks) and AI providers (chat) — their files, secrets and
+> Contacts, Tasks) and AI providers (chat, OCR) — their files, secrets and
 > states, the Accounts page, and how a feature picks its AI model. What a
 > Google account syncs is in `mail.md` and `calendar.md`; the assistant,
 > `assistant.md`.
@@ -233,7 +233,7 @@ the feature's own settings:
 | Feature | Kept in | Picked in |
 |---|---|---|
 | The assistant | the vault's settings, `.avelor/vault.yaml` `chat-model` (`vault.md#vault-config`; `set_vault_settings`) | the assistant's head |
-| A watch's steps: reading its files (OCR) | the watch file's `models`, by step (`import.md#watch-files`; `set_watch`) | the step's row in the watch's pane |
+| A watch's steps: reading its files (OCR) | the watch file's `models`, by step (`import.md#watch-files`; `set_watch`) | the step's row in the watch's pane; Import scans for reading |
 | Fetch mail's analysis | the Google account file's `mail.analysis` (`mail.md#analysis`; remembered by `mail_fetch`) | Fetch mail, section Analysis |
 | An auto-sync's analysis | the Google account file's `mail.auto-sync.analysis` (`set_mail_sync`) | the account's pane, under the auto-sync's filter |
 
@@ -251,9 +251,9 @@ a request; `aiModelOf(choice)` mirrors the check for its hints. Refused:
 - the model no longer offered (unticked): "gpt-5 is no longer offered;
   tick it under Accounts or pick another model.";
 - the spend limit reached: the assistant shows "has reached its spend
-  limit" and takes no input; the mail analysis stops before its next mail
-  (with a notice; `check_limit` before each); a call already running
-  finishes (`Error::SpendLimit`).
+  limit" and takes no input; Import scans stops before its next page and
+  the mail analysis before its next mail (each with a notice; `check_limit`
+  before each); a call already running finishes (`Error::SpendLimit`).
 
 No other model is ever tried in place of the pick: it could send a
 document to another provider. The picker (`aiModelPicker`, `aiShowModels`
@@ -276,10 +276,10 @@ why (`aiMissingHint`), with a button to Accounts where the fix is there.
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |
 | I3 | Offer a model | tick | `set_ai_settings {account, offered}` → `account`, `ok` | pickers offer it |
 | I8 | Pick a model | a feature's picker → `aiShowModels` → a model | the feature's own command: `set_vault_settings {chat_model}` → `vault_settings`, `ok`; `set_watch {watch, models}` → `watch`, `ok`; `mail_fetch {…, analysis}`, `set_mail_sync {account, analysis}` → `account` | the feature uses it; "Used by" names the feature |
-| I4 | Spend limit | edit field | `set_ai_settings {account, spend_limit}` → `account`, `ok` | enforced: at the limit a chat is refused |
+| I4 | Spend limit | edit field | `set_ai_settings {account, spend_limit}` → `account`, `ok` | enforced: at the limit a chat is refused and a scan read stops before its next page |
 | I5 | Replace key | edit key | `connect_ai {account, key}` | — |
 | I6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` / `remove_account`, shared with Google (H6) | — |
-| I7 | Spending | an assistant reply | `ai::account_used`: what the ledger recorded → this month in `<name>.spend.yaml` → `account` | "This month", also after a restart |
+| I7 | Spending | an assistant reply, a page read | `ai::account_used`: what the ledger recorded → this month in `<name>.spend.yaml` → `account` | "This month", also after a restart |
 
 ## Design <a id="design"></a>
 

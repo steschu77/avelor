@@ -1,17 +1,23 @@
-//! Import scans (import.md#import-scans): the files of an images folder watch.
+//! Import scans (import.md#import-scans): the files of an images folder watch,
+//! read by an AI account's OCR model.
 //!
-//! The page lists the files; the commands of the typed protocol
-//! (api.md#scans).
+//! The page lists the files, has the ticked ones read (a job reading one file
+//! after the other, which `cancel_job` stops); the commands of the typed
+//! protocol (api.md#scans). What a file read to is kept in memory while the
+//! app runs.
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
 //! them while the app runs; `scan_open` opens a file in its default app.
 
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use av_llm::{ChatRequest, ChatResponse, Client, FileData, Message, Part, Provider, StopReason};
 use av_utils::base64::to_base64;
+use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::id::Id;
@@ -19,12 +25,26 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 
+use crate::ai;
 use crate::app::App;
 use crate::app::Task;
+use crate::jobs::JobKind;
+use crate::jobs::count_summary;
 use crate::protocol::Req;
 use crate::sys;
+use crate::watches::READ_STEP;
 use crate::watches::{self, FolderFile};
+use av_vault::markdown::plain_title;
 
+/// The longest proposed title, in characters.
+const TITLE_LEN: usize = 80;
+/// How many more words a page must have before its progress is sent again.
+const PROGRESS_WORDS: usize = 10;
+/// What the OCR model is told, and asked.
+const OCR_SYSTEM: &str = "You transcribe scanned pages. Write the text of the \
+page in the image as Markdown: keep its headings, paragraphs, lists and tables, \
+in reading order. Write only the page's text: no comments, no code fence.";
+const OCR_REQUEST: &str = "Transcribe this page.";
 /// The previews' size: twice the page's large preview (180 x 254), so they
 /// stay sharp on a high-DPI screen.
 const PREVIEW_W: u32 = 360;
@@ -34,6 +54,10 @@ const PREVIEW_H: u32 = 508;
 /// What the app keeps for Import scans.
 #[derive(Default)]
 pub struct ScanState {
+    /// What each file read to, by its path.
+    cache: HashMap<PathBuf, Ocr>,
+    /// The read in progress; one at a time.
+    read: Option<ScanRead>,
     /// Each file's preview, by its path: a JPEG `data:` URL, or empty if
     /// the file couldn't be decoded.
     previews: HashMap<PathBuf, (Stamp, String)>,
@@ -43,15 +67,45 @@ pub struct ScanState {
 
 impl ScanState {
     // ------------------------------------------------------------------------
+    /// What `file` read to, if it was read as it is now.
+    fn cached(&self, file: &FolderFile) -> Option<&Ocr> {
+        self.cache
+            .get(&file.path)
+            .filter(|ocr| ocr.stamp.matches(file))
+    }
+
+    // ------------------------------------------------------------------------
     /// The preview of `file`, if it was made of the file as it is now.
     fn preview(&self, file: &FolderFile) -> Option<&str> {
         let (stamp, url) = self.previews.get(&file.path)?;
         stamp.matches(file).then_some(url.as_str())
     }
+
+    // ------------------------------------------------------------------------
+    /// The job reading the files of `watch`, if one is running.
+    fn job_of(&self, watch: Id) -> Option<Id> {
+        self.read
+            .as_ref()
+            .filter(|r| r.watch == watch)
+            .map(|r| r.job)
+    }
+
+    // ------------------------------------------------------------------------
+    /// `queued` or `reading` while the read of `watch` has the file `name`.
+    fn status(&self, watch: Id, name: &str) -> Option<&'static str> {
+        let read = self.read.as_ref().filter(|r| r.watch == watch)?;
+        if read.current.as_deref() == Some(name) {
+            Some("reading")
+        } else if read.queue.iter().any(|queued| queued == name) {
+            Some("queued")
+        } else {
+            None
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
-/// A file as it was when something was made of it (its preview):
+/// A file as it was when something was made of it (its text, its preview):
 /// what was made is valid while the file still is.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Stamp {
@@ -75,6 +129,63 @@ impl Stamp {
 }
 
 // ----------------------------------------------------------------------------
+/// What a file read to.
+struct Ocr {
+    /// The file as it was read.
+    stamp: Stamp,
+    words: usize,
+    title: String,
+}
+
+// ----------------------------------------------------------------------------
+/// A read in progress: files of one watch, read one after the other.
+struct ScanRead {
+    job: Id,
+    watch: Id,
+    /// The watch's folder, which the files' names are relative to.
+    root: PathBuf,
+    account: Id,
+    client: Client,
+    provider: Provider,
+    address: String,
+    model: String,
+    queue: VecDeque<String>,
+    /// The file being read; stopping the job cancels its read.
+    current: Option<String>,
+    total: usize,
+    counts: ReadCounts,
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Default)]
+struct ReadCounts {
+    read: usize,
+    failed: usize,
+    stopped: usize,
+    /// Stopped at the account's spend limit.
+    limit: bool,
+}
+
+impl ReadCounts {
+    // ------------------------------------------------------------------------
+    /// "5 read · 1 failed": the job's summary note; "· spend limit reached"
+    /// if that stopped it.
+    fn summary(&self) -> String {
+        let counts = [
+            (self.read, "read", "read"),
+            (self.failed, "failed", "failed"),
+            (self.stopped, "stopped", "stopped"),
+        ];
+        let summary = count_summary(&counts, "nothing to read");
+        if self.limit {
+            format!("{summary} \u{b7} spend limit reached")
+        } else {
+            summary
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// One file of `scan_list`'s answer.
 #[derive(Serialize)]
 struct FileInfo<'a> {
@@ -85,6 +196,17 @@ struct FileInfo<'a> {
     modified: DateTime,
     /// The document the file was imported into.
     in_vault: Option<Id>,
+    /// What it read to, if it was read as it is now.
+    read: Option<PageRead<'a>>,
+    /// `queued` or `reading` while a read has it.
+    status: Option<&'static str>,
+}
+
+// ----------------------------------------------------------------------------
+#[derive(Serialize)]
+struct PageRead<'a> {
+    words: usize,
+    title: &'a str,
 }
 
 // ----------------------------------------------------------------------------
@@ -93,6 +215,46 @@ struct FileInfo<'a> {
 struct Listing<'a> {
     listed: DateTime,
     files: Vec<FileInfo<'a>>,
+    /// The job reading this watch's files, if one is running.
+    job: Option<Id>,
+}
+
+// ----------------------------------------------------------------------------
+/// Where a file stands in a read (the `scan_page` event).
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(tag = "status", rename_all = "lowercase")]
+enum PageStatus<'a> {
+    Queued,
+    /// `words`: read so far.
+    Reading {
+        words: usize,
+    },
+    Read {
+        words: usize,
+        title: &'a str,
+    },
+    Failed {
+        error: &'a str,
+    },
+    Stopped,
+}
+
+// ----------------------------------------------------------------------------
+/// The `scan_page` event: `{watch, file, status, …}`.
+#[derive(Serialize)]
+struct PageEvent<'a> {
+    watch: Id,
+    file: &'a str,
+    #[serde(flatten)]
+    status: &'a PageStatus<'a>,
+}
+
+// ----------------------------------------------------------------------------
+/// `scan_read`'s args.
+#[derive(Deserialize)]
+pub(crate) struct ReadRequest {
+    watch: Id,
+    files: Vec<String>,
 }
 
 // ----------------------------------------------------------------------------
@@ -120,8 +282,28 @@ fn refuse(req: Req, error: Error, message: impl Into<String>) {
 }
 
 // ----------------------------------------------------------------------------
+/// Where `file` stands in a read of `watch`: the `scan_page` event.
+fn post_page(app: &App, watch: Id, file: &str, status: &PageStatus) {
+    app.post_event(
+        "scan_page",
+        PageEvent {
+            watch,
+            file,
+            status,
+        },
+    );
+}
+
+// ----------------------------------------------------------------------------
+/// Whether `name` is a file the OCR models take: JPEG, PNG, GIF or WebP.
+fn is_image(name: &str) -> bool {
+    av_utils::mime::type_for(Path::new(name)).starts_with("image/")
+}
+
+// ----------------------------------------------------------------------------
 /// `scan_list {watch}`: list the watch's files on a worker. Answers
-/// `{listed, files}`, each file with what is known of it.
+/// `{listed, files, job}`, each file with what is known of it, and the job
+/// reading this watch's files, if one is running.
 pub fn scan_list(app: &mut App, req: Req, id: Id) {
     let settings = match app.watches.get(id) {
         Ok(watch) => watch.settings().clone(),
@@ -149,6 +331,7 @@ pub fn scan_list(app: &mut App, req: Req, id: Id) {
 /// `scan_list`'s answer for the files of `watch`.
 fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> {
     let in_vault = app.vault.index().scan_origins(&watch);
+    let scans = &app.scans;
     let files = files
         .iter()
         .map(|file| FileInfo {
@@ -157,12 +340,313 @@ fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> 
             taken: file.taken,
             modified: DateTime::from_system_time(file.modified),
             in_vault: in_vault.get(&file.name).copied(),
+            read: scans.cached(file).map(|ocr| PageRead {
+                words: ocr.words,
+                title: &ocr.title,
+            }),
+            status: scans.status(watch, &file.name),
         })
         .collect();
     Listing {
         listed: DateTime::now(),
         files,
+        job: scans.job_of(watch),
     }
+}
+
+// ----------------------------------------------------------------------------
+/// `scan_read {watch, files}`: read the files with the model the
+/// watch picked for OCR (`AiAccounts::choose`), as a job: a `scan_page` event per
+/// file as it is queued, read and done. Files read before (and unchanged)
+/// are answered at once. One read at a time: a request for
+/// the watch being read adds to it. Answers `{job}`, the read of this watch
+/// (null if there is none: every file was read before). Before each file
+/// the account's spend limit is checked; reached, the read stops.
+pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
+    let (root, watch_name, picked) = match app.watches.get(request.watch) {
+        Ok(watch) => {
+            let settings = watch.settings();
+            let picked = settings.model(READ_STEP).cloned();
+            (settings.root(), settings.display_name(), picked)
+        }
+        Err(e) => return req.err(e),
+    };
+    let watch = request.watch;
+    if app.scans.read.as_ref().is_some_and(|r| r.watch != watch) {
+        let what = "reading a second folder".to_string();
+        let message = "Another folder is still being read; stop it or wait for it.";
+        return refuse(req, Error::Unsupported { what }, message);
+    }
+    let resolved = match app.ai.choose(picked.as_ref(), "OCR", DateTime::now()) {
+        Ok(resolved) => resolved,
+        Err(refusal) => return refuse(req, refusal.error, refusal.message),
+    };
+
+    let mut queue = Vec::new();
+    for name in request.files {
+        if app.scans.status(watch, &name).is_some() || queue.contains(&name) {
+            continue;
+        }
+        if !is_image(&name) {
+            let error = "Only JPEG, PNG, GIF and WebP images can be read.";
+            post_page(app, watch, &name, &PageStatus::Failed { error });
+            continue;
+        }
+        let file = FolderFile::read(&root, &name).ok();
+        let cached = file.as_ref().and_then(|f| app.scans.cached(f));
+        match cached {
+            Some(ocr) => {
+                let (words, title) = (ocr.words, ocr.title.as_str());
+                post_page(app, watch, &name, &PageStatus::Read { words, title });
+            }
+            _ => {
+                post_page(app, watch, &name, &PageStatus::Queued);
+                queue.push(name);
+            }
+        }
+    }
+    let total = queue.len();
+    if total == 0 {
+        // Nothing new to read.
+    } else if let Some(read) = &mut app.scans.read {
+        read.total += total;
+        read.queue.extend(queue);
+        post_progress(app);
+    } else {
+        let label = format!("Reading scans · {watch_name}");
+        let job = app.start_job(JobKind::ScanRead, label, total);
+        log::info!("Scan read {job}: reading {total} files of {watch_name}");
+        app.scans.read = Some(ScanRead {
+            job,
+            watch,
+            root,
+            account: resolved.account,
+            client: resolved.client,
+            provider: resolved.provider,
+            address: resolved.address,
+            model: resolved.model,
+            queue: queue.into(),
+            current: None,
+            total,
+            counts: ReadCounts::default(),
+        });
+        pump(app);
+    }
+    req.ok(json!({ "job": app.scans.job_of(watch) }));
+}
+
+// ----------------------------------------------------------------------------
+/// Start reading the next file, or finish the read if none is left.
+fn pump(app: &mut App) {
+    let Some(read) = &mut app.scans.read else {
+        return;
+    };
+    if read.current.is_some() {
+        return;
+    }
+    if read.queue.is_empty() {
+        return finish(app);
+    }
+    // The pages read so far are counted (`account_used`): at its limit the
+    // account takes no more.
+    if let Err(refusal) = app.ai.check_limit(read.account, DateTime::now()) {
+        return stop_at_limit(app, &refusal.message);
+    }
+    let Some(read) = &mut app.scans.read else {
+        return;
+    };
+    let Some(name) = read.queue.pop_front() else {
+        return finish(app);
+    };
+    let (job, watch, root) = (read.job, read.watch, read.root.clone());
+    let (client, model) = (read.client.clone(), read.model.clone());
+    post_page(app, watch, &name, &PageStatus::Reading { words: 0 });
+
+    let (file, progress_file, done_file) = (name.clone(), name.clone(), name.clone());
+    app.run_job_with_progress(
+        job,
+        move |progress, cancel| {
+            ocr(&client, cancel, &model, &root, &file, |words| {
+                progress.send_latest(words)
+            })
+        },
+        move |app, words: usize| on_progress(app, job, &progress_file, words),
+        move |app, result| on_read(app, job, done_file, result),
+    );
+    // The continuations run on this (the UI) thread, so they can't look
+    // before this.
+    if let Some(read) = &mut app.scans.read {
+        read.current = Some(name);
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Why reading a file failed: the file, or the model.
+enum ReadError {
+    File(Error),
+    Model(Error),
+}
+
+// ----------------------------------------------------------------------------
+/// Read the image `name` in `root` with `model`: the file as it was read,
+/// and the model's answer. `on_words` gets the words read so far as the
+/// answer streams in.
+fn ocr(
+    client: &Client,
+    cancel: &Cancel,
+    model: &str,
+    root: &Path,
+    name: &str,
+    mut on_words: impl FnMut(usize),
+) -> Result<(FolderFile, ChatResponse), ReadError> {
+    // The file's facts first: a change while it is read makes the text stale.
+    let file = FolderFile::read(root, name).map_err(ReadError::File)?;
+    let data = FileData::from_path(&file.path).map_err(ReadError::File)?;
+    let request = ChatRequest::new(model)
+        .system(OCR_SYSTEM)
+        .message(Message::user(OCR_REQUEST).with(Part::Inline(data)))
+        .context(ai::CONTEXT_TOKENS);
+    let mut text = String::new();
+    let mut sent = 0;
+    let response = client
+        .chat_stream(cancel, &request, |delta| {
+            text.push_str(delta);
+            let words = word_count(&text);
+            if words >= sent + PROGRESS_WORDS {
+                sent = words;
+                on_words(words);
+            }
+        })
+        .map_err(ReadError::Model)?;
+    Ok((file, response))
+}
+
+// ----------------------------------------------------------------------------
+/// The words read so far of the file being read.
+fn on_progress(app: &mut App, job: Id, name: &str, words: usize) {
+    let Some(read) = &app.scans.read else {
+        return;
+    };
+    if read.job == job && read.current.as_deref() == Some(name) {
+        post_page(app, read.watch, name, &PageStatus::Reading { words });
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// A file was read: keep its text and report it, or the failure; then read
+/// the next. Ignored if the read is gone (stopped).
+fn on_read(
+    app: &mut App,
+    job: Id,
+    name: String,
+    result: Result<(FolderFile, ChatResponse), ReadError>,
+) {
+    let Some(read) = app.scans.read.as_mut().filter(|r| r.job == job) else {
+        return;
+    };
+    read.current = None;
+    let page = match result {
+        Ok((file, response)) => page_of(file, response),
+        Err(ReadError::File(e)) => {
+            log::warn!("Scan read {job}: could not read {name}: {e}");
+            Err("Could not read the file.".to_string())
+        }
+        Err(ReadError::Model(e)) => Err(ai::chat_error(read.provider, &read.address, &e)),
+    };
+    let (watch, account) = (read.watch, read.account);
+    match page {
+        Ok((path, ocr)) => {
+            read.counts.read += 1;
+            let (words, title) = (ocr.words, ocr.title.as_str());
+            post_page(app, watch, &name, &PageStatus::Read { words, title });
+            app.scans.cache.insert(path, ocr);
+        }
+        Err(error) => {
+            read.counts.failed += 1;
+            log::info!("Scan read {job}: {name} failed: {error}");
+            post_page(app, watch, &name, &PageStatus::Failed { error: &error });
+        }
+    }
+    // Saved per page, so a long read keeps what it spent.
+    ai::account_used(app, account);
+    post_progress(app);
+    pump(app);
+}
+
+// ----------------------------------------------------------------------------
+/// The page a file read to, by the file's path; or why it has none.
+fn page_of(file: FolderFile, response: ChatResponse) -> Result<(PathBuf, Ocr), String> {
+    let text = clean_ocr(&response.text);
+    if text.is_empty() {
+        return Err(match response.stop {
+            StopReason::Refused => "The model declined to read the page.",
+            _ => "The model read no text.",
+        }
+        .to_string());
+    }
+    let ocr = Ocr {
+        stamp: Stamp::of(&file),
+        words: word_count(&text),
+        title: title_of(&text),
+    };
+    Ok((file.path, ocr))
+}
+
+// ----------------------------------------------------------------------------
+fn post_progress(app: &mut App) {
+    let Some(read) = &app.scans.read else {
+        return;
+    };
+    let done = read.counts.read + read.counts.failed;
+    let (job, total) = (read.job, read.total);
+    app.update_job(job, done, total);
+}
+
+// ----------------------------------------------------------------------------
+/// Stop the read (`jobs::stop`, from `cancel_job` or a vault switch, has
+/// cancelled the file being read): it and the files waiting report
+/// `stopped`, and the job ends.
+pub fn stop_read(app: &mut App) {
+    let Some(read) = &mut app.scans.read else {
+        return;
+    };
+    let mut stopped: Vec<String> = read.queue.drain(..).collect();
+    if let Some(name) = read.current.take() {
+        stopped.insert(0, name);
+    }
+    read.counts.stopped += stopped.len();
+    let watch = read.watch;
+    log::info!("Scan read {}: stopped", read.job);
+    for name in &stopped {
+        post_page(app, watch, name, &PageStatus::Stopped);
+    }
+    finish(app);
+}
+
+// ----------------------------------------------------------------------------
+/// The read's account has reached its spend limit (`message` says so):
+/// say it once, and stop the read as Stop does, the files left `stopped`.
+fn stop_at_limit(app: &mut App, message: &str) {
+    let Some(read) = &mut app.scans.read else {
+        return;
+    };
+    read.counts.limit = true;
+    log::info!("Scan read {}: {message}", read.job);
+    app.notice(message);
+    stop_read(app);
+}
+
+// ----------------------------------------------------------------------------
+/// The read is done: report it, and the account's spending (what the
+/// file being read when it stopped cost, too).
+fn finish(app: &mut App) {
+    let Some(read) = app.scans.read.take() else {
+        return;
+    };
+    let note = read.counts.summary();
+    log::info!("Scan read {}: {note}", read.job);
+    app.end_job(read.job, &note);
+    ai::account_used(app, read.account);
 }
 
 // ----------------------------------------------------------------------------
@@ -290,21 +774,71 @@ fn inside(root: &Path, path: &Path) -> bool {
     }
 }
 
+// ----------------------------------------------------------------------------
+/// The model's answer as page text: trimmed, without a code fence around
+/// it (which some models add despite being told not to).
+fn clean_ocr(text: &str) -> String {
+    let text = text.trim();
+    let unfenced = text.strip_prefix("```").and_then(|rest| {
+        let (info, body) = rest.split_once('\n')?;
+        // Only an info string (`markdown`), not a fenced block that starts
+        // the page and ends before its end.
+        if info.contains('`') || info.trim().contains(' ') {
+            return None;
+        }
+        body.trim_end().strip_suffix("```")
+    });
+    unfenced.unwrap_or(text).trim().to_string()
+}
+
+// ----------------------------------------------------------------------------
+/// The words of `text`: the runs between whitespace that have a letter or a
+/// digit (markdown's `#`, `-` and `|` don't count).
+fn word_count(text: &str) -> usize {
+    text.split_whitespace()
+        .filter(|word| word.chars().any(char::is_alphanumeric))
+        .count()
+}
+
+// ----------------------------------------------------------------------------
+/// A title proposed for a page: its first heading, else its first line,
+/// as plain text (`plain_title`).
+fn title_of(text: &str) -> String {
+    let mut lines = text.lines().map(str::trim).filter(|line| !line.is_empty());
+    let heading = lines.clone().find(|line| line.starts_with('#'));
+    let line = heading.or_else(|| lines.next()).unwrap_or_default();
+    // A table row's cells, as words.
+    let line: Vec<&str> = line
+        .split(['|', ' ', '\t'])
+        .filter(|w| !w.is_empty())
+        .collect();
+    plain_title(&line.join(" "), TITLE_LEN)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testing::Harness;
+    use crate::testing::{FakeOllama, parse, shape};
     use serde_json::Value;
     use std::fs;
+    use std::sync::{Arc, Mutex};
 
     const WATCH_ID: &str = "01a0e1cc-a24c-7490-82fe-e75669985b40";
     const IMPORTED_ID: &str = "01a0e1cc-a24c-7490-82fe-e75669985b41";
+    const OLLAMA_ID: &str = "01a0e1cc-a24c-7490-82fe-e75669985b42";
 
     // ------------------------------------------------------------------------
     /// A harness whose vault has an images watch on the folder `scans`
     /// beside it, which holds `a.jpg`, `b.jpg` and `c.jpg`; `c.jpg` is in the
     /// vault already. And that folder.
     fn with_scans(name: &str) -> (Harness, PathBuf) {
+        with_scans_and(name, &[])
+    }
+
+    // ------------------------------------------------------------------------
+    /// `with_scans`, with the vault files `more` too (an AI account).
+    fn with_scans_and(name: &str, more: &[(&str, String)]) -> (Harness, PathBuf) {
         let mut h = Harness::new(name);
         let root = h.vault();
         let folder = root.with_file_name("scans");
@@ -313,7 +847,7 @@ mod tests {
             fs::write(folder.join(file), file).unwrap();
         }
         let watch = format!(
-            "id: {WATCH_ID}\nfolder-watch:\n  type: images\n  folder: '{}'\n  patterns: ['*.jpg']\n",
+            "id: {WATCH_ID}\nfolder-watch:\n  type: images\n  folder: '{}'\n  patterns: ['*.jpg']\n  models:\n    read:\n      account: {OLLAMA_ID}\n      model: m\n",
             folder.display()
         );
         let imported = format!(
@@ -323,7 +857,7 @@ mod tests {
             (".avelor/watches/watch_images.yaml", watch),
             ("Scans/old.md", imported),
         ];
-        for (path, text) in files {
+        for (path, text) in files.into_iter().chain(more.iter().cloned()) {
             let path = root.join(path);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, text).unwrap();
@@ -335,25 +869,93 @@ mod tests {
     }
 
     // ------------------------------------------------------------------------
+    /// Keep `text` as what the file `name` of `folder` read to.
+    fn read_page(h: &mut Harness, folder: &Path, name: &str, text: &str) {
+        let file = FolderFile::read(folder, name).unwrap();
+        let ocr = Ocr {
+            stamp: Stamp::of(&file),
+            words: word_count(text),
+            title: title_of(text),
+        };
+        h.app.scans.cache.insert(file.path, ocr);
+    }
+
+    // ------------------------------------------------------------------------
     #[test]
-    fn the_listing_tells_what_is_in_the_vault() {
-        let (mut h, _folder) = with_scans("scan-list");
+    fn the_listing_tells_what_is_read_and_what_is_in_the_vault() {
+        let (mut h, folder) = with_scans("scan-list");
+        read_page(&mut h, &folder, "a.jpg", "# A");
         let sent = h.call_waiting("scan_list", json!({ "watch": WATCH_ID }));
         let listing = &sent.last().unwrap()["ok"];
         let files = listing["files"].as_array().unwrap();
         let names: Vec<&str> = files.iter().map(|f| f["file"].as_str().unwrap()).collect();
         assert_eq!(names, ["a.jpg", "b.jpg", "c.jpg"]);
-        assert_eq!(files[0]["in_vault"], Value::Null);
+        assert_eq!(files[0]["read"]["title"], "A");
+        assert_eq!(
+            (&files[0]["in_vault"], &files[1]["read"]),
+            (&Value::Null, &Value::Null)
+        );
         assert_eq!(files[2]["in_vault"], IMPORTED_ID);
+        assert_eq!(listing["job"], Value::Null, "nothing is being read");
     }
 
     // ------------------------------------------------------------------------
     #[test]
-    fn requests_for_unknown_watches_and_files_are_refused() {
+    fn a_read_stops_before_its_next_page_at_the_spend_limit() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let address = FakeOllama::new(&["m"])
+            .replying(&["# A"])
+            .recording(&requests)
+            .start();
+        let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+        let (mut h, _) = with_scans_and("scan-limit", &[(".avelor/accounts/ollama.yaml", account)]);
+        let args = json!({ "watch": WATCH_ID, "files": ["a.jpg", "b.jpg"] });
+        let request = json!({ "id": 1, "cmd": "scan_read", "args": args });
+        h.app.on_web_message(request.to_string());
+        // The first page is on its way; then the limit is reached.
+        let id = Id::parse(OLLAMA_ID).unwrap();
+        h.app.ai.update(id, |s| s.spend_limit = Some(0.0)).unwrap();
+        let ended = |t: &String| t.contains(r#""state":"done""#);
+        let sent = parse(&h.wait_for(|sent| sent.iter().any(ended)));
+
+        let last_of = |file: &str| {
+            let mut pages = sent.iter().filter(|m| m["ev"] == "scan_page");
+            pages.rfind(|m| m["data"]["file"] == file).unwrap()["data"]["status"].clone()
+        };
+        assert_eq!(last_of("a.jpg"), "read");
+        assert_eq!(last_of("b.jpg"), "stopped");
+        let requests = requests.lock().unwrap().clone();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["options"]["num_ctx"], ai::CONTEXT_TOKENS);
+        let notice = sent.iter().find(|m| m["ev"] == "notice").unwrap();
+        let message = notice["data"]["message"].as_str().unwrap();
+        assert!(
+            message.starts_with("Ollama has reached its spend limit"),
+            "{message}"
+        );
+        let job = sent.iter().rfind(|m| m["ev"] == "job").unwrap();
+        assert_eq!(
+            job["data"]["note"],
+            "1 read \u{b7} 1 stopped \u{b7} spend limit reached"
+        );
+        assert!(h.app.scans.read.is_none());
+
+        // The next read is refused before it starts.
+        let sent = h.call(
+            "scan_read",
+            json!({ "watch": WATCH_ID, "files": ["b.jpg"] }),
+        );
+        assert_eq!(sent[0]["err"]["code"], "spend_limit");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn requests_for_unknown_watches_accounts_and_files_are_refused() {
         let (mut h, folder) = with_scans("scan-refused");
         let unknown = Id::generate();
         let requests = [
             ("scan_list", json!({ "watch": unknown })),
+            ("scan_read", json!({ "watch": unknown, "files": [] })),
             ("scan_previews", json!({ "watch": unknown, "files": [] })),
             ("scan_open", json!({ "watch": unknown, "file": "a.jpg" })),
         ];
@@ -361,6 +963,19 @@ mod tests {
             let sent = h.call(cmd, args);
             assert_eq!(sent[0]["err"]["code"], "not_found", "{cmd}");
         }
+
+        // The account of the watch's OCR model is gone.
+        let sent = h.call(
+            "scan_read",
+            json!({ "watch": WATCH_ID, "files": ["a.jpg"] }),
+        );
+        assert_eq!(shape(&sent), ["reply"], "nothing queued");
+        assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+        assert_eq!(
+            sent[0]["err"]["message"],
+            "For OCR, the picked model\u{2019}s account is gone; pick another model."
+        );
+        assert!(h.app.scans.read.is_none());
 
         fs::write(folder.with_file_name("outside.jpg"), "x").unwrap();
         let outside = Path::new("..").join("outside.jpg");
@@ -371,6 +986,77 @@ mod tests {
             json!({ "watch": WATCH_ID, "file": "gone.jpg" }),
         );
         assert_eq!(sent[0]["err"]["code"], "invalid_path");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn answers_lose_a_fence_around_them() {
+        assert_eq!(clean_ocr("  # Bill\n\nText\n "), "# Bill\n\nText");
+        assert_eq!(
+            clean_ocr("```markdown\n# Bill\n\nText\n```\n"),
+            "# Bill\n\nText"
+        );
+        assert_eq!(clean_ocr("```\nText\n```"), "Text");
+        let code = "```\nfn a()\n```\nAfter the code.";
+        assert_eq!(clean_ocr(code), code, "a fenced block at the start stays");
+        assert_eq!(clean_ocr(" \n"), "");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn titles_come_from_the_first_heading_or_line() {
+        let letter = "Stadtwerke Springfield\nMain Street 1\n\n## Rechnung Nr. 4711\n\nText";
+        assert_eq!(title_of(letter), "Rechnung Nr. 4711");
+        assert_eq!(title_of("\n**Dear Mr. Yahnek,**\nText"), "Dear Mr. Yahnek,");
+        assert_eq!(title_of("| Date | Amount |\n|---|---|"), "Date Amount");
+        let long = format!("# {}", "word ".repeat(30));
+        assert!(title_of(&long).chars().count() <= TITLE_LEN + 1);
+        assert_eq!(title_of(""), "");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn words_are_runs_with_a_letter_or_digit() {
+        assert_eq!(word_count("# Bill\n\n- 3 x 4,50 EUR\n| a | b |"), 7);
+        assert_eq!(word_count(""), 0);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn statuses_and_summaries_read_well() {
+        fn json(status: PageStatus) -> String {
+            serde_json::to_string(&status).unwrap()
+        }
+        assert_eq!(json(PageStatus::Queued), r#"{"status":"queued"}"#);
+        let watch = Id::generate();
+        let status = PageStatus::Failed { error: "Gone" };
+        let event = PageEvent {
+            watch,
+            file: "a.jpg",
+            status: &status,
+        };
+        assert_eq!(
+            serde_json::to_value(event).unwrap(),
+            json!({ "watch": watch, "file": "a.jpg", "status": "failed", "error": "Gone" })
+        );
+        assert_eq!(
+            json(PageStatus::Read {
+                words: 3,
+                title: "Bill"
+            }),
+            r#"{"status":"read","words":3,"title":"Bill"}"#
+        );
+        let mut counts = ReadCounts {
+            read: 2,
+            failed: 0,
+            stopped: 1,
+            limit: false,
+        };
+        assert_eq!(counts.summary(), "2 read · 1 stopped");
+        counts.limit = true;
+        assert_eq!(counts.summary(), "2 read · 1 stopped · spend limit reached");
+        assert_eq!(ReadCounts::default().summary(), "nothing to read");
+        assert!(is_image("scan.JPG") && is_image("p1.webp") && !is_image("a.pdf"));
     }
 
     // ------------------------------------------------------------------------

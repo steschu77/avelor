@@ -250,7 +250,8 @@ pub struct App {
     /// The close asked of the page (`close`).
     pub close: CloseState,
 
-    /// Import scans (`scans`).
+    /// Import scans (`scans`): the files read so far, and the read in
+    /// progress.
     pub scans: ScanState,
 
     /// The assistant's replies being written, and the failed ones
@@ -407,7 +408,7 @@ impl App {
 
     // ------------------------------------------------------------------------
     /// The `Progress` that queues `on_progress` on the UI thread.
-    fn progress<P: Send + 'static>(
+    pub(crate) fn progress<P: Send + 'static>(
         &self,
         on_progress: impl FnMut(&mut App, P) + Send + 'static,
     ) -> Progress<P> {

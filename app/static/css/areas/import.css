@@ -35,7 +35,7 @@
 }
 
 .scans__file {
-  --cols: minmax(0, 1fr) 150px 80px;
+  --cols: minmax(0, 1fr) 150px 80px 140px;
   min-height: var(--h-row);
   padding: 0 8px;
   cursor: pointer;
@@ -57,8 +57,25 @@
   cursor: default;
 }
 
+.scans__status {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.scans__read {
+  justify-self: end;
+}
+
 .scans__empty {
   padding: 12px 0;
+}
+
+.scans__foot {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
 }
 
 .import__file {

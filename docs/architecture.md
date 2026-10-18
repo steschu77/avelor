@@ -188,7 +188,8 @@ still runs, and so does progress queued before the abort.
 
 `Progress::send_latest` (`app.rs`) replaces a not-yet-delivered update
 of the same stream, so at most one `ai_delta` per run of the UI queue. The
-reply's worker uses it; previews keep `send`, where every item counts.
+reply's worker and the scan read's word count use it; previews keep
+`send`, where every item counts.
 
 ### One way in <a id="one-way-in"></a>
 
@@ -394,7 +395,7 @@ side never touches the vault side; `app` is the only bridge.
 | `enrich.rs` | the mail analysis (`mail.md#analysis`): the vault's `context`, the request per level, its parser and its writes (pure: `request_for`, `parse`, `apply_lite`, `medium_messages`), the analysis job one mail at a time (`analyse`, `EnrichState`); its tests against a fake Ollama |
 | `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests |
 | `watches.rs`, `folders.rs` | watch files in `.avelor/watches/`, the `Watches` sub-state, globbing, listing; the watch commands, the events `watches` / `watch` / `watch_removed`, their dispatch tests |
-| `scans.rs` | Import scans: `scan_list`, `scan_previews`, `scan_open`, the event `scan_preview`; their dispatch tests |
+| `scans.rs` | Import scans: `scan_list`, `scan_read`, `scan_previews`, `scan_open`, the events `scan_page` / `scan_preview`, OCR as a job (the account and model resolved, the spend limit checked per page); their dispatch tests |
 
 ## Platforms <a id="platforms"></a>
 
@@ -691,8 +692,8 @@ abort. Where the bundle lands and how to measure the size:
   save conflict into `Error::ChangedOutside { path }` through
   `Vault::require_written` (`saving.md#limits`). A function whose failure
   is a reason the user reads, not an error a caller matches on, returns
-  those words as a `String` (an answer of the mail analysis that wasn't
-  JSON); one that answers a
+  those words as a `String` (a page of Import scans that read no text,
+  an answer of the mail analysis that wasn't JSON); one that answers a
   request with a code and the host's words returns both
   (`ai_accounts::Refusal`).
 - **Entity ops are generic**: a vault or host op is built on a property
