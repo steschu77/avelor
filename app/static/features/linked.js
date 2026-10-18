@@ -38,7 +38,7 @@ const scheduleLinkedLists = oncePerFrame(() => {
 });
 store.subscribe([
   state => state.entities_rev, state => state.threads_rev, state => state.selected_project,
-  state => state.selected_labels,
+  state => state.selected_source, state => state.selected_labels,
 ], scheduleLinkedLists);
 
 // Whether the entity or thread `id` can be written: its link set.
@@ -121,8 +121,8 @@ function renderLinkedResults() {
   els.results.replaceChildren(...(rows.length ? rows : [accEl('div', 'meta linked__none', 'No match in the current filter')]));
 }
 
-// The entities and threads in the vault panel's filter (project, labels:
-// `matchesFilter`; a thread while one of its members is) whose
+// The entities and threads in the vault panel's filter (project, source,
+// labels: `matchesFilter`; a thread while one of its members is) whose
 // title holds `query` (any case), newest first, at most LINKED_RESULTS --
 // but `target` and what it links to.
 function linkedResults(target, query) {

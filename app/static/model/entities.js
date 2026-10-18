@@ -77,15 +77,16 @@ export function projectScope({ selected_project } = store.getState()) {
 
 // ----------------------------------------------------------------------------
 // The vault panel's filter: `doc` is in `selected_project` (if one is set;
-// in none for `NO_PROJECT`), and carries every one of `selected_labels`.
-// The lenses show only matching entities; thread membership is never
-// filtered.
-export function matchesFilter(doc, { selected_project, selected_labels } = store.getState()) {
+// in none for `NO_PROJECT`), came from `selected_source` (if one is set),
+// and carries every one of `selected_labels`. The lenses show only matching
+// entities; thread membership is never filtered.
+export function matchesFilter(doc, { selected_project, selected_source, selected_labels } = store.getState()) {
   if (selected_project === NO_PROJECT) {
     if (projectsOf(doc).length) return false;
   } else if (selected_project && !doc.projects?.includes(selected_project)) {
     return false;
   }
+  if (selected_source && sourceKeyOf(doc) !== selected_source) return false;
   return selected_labels.every(tag => doc.tags?.includes(tag));
 }
 
@@ -156,6 +157,25 @@ export function projectsFor(target) {
 // bare string, or as null when an entity has none.
 function sourceKind(source) {
   return typeof source === 'string' ? source : Object.keys(source ?? {})[0];
+}
+
+// ----------------------------------------------------------------------------
+// The source `doc` came from, as the sidebar keys it: `created` for an
+// entity made in the app; as `accountSources` keys them, mail
+// by their account, events by their calendar entity, whose remote block
+// names the Google calendar (`calendar-id`, vault.md#remote).
+export function sourceKeyOf(doc) {
+  if (sourceKind(doc.source) === 'created') return 'created';
+  const account = doc.source?.remote?.account;
+  if (doc.kind === 'email' && account) return `${account}\nemail`;
+  if (doc.kind === 'event') {
+    const calendar = entities.get(doc.event?.calendar);
+    const calendarAccount = calendar?.source?.remote?.account;
+    const calendarId = calendar?.source?.remote?.remote
+      ?.find(property => property?.['calendar-id'])?.['calendar-id'];
+    if (calendarAccount && calendarId) return `${calendarAccount}\ncalendar\n${calendarId}`;
+  }
+  return null;
 }
 
 // ----------------------------------------------------------------------------

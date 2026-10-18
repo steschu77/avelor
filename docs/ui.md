@@ -32,11 +32,11 @@ or a click on a filter closes it (`closeVaultArea`). Menus are popups
 
 ## Vault panel <a id="vault-panel"></a>
 
-The vault panel defines the view on the vault: a project filters
-what the lens shows, and so do the labels picked in the lens head.
+The vault panel defines the view on the vault: a project and a source
+filter what the lens shows, and so do the labels picked in the lens head.
 Filtering is entirely on the page: all metadata
 arrives with the scan (`renderSidebar`, `features/sidebar.js`;
-`matchesFilter`, `model/entities.js`). The counts per project are derived on
+`matchesFilter`, `model/entities.js`). The counts per project and source are derived on
 the page, once per frame (`panel.md#host-pushes`).
 
 - **Projects**: "All Projects" clears the filter; "No project" shows the
@@ -45,6 +45,10 @@ the page, once per frame (`panel.md#host-pushes`).
   folded under an "Archived" row at the end, still selectable
   (`projectsInOrder`). Creating and editing projects, and dropping rows on
   them, is `panel.md#projects`.
+- **Sources**: "Created Here" (with a "+" that opens New); per
+  connected Google account a Mail source (unless its access is off), one
+  source per checked calendar. A source
+  counts and filters the entities that came through it (`sourceKeyOf`).
 - **Workspace**: Accounts, Trash.
 
 **Labels** filter from the lens head, for every lens: after the project's
@@ -255,7 +259,7 @@ The host switches off the browser's accelerator keys so they reach the page
 
 ## New
 
-The New item and Ctrl+N open a menu of types
+The New item, the "+" of "Created Here" and Ctrl+N open a menu of types
 (`showNewMenu`, `features/new.js`): a document, task, event, contact, list or
 record. The choice opens the New page in the expanded vault area
 (`openNew`, op `new`); its projects start with the selected one, and its
@@ -301,7 +305,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
 | B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
-| D7 | New | New item or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
+| D7 | New | New item, the "+" of "Created Here" or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
 | F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Recent files or Recent chats → `selectDocument` | — | the entity in the panel, its rows marked on the dashboard |
 | F4 | Dashboard layout | a card's ×, the Cards menu, Show all cards, a card's head dropped on another, Reset layout; the Week card's gear | `set_prefs {prefs}` (`dashboard_cards`, `dashboard_closed`, `week_start`) | the cards in their order, the closed ones hidden and counted on the Cards button; kept across restarts |

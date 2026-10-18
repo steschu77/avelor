@@ -1,6 +1,6 @@
-// New: a menu of the types the app makes -- at the sidebar's New item, or
-// Ctrl+N -- then the New page of the type picked, rendered into the expanded vault area while
-// its op is "new"; and the Task tab of the panel's context column, a new
+// New: a menu of the types the app makes -- at the sidebar's New item,
+// the + of "Created Here", or Ctrl+N -- then the New page of the type
+// picked, rendered into the expanded vault area while its op is "new"; and the Task tab of the panel's context column, a new
 // task for what the panel shows (a card's Task button opens it). Create
 // sends `create_entity` (api.md#structure): the host writes the
 // file into its type's folder and pushes the entity. The fields follow the

@@ -316,7 +316,7 @@ other side is derived.
   focused:
   "Links to", "Linked from" (chats and transactions included), and a
   search over the titles of the entities and threads in the vault panel's
-  filter (project, labels; `matchesFilter`), so narrowing the
+  filter (project, source, labels; `matchesFilter`), so narrowing the
   filter narrows what is offered. Picking a result (a click or Enter)
   links the card to it, replacing an older link. With only a thread shown,
   the tab is about the thread.
