@@ -4,6 +4,7 @@
 use super::{Changes, Index, SaveOutcome};
 use crate::change::Change;
 use crate::document::Document;
+use crate::envelope::Conversation;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -116,5 +117,17 @@ impl Index {
                 (*id, outcome)
             })
             .collect()
+    }
+
+    /// Replace the `conversation` block of `id`, which may be any entity;
+    /// `None` drops the role ([`Document::set_conversation`]).
+    pub fn set_conversation(
+        &mut self,
+        id: &Id,
+        conversation: Option<Conversation>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        self.update(id, changes, |d| d.set_conversation(conversation))
     }
 }
