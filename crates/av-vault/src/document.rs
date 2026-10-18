@@ -5,6 +5,7 @@
 //! keys are preserved verbatim in `extra` so round-tripping a document
 //! through the app never loses user data.
 
+use crate::envelope::Conversation;
 use crate::envelope::Message;
 use crate::envelope::Task;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
@@ -398,6 +399,13 @@ impl Document {
         if message.is_empty() {
             roles.message = None;
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's `conversation` block (vault.md#conversation);
+    /// `None` drops the role.
+    pub fn set_conversation(&mut self, conversation: Option<Conversation>) {
+        self.envelope_mut().roles.conversation = conversation;
     }
 
     // ------------------------------------------------------------------------

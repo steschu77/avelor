@@ -216,7 +216,7 @@ temporary vault and its events and reply asserted (`testing.rs`:
 |---|---|---|
 | av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), base64, DPAPI `secret`, logger, random (BCrypt), url, text normalization, atomic writes (`fs`), cross-thread `Cancel` | |
 | av-http | blocking `Client` / `Request` / `Response`; the process's one session (`Client::shared`); `Request::send_logged`, the one way the APIs are called: logged as `METHOD host/path`, timed, a non-2xx status as `Error::Http` with the reason the caller's parser reads from the body | WinHTTP; libsoup 3 on Linux, one session per worker thread; WinHTTP's IPv6 fast fallback on (a network whose IPv6 goes nowhere cost 21 s per new connection); a streamed read takes what has arrived (`WinHttpQueryDataAvailable`) |
-| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes`, the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the scan (`scan`, events applied by `Index::apply`), filenames, `to_html` | no network, no UI |
+| av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes`, the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the scan (`scan`, events applied by `Index::apply`), filenames, `to_html`, `plain_title`, conversation trees | no network, no UI |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-llm | `Client` over Anthropic, OpenAI (Responses API, not Chat Completions), Mistral, Gemini, Ollama; the providers' facts in one table (`ProviderSpec`, `PROVIDERS`: names, alias, default URL, key, uploads, auth) and one request builder from it (`Client::request`); streaming (SSE/NDJSON); normalized `Usage`, price table; the providers' error bodies | sends through `send_logged`; dispatch by macro, no trait |
 
@@ -241,6 +241,10 @@ temporary vault and its events and reply asserted (`testing.rs`:
       err: Result<()>,
   }
   ```
+
+- **`conversation`**: an `impl Conversation` with `path_to`, `leaf_from`,
+  `add`, `activate` and `ConversationMessage::is_reply`, the tree rules the
+  assistant follows.
 
 ## Host modules
 
@@ -525,8 +529,11 @@ abort. Where the bundle lands and how to measure the size:
   `rename_project`), even when the UI offers it for one kind. An empty
   value removes the key (an untitled entity is valid) instead of being
   refused.
-- **Reuse before writing**: `DateTime::from_system_time`. A new shared
-  helper replaces every existing copy of its pattern in the same change.
+- **Reuse before writing**: `av_vault::markdown::plain_title`,
+  `DateTime::from_system_time`, `OneOrMany::{as_slice, from_vec}`; on the
+  page the pieces named in `architecture.md#page` and `architecture.md#css`.
+  A new shared helper replaces every existing copy of its pattern in the
+  same change.
 - **Formatting**: Rust code is rustfmt-formatted; `cargo fmt --all` is
   fine on any file at any time.
 

@@ -1,4 +1,5 @@
-//! Markdown -> HTML rendering for the WYSIWYG editor.
+//! Markdown -> HTML rendering for the WYSIWYG editor, and a markdown line
+//! as a plain title ([`plain_title`]).
 //!
 //! [`to_html`] renders a markdown body into the exact DOM shape that
 //! `app/static/editor/editor.js` edits — no whitespace between blocks, bare
@@ -298,6 +299,41 @@ fn escape_into(out: &mut String, text: &str) {
 }
 
 // ----------------------------------------------------------------------------
+/// A title made of the markdown line `line` (a chat's first line): without
+/// its block marker (`#`, `>`, `-`, `1.`, …) and inline marks, cut at a word
+/// to at most `max` characters and an ellipsis.
+pub fn plain_title(line: &str, max: usize) -> String {
+    let line = line
+        .trim()
+        .trim_start_matches(|c: char| "#>*-+ ".contains(c));
+    let line = match line.split_once(". ") {
+        Some((number, rest))
+            if !number.is_empty() && number.chars().all(|c| c.is_ascii_digit()) =>
+        {
+            rest
+        }
+        _ => line,
+    };
+    let line: String = line
+        .chars()
+        .filter(|c| !matches!(c, '*' | '_' | '`'))
+        .collect();
+    let line = line.trim();
+    if line.chars().count() <= max {
+        return line.to_string();
+    }
+    let cut: String = line.chars().take(max).collect();
+    let cut = match cut.rfind(' ') {
+        Some(space) if space > max / 2 => &cut[..space],
+        _ => &cut,
+    };
+    format!(
+        "{}\u{2026}",
+        cut.trim_end_matches([' ', ',', '.', ';', ':'])
+    )
+}
+
+// ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -543,6 +579,25 @@ mod tests {
         assert_eq!(
             to_html("well-known, 5 > 3, a#b"),
             "<p>well-known, 5 &gt; 3, a#b</p>"
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_plain_title_drops_the_marks_and_is_cut_at_a_word() {
+        assert_eq!(
+            plain_title("## The *quarterly* report", 40),
+            "The quarterly report"
+        );
+        assert_eq!(plain_title("> - 1. `Step` one", 40), "Step one");
+        assert_eq!(plain_title("3.5 kg of flour", 40), "3.5 kg of flour");
+        assert_eq!(
+            plain_title("The quick brown fox jumps over the lazy dog", 20),
+            "The quick brown fox\u{2026}"
+        );
+        assert_eq!(
+            plain_title("Supercalifragilistic", 10),
+            "Supercalif\u{2026}"
         );
     }
 }
