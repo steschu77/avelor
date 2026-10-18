@@ -5,7 +5,8 @@
 // nothing. One button is armed at a time, page-wide. A page rebuilt on
 // every change names the button by `key`: the one rebuilt with the armed
 // button's key comes back armed. The card's delete and the project
-// header's, the trash's, the Workspace pages' Disconnect and Remove.
+// header's, the trash's, the Workspace pages' Disconnect and Remove, Fetch
+// mail replacing bodies.
 
 let armed = null; // { key, button, restore, timer } of the armed button
 

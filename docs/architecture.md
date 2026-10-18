@@ -59,6 +59,7 @@ read by OCR.
 | `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
 | `accounts.md` | Google and AI accounts: files, secrets, states, the Accounts page, AI uses and the spend limit |
+| `mail.md` | Fetch mail |
 | `assistant.md` | the assistant: conversations, context, streaming |
 
 ## Doc conventions
@@ -78,7 +79,7 @@ read by OCR.
   `app/static/`, crate files under `crates/<crate>/src/` (written
   `av-vault/vault.rs:201`).
 - **Flows** have ids by area (A vault, B navigation, C projects, D
-  documents and cards, E threads, F lenses, H Google
+  documents and cards, E threads, F lenses, G sync sources, H Google
   accounts, I AI accounts, L assistant): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
@@ -123,14 +124,14 @@ The rules the code follows, and every change to it:
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
 | UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the vault scan's batches into the index; every vault write | — |
-| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the vault scan's walk and reads (`vault_scan.rs`); HTTP (Google, LLMs), the OAuth wait, LLM streams; the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
+| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the vault scan's walk and reads (`vault_scan.rs`); HTTP (Google, LLMs), the OAuth wait, LLM streams; mail header pages fan out to 8 scoped threads (`mail::fetch_headers`); the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
 | WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
 
 ### The run family
 
 Three variants: plain (`run`), with ordered progress callbacks
 (`run_with_progress`), and superseding per channel (`run_superseding`;
-channels `connect_ai`); continuations are `FnOnce(&mut App, T)`. One OS thread per task is right without an async runtime:
+channels `connect_ai`, `mail-preview`); continuations are `FnOnce(&mut App, T)`. One OS thread per task is right without an async runtime:
 the OAuth wait and AI streams block for minutes. `Task(Cancel)` aborts (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
 dropping a `Task` leaves its work running. A sign-in runs under a
 `Cancel` of its own, the pending connect's (`App::begin_connect`), from
@@ -179,8 +180,13 @@ dialog waits in its modal loop.
 
 ### Jobs <a id="jobs"></a>
 
-`App::start_job` / `update_job` / `end_job` (`jobs.rs`): a
-card per job in the jobs panel (the `job` event, `ui.md#jobs-panel`). A vault switch stops the
+`App::start_job` / `update_job` / `end_job` / `run_job` (`jobs.rs`): a
+card per job in the jobs panel (the `job` event, `ui.md#jobs-panel`),
+its requests under one `Cancel`, Stop through `cancel_job {id}`. A stopped
+job's `apply` still runs. Feature slots that hold snapshots for
+`apply` (`mail.fetch`) stay in their sub-states. A
+failure of one item (a mail) is a `notice` plus the job's
+summary. A vault switch stops the jobs bound to the vault and the
 assistant's replies, and opens the new vault once they have ended
 (`switch_vault_when_stopped`). A new long operation becomes a job through
 this helper, not a slot with callbacks of its own.
@@ -206,8 +212,9 @@ pub fn set_title(app: &mut App, req: Req, id: Id, title: String) {
 }
 ```
 
-av-vault's `Changes` names what an edit wrote and trashed, so the same
-push sends `entity` and `entity_deleted` (`post_entity` serves scanned entries and edits alike). The
+av-vault's `Changes` names what an edit wrote, trashed, and whose body it
+changed, so the same push sends `entity`, `entity_deleted` and `content`
+(`post_entity` serves scanned entries and edits alike). The
 editor's own save (`Vault::save_content`, answered by `save_doc_content`)
 and taking in a change made outside the app (`Vault::reload`,
 `Vault::refresh`) aren't edits by the app and stay apart. `Vault` (`app.rs`), the open
@@ -258,6 +265,15 @@ side never touches the vault side; `app` is the only bridge.
 
 ### av-vault's core
 
+- **`schema`**: the remote keys and folder names as constants, next to the
+  roles they describe; the app imports them (`vault.md#remote`,
+  `vault.md#vault-layout`).
+
+  ```rust
+  pub mod remote { pub const GMAIL_ID: &str = "gmail-id"; pub const MESSAGE_ID: &str = "message-id"; }
+  pub mod layout { pub const PROJECTS: &str = "Projects"; pub const MAIL: &str = "Mail"; /* the folders New writes to, Conversations, .trash, .avelor/accounts */ }
+  ```
+
 - **One copy of the truth in `Document`**: the envelope holds the metadata,
   read through accessors and changed through setters. `envelope` is an
   `Option` — a markdown file without frontmatter stays without one until
@@ -301,19 +317,20 @@ side never touches the vault side; `app` is the only bridge.
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
-| `jobs.rs` | the jobs helper: start, update and end a job (the `job` event), the vault switch |
+| `jobs.rs` | the jobs helper: start, update, stop and end a job (the `job` event), `run_job`, `cancel_job`, the vault switch that waits for the old vault's jobs; a job's summary note (`count_summary`); its tests |
 | `api.rs` | `ready`, vault open (with its accounts and settings), switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 | `accounts.rs` | both kinds of account: the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
-| `google_accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect) |
+| `google_accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account |
 | `config_files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai_context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file, within a budget; its tests |
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked item; `create`, a new AI conversation; dispatch tests against a fake Ollama |
 | `ai_accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
+| `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); their tests |
 
 ## Platforms <a id="platforms"></a>
 
@@ -414,8 +431,9 @@ nothing imports `app.js`.
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`); its way to the Accounts page is the `accounts.open` action |
 | `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts, Google and AI; the trash |
+| `features/import/mail.js` | Fetch mail |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
-| `features/jobs.js` | job cards from the `job` event |
+| `features/jobs.js` | job cards from the `job` event, with Stop |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |
 | `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
 | `features/workspace/vault.js` | `switchVault`, `revealVault` |
@@ -425,11 +443,14 @@ nothing imports `app.js`.
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
 | `icons/` | the icons, Fluent UI System Icons (MIT, `icons/LICENSE`), each a file as it comes, joined into the page's sprite by `build.rs` |
 
-A page is drawn by what it must keep while it changes:
+A page is drawn in one of three ways, by what it must keep while it
+changes:
 
 - **Rebuilt whole**, the focused input found again by its
   `data-focus-key` (`replaceVaultPage`): the pages of the vault area,
   forms that change as a whole and are small.
+- **Built once and patched**: the panel and Fetch mail, whose editors,
+  scroll position and inputs must survive a change.
 - **Reconciled by key** (`placeChildren`): the lenses and the sidebar,
   long lists whose rows keep their hover, focus and drop state.
 
@@ -456,7 +477,8 @@ s.projects_rev], …)`), called when any of them changed.
 
 A render never sends a change to the host. It may ask once for data it
 shows and the page doesn't hold, guarded by a cache that marks it as
-loading: an account's models (`features/workspace/accounts.js`).
+loading: an account's calendars and models (`features/workspace/accounts.js`),
+an account's mail labels (`features/import/mail.js`).
 
 ### Actions <a id="actions"></a>
 
@@ -482,7 +504,7 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
 | `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `check`, `input`, `menu`, `tile`, `list-row`, `section-head`, the forms, `pane-head`, the dialogs, the vault area's `page`, the list + detail page (`ui/page.js`), … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, timeline, calendar, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), header (the lens header, the titles edited in place) |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, timeline, calendar, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), import (Fetch mail), header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 
@@ -498,8 +520,11 @@ Conventions the page keeps:
   defined goes unused (`development.md#measuring-size`).
 - **Layers** (the Recede design): the chrome sits on `--c-shade`, lists on
   `--c-paper`, the active content on `--c-card` with `--shadow-raise` /
-  `--shadow-card`. New
-  UI follows these layers.
+  `--shadow-card`. New UI follows these layers.
+- **Build from what exists** before adding a class: the utilities `push`,
+  `stack`, `truncate-start`; `.page-head`, `.select-bar`; typography that
+  must match a role joins that role's selector list. The global `[hidden]`
+  rule and button reset aren't repeated per block.
 - **Specificity**: a block rule that sets the same property as a component
   overrides it, so a block class and a component are combined only when
   their properties don't overlap. A bare `.is-x` loses to any later block
@@ -564,6 +589,19 @@ abort. Where the bundle lands and how to measure the size:
 
 ## Conventions <a id="conventions"></a>
 
+- **Every import or sync has the same shape**: *plan* on the UI thread from
+  the vault (what is there, what to ask for) → *run* on a worker (remote
+  I/O, no vault access) → *apply* on the UI thread through the vault edit
+  (`App::edit`). The
+  mail fetch (`plan_fetch`, the downloads, `fetch_action`) works this way. The mapping between remote data and
+  entities is a pure function with tests (`email_entity`).
+
+  ```mermaid
+  flowchart LR
+      plan["plan<br/>UI thread, reads the vault"] --> run["run<br/>worker, remote I/O only"] --> apply["apply<br/>UI thread, App::edit"]
+      apply --> events["entity / content / job events"]
+  ```
+
 - **AI use** names the model its feature picked (a `ModelChoice`, kept
   with the feature's settings); the host reads the pick there and checks
   it with `AiAccounts::choose`, and never puts another model in its place
@@ -581,6 +619,7 @@ abort. Where the bundle lands and how to measure the size:
 - **Google access** is Off / Read / Full per service, and nothing else
   (`accounts.md#access-levels`).
 - **Reuse before writing**: `av_vault::markdown::plain_title`,
+  `jobs::count_summary`,
   `DateTime::from_system_time`, `OneOrMany::{as_slice, from_vec}`; on the
   page the pieces named in `architecture.md#page` and `architecture.md#css`.
   A new shared helper replaces every existing copy of its pattern in the
@@ -596,5 +635,6 @@ abort. Where the bundle lands and how to measure the size:
 | av-http | transport, cancellation | know any API |
 | av-vault | the vault's schema, files, index, rules, conversions | do network or UI; start threads (the app decides where scan work runs) |
 | av-google / av-llm | their remote APIs, pricing logic | touch the vault or the page's presets |
+| `app` feature modules | orchestration: plan → run → apply, accounts files | parse messages, render, reach into other features |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
 | page | rendering, user input, the page's copy of the data | resolve filenames, conflicts or structural rules |

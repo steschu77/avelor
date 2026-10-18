@@ -6,7 +6,11 @@
 ## Checks <a id="checks"></a>
 
 - `cargo test --workspace` runs the unit tests and every feature module's
-  dispatch tests (`testing.rs`: `Harness`, `call`).
+  dispatch tests (`testing.rs`: `Harness` over a temporary vault, `call` and
+  the collected events and notes, `with_google` for a vault with a Google
+  account, `FakeOllama` for the assistant; `architecture.md#vault-edits`).
+  The vault scan reads on a worker: a test that opens or switches a vault
+  runs the queue with `wait_scanned`, which waits for the scan's end.
   av-vault's `forged_vault_loads_with_multi_roles` scans `data/forged`, so
   every file there must load.
 - The build bundles the page's modules and checks them

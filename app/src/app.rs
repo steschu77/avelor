@@ -15,6 +15,7 @@ use crate::config::{ConfigStore, WindowState};
 use crate::documents::DocumentState;
 use crate::google_accounts::GoogleAccounts;
 use crate::jobs::Jobs;
+use crate::mail::MailState;
 use crate::protocol::{self, Req};
 use crate::sys::Owner;
 use crate::sys::UiSignal;
@@ -230,6 +231,9 @@ pub struct App {
     /// version of each one in conflict.
     pub documents: DocumentState,
 
+    /// Fetch mail (`mail`): the fetch in progress; one at a time.
+    pub mail: MailState,
+
     /// The close asked of the page (`close`).
     pub close: CloseState,
 
@@ -257,6 +261,7 @@ impl App {
             superseding: HashMap::new(),
             jobs: Jobs::default(),
             documents: DocumentState::default(),
+            mail: MailState::default(),
             close: CloseState::default(),
             chat: ChatState::default(),
         }
@@ -316,16 +321,19 @@ impl App {
         apply: impl FnOnce(&mut App, T) + Send + 'static,
     ) -> Task {
         let cancel = Cancel::new();
-        self.spawn(cancel.clone(), work, apply);
+        self.spawn(cancel.clone(), false, work, apply);
         Task(cancel)
     }
 
     // ------------------------------------------------------------------------
     /// Run `work` on a new worker thread under `cancel`, then `apply` its
-    /// output on the UI thread -- unless `cancel` was cancelled meanwhile.
-    fn spawn<T: Send + 'static>(
+    /// output on the UI thread -- unless `cancel` was cancelled meanwhile
+    /// and not `apply_if_cancelled` (`run`; a job's continuation always runs,
+    /// `App::run_job`).
+    pub(crate) fn spawn<T: Send + 'static>(
         &self,
         cancel: Cancel,
+        apply_if_cancelled: bool,
         work: impl FnOnce(&Cancel) -> T + Send + 'static,
         apply: impl FnOnce(&mut App, T) + Send + 'static,
     ) {
@@ -334,7 +342,7 @@ impl App {
             .name("avelor-worker".to_string())
             .spawn(move || {
                 let out = work(&cancel);
-                if !cancel.is_cancelled() {
+                if apply_if_cancelled || !cancel.is_cancelled() {
                     ui.send_to_ui(move |app| apply(app, out));
                 }
             });
@@ -564,12 +572,16 @@ impl App {
 
     // ------------------------------------------------------------------------
     /// Send what an edit wrote: every created or rewritten entity
-    /// (`entity`), every trashed entity (`entity_deleted`).
+    /// (`entity`), a rewritten body (`content`), every trashed entity
+    /// (`entity_deleted`).
     fn post_changes(&self, changes: &Changes) {
         for id in changes.created.iter().chain(&changes.saved) {
             if let Some(entry) = self.vault.index().entry(id) {
                 self.post_entity(entry);
             }
+        }
+        for id in &changes.content {
+            self.post_content(id);
         }
         for id in &changes.trashed {
             self.post_entity_deleted(id);

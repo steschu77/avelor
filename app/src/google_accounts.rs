@@ -12,6 +12,7 @@ use std::sync::Arc;
 use av_google::auth::{GoogleScope, ScopeAccess};
 use av_google::calendar::CalendarListEntry;
 use av_google::client::Client;
+use av_google::gmail::MailFilter;
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
@@ -137,6 +138,8 @@ pub fn describe_scope(scope: &GoogleScope) -> String {
 pub struct AccountFile {
     pub id: Id,
     pub google: GoogleAccount,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_sync: Option<DateTime>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
 }
@@ -160,8 +163,43 @@ pub struct GoogleAccount {
     /// Without it, a missing token means a reconnect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disconnected: Option<DateTime>,
+    /// The mail import's remembered settings; absent until the first fetch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mail: Option<MailSettings>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
+}
+
+// ----------------------------------------------------------------------------
+/// What the mail import remembers per account: the filter of the last
+/// fetch, the preview's update mode, and when mail was last fetched (the
+/// "Since last time" preset).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct MailSettings {
+    #[serde(default)]
+    pub filter: MailFilter,
+    #[serde(default = "auto_update_default")]
+    pub auto_update: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_fetch: Option<DateTime>,
+    #[serde(flatten)]
+    rest: BTreeMap<String, Value>,
+}
+
+impl Default for MailSettings {
+    fn default() -> Self {
+        Self {
+            filter: MailFilter::default(),
+            auto_update: auto_update_default(),
+            last_fetch: None,
+            rest: BTreeMap::new(),
+        }
+    }
+}
+
+fn auto_update_default() -> bool {
+    true
 }
 
 // ----------------------------------------------------------------------------
@@ -218,8 +256,10 @@ pub struct AccountMeta<'a> {
     pub email: Option<&'a str>,
     pub scope: BTreeMap<&'static str, Level>,
     pub connected: Option<DateTime>,
+    pub last_sync: Option<DateTime>,
     pub status: ConnectionStatus,
     pub calendars: Vec<CalendarMeta<'a>>,
+    pub mail: Option<MailMeta<'a>>,
 }
 
 // ----------------------------------------------------------------------------
@@ -241,6 +281,15 @@ impl<'a> From<&'a CalendarSource> for CalendarMeta<'a> {
     }
 }
 
+// ----------------------------------------------------------------------------
+/// The mail settings as the page gets them (see `MailSettings`).
+#[derive(Serialize)]
+pub struct MailMeta<'a> {
+    pub filter: &'a MailFilter,
+    pub auto_update: bool,
+    pub last_fetch: Option<DateTime>,
+}
+
 impl Account {
     // ------------------------------------------------------------------------
     /// A newly connected Google account in `folder`, named after its email.
@@ -251,6 +300,7 @@ impl Account {
             calendars: Vec::new(),
             connected: Some(DateTime::now()),
             disconnected: None,
+            mail: None,
             rest: BTreeMap::new(),
         };
         google.set_scope(client.scope());
@@ -259,6 +309,7 @@ impl Account {
             file: AccountFile {
                 id: Id::generate(),
                 google,
+                last_sync: None,
                 rest: BTreeMap::new(),
             },
             client: Some(Arc::new(client)),
@@ -307,8 +358,14 @@ impl Account {
             email: self.email(),
             scope: levels_of(&scope),
             connected: self.file.google.connected,
+            last_sync: self.file.last_sync,
             status: self.status(),
             calendars: self.file.google.calendars.iter().map(Into::into).collect(),
+            mail: self.file.google.mail.as_ref().map(|mail| MailMeta {
+                filter: &mail.filter,
+                auto_update: mail.auto_update,
+                last_fetch: mail.last_fetch,
+            }),
         }
     }
 
@@ -648,6 +705,26 @@ last-sync: 2026-09-27T10:30:00Z
         assert_eq!(scope.calendar, ScopeAccess::Full);
         assert_eq!(scope.contacts, ScopeAccess::None);
         assert_eq!(file.google.email.as_deref(), Some("someone@example.com"));
+        assert!(file.last_sync.is_some());
+        assert_eq!(file.google.mail, None);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn mail_settings_round_trip_in_the_account_file() {
+        let mail = "  mail:\n    filter:\n      labels: [Umzug]\n      since: week\n    last-fetch: 2026-09-22T12:10:00Z\n";
+        let yaml = GOOGLE.replacen("  custom: kept\n", &format!("  custom: kept\n{mail}"), 1);
+        let file: AccountFile = serde_yaml_ng::from_str(&yaml).unwrap();
+        let mail = file.google.mail.as_ref().unwrap();
+        assert_eq!(mail.filter.labels, ["Umzug"]);
+        assert!(mail.auto_update, "auto-update defaults to on");
+        assert_eq!(
+            mail.last_fetch.map(|d| d.as_iso8601()).as_deref(),
+            Some("2026-09-22T12:10:00Z")
+        );
+        let again: AccountFile =
+            serde_yaml_ng::from_str(&serde_yaml_ng::to_string(&file).unwrap()).unwrap();
+        assert_eq!(again.google.mail, file.google.mail);
     }
 
     // ------------------------------------------------------------------------

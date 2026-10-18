@@ -87,7 +87,7 @@
   --p-pane: 20px;
   /* y padding of the panel's stacked parts: doc heads, tags, toolbars, text */
   --p-section: 8px;
-  /* the Workspace pages (Accounts) */
+  /* the Workspace pages (Accounts, Mail) */
   --p-page-x: 40px;
   --p-page-y: 28px;
   /* the sheet of the New page */

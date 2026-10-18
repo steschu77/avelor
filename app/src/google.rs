@@ -11,6 +11,7 @@ use av_google::calendar;
 use av_google::client::Client;
 use av_google::identity::{self, UserInfo};
 use av_utils::cancel::Cancel;
+use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use serde::Serialize;
@@ -31,6 +32,33 @@ pub fn post_account(app: &App, account: &Account) {
 pub fn post(app: &App, id: Id) {
     if let Ok(account) = app.google.get(id) {
         post_account(app, account);
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Answer a request whose account has no client (`GoogleAccounts::connected`
+/// failed): `not_found`, or `not_connected`.
+pub fn refuse_account(req: Req, error: Error) {
+    match error {
+        Error::NotConnected => req.fail(error, "The account isn't connected."),
+        error => req.err(error),
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// A sync of the account `id` ended (a mail fetch): its
+/// `last_sync` is now, `record` notes what else it did (a mail fetch's
+/// `last_fetch`), the account file is saved, and the page gets the account.
+/// A failed save is logged; what the sync wrote stays in the vault.
+pub fn finish_sync(app: &mut App, id: Id, record: impl FnOnce(&mut Account)) {
+    let updated = app.google.update(id, |account| {
+        account.file.last_sync = Some(DateTime::now());
+        record(account);
+        true
+    });
+    match updated {
+        Ok(_) => post(app, id),
+        Err(e) => log::warn!("Saving the last sync of {id} failed: {e}"),
     }
 }
 

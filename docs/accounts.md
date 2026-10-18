@@ -7,11 +7,13 @@
 
 ## Accounts in a vault
 
-Accounts belong to a vault. Each account is a YAML file in the vault's
-`.avelor/accounts/` folder (`accounts.md#account-files`); opening another vault
-switches to its accounts (`accounts::open`, on every vault open), and
-without an open vault there is nowhere to keep an account — the Accounts
-page says so. A file without a valid `id` is skipped (and
+Accounts belong to a vault: entities name the account they arrived from by
+its `id` in their `remote:` source block (`vault.md#remote`), and an
+assistant's replies the AI account they came through. Each account is a YAML
+file in the vault's `.avelor/accounts/` folder (`accounts.md#account-files`);
+opening another vault switches to its accounts (`accounts::open`, on every
+vault open), and without an open vault there is nowhere to keep an account —
+the Accounts page says so. A file without a valid `id` is skipped (and
 logged); keys the app doesn't know are kept.
 
 ## Secrets <a id="secrets"></a>
@@ -55,6 +57,7 @@ top-level key. One pass over `.avelor/accounts/` when a vault opens
 Every account file has:
 
 * `id`: UUIDv7, unique identifier for the account
+* `last-sync`: when the account last synced (optional)
 
 ### Google account file <a id="google-file"></a>
 
@@ -68,6 +71,18 @@ Every account file has:
       loaded
   * `connected`: when the account was first connected
   * `disconnected`: when the account was disconnected (`accounts.md#connection`)
+  * `mail`: what the mail import remembers (`mail.md`), written on each
+    fetch:
+    * `filter`: the filter of the last fetch, filled in when Fetch mail
+      opens again: `labels` (names), `every` (all labels instead of any),
+      `starred`, `attachment`, `unread`, `important`, `sent` (by the
+      account), `from` and `to` (addresses or domains, any of which may
+      match), `words`, `since` (the date preset: `last`, `day`, `week`,
+      `month`, `custom`), `after` and `before`
+    * `auto-update`: whether the match preview updates as the filter is
+      edited (default) or only on request
+    * `last-fetch`: when the last fetch without failures started; the
+      "Since last time" preset
 
 ```yaml
 id: 01a0e1cc-a24c-7490-82fe-e75669985b24
@@ -81,6 +96,16 @@ google:
       name: Jan
       color: "#9fe1e7"
   connected: 2026-09-27T10:14:00Z
+  mail:
+    filter:
+      labels: [Umzug, Rechnungen]
+      starred: true
+      from: [telekom.de, hausverwaltung-krause.de]
+      since: week
+      after: 2026-09-20T22:00:00Z
+    auto-update: true
+    last-fetch: 2026-09-22T12:10:00Z
+last-sync: 2026-09-27T10:30:00Z
 ```
 
 ### AI account file <a id="ai-account-file"></a>
@@ -153,7 +178,7 @@ accounts with a detail pane.
   account's id and must sign in as the same email. Disconnecting revokes
   the token and deletes it but keeps the account file, marked
   `disconnected`, so connecting the same Google account again keeps the
-  account's `id`. Removing
+  account's `id` (and with it every document's `remote:` link). Removing
   a disconnected account deletes its file. The pane lists the account's
   calendars; a checked one becomes a source.
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
@@ -212,7 +237,7 @@ why, with a button to Accounts where the fix is there.
 |---|---|---|---|---|
 | H1 | Open the page | Workspace → Accounts → `openVaultOp('accounts')` → `renderAccounts` | — (the accounts came with the vault: `accounts`) | list + detail pane; without a vault, a hint |
 | H2 | Connect Google | Off/Read/Full per service → "Sign in with Google" → `connectGoogle` | `connect_google {levels}` → the browser opened after the handler → consent (loopback, PKCE) → code redeemed and user info fetched on workers → `GoogleAccounts::connect`: account YAML in `.avelor/accounts/` + DPAPI token `<id>.token` → `account`, `ok {id}` | card; sidebar sources |
-| H3 | Reconnect / change access | same with the account id | as H2 with `{account, levels}`; must be the same email (`wrong_account`) | id kept |
+| H3 | Reconnect / change access | same with the account id | as H2 with `{account, levels}`; must be the same email (`wrong_account`) | id and `remote:` links kept |
 | H4 | Cancel sign-in | Cancel | `cancel_connect` → `ok`; the connect answers `cancelled` | — |
 | H5 | Calendars as sources | account pane renders → `list_calendars`; checkbox → `set_calendar_source {account, calendar, selected}` | `ok {calendars}` (after `account` if names changed); `account`, `ok` | checked calendars become sources |
 | H6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` (revoke on a worker, file marked `disconnected`, token deleted) → `account`, `ok`; `remove_account` (file and token deleted) → `account_removed`, `ok` | — |
@@ -273,7 +298,8 @@ plus `load_config_files` and `free_stem` (the next free file name).
 `GoogleAccounts` (`google_accounts.rs`) and `AiAccounts`
 (`ai_accounts.rs`) are the sub-states that own the files; `accounts.rs`
 does what both kinds share (the pass on vault open, disconnect, remove,
-the events `accounts` and `account_removed`).
+the events `accounts` and `account_removed`). The `finish_sync` of
+`google.rs` ends every sync of an account (`last-sync`).
 
 av-llm's `Client` speaks to Anthropic, OpenAI (Responses API, not Chat
 Completions), Mistral, Gemini and Ollama, with streaming (SSE/NDJSON), a

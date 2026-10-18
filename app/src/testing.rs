@@ -203,6 +203,43 @@ pub fn notes(name: &str, n: usize) -> (Harness, Vec<Id>) {
 }
 
 // ----------------------------------------------------------------------------
+/// The Google accounts of `with_google`: one connected (with a token), one
+/// disconnected.
+pub const CONNECTED: &str = "01a0e1cc-a24c-7490-82fe-e75669985b24";
+pub const DISCONNECTED: &str = "01a0e1cc-a24c-7490-82fe-e75669985b25";
+
+// ----------------------------------------------------------------------------
+/// A harness whose vault has the Google accounts `CONNECTED` (with a token)
+/// and `DISCONNECTED`, both with the lines `google` in their `google:` block
+/// (scopes, calendars, …), plus `files`; opened, and what that sent dropped.
+pub fn with_google(name: &str, google: &str, files: &[(&str, String)]) -> Harness {
+    let mut h = Harness::new(name);
+    let root = h.vault();
+    let account = |id: &str, extra: &str| {
+        format!("id: {id}\ngoogle:\n  email: {id}@example.com\n{google}{extra}")
+    };
+    let mut all = vec![
+        (".avelor/accounts/google_a.yaml", account(CONNECTED, "")),
+        (
+            ".avelor/accounts/google_b.yaml",
+            account(DISCONNECTED, "  disconnected: 2026-10-01T08:00:00Z\n"),
+        ),
+    ];
+    all.extend(files.iter().cloned());
+    for (path, text) in all {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    let token = h.app.config.dir().join(format!("{CONNECTED}.token"));
+    std::fs::write(token, av_utils::secret::protect(b"1//token").unwrap()).unwrap();
+    api::switch_to(&mut h.app, root.clone());
+    h.wait_scanned();
+    h.take();
+    h
+}
+
+// ----------------------------------------------------------------------------
 /// A fake Ollama on this computer, for the AI commands: `GET /api/tags`
 /// lists its models; `POST /api/chat` streams its reply as Ollama does (one
 /// JSON object per line, chunked), or, holding, sends the first piece and

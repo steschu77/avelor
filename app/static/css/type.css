@@ -9,6 +9,8 @@
 .seg,
 .section-head,
 .menu__hint,
+.mail__toggle,
+.select-bar,
 .type-toggle {
   font: 400 var(--fs-label)/1 var(--f-chrome);
   letter-spacing: var(--track-label);
@@ -46,7 +48,7 @@
   color: var(--c-ink-soft);
 }
 
-/* one line of a list: table titles */
+/* one line of a list: table titles, mail subjects */
 .row-title {
   font: 400 var(--fs-body)/1.3 var(--f-serif);
   white-space: nowrap;

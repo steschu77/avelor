@@ -1,7 +1,7 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
 // archived folded) after No project, and the sources, with their counts,
 // each a filter; renaming, adding, starring and dropping onto projects;
-// the vault's name and menu. It renders at most
+// the sources' sync buttons; the vault's name and menu. It renders at most
 // once per frame (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
@@ -20,6 +20,7 @@ import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
+import { openMailFetch } from './import/mail.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
 const projectsContainer = $('projects');
@@ -187,7 +188,8 @@ function renderSidebar() {
   for (const account of accounts.values()) {
     for (const source of accountSources(account)) {
       const row = rowFor(`source:${source.key}`, source.name, () =>
-        sidebarNavItem('nav-item nav-item--compact', source.name, 'nav-item__icon', source.icon, () => selectSource(source.key)));
+        sidebarNavItem('nav-item nav-item--compact', source.name, 'nav-item__icon', source.icon, () => selectSource(source.key),
+          source.kind === 'email' ? { icon: '#i-arrow-sync', title: `Sync ${source.name}`, onClick: () => syncSource(source) } : undefined));
       updateNavItem(row, sourceCounts.get(source.key) ?? 0, source.key === selected_source);
       sourceRows.push(row);
     }
@@ -286,7 +288,7 @@ function accountSources(account) {
   const { id, scope = {}, email = 'Mail' } = account;
   const sources = [];
   if (scope.email && scope.email !== 'off') {
-    sources.push({ key: `${id}\nemail`, name: email, icon: KIND_ICONS.email.icon });
+    sources.push({ key: `${id}\nemail`, kind: 'email', account: id, name: email, icon: KIND_ICONS.email.icon });
   }
   if (scope.calendar && scope.calendar !== 'off') {
     for (const calendar of account.calendars ?? []) {
@@ -294,6 +296,12 @@ function accountSources(account) {
     }
   }
   return sources;
+}
+
+// The sync button of a source: Mail opens the Fetch mail page
+// (features/import/mail.js).
+function syncSource(source) {
+  return openMailFetch(source.account);
 }
 
 // ----------------------------------------------------------------------------

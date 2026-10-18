@@ -1,4 +1,5 @@
-// The segmented control (the `seg` component).
+// The segmented control (the `seg` component), on the Workspace pages
+// and in Fetch mail.
 
 import { accEl } from '../core/dom.js';
 

@@ -5,7 +5,7 @@
    area's rule can override them. */
 
 /* Buttons: bordered and set like a label; --primary fills with the accent,
-   --ghost drops the border. */
+   --danger with the danger color, --ghost drops the border. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -27,7 +27,14 @@
   border-color: var(--c-accent);
 }
 
-.btn--primary:hover {
+.btn--danger,
+.btn--danger:hover {
+  background: var(--c-danger);
+  border-color: var(--c-danger);
+}
+
+.btn--primary:hover,
+.btn--danger:hover {
   filter: brightness(1.04);
 }
 
@@ -228,8 +235,8 @@
   color: var(--c-ink);
 }
 
-/* A check box drawn as a button: aria-pressed fills it; its text is the
-   check mark. */
+/* A check box drawn as a span or button: aria-checked or aria-pressed fills
+   it; its text is the check mark. */
 .check {
   flex: none;
   width: 12px;
@@ -247,6 +254,7 @@
   cursor: pointer;
 }
 
+.check[aria-checked="true"],
 .check[aria-pressed="true"] {
   color: var(--c-ink);
 }
@@ -283,7 +291,8 @@
   background: var(--c-line);
 }
 
-/* Popup menu (showMenu, ui/menu.js): the vault menu, the AI provider menu */
+/* Popup menu (showMenu, ui/menu.js): the vault menu, the AI provider menu,
+   the mail filter's menus, ... */
 .menu {
   position: fixed;
   display: block;
@@ -444,6 +453,36 @@
   color: var(--c-label);
 }
 
+.section-body {
+  padding: 12px 0 12px;
+}
+
+/* Selection buttons over a list (All / None), with a note at the end. */
+.select-bar {
+  margin-top: 8px;
+  padding-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--c-label);
+}
+
+.select-bar>button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+
+.select-bar__note {
+  margin-left: auto;
+  font-size: var(--fs-meta);
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: right;
+}
+
 /* A failure, marked by a bar on the left. */
 .error-note {
   padding: 6px 10px;
@@ -477,7 +516,8 @@
   font-size: var(--fs-body);
 }
 
-/* Form rows: a grid of labels and fields, each field on a rule. */
+/* Form rows: a grid of labels and fields, each field on a rule. --wrap is a
+   field whose controls wrap onto more lines (the mail date range). */
 .form-grid {
   display: grid;
   grid-template-columns: 110px minmax(0, 1fr);
@@ -493,6 +533,11 @@
   flex-wrap: wrap;
   border-bottom: 1px solid var(--c-line);
   font: 400 var(--fs-body)/1 var(--f-serif);
+}
+
+.form-field--wrap {
+  padding: 6px 0;
+  gap: 8px 14px;
 }
 
 .form-field>.seg {
@@ -589,8 +634,8 @@
   box-shadow: inset 0 0 0 2px var(--c-accent);
 }
 
-/* A page of the expanded vault area (ui/page.js): the Workspace pages
-   and New. */
+/* A page of the expanded vault area (ui/page.js): the Workspace pages,
+   Fetch mail and New. */
 .page {
   padding: var(--p-page-y) var(--p-page-x);
   display: flex;

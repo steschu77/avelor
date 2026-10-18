@@ -523,6 +523,21 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn an_edit_that_rewrites_a_body_pushes_the_content() {
+        let (mut h, ids) = notes("content", 1);
+        let id = ids[0];
+        let edited = h
+            .app
+            .edit(|index, changes| index.set_content(&id, "New body\n".into(), changes));
+        assert_eq!(edited.unwrap(), SaveOutcome::Saved);
+        let sent = parse(&h.take());
+        assert_eq!(shape(&sent), ["entity", "content"]);
+        assert_eq!(sent[1]["data"]["id"], id.to_string());
+        assert_eq!(sent[1]["data"]["source"], "New body\n");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn an_edit_that_fails_part_way_still_pushes_what_it_wrote() {
         let (mut h, ids) = notes("part-way", 2);
         let edited = h.app.edit(|index, changes| {

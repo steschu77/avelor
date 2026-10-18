@@ -556,7 +556,7 @@ type (`kind`, `Document::kind()`):
 - `thread` → `onThread` into the page's `threads` Map, which
   the Documents lens reads for a thread's row,
 - everything else → `onDocMeta` into `entities`: an entity's rows in the
-  Documents lens, including thread members and conversations.
+  Documents lens, including thread members, emails, and conversations.
 
 The sidebar's per-project counts are derived on the page,
 never sent: `renderSidebar` counts the `entities` entries whose `projects`

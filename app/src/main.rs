@@ -16,6 +16,7 @@ mod documents;
 mod google;
 mod google_accounts;
 mod jobs;
+mod mail;
 mod page;
 mod protocol;
 mod shell;

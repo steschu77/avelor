@@ -24,7 +24,8 @@ grips to resize them; the widths are remembered across restarts
 button puts the assistant beside the card, over the main view, as the
 full width does (`assistant.md#conversations`). Opening a panel never
 moves the main view's layout. The expanded vault area hosts the
-pages of the vault panel: the Workspace pages (Accounts, Trash) and New. It is
+pages of the vault panel: the Workspace pages (Accounts, Trash), Fetch mail
+and New. It is
 expanded only while one of them is shown: a page opens it (`openVaultOp`,
 `ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
 or a click on a filter closes it (`closeVaultArea`). Menus are popups
@@ -240,7 +241,7 @@ of the others.
 ## Jobs panel <a id="jobs-panel"></a>
 
 A card per job from the `job` event (`features/jobs.js`, `renderJob`): its label,
-its progress, and its note when it ends. A card is removed 1.5 s after its job is done, 8 s
+its progress, a Stop button while it is `stoppable` (a mail fetch; a vault scan can't be stopped), and its note when it ends. A card is removed 1.5 s after its job is done, 8 s
 when it has a note. How jobs run on the host: `architecture.md#jobs`.
 
 ## Keys and actions <a id="keys-and-actions"></a>
@@ -249,8 +250,8 @@ What a key, a menu or a button starts is a registered action
 (`architecture.md#actions`). The page keys:
 
 - **Esc** closes an open menu, else the page in the expanded vault area
-  (New); in an editor it leaves edit mode.
-- **Ctrl+Enter** runs the open page's main action (Create).
+  (Fetch mail, New); in an editor it leaves edit mode.
+- **Ctrl+Enter** runs the open page's main action (Fetch, Create).
 - **Ctrl+N** opens New.
 - A key the editor already handled (Ctrl+I as italic) is left alone.
 
@@ -301,7 +302,9 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 |---|---|---|---|---|
 | A5 | Panel widths | drag a grip → `saveWidth` → `savePrefs` | `set_prefs {prefs}` → `config.yaml` `prefs` | the width comes back on the next start, inside the page (`#prefs`), without easing |
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a note) |
+| A8 | Stop a job | the card's Stop | `cancel_job` → the job's requests cancelled; it ends `stopped · …` | mail fetch |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
+| B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `<account>\nemail`, `<account>\ncalendar\n<id>` |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
 | B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |

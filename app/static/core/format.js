@@ -72,18 +72,32 @@ export const DAY_LONG_MONTH_YEAR = format({ day: 'numeric', month: 'long', year:
 export const LONG_DAY = format({ weekday: 'long', day: 'numeric', month: 'long' }); // Tuesday, October 14
 export const LONG_DATE = format({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); // Tuesday, October 14, 2026
 
+const DAY_MONTH_YEAR_TIME = format({
+  day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+});
+const DAY2_SHORT_MONTH = format({ day: '2-digit', month: 'short' });
+const DAY2_SHORT_MONTH_YEAR = format({ day: '2-digit', month: 'short', year: 'numeric' });
+
 // A date in a list: day and month, with the year if it isn't this one (the
 // dashboard's cards, a thread's days in the Documents lens).
 export function shortDate(date) {
   return date.getFullYear() === new Date().getFullYear() ? DAY_MONTH.format(date) : DATE_FORMAT.format(date);
 }
 
+// A date in a column of mails, "Oct 05": the year only when it isn't this
+// one, and with the time if `withTime`.
+export function shortMonthDate(date, withTime) {
+  const thisYear = date.getFullYear() === new Date().getFullYear();
+  const day = (thisYear ? DAY2_SHORT_MONTH : DAY2_SHORT_MONTH_YEAR).format(date);
+  return withTime ? `${day}, ${TIME_FORMAT.format(date)}` : day;
+}
+
 // ----------------------------------------------------------------------------
-// A date of the Workspace pages (`iso`: an account connected), like "Oct 3,
-// 2026"; "Never" without one.
+// A date of the Workspace pages (`iso`: an account connected or synced),
+// like "Oct 3, 2026", with the time if `withTime`; "Never" without one.
 export function pageDate(iso, withTime) {
   if (!iso) return 'Never';
-  return DAY_MONTH_YEAR.format(new Date(iso));
+  return (withTime ? DAY_MONTH_YEAR_TIME : DAY_MONTH_YEAR).format(new Date(iso));
 }
 
 // ----------------------------------------------------------------------------

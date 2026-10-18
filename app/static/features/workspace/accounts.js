@@ -14,6 +14,7 @@ import { registerAction } from '../../core/actions.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
 import { vaultSettings } from '../../model/entities.js';
+import { entities } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
 import {
@@ -227,7 +228,8 @@ function renderAccountDetail() {
 }
 
 function renderAccountList() {
-  const list = pageList('Accounts', 'Remote sources and AI providers.');
+  const list = pageList('Accounts',
+    'Remote sources and AI providers. Whatever arrives from one, or is written by one, names the account.');
   if (!store.getState().vault_path) {
     list.append(accEl('div', 'page-text', 'Accounts are kept in the vault: open a vault to see them.'));
     return list;
@@ -371,6 +373,18 @@ function renderConnectPane() {
   return pane;
 }
 
+// Entities that arrived from `id`, by kind: [total, "12 email \u00b7 3 event"].
+function accountEntityCounts(id) {
+  const byKind = new Map();
+  for (const doc of entities.values()) {
+    if (doc.source?.remote?.account !== id) continue;
+    byKind.set(doc.kind, (byKind.get(doc.kind) ?? 0) + 1);
+  }
+  const total = [...byKind.values()].reduce((a, b) => a + b, 0);
+  const detail = [...byKind].map(([kind, n]) => `${n} ${kind}`).join(' \u00b7 ');
+  return [total, detail];
+}
+
 function renderAccountPane(account) {
   const pane = detailPane();
   const connected = account.status === 'connected';
@@ -385,8 +399,12 @@ function renderAccountPane(account) {
   pane.append(detailHead(heading, { button: reconnect }),
     accEl('div', 'pane-title', account.email ?? 'Unknown account'));
 
+  const [total, detail] = accountEntityCounts(account.id);
   pane.append(stats(
+    stat('Last sync', pageDate(account.last_sync, true)),
     stat('Connected since', account.connected ? pageDate(account.connected) : 'Unknown'),
+    stat('In the vault', plural(total, 'entity', 'entities'), detail),
+    stat('Account id', `${account.id.slice(0, 8)}\u2026${account.id.slice(-4)}`, 'in every remote: block'),
   ), renderAccessRows(account.id));
 
   // An edit only takes effect with the next consent.
@@ -419,11 +437,12 @@ function renderAccountPane(account) {
   return pane;
 }
 
-// Re-render while visible when the op, the vault, the accounts, or what
-// picked a model (the vault's settings: "Used by") change.
+// Re-render while visible when the op, the vault, the accounts, the
+// entities, or what picked a model (the vault's settings:
+// "Used by") change.
 store.subscribe([
   state => state.vault_op, state => state.vault_path, state => state.accounts_rev,
-  state => state.settings_rev,
+  state => state.entities_rev, state => state.settings_rev,
 ], () => scheduleRenderAccounts());
 
 // ----------------------------------------------------------------------------

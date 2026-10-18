@@ -1,0 +1,239 @@
+/* The import pages (features/import/): Fetch mail. */
+
+/* Fetch mail (sync button of a Mail source, features/import/mail.js): the filter form, then
+   the matches with the fetch button under them */
+.mail {
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+.mail__grid {
+  margin-top: 20px;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 0 36px;
+}
+
+.mail__form {
+  min-width: 0;
+  overflow-y: auto;
+  padding-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* the filter form, on Fetch mail */
+.mail__filter {
+  display: flex;
+  flex-direction: column;
+}
+
+.mail__add {
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: var(--c-label);
+  font: 400 var(--fs-ui)/1.5 var(--f-chrome);
+  cursor: pointer;
+}
+
+.mail__add:hover {
+  color: var(--c-ink);
+}
+
+.mail__toggle {
+  padding: 4px 9px;
+  border: 1px dashed var(--c-line);
+  background: transparent;
+  color: var(--c-label);
+  cursor: pointer;
+}
+
+.mail__toggle[aria-pressed="true"] {
+  border: 1px solid var(--c-ink);
+  color: var(--c-ink);
+}
+
+.mail__toggle[aria-pressed="true"]::before {
+  content: "\2713\00a0";
+}
+
+.mail__date {
+  width: 240px;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-ink);
+  font: 400 var(--fs-body)/1 var(--f-serif);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mail__date-hint {
+  margin-left: auto;
+}
+
+.mail__date-caret {
+  color: var(--c-label);
+}
+
+.mail__range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mail__matches {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mail__box {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 0;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  display: flex;
+  flex-direction: column;
+}
+
+.mail__box>.section-head,
+.mail__box>.error-note {
+  margin-bottom: 10px;
+}
+
+/* the search is out of date: an outlined bar with a button to search again */
+.mail__stale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-ink);
+  background: var(--c-paper);
+  font: 400 var(--fs-small)/1.35 var(--f-serif);
+}
+
+.mail__stale>.btn {
+  margin-left: auto;
+  flex: none;
+}
+
+.mail__count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.mail__count--busy,
+.mail__row--loading {
+  opacity: .55;
+}
+
+.mail__note {
+  margin-top: 6px;
+}
+
+.mail__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.mail__row {
+  --cols: 14px minmax(0, 1fr) 54px;
+  flex: none;
+  row-gap: 1px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.mail__row:hover {
+  background: var(--c-hover);
+}
+
+.mail__row>.check {
+  grid-row: 1 / 3;
+}
+
+.mail__date-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mail__from {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mail__status {
+  text-align: right;
+}
+
+/* an in-vault mail that is ticked: fetching replaces its body */
+.mail__row--replace {
+  background: color-mix(in srgb, var(--c-danger) 16%, transparent);
+}
+
+.mail__row--replace:hover {
+  background: color-mix(in srgb, var(--c-danger) 24%, transparent);
+}
+
+.mail__row--replace>.check {
+  border-color: var(--c-danger);
+  background: var(--c-danger);
+}
+
+.mail__row--replace>.mail__status {
+  color: var(--c-ink);
+}
+
+.mail__empty {
+  padding: 16px 0;
+}
+
+.mail__pager {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--c-line);
+}
+
+.mail__footer {
+  flex: none;
+  padding: 12px 0;
+  border-top: 1px solid var(--c-line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 6px;
+}
+
+.mail__footer>.btn--ghost {
+  margin-left: auto;
+}
+
+.mail__footer>.error-note,
+.mail__warning {
+  flex-basis: 100%;
+}
+
+.mail__warning {
+  color: var(--c-ink-soft);
+}

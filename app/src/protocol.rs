@@ -17,6 +17,7 @@ use crate::structure;
 use crate::trash;
 use crate::{accounts, ai};
 use crate::{chat, vault_settings};
+use crate::{jobs, mail};
 use av_llm::Provider;
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -53,6 +54,8 @@ enum Command {
     RevealVault,
     /// Open a web, mail or phone link in its default app.
     OpenUrl(Url),
+    /// Stop the job `id` (`jobs::cancel_job`).
+    CancelJob(Target),
     /// The page's answer to the event `close` (`close::close_ready`).
     CloseReady(close::Answer),
     // A document's content in the editors (`documents`).
@@ -92,6 +95,11 @@ enum Command {
     ConnectAi(ConnectAi),
     ListAiModels(OfAccount),
     SetAiSettings(ai::SettingsChange),
+    // Fetch mail (`mail`).
+    MailLabels(OfAccount),
+    MailSearch(mail::SearchRequest),
+    MailHeaders(mail::HeadersRequest),
+    MailFetch(mail::FetchRequest),
     // The assistant's chats (`chat`).
     ChatOpen(Target),
     ChatSend(chat::SendRequest),
@@ -118,7 +126,7 @@ struct Url {
     url: String,
 }
 
-/// `{id}`: the entity the command is about.
+/// `{id}`: the entity or job the command is about.
 #[derive(Deserialize)]
 struct Target {
     id: Id,
@@ -269,6 +277,7 @@ impl Command {
             "set_vault_settings" => Command::SetVaultSettings(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
             "open_url" => Command::OpenUrl(from_value(args)?),
+            "cancel_job" => Command::CancelJob(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "save_doc_content" => Command::SaveDocContent(from_value(args)?),
@@ -301,6 +310,10 @@ impl Command {
             "connect_ai" => Command::ConnectAi(from_value(args)?),
             "list_ai_models" => Command::ListAiModels(from_value(args)?),
             "set_ai_settings" => Command::SetAiSettings(from_value(args)?),
+            "mail_labels" => Command::MailLabels(from_value(args)?),
+            "mail_search" => Command::MailSearch(from_value(args)?),
+            "mail_headers" => Command::MailHeaders(from_value(args)?),
+            "mail_fetch" => Command::MailFetch(from_value(args)?),
             "chat_open" => Command::ChatOpen(from_value(args)?),
             "chat_send" => Command::ChatSend(from_value(args)?),
             "chat_stop" => Command::ChatStop(from_value(args)?),
@@ -338,6 +351,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetVaultSettings(a) => vault_settings::set_vault_settings(app, req, a),
         Command::RevealVault => api::reveal_vault(app, req),
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
+        Command::CancelJob(a) => jobs::cancel_job(app, req, a.id),
         Command::CloseReady(a) => close::close_ready(app, req, a),
         Command::LoadDocContent(a) => documents::load_doc_content(app, req, a.id),
         Command::SaveDocContent(a) => {
@@ -378,6 +392,10 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::ConnectAi(a) => ai::connect_ai(app, req, a.account, a.provider, a.key, a.address),
         Command::ListAiModels(a) => ai::list_ai_models(app, req, a.account),
         Command::SetAiSettings(a) => ai::set_ai_settings(app, req, a),
+        Command::MailLabels(a) => mail::mail_labels(app, req, a.account),
+        Command::MailSearch(a) => mail::mail_search(app, req, a),
+        Command::MailHeaders(a) => mail::mail_headers(app, req, a),
+        Command::MailFetch(a) => mail::mail_fetch(app, req, a),
         Command::ChatOpen(a) => chat::chat_open(app, req, a.id),
         Command::ChatSend(a) => chat::chat_send(app, req, a),
         Command::ChatStop(a) => chat::chat_stop(app, req, a.conversation),
