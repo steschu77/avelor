@@ -13,7 +13,8 @@
 // which starts a branch. A card's chat button opens the chat beside the
 // card (`toggleCardChat`). A written reply can be saved as a document, or
 // start a task (`assistantSaveReply`; the `task.with` action,
-// features/new.js).
+// features/new.js). A reply that ends the path may offer questions to ask
+// next, as chips (the email analysis's conversation, `renderAssistantSuggestions`).
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
 import { titled } from '../../core/dom.js';
@@ -412,7 +413,7 @@ function renderAssistantHead() {
 const scheduleRenderAssistantHead = oncePerFrame(() => renderAssistantHead());
 
 function renderAssistantMessages(setup) {
-  for (const el of assistantMessagesEl.querySelectorAll('.chat__hint, :scope>.error-note')) el.remove();
+  for (const el of assistantMessagesEl.querySelectorAll('.chat__hint, .chat__suggestions, :scope>.error-note')) el.remove();
   const conversation = assistantOpen ? assistantConversation : null;
   const path = conversation ? assistantPath(conversation) : [];
 
@@ -439,6 +440,11 @@ function renderAssistantMessages(setup) {
     }
   });
 
+  const last = path[path.length - 1];
+  if (last?.role === 'assistant' && last.status === 'done' && last.suggestions?.length) {
+    assistantMessagesEl.append(renderAssistantSuggestions(last, setup));
+  }
+
   if (!assistantOpen) {
     if (!setup.problem) {
       const hint = accEl('div', 'chat__hint');
@@ -456,6 +462,27 @@ function renderAssistantMessages(setup) {
   if (assistantNotice) {
     assistantMessagesEl.append(accEl('div', 'error-note', assistantNotice));
   }
+}
+
+// The questions the last reply offers to ask next (the email analysis's
+// conversation), as chips: a click sends one as if it were typed. They are gone
+// once the conversation moves on.
+function renderAssistantSuggestions(message, setup) {
+  const row = accEl('div', 'chat__suggestions');
+  const busy = !!assistantSend || assistantWriting() || !!setup.problem;
+  for (const text of message.suggestions) {
+    const chip = accEl('button', 'chip chip--action', text);
+    chip.type = 'button';
+    chip.title = t('chat.ask_this');
+    chip.disabled = busy;
+    chip.addEventListener('click', () => {
+      if (assistantSend || assistantWriting() || assistantSetup().problem) return;
+      assistantPost({ text, parent: message.id }, null);
+      assistantScrollDown();
+    });
+    row.append(chip);
+  }
+  return row;
 }
 
 // What keeps the picked model from answering, with the way out: the menu

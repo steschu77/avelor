@@ -489,14 +489,17 @@ It carries the following additional fields:
   * `account`: UUIDv7, ID of the AI account the model was called through,
   * `date`: DateTime,
   * `content`: string, the message text as markdown,
-  * `suggestions`: [string], questions offered to ask next.
+  * `suggestions`: [string], questions offered to ask next, shown while the
+    message ends the shown path (the email analysis's conversation,
+    `email.md#analysis`).
 * `active`: UUIDv7, ID of the leaf message of the currently shown path.
 
 A message with a `model` is an AI reply. In an AI conversation (the `ai`
 source) the user's own messages carry no `sender`. The app writes its
 conversations to `Conversations/`, `linked-to` (the metadata field) the document
 or thread shown when the conversation started; a reply is written once it is
-complete or stopped, and a failed reply isn't written at all.
+complete or stopped, and a failed reply isn't written at all. The email
+analysis writes a conversation that starts with replies, `linked-to` its email.
 
 Messages are ordered by their `parent` links, forming a tree. Messages that
 share a parent are siblings, e.g. an AI re-run, or an AI re-run with a

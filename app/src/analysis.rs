@@ -1,12 +1,14 @@
 //! Analysing entities with an AI (email.md#analysis): the email analysis -- Lite
 //! gives each new email its type, a clean title, labels in use and active
-//! projects.
+//! projects; Medium also points to check, a quick reply and questions, as a
+//! conversation linked to the email.
 //!
 //! An analysis goes plan → run → apply (architecture.md#conventions), one email
 //! after another, as a job: the plan picks the model (`AiAccounts::choose`),
 //! gathers the vault's labels and projects and each email's text; the run asks
-//! the model; the apply reads its answer and writes it through the vault edit.
-//! The spend limit is checked before each email.
+//! the model; the apply reads its answer and writes it through the vault edit
+//! (`chat::create` for Medium's conversation). The spend limit is checked before each
+//! email.
 
 use std::collections::HashMap;
 

@@ -23,7 +23,7 @@ const PAGE_CALLS: &[&str] = &["t", "parts"];
 const HOST_PAGE_CALL: &str = "Text::new(\"";
 
 /// The host's lookups of a text it shows or writes itself (`texts.rs`).
-const HOST_CALLS: &[&str] = &["texts::text(\""];
+const HOST_CALLS: &[&str] = &["texts::text(\"", "texts::filled(\""];
 
 // ----------------------------------------------------------------------------
 /// A catalog's text: plain, or a count's forms by their category.
@@ -218,7 +218,7 @@ impl<'a> Visit<'a> for KeyCalls {
 // ----------------------------------------------------------------------------
 /// The keys the host source `rust` uses, outside the line comments: those
 /// of the texts it gives the page (`Text::new`), and those it shows or
-/// writes itself (`texts::text`).
+/// writes itself (`texts::text`, `texts::filled`).
 pub fn host_keys(rust: &str) -> Used {
     let mut used = Used::default();
     for line in rust.lines() {

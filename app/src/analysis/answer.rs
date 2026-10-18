@@ -13,6 +13,12 @@ const LABELS_PER_EMAIL: usize = 3;
 const PROJECTS_PER_EMAIL: usize = 2;
 /// A longer title is cut.
 pub(super) const TITLE_CHARS: usize = 120;
+/// The most points to check and questions one email gets, and how long
+/// each may be; a longer quick reply is cut too.
+pub(super) const CHECKS_PER_EMAIL: usize = 3;
+const QUESTIONS_PER_EMAIL: usize = 3;
+pub(super) const POINT_CHARS: usize = 300;
+const REPLY_CHARS: usize = 4000;
 /// The types the analysis gives an email (email.md#analysis).
 pub const EMAIL_TYPES: [&str; 2] = ["newsletter", "notification"];
 
@@ -31,18 +37,31 @@ pub struct Lite {
 }
 
 // ----------------------------------------------------------------------------
+/// What Medium found beyond Lite, for the email's conversation: a quick reply or a
+/// point to check, at least.
+#[derive(Debug, Default, PartialEq)]
+pub struct Medium {
+    pub check: Vec<String>,
+    pub reply: Option<String>,
+    pub questions: Vec<String>,
+}
+
+// ----------------------------------------------------------------------------
 /// Read the `answer` of the analysis at `level` against `ctx` for an email
 /// titled `title`: the JSON object in it (code fences and text around it
 /// ignored); a title trimmed and cut, dropped if empty or the email's own;
 /// a type from `EMAIL_TYPES`, in any case; the labels and projects from the lists
-/// only, matched in any case, each once, the first few kept. An answer
-/// without such an object is refused, in words.
+/// only, matched in any case, each once, the first few kept. Medium's
+/// points, reply and questions trimmed and cut, the first few kept; none
+/// for a newsletter, no reply for a notification, and no conversation without a
+/// reply or a point. An answer without such an object is refused, in
+/// words.
 pub fn parse(
     answer: &str,
-    _level: AnalysisLevel,
+    level: AnalysisLevel,
     ctx: &Context,
     title: &str,
-) -> std::result::Result<Lite, Text> {
+) -> std::result::Result<(Lite, Option<Medium>), Text> {
     let refused = || Text::new("analysis.not_json");
     let (Some(start), Some(end)) = (answer.find('{'), answer.rfind('}')) else {
         return Err(refused());
@@ -79,12 +98,40 @@ pub fn parse(
     }
     projects.truncate(PROJECTS_PER_EMAIL);
 
-    Ok(Lite {
+    let lite = Lite {
         title: new_title,
         doc_type,
         labels,
         projects,
-    })
+    };
+    let medium = match level {
+        AnalysisLevel::Medium => medium_of(&object, lite.doc_type.as_deref()),
+        _ => None,
+    };
+    Ok((lite, medium))
+}
+
+// ----------------------------------------------------------------------------
+/// Medium's part of the answer `object` for an email of the type `doc_type`
+/// (see `parse`).
+fn medium_of(object: &Value, doc_type: Option<&str>) -> Option<Medium> {
+    if doc_type == Some("newsletter") {
+        return None;
+    }
+    let points = |key: &str, most: usize| -> Vec<String> {
+        let points = names(&object[key]).into_iter().map(|p| cut(p, POINT_CHARS));
+        points.filter(|p| !p.is_empty()).take(most).collect()
+    };
+    let reply = object["reply"]
+        .as_str()
+        .map(|reply| cut(reply, REPLY_CHARS))
+        .filter(|reply| !reply.is_empty() && doc_type != Some("notification"));
+    let medium = Medium {
+        check: points("check", CHECKS_PER_EMAIL),
+        reply,
+        questions: points("questions", QUESTIONS_PER_EMAIL),
+    };
+    (medium.reply.is_some() || !medium.check.is_empty()).then_some(medium)
 }
 
 // ----------------------------------------------------------------------------

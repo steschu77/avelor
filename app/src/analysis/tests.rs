@@ -1,12 +1,14 @@
 use super::*;
+use av_utils::datetime::DateTime;
 use av_vault::document::Document;
+use av_vault::envelope::DocumentType;
 use av_vault::shared::DocType;
 use serde_json::Value;
 
-use super::answer::{Lite, TITLE_CHARS, parse};
-use super::apply::apply_lite;
+use super::answer::{CHECKS_PER_EMAIL, Lite, Medium, POINT_CHARS, TITLE_CHARS, parse};
+use super::apply::{apply_lite, medium_messages};
 use super::context::{BODY_CHARS, Context, EmailText, context};
-use super::request::{LITE_SHAPE, again, request_for};
+use super::request::{LITE_SHAPE, MEDIUM_SHAPE, again, request_for};
 use crate::ai;
 use crate::ai::accounts::ModelChoice;
 use crate::google::accounts::{Analysis, AnalysisLevel};
@@ -15,6 +17,7 @@ use crate::texts::Text;
 use av_vault::document::FileFormat;
 use av_vault::envelope::{Email, Roles, Source};
 use av_vault::shared::OneOrMany;
+use serde_json::json;
 use std::fs;
 use std::sync::{Arc, Mutex};
 
@@ -112,6 +115,19 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
         system.contains("- type:") && !system.contains("- check:"),
         "{system}"
     );
+    let medium = request_for(AnalysisLevel::Medium, "m", &ctx(), &email);
+    let system = medium.system.as_deref().unwrap();
+    assert!(system.contains(MEDIUM_SHAPE), "{system}");
+    assert!(
+        system.contains("- check:")
+            && system.contains("- reply:")
+            && system.contains("- questions:")
+    );
+    let asked = again(medium.clone(), "Sorry.", AnalysisLevel::Medium);
+    let Some(av_llm::Part::Text(reminder)) = asked.messages[2].parts.first() else {
+        panic!("{:?}", asked.messages);
+    };
+    assert!(reminder.contains(MEDIUM_SHAPE), "{reminder}");
     let empty = again(request.clone(), "  ", AnalysisLevel::Lite);
     assert_eq!(
         empty.messages.len(),
@@ -179,9 +195,9 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
 #[test]
 fn the_answer_is_read_against_the_lists() {
     let answer = "Sure! ```json\n{\"title\": \"  Abschlag Oktober \", \"labels\": [\"rechnungen\", \"Unbekannt\", \"Rechnungen\", \"Umzug\", \"Steuer\", \"Bank\"], \"projects\": [\"wohnung köln\", \"Garten\", \"Auto\", \"Wohnung Köln\"]}\n``` Done.";
-    let lite = parse(answer, AnalysisLevel::Lite, &ctx(), "AW: Abschlag").unwrap();
+    let (lite, medium) = parse(answer, AnalysisLevel::Lite, &ctx(), "AW: Abschlag").unwrap();
     assert_eq!(lite.title.as_deref(), Some("Abschlag Oktober"));
-    assert_eq!(lite.doc_type, None);
+    assert_eq!((lite.doc_type, medium), (None, None));
     assert_eq!(
         lite.labels,
         ["Rechnungen", "Umzug", "Steuer"],
@@ -196,7 +212,7 @@ fn the_answer_is_read_against_the_lists() {
         "Abschlag",
     );
     assert_eq!(
-        same.unwrap(),
+        same.unwrap().0,
         Lite {
             title: None,
             doc_type: Some("notification".into()),
@@ -205,12 +221,12 @@ fn the_answer_is_read_against_the_lists() {
         },
         "the email's own title is no change; one label as a string; the type in any case"
     );
-    let unknown = lite(r#"{"type": "bill"}"#, "t").unwrap();
+    let unknown = lite(r#"{"type": "bill"}"#, "t").unwrap().0;
     assert_eq!(unknown.doc_type, None, "only an email's own types");
     let long = format!(r#"{{"title": "{}"}}"#, "x".repeat(200));
-    let cut = lite(&long, "t").unwrap().title.unwrap();
+    let cut = lite(&long, "t").unwrap().0.title.unwrap();
     assert_eq!(cut.chars().count(), TITLE_CHARS);
-    assert_eq!(lite(r#"{"title": "  "}"#, "t").unwrap().title, None);
+    assert_eq!(lite(r#"{"title": "  "}"#, "t").unwrap().0.title, None);
 
     for bad in ["Sorry, I can't.", "{not json}", "[1, 2]", "} {"] {
         let refused = lite(bad, "t");
@@ -220,6 +236,78 @@ fn the_answer_is_read_against_the_lists() {
             "{bad}"
         );
     }
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn medium_reads_the_points_the_reply_and_the_questions() {
+    let medium = |answer: &str| parse(answer, AnalysisLevel::Medium, &ctx(), "t").unwrap().1;
+    let long = "x".repeat(POINT_CHARS + 10);
+    let answer = format!(
+        r#"{{"check": [" Der Betrag ", "", "{long}", "Die Frist", "Zu viel"], "reply": " Danke! ", "questions": "Warum?"}}"#
+    );
+    let found = medium(&answer).unwrap();
+    assert_eq!(found.check.len(), CHECKS_PER_EMAIL, "{found:?}");
+    assert_eq!(found.check[0], "Der Betrag");
+    assert_eq!(found.check[1].chars().count(), POINT_CHARS, "cut");
+    assert_eq!(found.reply.as_deref(), Some("Danke!"));
+    assert_eq!(found.questions, ["Warum?"]);
+
+    let notification =
+        medium(r#"{"type": "notification", "check": ["Der Betrag"], "reply": "Danke!"}"#);
+    assert_eq!(
+        notification,
+        Some(Medium {
+            check: vec!["Der Betrag".into()],
+            reply: None,
+            questions: vec![],
+        }),
+        "no reply to a notification"
+    );
+    let newsletter =
+        r#"{"type": "newsletter", "check": ["Rabatt"], "reply": "Nein", "questions": ["Was?"]}"#;
+    assert_eq!(medium(newsletter), None, "nothing for a newsletter");
+    let nothing = r#"{"reply": null, "check": [], "questions": ["Was?"]}"#;
+    assert_eq!(
+        medium(nothing),
+        None,
+        "questions alone make no conversation"
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn medium_messages_follow_each_other() {
+    let account = Id::parse(OLLAMA_ID).unwrap();
+    let now = DateTime::now();
+    let medium = Medium {
+        check: vec!["Der Betrag".into(), "Die Frist".into()],
+        reply: Some("Danke!".into()),
+        questions: vec!["Warum?".into()],
+    };
+    let messages = medium_messages(&medium, "m", account, now);
+    let [points, reply] = &messages[..] else {
+        panic!("{messages:?}");
+    };
+    assert_eq!(points.content.as_deref(), Some("- Der Betrag\n- Die Frist"));
+    assert_eq!((points.parent, reply.parent), (None, points.id));
+    assert_eq!(reply.content.as_deref(), Some("Danke!"));
+    assert!(points.suggestions.is_empty());
+    assert_eq!(reply.suggestions, ["Warum?"]);
+    assert_eq!(
+        (reply.model.as_deref(), reply.account),
+        (Some("m"), Some(account))
+    );
+    assert!(reply.is_reply());
+
+    let only_reply = Medium {
+        check: vec![],
+        ..medium
+    };
+    let messages = medium_messages(&only_reply, "m", account, now);
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].parent, None);
+    assert_eq!(messages[0].suggestions, ["Warum?"]);
 }
 
 // ------------------------------------------------------------------------
@@ -330,8 +418,7 @@ fn of<'a>(sent: &'a [Value], ev: &str) -> Vec<&'a Value> {
 // ------------------------------------------------------------------------
 #[test]
 fn an_analysis_writes_the_title_labels_and_projects() {
-    let answer =
-        r#"{"title": "Abschlag Oktober", "labels": ["rechnungen"], "projects": ["Wohnung"]}"#;
+    let answer = r#"{"title": "Abschlag Oktober", "labels": ["rechnungen"], "projects": ["Wohnung"], "reply": "Danke!"}"#;
     let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
     let mut h = with_emails("analysis-run", &address, "");
     let ids = vec![Id::parse(EMAIL_ID).unwrap()];
@@ -357,6 +444,84 @@ fn an_analysis_writes_the_title_labels_and_projects() {
         !h.vault().join("Conversations").exists(),
         "Lite writes no conversation"
     );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn medium_writes_a_chat_linked_to_the_email() {
+    let answer = r#"{"title": "Abschlag Oktober", "check": ["Der Betrag ist neu."], "reply": "Danke, ist bezahlt.", "questions": ["Warum ist er hoeher?"]}"#;
+    let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
+    let mut h = with_emails("analysis-medium", &address, "");
+    let email = Id::parse(EMAIL_ID).unwrap();
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        vec![email],
+        &at(AnalysisLevel::Medium),
+    );
+    let sent = until_done(&mut h);
+
+    assert_eq!(
+        shown(&of(&sent, "job").last().unwrap()["summary"]),
+        "1 analysed · 1 conversation"
+    );
+    assert!(of(&sent, "notice").is_empty(), "{sent:?}");
+    let conversations: Vec<_> = fs::read_dir(h.vault().join("Conversations"))
+        .unwrap()
+        .collect();
+    assert_eq!(conversations.len(), 1);
+
+    let chat = h
+        .app
+        .vault
+        .index()
+        .all()
+        .iter()
+        .find(|e| e.doc.linked_to() == Some(email))
+        .unwrap();
+    let id = chat.doc.id();
+    assert_eq!(chat.doc.title(), "Email analysis · Abschlag Oktober");
+    assert_eq!(chat.doc.kind(), DocumentType::Conversation);
+    let conversation = chat.doc.roles().conversation.clone().unwrap();
+    let [points, reply] = &conversation.messages[..] else {
+        panic!("{conversation:?}");
+    };
+    assert_eq!(points.content.as_deref(), Some("- Der Betrag ist neu."));
+    assert_eq!(reply.parent, points.id);
+    assert_eq!(reply.content.as_deref(), Some("Danke, ist bezahlt."));
+    assert_eq!(conversation.active, reply.id);
+    assert_eq!(reply.account, Some(Id::parse(OLLAMA_ID).unwrap()));
+
+    // As the page opens it: the questions under the reply.
+    let opened = h.call("chat_open", json!({ "id": id }));
+    let messages = &opened[0]["ok"]["conversation"]["messages"];
+    assert_eq!(messages[0]["role"], "assistant");
+    assert!(messages[0].get("suggestions").is_none());
+    assert_eq!(messages[1]["suggestions"], json!(["Warum ist er hoeher?"]));
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_newsletter_gets_no_chat() {
+    let answer = r#"{"type": "newsletter", "title": "Angebote", "check": ["Rabatt"], "reply": "Nein", "questions": ["Was?"]}"#;
+    let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
+    let mut h = with_emails("analysis-newsletter", &address, "");
+    let ids = vec![Id::parse(EMAIL_ID).unwrap()];
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        ids,
+        &at(AnalysisLevel::Medium),
+    );
+    let sent = until_done(&mut h);
+
+    assert_eq!(
+        shown(&of(&sent, "job").last().unwrap()["summary"]),
+        "1 analysed"
+    );
+    let text = fs::read_to_string(h.vault().join("Email/a.md")).unwrap();
+    assert!(text.contains("type: newsletter"), "{text}");
+    assert!(!h.vault().join("Conversations").exists());
 }
 
 // ------------------------------------------------------------------------

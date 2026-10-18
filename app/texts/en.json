@@ -174,6 +174,8 @@
     "one": "{error} (asked once)",
     "other": "{error} (asked {n} times)"
   },
+  "analysis.chat_title.email": "Email analysis · {title}",
+  "analysis.chat_write_failed": "the conversation could not be written.",
   "analysis.cut_off": "The model ran out of room before it finished its answer (its context window or its output limit).",
   "analysis.label.email": "Analysing email · {email}",
   "analysis.not_json": "The answer wasn't the JSON object asked for.",
@@ -217,6 +219,7 @@
   "card.task": "New task for this",
   "chat.also": "AI",
   "chat.ask_anything": "Ask anything…",
+  "chat.ask_this": "Ask this",
   "chat.assistant_at": "Assistant · {time}",
   "chat.assistant_reply": "Assistant reply",
   "chat.branch_failed": "Could not save the branch.",
@@ -288,6 +291,10 @@
   "count.conflicts": {
     "one": "{n} conflict",
     "other": "{n} conflicts"
+  },
+  "count.conversations": {
+    "one": "{n} conversation",
+    "other": "{n} conversations"
   },
   "count.deleted": "{n} deleted",
   "count.entities": {
@@ -397,6 +404,7 @@
   "email.all_of": "all of",
   "email.analysis_blocked": "The analysis is on: pick a model that works for it, or turn it off.",
   "email.analysis_lite": "Sends each new email to {picker} for its type, a clean title, and labels and projects from this vault.",
+  "email.analysis_medium": "Sends each new email to {picker} for its type, a clean title, and labels and projects from this vault; and, for an email that asks for it, a quick reply, points to check and questions, as a conversation linked to the email.",
   "email.analysis_off": "New emails keep their subject as title; nothing is sent to an AI.",
   "email.any_of": "any of",
   "email.as_it_came": "As the email came; read only",
@@ -1008,6 +1016,7 @@
   "vault_op.trash": "Trash",
   "vault_op.vault": "Vault",
   "watch.level.lite": "Lite",
+  "watch.level.medium": "Medium",
   "watch.off": "Off",
   "watch.step.analysis": "Analysis",
   "week.of": "Week of {day} · {what}",
