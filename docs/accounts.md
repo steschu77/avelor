@@ -86,6 +86,9 @@ Every account file has:
       edited (default) or only on request
     * `last-fetch`: when the last fetch without failures started; the
       "Since last time" preset
+    * `analysis`: Fetch mail's analysis of new mail (`mail.md#analysis`):
+      `level` (`off`, `lite`) and the `model` it runs with,
+      `{account, model}`, kept while the level is off; absent: off
     * `auto-sync`: the account's mail auto-sync (`mail.md#mail-auto-sync`),
       absent until it is first switched on: `enabled`; `filter`, its own
       filter, apart from the one above and without dates; `since`, from when
@@ -224,6 +227,7 @@ the feature's own settings:
 | Feature | Kept in | Picked in |
 |---|---|---|
 | The assistant | the vault's settings, `.avelor/vault.yaml` `chat-model` (`vault.md#vault-config`; `set_vault_settings`) | the assistant's head |
+| Fetch mail's analysis | the Google account file's `mail.analysis` (`mail.md#analysis`; remembered by `mail_fetch`) | Fetch mail, section Analysis |
 
 The host reads the pick where it is kept and checks it,
 `AiAccounts::choose(choice, what, now)`: a `Resolved` (account, model,
@@ -239,15 +243,16 @@ a request; `aiModelOf(choice)` mirrors the check for its hints. Refused:
 - the model no longer offered (unticked): "gpt-5 is no longer offered;
   tick it under Accounts or pick another model.";
 - the spend limit reached: the assistant shows "has reached its spend
-  limit" and takes no input; a call already running finishes
-  (`Error::SpendLimit`).
+  limit" and takes no input; the mail analysis stops before its next mail
+  (with a notice; `check_limit` before each); a call already running
+  finishes (`Error::SpendLimit`).
 
 No other model is ever tried in place of the pick: it could send a
 document to another provider. The picker (`aiModelPicker`, `aiShowModels`
 in `features/workspace/models.js`) names the picked model, marked while it is refused,
 and opens a menu of every account's offered models, by account; an
 account without its key is dimmed. Where a pick is refused the page shows
-why, with a button to Accounts where the fix is there.
+why (`aiMissingHint`), with a button to Accounts where the fix is there.
 
 ## Flows
 
@@ -262,7 +267,7 @@ why, with a button to Accounts where the fix is there.
 | I1 | Add an AI provider | "AI provider" menu → draft pane → key or address → Save → `aiConnect` | `connect_ai {provider, key \| address}` (channel `connect_ai`) → models listed with the new values on a worker → only then stored in `.avelor/accounts/` (the key as `<id>.key`) → `account`, `ok {id, models}` | card with models |
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |
 | I3 | Offer a model | tick | `set_ai_settings {account, offered}` → `account`, `ok` | pickers offer it |
-| I8 | Pick a model | a feature's picker → `aiShowModels` → a model | the feature's own command: `set_vault_settings {chat_model}` → `vault_settings`, `ok` | the feature uses it; "Used by" names the feature |
+| I8 | Pick a model | a feature's picker → `aiShowModels` → a model | the feature's own command: `set_vault_settings {chat_model}` → `vault_settings`, `ok`; `mail_fetch {…, analysis}` → `account` | the feature uses it; "Used by" names the feature |
 | I4 | Spend limit | edit field | `set_ai_settings {account, spend_limit}` → `account`, `ok` | enforced: at the limit a chat is refused |
 | I5 | Replace key | edit key | `connect_ai {account, key}` | — |
 | I6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` / `remove_account`, shared with Google (H6) | — |

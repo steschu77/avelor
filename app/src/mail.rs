@@ -13,6 +13,9 @@
 //! An account's auto-sync fetches the new mail that matches its own filter
 //! every 15 minutes, started by the clock (`App::on_clock`): a quiet search
 //! first, then -- only if there is new mail -- a fetch job like the page's.
+//!
+//! A fetch whose filter turns the analysis on (mail.md#analysis) hands its new
+//! mails to `enrich::analyse` when it ends.
 
 use std::collections::HashMap;
 use std::collections::{HashSet, VecDeque};
@@ -36,8 +39,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::App;
+use crate::enrich;
 use crate::google;
 use crate::google::{SYNC_EVERY, first_due, later};
+use crate::google_accounts::Analysis;
 use crate::google_accounts::AutoSync;
 use crate::google_accounts::MailSettings;
 use crate::jobs::JobKind;
@@ -104,6 +109,8 @@ struct MailFetch {
     /// When the fetch (an auto-sync: its search) started: what it fetched
     /// covers the mail up to then.
     started: DateTime,
+    /// The analysis of the mails it creates, as the fetch's filter has it.
+    analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
@@ -116,6 +123,7 @@ struct FetchPlan {
     replace: HashSet<String>,
     origin: Origin,
     started: DateTime,
+    analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
@@ -172,6 +180,10 @@ pub(crate) struct FetchRequest {
     filter: MailFilter,
     #[serde(default)]
     auto_update: bool,
+    /// Remembered like the filter; with a level other than off, the new
+    /// mails are analysed after the fetch.
+    #[serde(default)]
+    analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
@@ -385,12 +397,14 @@ fn fetch_headers(client: &Client, cancel: &Cancel, ids: &[String]) -> Result<Vec
 }
 
 // ----------------------------------------------------------------------------
-/// `mail_fetch {account, ids, replace?, filter?, auto_update?}`:
+/// `mail_fetch {account, ids, replace?, filter?, auto_update?, analysis?}`:
 /// fetch the mails into the vault as a job, answering `{job}` once it
 /// started. The job's events follow, an `entity` event per mail written
 /// (with `content` for a replaced body), a `notice` per mail that failed,
-/// and finally the account (`account`: its last fetch and sync). The filter
-/// and mode are remembered in the account first.
+/// and finally the account (`account`: its last fetch and sync). The filter,
+/// mode and analysis are remembered in the account first. With the analysis
+/// on, its pick is checked first (`AiAccounts::choose`): refused, nothing is
+/// fetched; else the new mails are analysed after the fetch.
 pub fn mail_fetch(app: &mut App, req: Req, request: FetchRequest) {
     if app.mail.fetch.is_some() {
         let what = "a second mail fetch".to_string();
@@ -404,9 +418,20 @@ pub fn mail_fetch(app: &mut App, req: Req, request: FetchRequest) {
         Ok(client) => client,
         Err(e) => return google::refuse_account(req, e),
     };
+    let analysis = request.analysis.clone().filter(Analysis::is_on);
+    if let Some(analysis) = &analysis {
+        let picked = analysis.model.as_ref();
+        if let Err(refusal) = app
+            .ai
+            .choose(picked, enrich::MAIL_ANALYSIS, DateTime::now())
+        {
+            return req.fail(refusal.error, refusal.message);
+        }
+    }
     let remembered = Remembered {
         filter: request.filter,
         auto_update: request.auto_update,
+        analysis: request.analysis,
     };
     remember_settings(app, account, remembered);
 
@@ -423,6 +448,7 @@ pub fn mail_fetch(app: &mut App, req: Req, request: FetchRequest) {
         replace,
         origin: Origin::Manual,
         started: DateTime::now(),
+        analysis,
     };
     let job_id = start_fetch(app, format!("Fetching mail · {email}"), plan);
     req.ok(json!({ "job": job_id }));
@@ -460,6 +486,7 @@ fn start_fetch(app: &mut App, label: String, plan: FetchPlan) -> Id {
         },
         origin: plan.origin,
         started: plan.started,
+        analysis: plan.analysis,
     });
     if skipped > 0 {
         app.update_job(job_id, skipped, total);
@@ -503,10 +530,11 @@ fn find_account_email(app: &App, account: Id) -> String {
 struct Remembered {
     filter: MailFilter,
     auto_update: bool,
+    analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
-/// Store the page's filter and mode in the account file (best
+/// Store the page's filter, mode and analysis in the account file (best
 /// effort: a failed save only costs the pre-filled form next time).
 fn remember_settings(app: &mut App, account: Id, remembered: Remembered) {
     let remembered = app.google.update(account, |account| {
@@ -517,6 +545,7 @@ fn remember_settings(app: &mut App, account: Id, remembered: Remembered) {
             .get_or_insert_with(MailSettings::default);
         mail.filter = remembered.filter;
         mail.auto_update = remembered.auto_update;
+        mail.analysis = remembered.analysis;
         true
     });
     if let Err(e) = remembered {
@@ -767,7 +796,8 @@ pub fn stop(app: &mut App) {
 /// when it started (the page's "Since last time", or where the next
 /// auto-sync starts) only if it fetched all and nothing failed, so the next
 /// one still covers what it didn't write -- and end the job with its
-/// summary.
+/// summary. Unless it was stopped, the analysis it asks for starts on the
+/// mails it created.
 fn finish(app: &mut App) {
     let Some(fetch) = app.mail.fetch.take() else {
         return;
@@ -803,6 +833,11 @@ fn finish(app: &mut App) {
     };
     if let Some((message, entity)) = new_mail_notice(&counts.created, title_of, &email) {
         app.inform(&message, entity);
+    }
+    let analysis = fetch.analysis.filter(|a| a.is_on() && !stopped);
+    if let Some(analysis) = analysis.filter(|_| !fetch.counts.created.is_empty()) {
+        let created = fetch.counts.created;
+        enrich::analyse(app, &email, created, &analysis);
     }
 }
 
@@ -1004,6 +1039,7 @@ fn on_sync_listed(
         replace: HashSet::new(),
         origin: Origin::AutoSync,
         started,
+        analysis: None,
     };
     start_fetch(app, format!("Syncing mail · {email}"), plan);
     pump(app);
@@ -1334,6 +1370,7 @@ Content-Type: text/html; charset=utf-8\r\n\
             replace: HashSet::new(),
             origin: Origin::Manual,
             started: now,
+            analysis: None,
         };
         start_fetch(&mut h.app, "Fetching".into(), plan);
         auto_sync(&mut h.app, now);
@@ -1399,6 +1436,7 @@ Content-Type: text/html; charset=utf-8\r\n\
             replace: HashSet::new(),
             origin: Origin::Manual,
             started: now,
+            analysis: None,
         };
         let manual = start_fetch(&mut h.app, "Fetching".into(), plan);
         on_sync_listed(&mut h.app, account, root, now, Ok(vec!["g2".into()]));
@@ -1425,6 +1463,7 @@ Content-Type: text/html; charset=utf-8\r\n\
             replace: HashSet::new(),
             origin: Origin::AutoSync,
             started,
+            analysis: None,
         };
         start_fetch(&mut h.app, "Syncing mail".into(), plan);
         finish(&mut h.app);
@@ -1480,6 +1519,7 @@ Content-Type: text/html; charset=utf-8\r\n\
             replace: HashSet::new(),
             origin: Origin::Manual,
             started: DateTime::now(),
+            analysis: None,
         };
         start_fetch(&mut h.app, "Fetching".into(), plan);
         h.app.mail.fetch.as_mut().unwrap().counts.created.push(mail);
@@ -1495,5 +1535,73 @@ Content-Type: text/html; charset=utf-8\r\n\
             sent[3]["data"],
             json!({ "level": "info", "message": "New mail: Nebenkosten 2026", "entity": mail })
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_fetch_with_the_analysis_on_needs_a_model_and_remembers_it() {
+        let mut h = with_google("mail-fetch-analysis", MAIL, &[]);
+        let model = json!({ "account": Id::generate(), "model": "m" });
+        let fetch = |level: &str| {
+            let analysis = json!({ "level": level, "model": model });
+            json!({ "account": CONNECTED, "ids": [], "analysis": analysis })
+        };
+        let sent = h.call("mail_fetch", fetch("lite"));
+        assert_eq!(shape(&sent), ["reply"], "nothing fetched: {sent:?}");
+        assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+        assert_eq!(
+            sent[0]["err"]["message"],
+            "For the mail analysis, the picked model\u{2019}s account is gone; pick another model."
+        );
+        let file = h.vault().join(".avelor/accounts/google_a.yaml");
+        assert!(!fs::read_to_string(&file).unwrap().contains("analysis"));
+
+        let sent = h.call("mail_fetch", fetch("off"));
+        assert!(sent.iter().any(|m| m["ok"]["job"].is_string()), "{sent:?}");
+        h.run_queue();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(
+            text.contains("analysis:") && text.contains("level: off") && text.contains("model: m"),
+            "off, the model kept: {text}"
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_finished_fetch_hands_its_new_mails_to_the_analysis() {
+        let mut h = with_google("mail-analyse-after", MAIL, &[]);
+        let account = connected_id();
+        let lite = Analysis {
+            level: crate::google_accounts::AnalysisLevel::Lite,
+            model: None,
+        };
+        for stopped in [false, true] {
+            let client = h.app.google.connected(account).unwrap();
+            let plan = FetchPlan {
+                account,
+                client,
+                queue: VecDeque::new(),
+                skipped: 0,
+                replace: HashSet::new(),
+                origin: Origin::Manual,
+                started: DateTime::now(),
+                analysis: Some(lite.clone()),
+            };
+            let job = start_fetch(&mut h.app, "Fetching".into(), plan);
+            let fetch = h.app.mail.fetch.as_mut().unwrap();
+            fetch.counts.created.push(Id::generate());
+            if stopped {
+                crate::jobs::stop(&mut h.app, job);
+            } else {
+                finish(&mut h.app);
+            }
+            let sent = parse(&h.take());
+            // No AI account in this vault: the analysis says so.
+            let refused = sent.iter().any(|m| {
+                let message = m["data"]["message"].as_str().unwrap_or_default();
+                message.contains("For the mail analysis, add an AI provider")
+            });
+            assert_eq!(refused, !stopped, "stopped: {stopped}, {sent:?}");
+        }
     }
 }

@@ -15,6 +15,7 @@ use crate::chat::ChatState;
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
 use crate::documents::DocumentState;
+use crate::enrich::EnrichState;
 use crate::google_accounts::GoogleAccounts;
 use crate::jobs::Jobs;
 use crate::mail;
@@ -247,6 +248,9 @@ pub struct App {
     /// The assistant's replies being written, and the failed ones
     /// (`chat`); neither is in the vault.
     pub chat: ChatState,
+
+    /// The mail analyses running (`enrich`), each a job.
+    pub enrich: EnrichState,
 }
 
 impl App {
@@ -272,6 +276,7 @@ impl App {
             calendar: CalendarState::default(),
             close: CloseState::default(),
             chat: ChatState::default(),
+            enrich: EnrichState::default(),
         }
     }
 

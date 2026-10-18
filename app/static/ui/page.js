@@ -180,9 +180,9 @@ export function stat(label, value, note) {
   return cell;
 }
 
-// A notice in the detail: news ('info') or what failed ('error'), of text
-// and elements, a button after the text.
-const NOTICE_TYPES = { info: 'prose', error: 'error-note' };
+// A notice in the detail: news ('info'), what failed ('error') or a hint
+// ('hint'), of text and elements, a button after the text.
+const NOTICE_TYPES = { info: 'prose', error: 'error-note', hint: 'note' };
 
 export function notice(kind, ...content) {
   const el = accEl('div', `notice ${NOTICE_TYPES[kind]}`);

@@ -59,7 +59,7 @@ read by OCR.
 | `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
 | `accounts.md` | Google and AI accounts: files, secrets, states, the Accounts page, AI uses and the spend limit |
-| `mail.md` | Fetch mail, the mail auto-sync |
+| `mail.md` | Fetch mail, the mail auto-sync, the mail analysis |
 | `calendar.md` | calendar sync, its rules, auto-sync and sync points |
 | `assistant.md` | the assistant: conversations, context, streaming |
 
@@ -345,8 +345,9 @@ side never touches the vault side; `app` is the only bridge.
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai_context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file, within a budget; its tests |
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked item; `create`, a new AI conversation; dispatch tests against a fake Ollama |
-| `ai_accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
-| `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); their tests |
+| `ai_accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` and `check_limit` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
+| `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); a fetch's new mails handed to the analysis; their tests |
+| `enrich.rs` | the mail analysis (`mail.md#analysis`): the vault's `context`, the request per level, its parser and its writes (pure: `request_for`, `parse`, `apply_lite`), the analysis job one mail at a time (`analyse`, `EnrichState`); its tests against a fake Ollama |
 | `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests |
 
 ## Platforms <a id="platforms"></a>
@@ -448,7 +449,7 @@ nothing imports `app.js`.
 | `features/dashboard/dashboard.js`, `features/dashboard/cards.js` | the Dashboard lens: its cards' order and the closed ones, the Cards menu, dragging a card; the cards Week, Tasks (a task dragged to another column), Upcoming, Recent files and Recent chats |
 | `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`showInDocuments`, `revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
-| `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`); its way to the Accounts page is the `accounts.open` action |
+| `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`), `aiMissingHint`; its way to the Accounts page is the `accounts.open` action |
 | `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts, Google and AI; the trash |
 | `features/import/mail.js` | Fetch mail, and an account's mail auto-sync |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
@@ -643,7 +644,8 @@ abort. Where the bundle lands and how to measure the size:
   save conflict into `Error::ChangedOutside { path }` through
   `Vault::require_written` (`saving.md#limits`). A function whose failure
   is a reason the user reads, not an error a caller matches on, returns
-  those words as a `String`; one that answers a
+  those words as a `String` (an answer of the mail analysis that wasn't
+  JSON); one that answers a
   request with a code and the host's words returns both
   (`ai_accounts::Refusal`).
 - **Entity ops are generic**: a vault or host op is built on a property

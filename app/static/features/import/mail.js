@@ -25,8 +25,12 @@ import { armedButton } from '../../ui/confirm.js';
 import {
   closeVaultArea, openVaultOp, registerVaultPage,
 } from '../../ui/page.js';
+import { notice } from '../../ui/page.js';
 import { accSeg } from '../../ui/segmented.js';
 import { iconEl } from '../../ui/icons.js';
+import {
+  aiAnyOffered, aiMissingHint, aiModelOf, aiModelPicker,
+} from '../workspace/models.js';
 
 const MAIL_PAGE_SIZE = 50; // matches per page, as the host pages them
 const MAIL_DEBOUNCE_MS = 500;
@@ -67,6 +71,7 @@ export function openMailFetch(account_id) {
       to: filter.since === 'custom' && before ? mailDateInput(before) : '',
     },
     auto: saved?.auto_update ?? true,
+    analysis: { ...MAIL_ANALYSIS_OFF, ...saved?.analysis },
     searching: false, // while a `mail_search` / `mail_headers` is answered
     error: null,
     matches: null, // [{ id, in_vault }] of the last search
@@ -105,12 +110,14 @@ store.subscribe([state => state.vault_op, state => state.vault_expanded], ([vaul
 });
 
 // The account changed (e.g. its last fetch after a fetch): refresh the
-// header line and the date presets that depend on it.
+// header line and the date presets that depend on it; and the analysis,
+// whose pick may have changed with the AI accounts.
 store.subscribe(state => state.accounts_rev, () => {
   if (!mail) return;
   if (!accounts.has(mail.account)) return closeMailPage();
   renderMailSubtitle();
   renderMailDate(mail.form);
+  renderMailAnalysisSection();
   scheduleRenderMailMatches();
 });
 
@@ -323,10 +330,12 @@ function mailReplacing() {
 }
 
 // Whether Fetch can run: a list to fetch from, not about to be replaced by
-// a pending Auto-update search.
+// a pending Auto-update search, and an analysis that is off or has a
+// working pick.
 function mailCanFetch() {
   return mail.matches !== null && mail.selected.size > 0 && !mail.fetching
-    && !mail.searching && !(mail.auto && mail.timer !== null);
+    && !mail.searching && !(mail.auto && mail.timer !== null)
+    && !mailAnalysisBlocked(mail.analysis);
 }
 
 // Fetch the selection; replacing bodies takes a second click on Fetch
@@ -340,7 +349,7 @@ function mailFetch() {
   m.fetching = true;
   const ids = m.matches.filter(match => m.selected.has(match.id)).map(match => match.id);
   const filter = m.listFilter ? JSON.parse(m.listFilter) : mailHostFilter();
-  const args = { account: m.account, ids, replace, filter, auto_update: m.auto };
+  const args = { account: m.account, ids, replace, filter, auto_update: m.auto, analysis: m.analysis };
   // Once the fetch runs, the page closes; the job card shows it.
   rpcCall('mail_fetch', args).then(({ job }) => {
     mailFetchJobs.set(job, args.account);
@@ -377,11 +386,15 @@ function renderMailPage() {
   filter.append(renderMailFilterForm(mail.form));
   form.append(section, filter);
 
+  els.analysis = accEl('div');
+  form.append(els.analysis);
+
   els.matches = accEl('div', 'mail__matches');
   grid.append(form, els.matches);
   page.append(grid);
   $('vault-area-body').replaceChildren(page);
 
+  renderMailAnalysisSection();
   renderMailSubtitle();
   renderMailMatches();
 }
@@ -640,6 +653,53 @@ function mailSetSync(account, change) {
 }
 
 // ----------------------------------------------------------------------------
+// the analysis of new mail (mail.md#analysis), of Fetch mail: a level,
+// and the model it runs with
+
+const MAIL_ANALYSIS_OFF = { level: 'off', model: null };
+
+// `analysis` ({ level, model }) as a seg of its levels and a body: with the
+// analysis on, the picker of its model, and what keeps the pick from working
+// (`aiMissingHint`; not for a plain "pick a model", which the picker says
+// itself). `onChange` gets the analysis as changed.
+function renderMailAnalysis(analysis, onChange) {
+  const seg = accSeg([['off', 'Off'], ['lite', 'Lite']], analysis.level,
+    level => onChange({ ...analysis, level }));
+  const body = accEl('div', 'page-text mail__text');
+  if (analysis.level === 'off') {
+    body.append('New mails keep their subject as title; nothing is sent to an AI.');
+    return { seg, body };
+  }
+  const picker = aiModelPicker(analysis.model, model => onChange({ ...analysis, model }));
+  body.append('Sends each new mail to ', picker,
+    ' for its kind, a clean title, and labels and projects from this vault.');
+  const ai = aiModelOf(analysis.model);
+  if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
+    body.append(notice('hint', ...aiMissingHint(ai, 'the mail analysis')));
+  }
+  return { seg, body };
+}
+
+// Whether `analysis` is on but its pick wouldn't work (the host refuses a
+// fetch then).
+function mailAnalysisBlocked(analysis) {
+  return analysis.level !== 'off' && !!aiModelOf(analysis.model).problem;
+}
+
+// Fetch mail's third section, Analysis: built again on its changes, and
+// when the accounts change (the pick's problems).
+function renderMailAnalysisSection() {
+  const { seg, body } = renderMailAnalysis(mail.analysis, analysis => {
+    mail.analysis = analysis;
+    renderMailAnalysisSection();
+    scheduleRenderMailMatches();
+  });
+  const head = accEl('div', 'section-head', '2 \u00b7 Analysis');
+  head.append(seg);
+  mail.els.analysis.replaceChildren(head, body);
+}
+
+// ----------------------------------------------------------------------------
 // rendering: the matches pane
 
 const scheduleRenderMailMatches = oncePerFrame(() => {
@@ -795,6 +855,10 @@ function renderMailFooter() {
   if (replacing) {
     footer.append(accEl('div', 'note mail__warning',
       `${replacing} selected ${replacing === 1 ? 'mail is' : 'mails are'} already in the vault: fetching replaces ${replacing === 1 ? 'its body' : 'their bodies'}, and edits to ${replacing === 1 ? 'it' : 'them'} are lost. Title, projects, labels and threads stay.`));
+  }
+  if (mailAnalysisBlocked(mail.analysis)) {
+    footer.append(accEl('div', 'note mail__warning',
+      'The analysis is on: pick a model that works for it, or turn it off.'));
   }
   if (mail.fetchError) footer.append(accEl('div', 'error-note', mail.fetchError));
   return footer;

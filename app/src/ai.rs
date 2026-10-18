@@ -16,6 +16,12 @@ use crate::app::App;
 use crate::config_files::unique_names;
 use crate::protocol::Req;
 
+/// The context window Ollama runs the model with for the mail analysis;
+/// one value, as Ollama loads the model anew when it changes. The largest
+/// analysis request comes to about 4,000 tokens; the answer and a thinking
+/// model's reasoning need the rest.
+pub const CONTEXT_TOKENS: u32 = 16_384;
+
 // ----------------------------------------------------------------------------
 /// Send the account `id` to the page, if there is one: the `account` event.
 pub fn post(app: &App, id: Id) {

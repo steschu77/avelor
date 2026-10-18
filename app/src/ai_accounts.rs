@@ -736,6 +736,18 @@ impl AiAccounts {
     }
 
     // ------------------------------------------------------------------------
+    /// Whether the account `id` may still be called in the month of `now`:
+    /// refused once it has reached its spend limit (`SpendLimit`), or if it
+    /// is gone (`NotFound`).
+    pub fn check_limit(&self, id: Id, now: DateTime) -> std::result::Result<(), Refusal> {
+        let account = self.get(id).map_err(|error| Refusal {
+            error,
+            message: "The AI account is gone.".to_string(),
+        })?;
+        account.check_limit(&month_of(now))
+    }
+
+    // ------------------------------------------------------------------------
     /// Add what the clients of the account `id` recorded since the last time
     /// to this month, and save its spend file. A failed save keeps it in
     /// memory, for the next one.
@@ -1108,5 +1120,9 @@ note: top-level kept
         );
         let chat = accounts.choose(Some(&gpt), "chats", october).unwrap();
         assert_eq!(chat.account, id);
+        assert!(accounts.check_limit(id, september).is_err());
+        assert!(accounts.check_limit(id, october).is_ok());
+        let gone = accounts.check_limit(Id::generate(), october).err().unwrap();
+        assert_eq!(gone.error.code(), "not_found");
     }
 }

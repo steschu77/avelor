@@ -87,7 +87,8 @@ a request as its context length allows (often 4k tokens): older Ollama
 versions kept the end of a longer one, newer ones refuse it (400,
 `exceed_context_size_error`). For long documents, raise the context
 length in Ollama's settings. The host sends no `num_ctx`, by choice, so
-the server's default applies.
+the server's default applies (the mail analysis sends
+`ai::CONTEXT_TOKENS`).
 
 ## Flows
 

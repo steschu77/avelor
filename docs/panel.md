@@ -53,8 +53,8 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
   calendar, a status other than confirmed — for a task its status, its
   due date as seen from today (tagged when overdue), its assignee and when
   it was done (`task.done`), for a mail its sender, followed by its kind
-  when the mail analysis found one ("Stadtwerke · Request"),
-  and for a document its genre (`renderCardDetails`,
+  when the mail analysis found one ("Stadtwerke · Request",
+  `mail.md#analysis`), and for a document its genre (`renderCardDetails`,
   `features/panel/details.js`). A task's fields and a document's genre are
   editable in place while the host can write the entity
   (`panel.md#field-edits`); the rest is read-only;

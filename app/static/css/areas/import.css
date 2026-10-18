@@ -89,6 +89,10 @@
   gap: 8px;
 }
 
+.mail__text {
+  padding: 12px 0;
+}
+
 .mail__matches {
   min-width: 0;
   min-height: 0;

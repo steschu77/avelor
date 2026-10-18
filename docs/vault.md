@@ -454,9 +454,11 @@ An email is a markdown file holding the mail's body with the following
 additional fields:
 
 * `subject`: string, the subject as the mail came; written only once the
-  title differs from it, absent otherwise: the title is the subject,
-* `kind`: string, what the mail is: `request`, `reply`, `notification`,
-  `newsletter` or `other`,
+  title differs from it (the mail analysis, `mail.md#analysis`), absent
+  otherwise: the title is the subject,
+* `kind`: string, what the mail is, as the mail analysis found:
+  `request`, `reply`, `notification`, `newsletter` or `other`; absent if
+  it wasn't analysed,
 * `from`: EmailAddress,
 * `to`: [EmailAddress],
 * `cc`: [EmailAddress],

@@ -6,6 +6,7 @@
 //! through the app never loses user data.
 
 use crate::envelope::Conversation;
+use crate::envelope::Email;
 use crate::envelope::Event;
 use crate::envelope::Message;
 use crate::envelope::Remote;
@@ -429,6 +430,13 @@ impl Document {
     /// the role.
     pub fn set_event(&mut self, event: Option<Event>) {
         self.envelope_mut().roles.event = event;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's `email` block (vault.md#email); `None` drops the
+    /// role.
+    pub fn set_email(&mut self, email: Option<Email>) {
+        self.envelope_mut().roles.email = email;
     }
 
     // ------------------------------------------------------------------------

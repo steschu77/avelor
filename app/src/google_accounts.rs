@@ -19,6 +19,7 @@ use av_utils::id::Id;
 use serde::{Deserialize, Serialize};
 use serde_yaml_ng::Value;
 
+use crate::ai_accounts::ModelChoice;
 use crate::config::is_false;
 use crate::config_files::{ConnectionStatus, SecretFile, remove_if_exists, write_yaml};
 
@@ -186,6 +187,9 @@ pub struct MailSettings {
     /// Absent until auto-sync is first switched on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_sync: Option<AutoSync>,
+    /// Fetch mail's analysis, remembered with the filter; absent: off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis: Option<Analysis>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
 }
@@ -197,8 +201,36 @@ impl Default for MailSettings {
             auto_update: auto_update_default(),
             last_fetch: None,
             auto_sync: None,
+            analysis: None,
             rest: BTreeMap::new(),
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// How closely new mail is analysed (mail.md#analysis): Lite sorts it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnalysisLevel {
+    Off,
+    Lite,
+}
+
+// ----------------------------------------------------------------------------
+/// A filter's mail analysis: its level, and the model it runs with
+/// (accounts.md#model-choice), kept while the level is off.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Analysis {
+    pub level: AnalysisLevel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<ModelChoice>,
+}
+
+impl Analysis {
+    // ------------------------------------------------------------------------
+    /// Whether new mail is analysed at all.
+    pub fn is_on(&self) -> bool {
+        self.level != AnalysisLevel::Off
     }
 }
 
@@ -326,6 +358,7 @@ pub struct MailMeta<'a> {
     pub auto_update: bool,
     pub last_fetch: Option<DateTime>,
     pub auto_sync: Option<&'a AutoSync>,
+    pub analysis: Option<&'a Analysis>,
 }
 
 impl Account {
@@ -404,6 +437,7 @@ impl Account {
                 auto_update: mail.auto_update,
                 last_fetch: mail.last_fetch,
                 auto_sync: mail.auto_sync.as_ref(),
+                analysis: mail.analysis.as_ref(),
             }),
         }
     }

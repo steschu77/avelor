@@ -13,6 +13,7 @@ use av_utils::id::Id;
 use serde::Serialize;
 
 use crate::app::App;
+use crate::enrich;
 use crate::mail;
 use crate::protocol::Req;
 use crate::{api, chat};
@@ -23,6 +24,7 @@ pub enum JobKind {
     VaultScan,
     MailFetch,
     CalendarSync,
+    MailAnalysis,
 }
 
 impl JobKind {
@@ -35,9 +37,13 @@ impl JobKind {
 
     // ------------------------------------------------------------------------
     /// Whether it belongs to the open vault, so a vault switch stops it
-    /// first: it writes into the vault (mail fetch, calendar sync).
+    /// first: it writes into the vault (mail fetch, calendar sync, mail
+    /// analysis).
     fn vault_bound(self) -> bool {
-        matches!(self, JobKind::MailFetch | JobKind::CalendarSync)
+        matches!(
+            self,
+            JobKind::MailFetch | JobKind::CalendarSync | JobKind::MailAnalysis
+        )
     }
 }
 
@@ -195,8 +201,9 @@ impl App {
     // ------------------------------------------------------------------------
     /// Open `root` once the work bound to the open vault has stopped: the
     /// assistant's replies being written keep what they have so far (as
-    /// Stop does), mail fetch and calendar sync are stopped, and a sync
-    /// first records what it already did. A newer switch replaces this one.
+    /// Stop does), mail fetch, calendar sync and the mail analyses are
+    /// stopped, and a sync first records what it already did. A newer
+    /// switch replaces this one.
     pub fn switch_vault_when_stopped(&mut self, root: PathBuf) {
         chat::stop_all(self);
         let bound: Vec<Id> = self
@@ -243,7 +250,7 @@ pub fn cancel_job(app: &mut App, req: Req, id: Id) {
 
 // ----------------------------------------------------------------------------
 /// Stop the job `id`: its requests are cancelled, and the job ends -- at once
-/// (mail fetch), or once it has kept what it did
+/// (mail fetch, mail analysis), or once it has kept what it did
 /// (calendar sync, whose continuation runs with what the sync returned).
 pub fn stop(app: &mut App, id: Id) {
     let Some(kind) = app.jobs.running.get(&id).map(|job| job.kind) else {
@@ -253,6 +260,7 @@ pub fn stop(app: &mut App, id: Id) {
     app.stop_job(id);
     match kind {
         JobKind::MailFetch => mail::stop(app),
+        JobKind::MailAnalysis => enrich::stop(app, id),
         JobKind::CalendarSync | JobKind::VaultScan => {}
     }
 }

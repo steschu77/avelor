@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -248,7 +249,14 @@ pub fn with_google(name: &str, google: &str, files: &[(&str, String)]) -> Harnes
 pub struct FakeOllama {
     models: Vec<String>,
     reply: Vec<String>,
+    /// Whole replies, one per chat request in turn, the last one again
+    /// after that; instead of `reply`.
+    turns: Vec<String>,
+    /// The chat requests answered so far.
+    served: AtomicUsize,
     hold: bool,
+    /// Replies end as if the model ran out of room (`length`).
+    cut: bool,
     /// Where the chat requests go, as JSON, if they are kept.
     requests: Option<Arc<Mutex<Vec<Value>>>>,
 }
@@ -270,9 +278,24 @@ impl FakeOllama {
     }
 
     // ------------------------------------------------------------------------
+    /// Answer the first chat with the first of `answers`, the second with
+    /// the second, …, and every later one with the last.
+    pub fn answering_in_turn(mut self, answers: &[&str]) -> Self {
+        self.turns = answers.iter().map(|a| a.to_string()).collect();
+        self
+    }
+
+    // ------------------------------------------------------------------------
     /// Keep the chat requests in `requests`.
     pub fn recording(mut self, requests: &Arc<Mutex<Vec<Value>>>) -> Self {
         self.requests = Some(Arc::clone(requests));
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    /// End each reply as cut off: Ollama's `done_reason: length`.
+    pub fn cut_off(mut self) -> Self {
+        self.cut = true;
         self
     }
 
@@ -345,7 +368,12 @@ impl FakeOllama {
             let _ = write!(stream, "{:x}\r\n{line}\r\n", line.len());
             let _ = stream.flush();
         };
-        for (i, piece) in self.reply.iter().enumerate() {
+        let turn = match self.turns.len() {
+            0 => None,
+            n => Some(self.turns[self.served.fetch_add(1, Ordering::Relaxed).min(n - 1)].clone()),
+        };
+        let reply = turn.map_or_else(|| self.reply.clone(), |answer| vec![answer]);
+        for (i, piece) in reply.iter().enumerate() {
             let message = json!({ "role": "assistant", "content": piece });
             send(
                 &mut stream,
@@ -362,7 +390,7 @@ impl FakeOllama {
             "model": "m",
             "message": { "role": "assistant", "content": "" },
             "done": true,
-            "done_reason": "stop",
+            "done_reason": if self.cut { "length" } else { "stop" },
             "prompt_eval_count": 5,
             "eval_count": 3,
         });

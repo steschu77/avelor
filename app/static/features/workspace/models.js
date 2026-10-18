@@ -1,6 +1,6 @@
 // The models features pick (accounts.md#model-choice): the AI providers, a
-// pick as the host checks it and the picker a feature shows. The way to the
-// Accounts page is the `accounts.open` action
+// pick as the host checks it, the picker a feature shows and what keeps a pick
+// from working. The way to the Accounts page is the `accounts.open` action
 // (features/workspace/accounts.js).
 
 import { accEl } from '../../core/dom.js';
@@ -58,6 +58,30 @@ export function aiLimitReached(account) {
 // Whether any AI account offers a model to pick.
 export function aiAnyOffered() {
   return [...accounts.values()].some(a => isAiAccount(a) && a.offered?.length);
+}
+
+// What `aiModelOf` found wrong (`ai.problem`) for `what` (e.g. 'OCR', 'the
+// AI steps'), in the host's words, and a button to Accounts where the fix
+// is there: elements to put into a note beside the feature's picker.
+export function aiMissingHint(ai, what) {
+  const name = ai.account ? aiProvider(ai.account.kind).name : '';
+  const pick = aiAnyOffered()
+    ? `For ${what}, pick a model.`
+    : `For ${what}, tick a model under Accounts, then pick it.`;
+  const text = {
+    provider: `For ${what}, add an AI provider under Accounts.`,
+    pick,
+    gone: `For ${what}, the picked model\u2019s account is gone; pick another model.`,
+    key: `For ${what}, enter ${name}\u2019s key again under Accounts.`,
+    offered: `For ${what}, ${ai.model} is no longer offered; tick it under Accounts or pick another model.`,
+    limit: `For ${what}, ${name} has reached its spend limit; raise it under Accounts.`,
+  }[ai.problem];
+  const atAccounts = ai.problem !== 'gone' && (ai.problem !== 'pick' || !aiAnyOffered());
+  if (!atAccounts) return [accEl('span', '', text)];
+  const open = accEl('button', 'btn btn--ghost', 'Accounts');
+  open.type = 'button';
+  open.addEventListener('click', () => aiOpenAccounts(ai.account?.id));
+  return [accEl('span', '', text), open];
 }
 
 // The picker of a feature's model: a button naming the model `choice` picks
