@@ -69,10 +69,12 @@ message.
 ## Messages <a id="messages"></a>
 
 `load_doc_content` and `save_doc_content` carry a document's content
-(`api.md#documents`); a body the host sends unasked (a file read
+(`api.md#documents`); a body the host sends unasked (an edit, a file read
 again) is the `content` event, handled the same way (`onDocContent`).
 `check_files` and the `activated` event are the look at the files when the
-window becomes active again (`saving.md#conflicts`); `reload_entity` is the conflict dialog's Use theirs; `close` and
+window becomes active again (`saving.md#conflicts`); `set_editing` tells the
+host which documents are in edit mode (`saving.md#edit-mode`);
+`reload_entity` is the conflict dialog's Use theirs; `close` and
 `close_ready` are `saving.md#closing-the-app`.
 
 A failed save is answered with an error, shown in the status bar
@@ -159,6 +161,24 @@ re-render if one is still needed.
 
 Even when not editing, the re-render is applied only if it differs from
 the editor's current HTML — usually it doesn't (`markdown.md#round-trip`).
+
+## Edit mode on the host <a id="edit-mode"></a>
+
+The host knows which documents are in edit mode (`set_editing` →
+`DocumentState`, `documents.rs`): the page sends the whole list whenever it changes — a
+card's Edit button or Esc, a card torn down while in edit mode, the
+project description's pen — after the save that ends an edit, so the host
+has the last text first (`reportEditing`, sent only when the list
+changed). Edit mode is a session of edits: leaving it, not each autosave,
+is the point to act on what was edited. The calendar sync uses it
+(`calendar.md#sync-points`): an edited event is synced when it leaves
+edit mode, and a calendar's auto-sync waits while one of its events is in
+edit mode, so a change from Google never lands in an open editor. The host
+forgets the list when a vault opens, and the page loading opens one.
+Before a vault switch every editor leaves edit mode, saving
+(`leaveEditModes`, as closing the app does). When the new vault opens, the
+page forgets its unsaved state, so nothing of the old vault is saved into
+the new one (`vault.md#opening`).
 
 ## Conflicts <a id="conflicts"></a>
 

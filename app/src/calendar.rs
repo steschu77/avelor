@@ -10,7 +10,9 @@
 //! A calendar's auto-sync syncs it every 15 minutes, started by the clock
 //! (`App::on_clock`): a quiet list of Google's changes first, then -- only if
 //! there is something to pull or push -- a sync job like the sidebar's, with
-//! what was listed.
+//! what was listed. It also syncs sooner: when one of its events waits to be
+//! pushed -- one being edited once it leaves edit mode -- and when the window
+//! is active again. While one of its events is in edit mode, it waits.
 //!
 //! A two-way sync deletes in Google the calendar's events deleted in the vault
 //! (their files in the trash), and marks each trashed file cancelled; one that
@@ -57,6 +59,9 @@ use av_vault::schema::remote::{CALENDAR_ID, ETAG, EVENT_ID, SNAPSHOT, SYNC_TOKEN
 const CANCELLED: &str = "cancelled";
 /// How far back a calendar's first sync reaches, in seconds: a year.
 const FIRST_SYNC_SPAN: i64 = 365 * 86_400;
+/// How long after it last looked at Google a calendar syncs when the
+/// window is active again, in seconds.
+const ACTIVATED_AFTER: i64 = 2 * 60;
 
 // ----------------------------------------------------------------------------
 /// A calendar source: the account, and Google's id of the calendar.
@@ -598,7 +603,7 @@ fn auto_sync_sources(app: &App) -> Vec<SourceKey> {
 /// The clock ticked, or the vault scan ended (`App::on_clock`): list
 /// the changes of the first calendar that is due -- one with auto-sync on,
 /// of a connected account with calendar access, last synced 15 minutes ago
-/// -- unless the
+/// or made due sooner, none of whose events is in edit mode -- unless the
 /// scan, a sync or another auto-sync's list still runs. One at a time; the
 /// next tick takes the next calendar. The list writes nothing;
 /// `on_auto_listed` decides on a job.
@@ -607,7 +612,9 @@ pub fn auto_sync(app: &mut App, now: DateTime) {
     if app.scanning() || state.sync.is_some() || state.listing.is_some() {
         return;
     }
+    let editing = editing_sources(app);
     let sources = auto_sync_sources(app);
+    let sources = sources.into_iter().filter(|key| !editing.contains(key));
     let Some(key) = first_due(sources, &state.next_sync, now) else {
         return;
     };
@@ -652,8 +659,9 @@ fn on_auto_listed(app: &mut App, key: SourceKey, root: Option<PathBuf>, result: 
         Ok(changes) => changes,
         Err(e) => return auto_sync_failed(app, key, &source.name, &e),
     };
-    if app.calendar.sync.is_some() {
-        // A sync started meanwhile: again at the next tick.
+    if app.calendar.sync.is_some() || editing_sources(app).contains(&key) {
+        // A sync started meanwhile, or one of its events is being edited:
+        // again at the next tick, or once the edit ends.
         app.calendar.next_sync.insert(key, DateTime::now());
         return;
     }
@@ -683,6 +691,106 @@ fn auto_sync_failed(app: &mut App, key: SourceKey, name: &str, error: &Error) {
     if app.calendar.failing.insert(key) {
         app.notice(&format!("Calendar auto-sync of {name} failed."));
     }
+}
+
+// ----------------------------------------------------------------------------
+/// Entities the vault now holds differently: written by the app
+/// (`App::edit`), saved from an editor, taken in from outside, or
+/// leaving edit mode (`documents::set_editing`). An event that waits to be
+/// pushed makes its calendar's auto-sync due -- unless it is in edit mode,
+/// whose end is the sync point. Only for a calendar that syncs on its own,
+/// two-way.
+pub(crate) fn changed<'a>(app: &mut App, ids: impl IntoIterator<Item = &'a Id>) {
+    for id in ids {
+        if app.documents.is_editing(id) {
+            continue;
+        }
+        if let Some(key) = waiting_push(app, id) {
+            make_due(app, key, &format!("{id} waits to be pushed"));
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The event `id` was deleted, and its calendar would delete it in Google
+/// (`waiting_delete`, asked before): its auto-sync is due.
+pub(crate) fn deleted(app: &mut App, id: &Id, key: SourceKey) {
+    make_due(app, key, &format!("{id} was deleted"));
+}
+
+// ----------------------------------------------------------------------------
+/// The auto-sync of `key` is due now, for the reason `why`.
+fn make_due(app: &mut App, key: SourceKey, why: &str) {
+    log::info!("Calendar auto-sync of {}: due, {why}", key.1);
+    app.calendar.next_sync.remove(&key);
+}
+
+// ----------------------------------------------------------------------------
+/// The calendar of the event `id`, if its auto-sync is on and two-way and
+/// would push the event: one never synced, or changed since.
+fn waiting_push(app: &App, id: &Id) -> Option<SourceKey> {
+    let entry = app.vault.index().entry(id)?;
+    let key = two_way_auto_sync(app, &entry.doc)?;
+    let local = local_event(&entry.doc, &entry.local, key.0);
+    local.wants_push().then_some(key)
+}
+
+// ----------------------------------------------------------------------------
+/// The calendar of the event `id`, if its auto-sync is on and two-way and
+/// would delete the event in Google once it is deleted here: one synced
+/// with it, not cancelled. Asked before the delete (`deleted`).
+pub(crate) fn waiting_delete(app: &App, id: &Id) -> Option<SourceKey> {
+    let entry = app.vault.index().entry(id)?;
+    let key = two_way_auto_sync(app, &entry.doc)?;
+    let local = local_event(&entry.doc, &entry.local, key.0);
+    (local.remote_event_id.is_some() && !local.cancelled).then_some(key)
+}
+
+// ----------------------------------------------------------------------------
+/// The calendar source of the event `doc`, if its auto-sync is on and
+/// two-way.
+fn two_way_auto_sync(app: &App, doc: &Document) -> Option<SourceKey> {
+    let key = source_of(app, doc)?;
+    let client = app.google.connected(key.0).ok()?;
+    let two_way = client.scope().calendar == ScopeAccess::Full;
+    (two_way && auto_sync_sources(app).contains(&key)).then_some(key)
+}
+
+// ----------------------------------------------------------------------------
+/// The calendar source of the event `doc`: the account and the Google
+/// calendar its calendar entity names.
+fn source_of(app: &App, doc: &Document) -> Option<SourceKey> {
+    let calendar = doc.roles().event.as_ref()?.calendar?;
+    let entry = app.vault.index().entry(&calendar)?;
+    let Some(Source::Remote(remote)) = entry.doc.source() else {
+        return None;
+    };
+    Some((remote.account?, remote.get(CALENDAR_ID)?.to_string()))
+}
+
+// ----------------------------------------------------------------------------
+/// The calendars one of whose events the page shows in edit mode: their
+/// auto-sync waits, so a change from Google never lands in an open editor.
+fn editing_sources(app: &App) -> HashSet<SourceKey> {
+    let entries = app
+        .documents
+        .editing()
+        .filter_map(|id| app.vault.index().entry(id));
+    entries.filter_map(|e| source_of(app, &e.doc)).collect()
+}
+
+// ----------------------------------------------------------------------------
+/// The window is active again (`App::on_activated`): a calendar whose
+/// auto-sync last looked at Google 2 minutes ago or more is due -- a change
+/// just made in Google Calendar shows soon -- and the first due runs now.
+pub(crate) fn activated(app: &mut App, now: DateTime) {
+    // Each look sets the next one `SYNC_EVERY` out (`auto_sync`, `start`):
+    // one at least `ACTIVATED_AFTER` ago left the next one that much nearer.
+    let stale = later(now, SYNC_EVERY - ACTIVATED_AFTER);
+    let sources = auto_sync_sources(app);
+    let next = &mut app.calendar.next_sync;
+    next.retain(|key, at| !sources.contains(key) || *at > stale);
+    auto_sync(app, now);
 }
 
 // ----------------------------------------------------------------------------
@@ -1756,6 +1864,60 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn a_delete_is_pushed_and_its_trashed_file_cancelled() {
+        let files = [calendar_file(), synced_event_file("calendar-delete-0")];
+        let mut h = with_google("calendar-delete", FULL, &files);
+        let id = Id::parse(EV).unwrap();
+        assert_eq!(waiting_delete(&h.app, &id), None, "auto-sync off");
+        let key = switch_on(&mut h);
+        not_due(&mut h, &key);
+        assert_eq!(waiting_delete(&h.app, &id), Some(key.clone()));
+        h.call("delete_entity", json!({ "id": EV }));
+        let next = &h.app.calendar.next_sync;
+        assert!(!next.contains_key(&key), "due: the delete is pushed");
+
+        let (job, events) = planned(&h, true);
+        let path = job.calendars[0].events[0].path.clone();
+        let job_id = begin(&mut h, events);
+        let output = SyncOutput {
+            effects: vec![Effect::CancelTrashed {
+                path,
+                etag: Some("\"2\"".into()),
+            }],
+            report: Report {
+                deleted: 1,
+                ..Report::default()
+            },
+        };
+        apply(&mut h.app, job_id, Ok(output));
+        h.run_queue();
+        let sent = parse(&h.take());
+        assert_eq!(sent.last().unwrap()["data"]["note"], "1 deleted");
+        let file = h.vault().join(".trash").join(event_file().0);
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.contains("status: cancelled"), "{text}");
+        assert!(text.contains("etag: '\"2\"'"), "{text}");
+        let (job, _) = planned(&h, true);
+        assert!(job.calendars[0].events.is_empty(), "done with it");
+
+        // A restore brings it back cancelled.
+        let sent = h.call("restore_entity", json!({ "path": event_file().0 }));
+        assert_eq!(sent.last().unwrap()["ok"]["id"], EV, "{sent:?}");
+        let event = h
+            .app
+            .vault
+            .index()
+            .entry(&id)
+            .unwrap()
+            .doc
+            .roles()
+            .event
+            .clone();
+        assert_eq!(event.unwrap().status.as_deref(), Some(CANCELLED));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn a_deleted_event_changed_in_google_comes_back_from_the_trash() {
         let files = [calendar_file(), synced_event_file("calendar-back-0")];
         let mut h = with_google("calendar-back", FULL, &files);
@@ -1952,6 +2114,124 @@ mod tests {
         let (path, text) = event_file();
         let recorded = format!("  - snapshot: {snapshot}\n  - etag:");
         (path, text.replace("  - etag:", &recorded))
+    }
+
+    // ------------------------------------------------------------------------
+    /// The calendar's next auto-sync, put 10 minutes out.
+    fn not_due(h: &mut Harness, key: &SourceKey) {
+        let next = later(DateTime::now(), 600);
+        h.app.calendar.next_sync.insert(key.clone(), next);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_edit_that_waits_to_be_pushed_makes_the_calendar_due() {
+        let files = [calendar_file(), synced_event_file("calendar-due-edit-0")];
+        let mut h = with_google("calendar-due-edit", FULL, &files);
+        let id = Id::parse(EV).unwrap();
+        assert_eq!(waiting_push(&h.app, &id), None, "auto-sync off");
+        let key = switch_on(&mut h);
+        assert_eq!(waiting_push(&h.app, &id), None, "pushed already");
+
+        not_due(&mut h, &key);
+        h.call("set_tags", json!({ "id": EV, "tags": ["dentist"] }));
+        let next = &h.app.calendar.next_sync;
+        assert!(next.contains_key(&key), "labels aren't pushed");
+
+        h.call("set_title", json!({ "id": EV, "title": "Dentist at 11" }));
+        assert_eq!(waiting_push(&h.app, &id), Some(key.clone()));
+        let next = &h.app.calendar.next_sync;
+        assert!(!next.contains_key(&key), "due: the title is pushed");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_change_taken_in_that_waits_to_be_pushed_makes_the_calendar_due() {
+        let files = [
+            calendar_file(),
+            synced_event_file("calendar-due-taken-in-0"),
+        ];
+        let mut h = with_google("calendar-due-taken-in", FULL, &files);
+        let key = switch_on(&mut h);
+        not_due(&mut h, &key);
+        let file = h.vault().join(event_file().0);
+        let text = fs::read_to_string(&file).unwrap();
+        fs::write(&file, text.replace("Local body", "Changed outside")).unwrap();
+        let sent = h.call("check_files", json!({ "ids": [EV] }));
+        assert_eq!(sent.last().unwrap()["ok"]["taken_in"], 1, "{sent:?}");
+        let next = &h.app.calendar.next_sync;
+        assert!(!next.contains_key(&key), "due: the body is pushed");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_event_in_edit_mode_is_synced_when_the_edit_ends() {
+        let mut h = with_google("calendar-editing", FULL, &[calendar_file(), event_file()]);
+        let key = switch_on(&mut h);
+        not_due(&mut h, &key);
+
+        let sent = h.call("set_editing", json!({ "ids": [EV] }));
+        assert_eq!(sent.last().unwrap()["ok"], Value::Null, "{sent:?}");
+        let save = json!({ "id": EV, "markdown": "Edited body\n", "overwrite": false });
+        h.call("save_doc_content", save);
+        let next = &h.app.calendar.next_sync;
+        assert!(next.contains_key(&key), "more edits are coming");
+
+        // Due meanwhile: its auto-sync waits for the edit.
+        h.app
+            .calendar
+            .next_sync
+            .insert(key.clone(), DateTime::now());
+        auto_sync(&mut h.app, DateTime::now());
+        assert!(h.app.calendar.listing.is_none(), "waits while edited");
+        not_due(&mut h, &key);
+        let root = Some(h.vault());
+        on_auto_listed(&mut h.app, key.clone(), root, listed(true));
+        assert!(h.app.calendar.sync.is_none(), "no job while edited");
+        let next = h.app.calendar.next_sync[&key];
+        assert!(next <= DateTime::now(), "again once the edit ends");
+
+        // The edit ends: the calendar is due. Another list in flight keeps
+        // its run from going out in this test.
+        not_due(&mut h, &key);
+        h.app.calendar.listing = Some(key.clone());
+        h.call("set_editing", json!({ "ids": [] }));
+        let ev = Id::parse(EV).unwrap();
+        assert!(!h.app.documents.is_editing(&ev));
+        let next = &h.app.calendar.next_sync;
+        assert!(!next.contains_key(&key), "due: the edit ended");
+
+        h.call("set_editing", json!({ "ids": [EV] }));
+        let root = h.vault();
+        crate::api::switch_to(&mut h.app, root.clone());
+        assert!(!h.app.documents.is_editing(&ev), "a vault opened");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_window_active_again_syncs_what_hasnt_looked_at_google_lately() {
+        let mut h = with_google("calendar-activated", FULL, &[calendar_file()]);
+        let key = switch_on(&mut h);
+        // Another list in flight keeps the run from going out in this test.
+        h.app.calendar.listing = Some(key.clone());
+        let now = DateTime::now();
+
+        h.app
+            .calendar
+            .next_sync
+            .insert(key.clone(), later(now, SYNC_EVERY));
+        activated(&mut h.app, now);
+        let next = &h.app.calendar.next_sync;
+        assert!(next.contains_key(&key), "looked just now");
+
+        let three_minutes_ago = later(now, SYNC_EVERY - 3 * 60);
+        h.app
+            .calendar
+            .next_sync
+            .insert(key.clone(), three_minutes_ago);
+        activated(&mut h.app, now);
+        let next = &h.app.calendar.next_sync;
+        assert!(!next.contains_key(&key), "looked 3 minutes ago: due");
     }
 
     // ------------------------------------------------------------------------

@@ -63,6 +63,7 @@ enum Command {
     LoadDocContent(Target),
     SaveDocContent(Save),
     CheckFiles(Ids),
+    SetEditing(Ids),
     // The structural commands (`structure`).
     CreateEntity(Box<NewEntity>),
     CreateThread(NewThread),
@@ -287,6 +288,7 @@ impl Command {
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "save_doc_content" => Command::SaveDocContent(from_value(args)?),
             "check_files" => Command::CheckFiles(from_value(args)?),
+            "set_editing" => Command::SetEditing(from_value(args)?),
             "create_entity" => Command::CreateEntity(from_value(args)?),
             "create_thread" => Command::CreateThread(from_value(args)?),
             "create_project" => Command::CreateProject(from_value(args)?),
@@ -366,6 +368,7 @@ fn route(app: &mut App, req: Req, command: Command) {
             documents::save_doc_content(app, req, a.id, a.markdown, a.overwrite)
         }
         Command::CheckFiles(a) => documents::check_files(app, req, a.ids),
+        Command::SetEditing(a) => documents::set_editing(app, req, a.ids),
         Command::CreateEntity(a) => structure::create_entity(app, req, *a),
         Command::CreateThread(a) => structure::create_thread(app, req, a.title, a.members),
         Command::CreateProject(a) => structure::create_project(app, req, a.title),

@@ -18,6 +18,7 @@ use av_vault::vault::{Changes, Index};
 use serde::Serialize;
 
 use crate::app::App;
+use crate::calendar;
 use crate::documents;
 use crate::protocol::Req;
 
@@ -240,7 +241,12 @@ pub fn edit_entities(app: &mut App, req: Req, ids: Vec<Id>, change: Change) {
 /// fewer than two members are dissolved (`panel.md#structural-edits`), and a
 /// project's members leave it first.
 pub fn delete_entity(app: &mut App, req: Req, id: Id) {
+    // A synced event's calendar deletes it in Google: due once it is gone.
+    let calendar = calendar::waiting_delete(app, &id);
     let result = app.edit(|index, changes| index.delete(&id, changes));
+    if let (Ok(SaveOutcome::Saved), Some(key)) = (&result, calendar) {
+        calendar::deleted(app, &id, key);
+    }
     answer(app, req, result, None);
 }
 

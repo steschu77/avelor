@@ -1,7 +1,7 @@
 # Avelor — Calendar sync
 
 > Google Calendar ⟷ vault: syncing a checked calendar, the rules of the
-> two-way sync, the auto-sync and how the sync is built. The account and its calendars are
+> two-way sync, the auto-sync and its sync points, how the sync is built. The account and its calendars are
 > `accounts.md`; the event format, `vault.md#event` and `vault.md#remote`; the
 > calendar lens, `ui.md#calendar`.
 
@@ -66,6 +66,23 @@ sync; a sync from the sync button counts as a run.
   is a "Syncing calendar · <name>" job like the sync button's.
 - The calendar source's sync button is shown pressed while auto-sync is
   on; it still syncs right away.
+
+## Sync points <a id="sync-points"></a>
+
+An auto-synced calendar also syncs sooner:
+
+- With Full access, an event changed in the app syncs it: its description
+  once you leave edit mode (the Edit button again, Esc, or closing its
+  card), anything else right away — an event made with New, a change made
+  outside the app that the app takes in, an edit saved outside edit mode.
+  Deleting a synced event makes its calendar due too.
+- While one of its events is in edit mode, the calendar's auto-sync waits,
+  so a change made in Google never replaces text you are typing; it runs
+  once you leave edit mode. An event left in edit mode isn't synced until
+  you leave it — there is no cap, and the sync button doesn't wait.
+- Switching back to the app syncs the calendars that haven't asked Google
+  in the last 2 minutes, so a change just made in Google Calendar shows
+  within moments.
 
 ## Flows
 
@@ -132,3 +149,10 @@ sequenceDiagram
   running fetch or sync: a quiet `list_changes` first (`on_auto_listed`),
   and a job only if `SyncJob::has_work`. Its schedule (`SYNC_EVERY`,
   `first_due`) is shared with the mail auto-sync in `google.rs`.
+- **Sync points**: an event waiting to be pushed (`LocalEvent::wants_push`)
+  makes its auto-synced, two-way calendar due — when it leaves edit mode
+  (`DocumentState::is_editing`, `saving.md#edit-mode`), or at once
+  when written by the app (`App::edit`), saved outside edit mode or
+  taken in (`calendar::changed`); deleting a synced event makes it due
+  (`waiting_delete`); the window active again makes due the calendars that
+  last looked at Google 2+ minutes ago (`calendar::activated`).

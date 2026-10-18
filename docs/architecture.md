@@ -60,7 +60,7 @@ read by OCR.
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
 | `accounts.md` | Google and AI accounts: files, secrets, states, the Accounts page, AI uses and the spend limit |
 | `mail.md` | Fetch mail, the mail auto-sync |
-| `calendar.md` | calendar sync, its rules, auto-sync |
+| `calendar.md` | calendar sync, its rules, auto-sync and sync points |
 | `assistant.md` | the assistant: conversations, context, streaming |
 
 ## Doc conventions
@@ -115,7 +115,7 @@ The rules the code follows, and every change to it:
    through the UI thread's message queue, so a wait for it there needs a
    nested message loop. A Win32 message that needs an answer at once
    (`WM_QUERYENDSESSION`) gets it from what the host already knows, and the
-   page keeps the host up to date ahead of time: saves within a second of a
+   page keeps the host up to date ahead of time: `set_editing`, saves within a second of a
    pause, the saves a conflict refused. Modal dialogs through `on_ui` stay
    the only modal loops. A request the page can answer later (`WM_CLOSE`)
    is asked, with a timeout.
@@ -204,7 +204,8 @@ in, with no thread or handle of its own. It starts the mail and calendar
 auto-syncs that are due (`mail::auto_sync`, `calendar::auto_sync`, which
 wait for the vault scan and for a running fetch or sync); the end of a
 vault scan calls them too. Their schedule (`SYNC_EVERY`, `first_due`) is
-shared in `google.rs`.
+shared in `google.rs`. A calendar is also made due by its sync points
+(`calendar.md#sync-points`).
 
 ### Closing
 
@@ -334,7 +335,7 @@ side never touches the vault side; `app` is the only bridge.
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update, stop and end a job (the `job` event), `run_job`, `cancel_job`, the vault switch that waits for the old vault's jobs; a job's summary note (`count_summary`); its tests |
 | `api.rs` | `ready`, vault open (with its accounts and settings), switch and reveal, `set_prefs`, `open_url` |
-| `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `DocumentState`, the app's version of each one in conflict; the conflict copy (`keep_conflict_copy`, `keep_held`); their dispatch tests |
+| `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `set_editing`; `DocumentState`, the documents in edit mode and the app's version of each one in conflict; the conflict copy shared with calendar sync (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
@@ -346,7 +347,7 @@ side never touches the vault side; `app` is the only bridge.
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked item; `create`, a new AI conversation; dispatch tests against a fake Ollama |
 | `ai_accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
 | `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); their tests |
-| `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`); their dispatch tests |
+| `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests |
 
 ## Platforms <a id="platforms"></a>
 
@@ -436,7 +437,7 @@ nothing imports `app.js`.
 | `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `setNotice`, `showError` |
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `sourceKeyOf`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the chats with an AI); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/calendar.js` | what the calendar shows: the events in the filter with their series expanded (RFC 5545 lines), the tasks due, the day an entity shows on (`calendarDayOf`) |
-| `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts (`editorRoots`) |
+| `model/documents.js` | the save pipeline (`saving.md`): the content cache, the dirty state, saves and autosave, the conflicts, the documents in edit mode (`editorRoots`, `reportEditing`) |
 | `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinThreadLocal`, …, `editEntityLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, the accounts, `vault`, `vault_settings`, `activated`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc; the two-click confirm (`armedButton`: one armed button page-wide, which a page rebuilt on every change names by a key); the editors' toolbars |
 | `ui/page.js`, `ui/field.js`, `ui/segmented.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages: their Esc and Ctrl+Enter (`registerVaultPage`), `replaceVaultPage`, which keeps the focus; the parts of a list + detail page (`listDetailPage`, `pageList`, `itemCard`, `addTile`, `detailPane`, `detailHead`, `stats`, `notice`, `failedRetry`, `detailFooter`) and the changes a page shows until the host has them (`sentDrafts`); editing in place (`editTextInPlace`) and the Workspace pages' editable field (`renderEditField`); the segmented control (`accSeg`) |
@@ -654,6 +655,10 @@ abort. Where the bundle lands and how to measure the size:
   (`accounts.md#access-levels`).
 - **Remote versions are compared in one place**: the calendar sync
   engine's two hooks (`calendar.md#design`).
+- **Sync and commit points come from the edit state**: the host knows the
+  documents in edit mode (`set_editing` → `DocumentState`), and an edit
+  ends when its document leaves edit mode, not with each autosave. The
+  calendar's sync points use it.
 - **Reuse before writing**: `av_vault::markdown::plain_title`,
   `jobs::count_summary`,
   `DateTime::from_system_time`, `OneOrMany::{as_slice, from_vec}`; on the

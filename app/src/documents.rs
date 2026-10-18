@@ -3,7 +3,10 @@
 //! window is active. Typed commands (`api.md#documents`). A file changed
 //! outside the app is taken in if the app had only read it -- `entity` and
 //! `content` pushed before the answer -- and otherwise answered as a
-//! conflict for the dialog, nothing written (`saving.md#conflicts`).
+//! conflict for the dialog, nothing written (`saving.md#conflicts`). The
+//! page also says which documents it shows in edit mode (`set_editing`):
+//! leaving edit mode is the point to sync what was edited
+//! (`saving.md#edit-mode`).
 //!
 //! The app's version of a document in conflict -- a save refused, or its
 //! saved edits written over outside the app -- is held until the dialog is
@@ -12,8 +15,10 @@
 //! (`keep_held`, `saving.md#held-saves`).
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 
+use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::id::Id;
@@ -25,6 +30,7 @@ use av_vault::vault::SaveOutcome;
 use serde::Serialize;
 
 use crate::app::App;
+use crate::calendar;
 use crate::config::is_false;
 use crate::protocol::Req;
 use crate::structure::Conflict;
@@ -37,6 +43,10 @@ pub(crate) const CONFLICT_TAG: &str = "conflict";
 /// The documents in the page's editors (`App::documents`).
 #[derive(Default)]
 pub struct DocumentState {
+    /// The documents the page shows in edit mode (`set_editing`): more edits
+    /// of them are coming, so leaving edit mode is the point to sync them.
+    /// Cleared when a vault opens (the page loading opens it too).
+    editing: HashSet<Id>,
     /// The app's version of each document whose file changed outside the
     /// app while the conflict dialog asks about it -- a refused save
     /// (`save_doc_content`), or the app's saved edits written over
@@ -46,6 +56,17 @@ pub struct DocumentState {
 }
 
 impl DocumentState {
+    // ------------------------------------------------------------------------
+    /// Whether the page shows `id` in edit mode.
+    pub fn is_editing(&self, id: &Id) -> bool {
+        self.editing.contains(id)
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn editing(&self) -> impl Iterator<Item = &Id> {
+        self.editing.iter()
+    }
+
     // ------------------------------------------------------------------------
     /// Drop the app's version of `id` held for the conflict dialog: the file
     /// was read again (Use theirs, `structure::reload_entity`).
@@ -129,8 +150,9 @@ pub fn load_doc_content(app: &mut App, req: Req, id: Id) {
 /// as the acknowledgment). A file changed outside the app is answered as a
 /// conflict and not written, unless `overwrite`, the dialog's Use ours.
 /// A refused save is held until a save of the document goes through or it
-/// is reloaded (`DocumentState::held`). A failure is answered in the host's
-/// words.
+/// is reloaded (`DocumentState::held`). A saved event may wait to be pushed
+/// to Google (`calendar::changed`, which waits for the end of edit mode). A
+/// failure is answered in the host's words.
 pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overwrite: bool) {
     match app.vault.save_content(&id, &markdown, overwrite) {
         Ok(SaveOutcome::Conflict(_)) => {
@@ -142,7 +164,12 @@ pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overw
                 ..Default::default()
             });
         }
-        Ok(SaveOutcome::Saved | SaveOutcome::Unchanged) => {
+        Ok(SaveOutcome::Saved) => {
+            app.documents.held.remove(&id);
+            calendar::changed(app, [&id]);
+            req.ok(Content::of(app, &id));
+        }
+        Ok(SaveOutcome::Unchanged) => {
             app.documents.held.remove(&id);
             req.ok(Content::of(app, &id));
         }
@@ -210,6 +237,35 @@ pub(crate) fn keep_held(app: &mut App) {
 }
 
 // ----------------------------------------------------------------------------
+/// A vault opens (`api::open_vault`): nothing is in edit mode until the page
+/// says so.
+pub(crate) fn vault_opened(app: &mut App) {
+    app.documents.editing.clear();
+}
+
+// ----------------------------------------------------------------------------
+/// `set_editing`: the documents the page shows in edit mode now, all of
+/// them, sent after every change -- after the save that ends an edit, which
+/// so arrives first. A document that left edit mode is a sync point: an
+/// event waiting to be pushed syncs its calendar (`calendar::changed`),
+/// right away if it can.
+pub fn set_editing(app: &mut App, req: Req, ids: Vec<Id>) {
+    let editing: HashSet<Id> = ids.into_iter().collect();
+    let ended: Vec<Id> = app
+        .documents
+        .editing
+        .difference(&editing)
+        .copied()
+        .collect();
+    app.documents.editing = editing;
+    if !ended.is_empty() {
+        calendar::changed(app, &ended);
+        calendar::auto_sync(app, DateTime::now());
+    }
+    req.ok(());
+}
+
+// ----------------------------------------------------------------------------
 /// `check_files`: look at the files of `ids` -- the documents the page shows
 /// without unsaved edits, once the window is active again -- and take in
 /// what was changed outside the app, unless it replaced the app's own
@@ -265,7 +321,8 @@ fn refresh(app: &mut App, id: &Id) -> Option<Refresh> {
 // ----------------------------------------------------------------------------
 /// Send what reading `id`'s file again gave (`now`: the id the file has
 /// now, `None` if it is gone): the entity with its content, or
-/// `entity_deleted` -- both, if its `id` was changed by hand.
+/// `entity_deleted` -- both, if its `id` was changed by hand. An event
+/// taken in may wait to be pushed to Google (`calendar::changed`).
 pub(crate) fn post_taken_in(app: &mut App, id: &Id, now: Option<Id>) {
     if now != Some(*id) {
         app.post_entity_deleted(id);
@@ -275,6 +332,7 @@ pub(crate) fn post_taken_in(app: &mut App, id: &Id, now: Option<Id>) {
             app.post_entity(entry);
         }
         app.post_content(&now);
+        calendar::changed(app, [&now]);
     }
 }
 

@@ -1,8 +1,10 @@
 // The documents' content in the editors (saving.md): the content cache,
-// the dirty state, the saves and autosave, and the conflicts the conflict
-// dialog asks about (features/conflict.js). The editors are the panel's
-// cards (features/panel/panel.js) and the project description
-// (features/header.js); they register their roots in `editorRoots`.
+// the dirty state, the saves and autosave, the conflicts the conflict
+// dialog asks about (features/conflict.js), and the documents in edit
+// mode. The editors are the panel's cards (features/panel/panel.js) and
+// the project description (features/header.js); they register their
+// roots in `editorRoots`.
+
 
 import { oncePerFrame } from '../core/dom.js';
 import { rpcCall } from '../core/rpc.js';
@@ -61,6 +63,21 @@ export const editorRoots = new Map(); // doc_id -> root element
 // Whether `doc_id` is loaded into an editor that is in edit mode.
 function isEditing(doc_id) {
   return editorRoots.get(doc_id)?.getAttribute('contenteditable') === 'true';
+}
+
+// Tell the host which documents are in edit mode (`set_editing`): more
+// edits of them are coming, so one leaving edit mode is the point to sync
+// it (saving.md#edit-mode). Called after every change of edit mode --
+// after the save that ends an edit, which so reaches the host first. The
+// whole list each time, sent only when it changed; a failed send is
+// repeated with the next change.
+let reportedEditing = '';
+export function reportEditing() {
+  const ids = [...editorRoots.keys()].filter(isEditing).sort();
+  const key = ids.join(',');
+  if (key === reportedEditing) return;
+  reportedEditing = key;
+  rpcCall('set_editing', { ids }).catch(() => { reportedEditing = null; });
 }
 
 // Show `doc_id`'s content in `editor` (on `root`) whenever it arrives, and

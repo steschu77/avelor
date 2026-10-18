@@ -15,6 +15,7 @@ import { projectScope } from '../model/entities.js';
 import {
   bindDocContent, editorRoots, onEdited, trySave,
 } from '../model/documents.js';
+import { reportEditing } from '../model/documents.js';
 import { structureCall } from '../model/structure.js';
 import { armedButton } from '../ui/confirm.js';
 import { showMenu } from '../ui/menu.js';
@@ -113,6 +114,7 @@ function setProjectDescEditMode(on) {
   projectDescEditor.setEditable(on);
   projectDescBtn.setAttribute('aria-pressed', String(on));
   updateProjectDesc();
+  reportEditing();
 }
 
 // Every editor leaves edit mode -- the card being edited, the project

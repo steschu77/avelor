@@ -230,8 +230,8 @@ pub struct App {
     /// The long operations running (`jobs`).
     pub jobs: Jobs,
 
-    /// The documents in the page's editors (`documents`): the app's
-    /// version of each one in conflict.
+    /// The documents in the page's editors (`documents`): those in edit
+    /// mode, and the app's version of each one in conflict.
     pub documents: DocumentState,
 
     /// Fetch mail (`mail`): the fetch in progress; one at a time.
@@ -568,9 +568,11 @@ impl App {
 
     // ------------------------------------------------------------------------
     /// The window is active again: the page looks at the files it shows
-    /// (the `activated` event, `saving.md#file-checks`).
+    /// (the `activated` event, `saving.md#file-checks`), and the calendars that
+    /// haven't looked at Google for a while sync (`calendar::activated`).
     pub fn on_activated(&mut self) {
         self.post_event("activated", ());
+        calendar::activated(self, DateTime::now());
     }
 
     // ------------------------------------------------------------------------
@@ -589,11 +591,13 @@ impl App {
     /// (`panel.md#saving-structure`). The one way the app edits the vault:
     /// the editor's own save, which is answered with what it wrote
     /// (`Vault::save_content`), and taking in a change made outside the app
-    /// (`Vault::reload`, `Vault::refresh`) are not edits by the app.
+    /// (`Vault::reload`, `Vault::refresh`) are not edits by the app. An
+    /// event it wrote may wait to be pushed to Google (`calendar::changed`).
     pub fn edit<R>(&mut self, f: impl FnOnce(&mut Index, &mut Changes) -> Result<R>) -> Result<R> {
         let mut changes = Changes::default();
         let result = f(&mut self.vault.index, &mut changes);
         self.post_changes(&changes);
+        calendar::changed(self, changes.created.iter().chain(&changes.saved));
         result
     }
 
