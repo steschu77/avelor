@@ -64,8 +64,8 @@ typesBtn.addEventListener('click', () => {
 // `pref` (their ids joined by commas; an id this page doesn't know is
 // dropped; `shownAtFirst` while it is missing), the bar's fold `barPref`
 // (`open` / `closed`). A change renders the lens again. `render(shown,
-// counts)` sets the toggles; `shown()` the types shown; `showAll()` switches
-// types on.
+// counts)` sets the toggles; `shown()` the types shown; `show(type_id)` and
+// `showAll()` switch types on.
 export function typeBar({ lens, el, pref, barPref, shownAtFirst = DOC_TYPES.map(type => type.id) }) {
   function shown() {
     const saved = store.getState().prefs[pref];
@@ -112,6 +112,10 @@ export function typeBar({ lens, el, pref, barPref, shownAtFirst = DOC_TYPES.map(
 
   return {
     shown,
+    show(type_id) {
+      const types = shown();
+      if (!types.has(type_id)) save(types.add(type_id));
+    },
     showAll: () => save(new Set(DOC_TYPES.map(type => type.id))),
     render,
   };

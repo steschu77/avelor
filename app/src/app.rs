@@ -306,6 +306,16 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
+    /// Tell the page `message` in its status bar (the event `notice`, level
+    /// info), and log it: what a job brought, e.g. new mail; `entity` is the
+    /// one a click on it shows.
+    pub fn inform(&self, message: &str, entity: Option<Id>) {
+        log::info!("{message}");
+        let notice = serde_json::json!({ "level": "info", "message": message, "entity": entity });
+        self.post_event("notice", notice);
+    }
+
+    // ------------------------------------------------------------------------
     /// The answer token for the page's request `id`: it must be answered
     /// (`Req::ok`, `Req::err`), or it answers `cancelled` when dropped.
     pub fn req(&self, id: u64) -> Req {

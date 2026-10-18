@@ -793,6 +793,36 @@ fn finish(app: &mut App) {
     };
     log::info!("Mail fetch {}: {note}", fetch.job_id);
     app.end_job(fetch.job_id, &note);
+
+    let email = find_account_email(app, fetch.account);
+    let title_of = |id: Id| {
+        app.vault
+            .index()
+            .entry(&id)
+            .map(|e| e.doc.title().to_string())
+    };
+    if let Some((message, entity)) = new_mail_notice(&counts.created, title_of, &email) {
+        app.inform(&message, entity);
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// What the status bar says about the mails a fetch wrote (`created`):
+/// nothing for none; the title of one, which a click shows; the count of
+/// more, and whose they are.
+fn new_mail_notice(
+    created: &[Id],
+    title_of: impl Fn(Id) -> Option<String>,
+    email: &str,
+) -> Option<(String, Option<Id>)> {
+    match created {
+        [] => None,
+        [id] => {
+            let title = title_of(*id).unwrap_or_else(|| "No subject".to_string());
+            Some((format!("New mail: {title}"), Some(*id)))
+        }
+        many => Some((format!("{} new mails · {email}", many.len()), None)),
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1409,5 +1439,61 @@ Content-Type: text/html; charset=utf-8\r\n\
             "the page's stays"
         );
         assert!(account["last_sync"].is_string());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn new_mail_is_told_by_its_title_or_its_count() {
+        let (a, b) = (Id::generate(), Id::generate());
+        let title_of = |id: Id| (id == a).then(|| "Nebenkosten 2026".to_string());
+        assert_eq!(new_mail_notice(&[], title_of, "jan@example.com"), None);
+        assert_eq!(
+            new_mail_notice(&[a], title_of, "jan@example.com"),
+            Some(("New mail: Nebenkosten 2026".to_string(), Some(a)))
+        );
+        assert_eq!(
+            new_mail_notice(&[b], title_of, "jan@example.com"),
+            Some(("New mail: No subject".to_string(), Some(b))),
+            "gone meanwhile"
+        );
+        assert_eq!(
+            new_mail_notice(&[a, b], title_of, "jan@example.com"),
+            Some(("2 new mails · jan@example.com".to_string(), None))
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_fetch_that_wrote_mail_tells_the_page_after_its_end() {
+        let known = format!(
+            "---\nid: 01a0e1cc-a24c-7490-82fe-e75669985b32\ntitle: Nebenkosten 2026\nremote:\n  account: {CONNECTED}\n  remote:\n  - gmail-id: g1\nemail: {{}}\n---\nBody\n"
+        );
+        let mut h = with_google("mail-new-notice", MAIL, &[("Mail/n.md", known)]);
+        let account = connected_id();
+        let mail = Id::parse("01a0e1cc-a24c-7490-82fe-e75669985b32").unwrap();
+        let client = h.app.google.connected(account).unwrap();
+        let plan = FetchPlan {
+            account,
+            client,
+            queue: VecDeque::new(),
+            skipped: 0,
+            replace: HashSet::new(),
+            origin: Origin::Manual,
+            started: DateTime::now(),
+        };
+        start_fetch(&mut h.app, "Fetching".into(), plan);
+        h.app.mail.fetch.as_mut().unwrap().counts.created.push(mail);
+        finish(&mut h.app);
+        let sent = parse(&h.take());
+        assert_eq!(
+            shape(&sent),
+            ["job", "account", "job", "notice"],
+            "{sent:?}"
+        );
+        assert_eq!(sent[2]["data"]["note"], "1 new");
+        assert_eq!(
+            sent[3]["data"],
+            json!({ "level": "info", "message": "New mail: Nebenkosten 2026", "entity": mail })
+        );
     }
 }
