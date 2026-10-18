@@ -696,6 +696,7 @@
   "save.document_gone": "Could not save the document: it is no longer in the vault.",
   "save.settings": "Could not save the settings.",
   "save.vault_settings": "Could not save the vault’s settings.",
+  "save.watch": "Could not save the folder watch.",
   "schedule.every_day": {
     "one": "Every day",
     "other": "Every {n} days"
@@ -880,9 +881,14 @@
   "vault_op.new": "New",
   "vault_op.trash": "Trash",
   "vault_op.vault": "Vault",
+  "watch.delete_failed": "Could not delete the watch file.",
+  "watch.enter_folder": "Enter a folder.",
   "watch.level.lite": "Lite",
   "watch.level.medium": "Medium",
+  "watch.no_folder": "There's no folder at {path}.",
   "watch.off": "Off",
+  "watch.open_vault_first": "Open a vault first: folder watches are kept in it.",
+  "watch.pick": "Choose a folder",
   "watch.step.analysis": "Analysis",
   "week.of": "Week of {day} · {what}",
   "workspace.accounts": "Accounts",

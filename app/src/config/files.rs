@@ -1,7 +1,7 @@
 //! What the YAML files of the configuration share (`accounts.md#design`):
-//! accounts of both kinds are each one YAML file, an account's secret a
-//! DPAPI-encrypted file with the app (on Linux, a file only the user can
-//! read).
+//! accounts of both kinds and folder watches are each one YAML file, an
+//! account's secret a DPAPI-encrypted file with the app (on Linux, a file
+//! only the user can read).
 
 use std::fs;
 use std::io::ErrorKind;

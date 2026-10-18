@@ -691,6 +691,7 @@
   "save.document_gone": "Das Dokument konnte nicht gespeichert werden: Es ist nicht mehr im Tresor.",
   "save.settings": "Die Einstellungen konnten nicht gespeichert werden.",
   "save.vault_settings": "Die Einstellungen des Tresors konnten nicht gespeichert werden.",
+  "save.watch": "Die Ordnerüberwachung konnte nicht gespeichert werden.",
   "schedule.every_day": {
     "one": "Jeden Tag",
     "other": "Alle {n} Tage"
@@ -875,9 +876,14 @@
   "vault_op.new": "Neu",
   "vault_op.trash": "Papierkorb",
   "vault_op.vault": "Tresor",
+  "watch.delete_failed": "Die Datei der Überwachung konnte nicht gelöscht werden.",
+  "watch.enter_folder": "Gib einen Ordner an.",
   "watch.level.lite": "Leicht",
   "watch.level.medium": "Mittel",
+  "watch.no_folder": "Unter {path} gibt es keinen Ordner.",
   "watch.off": "Aus",
+  "watch.open_vault_first": "Öffne zuerst einen Tresor: Ordnerüberwachungen werden darin gespeichert.",
+  "watch.pick": "Ordner auswählen",
   "watch.step.analysis": "Analyse",
   "week.of": "Woche vom {day} · {what}",
   "workspace.accounts": "Konten",
