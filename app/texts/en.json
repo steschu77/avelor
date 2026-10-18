@@ -123,6 +123,7 @@
   },
   "cal.previous_month": "Previous month",
   "cal.today": "Today",
+  "card.chat": "Chat about document",
   "card.delete": "Delete document",
   "card.edit": "Edit document",
   "card.leave_thread": "Remove from thread",
@@ -404,6 +405,10 @@
   "page.retry": "Retry",
   "page.submit": "Run the page’s main action",
   "panel.add_project_label": "Add to a project or a label",
+  "panel.chat_count": {
+    "one": "Chat about document · {n} conversation",
+    "other": "Chat about document · {n} conversations"
+  },
   "panel.close": "Close the details",
   "panel.delete_armed": "Click again to delete",
   "panel.edit_message": "Edit message",
