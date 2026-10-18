@@ -39,6 +39,7 @@ import {
   aiAnyOffered, aiModelOf, aiModelPicker, aiOpenAccounts, aiProvider,
   aiShowModels,
 } from '../workspace/models.js';
+import { aiUsd } from '../workspace/models.js';
 import {
   childrenByParent, firstLeafFrom, pathToActive, siblingsOf,
 } from './tree.js';
@@ -473,6 +474,10 @@ function renderAssistantGuide(setup) {
   } else if (setup.problem === 'key') {
     text = t('chat.guide.key', { name, model: setup.model });
     label = t('open.named', { name });
+    pick = false;
+  } else if (setup.problem === 'limit') {
+    text = t('chat.guide.limit', { name, limit: aiUsd(setup.account.spend_limit) });
+    label = t('chat.guide.raise');
     pick = false;
   } else if (setup.problem === 'gone') {
     text = t('chat.guide.gone', { model: setup.model });
