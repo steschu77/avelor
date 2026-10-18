@@ -10,9 +10,18 @@ pub enum Error {
     // Generic errors
     Logging,
     NotInitialized,
-    /// A deadline passed: a network request.
+    /// A deadline passed: a network request, or waiting for the user to
+    /// finish a browser sign-in.
     Timeout,
     Cancelled,
+    /// A stored credential is no longer accepted (e.g. an OAuth refresh
+    /// token was revoked); the user has to reconnect the account.
+    Expired,
+    /// A sign-in answer didn't belong to the request we sent (OAuth
+    /// `state` mismatch).
+    Aborted,
+    /// The user declined a sign-in.
+    Denied,
     BadRequest {
         msg: String,
     },
@@ -118,6 +127,9 @@ impl Error {
             Error::NotInitialized => "not_initialized",
             Error::Timeout => "timeout",
             Error::Cancelled => "cancelled",
+            Error::Expired => "expired",
+            Error::Aborted => "aborted",
+            Error::Denied => "denied",
             Error::BadRequest { .. } => "bad_request",
             Error::InvalidArgument { .. } => "invalid_argument",
             Error::InvalidDate => "invalid_date",
