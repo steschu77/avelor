@@ -61,6 +61,7 @@ read by OCR.
 | `accounts.md` | Google and AI accounts: files, secrets, states, the Accounts page, AI uses and the spend limit |
 | `mail.md` | Fetch mail, the mail auto-sync, the mail analysis |
 | `calendar.md` | calendar sync, its rules, auto-sync and sync points |
+| `import.md` | folder watches |
 | `assistant.md` | the assistant: conversations, context, streaming |
 
 ## Doc conventions
@@ -287,7 +288,7 @@ side never touches the vault side; `app` is the only bridge.
 
   ```rust
   pub mod remote { pub const GMAIL_ID: &str = "gmail-id"; pub const MESSAGE_ID: &str = "message-id"; /* calendar-id, sync-token, time-min, event-id, etag, snapshot */ }
-  pub mod layout { pub const PROJECTS: &str = "Projects"; pub const MAIL: &str = "Mail"; /* the folders New writes to, Calendar, Conversations, .trash, .avelor/accounts */ }
+  pub mod layout { pub const PROJECTS: &str = "Projects"; pub const MAIL: &str = "Mail"; /* the folders New writes to, Calendar, Conversations, .trash, .avelor/accounts, .avelor/watches */ }
   ```
 
 - **One copy of the truth in `Document`**: the envelope holds the metadata,
@@ -334,7 +335,7 @@ side never touches the vault side; `app` is the only bridge.
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update, stop and end a job (the `job` event), `run_job`, `cancel_job`, the vault switch that waits for the old vault's jobs; a job's summary note (`count_summary`); its tests |
-| `api.rs` | `ready`, vault open (with its accounts and settings), switch and reveal, `set_prefs`, `open_url` |
+| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch and reveal, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `set_editing`; `DocumentState`, the documents in edit mode and the app's version of each one in conflict; the conflict copy shared with calendar sync (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
@@ -349,6 +350,7 @@ side never touches the vault side; `app` is the only bridge.
 | `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); a fetch's new mails handed to the analysis; their tests |
 | `enrich.rs` | the mail analysis (`mail.md#analysis`): the vault's `context`, the request per level, its parser and its writes (pure: `request_for`, `parse`, `apply_lite`, `medium_messages`), the analysis job one mail at a time (`analyse`, `EnrichState`); its tests against a fake Ollama |
 | `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests |
+| `watches.rs`, `folders.rs` | watch files in `.avelor/watches/`, the `Watches` sub-state; the watch commands, the events `watches` / `watch` / `watch_removed`, their dispatch tests |
 
 ## Platforms <a id="platforms"></a>
 
@@ -383,7 +385,7 @@ the only `cfg(target_os)` in `app/src`:
   (`IFileOpenDialog`; `gtk::FileDialog` in a nested `glib::MainLoop`), so
   `App::on_ui` keeps its meaning.
 - `open_url`, `open_path`, `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
-  is up, else stderr), and `BRIDGE_JS`.
+  is up, else stderr), the watch folder expansion, and `BRIDGE_JS`.
 
 **The shared shell.** `shell.rs` holds what the main window decides:
 
@@ -678,6 +680,6 @@ abort. Where the bundle lands and how to measure the size:
 | av-http | transport, cancellation | know any API |
 | av-vault | the vault's schema, files, index, rules, conversions | do network or UI; start threads (the app decides where scan work runs) |
 | av-google / av-llm | their remote APIs, pure sync and pricing logic | touch the vault or the page's presets |
-| `app` feature modules | orchestration: plan → run → apply, accounts files | parse messages, render, reach into other features |
+| `app` feature modules | orchestration: plan → run → apply, accounts and watches files | parse messages, render, reach into other features |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
 | page | rendering, user input, the page's copy of the data | resolve filenames, conflicts or structural rules |

@@ -57,6 +57,9 @@ pub mod layout {
     /// entities, and skipped by the scan like every dot-folder. Their
     /// secrets stay with the app.
     pub const ACCOUNTS: &str = ".avelor/accounts";
+    /// The vault's folder watches, one YAML file each; no entities, and
+    /// skipped by the scan like every dot-folder.
+    pub const WATCHES: &str = ".avelor/watches";
     /// The vault's own settings (`vault.md#vault-config`); skipped by the
     /// scan like every dot-folder.
     pub const VAULT_SETTINGS: &str = ".avelor/vault.yaml";

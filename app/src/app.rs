@@ -25,6 +25,7 @@ use crate::sys::Owner;
 use crate::sys::UiSignal;
 use crate::vault_scan::VaultScan;
 use crate::vault_settings::VaultSettings;
+use crate::watches::Watches;
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
@@ -213,6 +214,9 @@ pub struct App {
     /// The open vault's AI accounts (`accounts::open`).
     pub ai: AiAccounts,
 
+    /// The open vault's folder watches (`folders::open`).
+    pub watches: Watches,
+
     /// The open vault's own settings (`vault_settings::open`).
     pub settings: VaultSettings,
 
@@ -266,6 +270,7 @@ impl App {
             google: GoogleAccounts::default(),
             hides_google: !av_google::auth::has_client(),
             ai: AiAccounts::default(),
+            watches: Watches::default(),
             settings: VaultSettings::default(),
             connect: None,
             scan: VaultScan::default(),

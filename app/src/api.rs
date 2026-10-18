@@ -1,6 +1,6 @@
 //! The app's own commands (`api.md#the-page-side`): `ready`, switching and
 //! revealing the vault, opening a link, and the page's preferences; and
-//! opening a vault with its accounts and settings (`open_vault`).
+//! opening a vault with its accounts, watches and settings (`open_vault`).
 
 use std::path::{Path, PathBuf};
 
@@ -9,6 +9,7 @@ use crate::app::App;
 use crate::app::Prefs;
 use crate::calendar;
 use crate::documents;
+use crate::folders;
 use crate::mail;
 use crate::protocol::Req;
 use crate::sys;
@@ -20,8 +21,8 @@ use serde_json::json;
 /// `ready`: the page is loaded and listens. A config that couldn't be read
 /// at start, and was set aside (`config::load_config`, which logs why), is
 /// told now, in the status bar. Opens the vault of the last session (or the
-/// command line's, `ConfigStore::vault`), with its accounts; answers whether
-/// this build has Google (`App::hides_google`).
+/// command line's, `ConfigStore::vault`), with its accounts and watches;
+/// answers whether this build has Google (`App::hides_google`).
 pub fn ready(app: &mut App, req: Req) {
     if app.config.take_error().is_some() {
         app.notice(CONFIG_UNREAD);
@@ -68,15 +69,16 @@ pub(crate) fn switch_to(app: &mut App, root: PathBuf) {
 }
 
 // ----------------------------------------------------------------------------
-/// Make `root` the open vault with its accounts, then kick off a scan that
-/// streams progress and results back via `on_scan_event`. A save of the old
-/// vault still held for the conflict dialog is kept as a conflict copy
-/// there first (`documents::keep_held`).
+/// Make `root` the open vault with its accounts and folder watches, then
+/// kick off a scan that streams progress and results back via
+/// `on_scan_event`. A save of the old vault still held for the conflict
+/// dialog is kept as a conflict copy there first (`documents::keep_held`).
 pub(crate) fn open_vault(app: &mut App, root: &Path) {
     documents::keep_held(app);
     app.vault.begin_open(root);
     documents::vault_opened(app);
     accounts::open(app, root);
+    folders::open(app, root);
     vault_settings::open(app, root);
     mail::vault_opened(app);
     calendar::vault_opened(app);

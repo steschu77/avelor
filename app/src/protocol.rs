@@ -12,6 +12,7 @@ use crate::app::{App, UiQueue};
 use crate::calendar;
 use crate::close;
 use crate::documents;
+use crate::folders;
 use crate::google;
 use crate::google_accounts::{CalendarSource, Level};
 use crate::structure;
@@ -97,6 +98,11 @@ enum Command {
     ConnectAi(ConnectAi),
     ListAiModels(OfAccount),
     SetAiSettings(ai::SettingsChange),
+    // Folder watches (`folders`).
+    CreateWatch(folders::NewWatch),
+    SetWatch(folders::WatchChange),
+    RemoveWatch(OfWatch),
+    PickFolder(PickFolder),
     // Fetch mail (`mail`).
     MailLabels(OfAccount),
     MailSearch(mail::SearchRequest),
@@ -271,6 +277,19 @@ struct CalendarChoice {
     selected: bool,
 }
 
+/// `{watch}`
+#[derive(Deserialize)]
+struct OfWatch {
+    watch: Id,
+}
+
+/// `{title?}`: the folder picker's heading.
+#[derive(Deserialize)]
+struct PickFolder {
+    #[serde(default)]
+    title: Option<String>,
+}
+
 impl Command {
     // ------------------------------------------------------------------------
     /// The command `cmd` with its `args`.
@@ -317,6 +336,10 @@ impl Command {
             "connect_ai" => Command::ConnectAi(from_value(args)?),
             "list_ai_models" => Command::ListAiModels(from_value(args)?),
             "set_ai_settings" => Command::SetAiSettings(from_value(args)?),
+            "create_watch" => Command::CreateWatch(from_value(args)?),
+            "set_watch" => Command::SetWatch(from_value(args)?),
+            "remove_watch" => Command::RemoveWatch(from_value(args)?),
+            "pick_folder" => Command::PickFolder(from_value(args)?),
             "mail_labels" => Command::MailLabels(from_value(args)?),
             "mail_search" => Command::MailSearch(from_value(args)?),
             "mail_headers" => Command::MailHeaders(from_value(args)?),
@@ -403,6 +426,10 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::ConnectAi(a) => ai::connect_ai(app, req, a.account, a.provider, a.key, a.address),
         Command::ListAiModels(a) => ai::list_ai_models(app, req, a.account),
         Command::SetAiSettings(a) => ai::set_ai_settings(app, req, a),
+        Command::CreateWatch(a) => folders::create_watch(app, req, a),
+        Command::SetWatch(a) => folders::set_watch(app, req, a),
+        Command::RemoveWatch(a) => folders::remove_watch(app, req, a.watch),
+        Command::PickFolder(a) => folders::pick_folder(app, req, a.title),
         Command::MailLabels(a) => mail::mail_labels(app, req, a.account),
         Command::MailSearch(a) => mail::mail_search(app, req, a),
         Command::MailHeaders(a) => mail::mail_headers(app, req, a),

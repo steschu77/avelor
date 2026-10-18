@@ -15,6 +15,7 @@ mod config;
 mod config_files;
 mod documents;
 mod enrich;
+mod folders;
 mod google;
 mod google_accounts;
 mod jobs;
@@ -29,6 +30,7 @@ mod testing;
 mod trash;
 mod vault_scan;
 mod vault_settings;
+mod watches;
 
 use av_utils::error::Result;
 use av_utils::logger;

@@ -1,7 +1,7 @@
 //! The vault's own settings (vault.md#vault-config): `.avelor/vault.yaml`,
-//! beside the vault's accounts, read when the vault opens. The model the
-//! assistant answers with (accounts.md#model-choice). Keys the app doesn't
-//! know are kept.
+//! beside the vault's accounts and watches, read when the vault opens. The
+//! model the assistant answers with (accounts.md#model-choice). Keys the
+//! app doesn't know are kept.
 
 use std::collections::BTreeMap;
 use std::fs;

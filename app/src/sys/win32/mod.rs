@@ -14,6 +14,7 @@ pub use dialogs::show_error;
 pub use dialogs::{Owner, open_path, pick_folder};
 pub use paths::Paths;
 pub use paths::paths;
+pub use paths::{collapse_env, expand_env};
 pub use webview::BRIDGE_JS;
 pub use window::UiSignal;
 

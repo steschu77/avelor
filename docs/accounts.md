@@ -6,7 +6,7 @@
 > Google account syncs is in `mail.md` and `calendar.md`; the assistant,
 > `assistant.md`.
 
-## Accounts in a vault
+## Accounts in a vault <a id="vault-accounts"></a>
 
 Accounts belong to a vault: entities name the account they arrived from by
 its `id` in their `remote:` source block (`vault.md#remote`), and an

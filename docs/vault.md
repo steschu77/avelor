@@ -3,8 +3,8 @@
 > The vault's file format and its life cycle: what an entity file holds,
 > identity, roles, types and sources, file names, the layout; opening,
 > switching and scanning a vault, the trash, the Vault page. The account
-> files in `.avelor/` are described in `accounts.md`, how an edited document
-> reaches its file in `saving.md`.
+> and watch files in `.avelor/` are described in `accounts.md` and
+> `import.md`, how an edited document reaches its file in `saving.md`.
 
 ## Principles <a id="principles"></a>
 
@@ -612,8 +612,8 @@ Well-known properties (named in `av_vault::schema::remote`):
 
 Block: `scan:`
 
-* `watch`: UUIDv7, ID of the folder watch the scan was imported from;
-  absent for a scan that came another way,
+* `watch`: UUIDv7, ID of the folder watch the scan was imported from
+  (`import.md#folder-watches`); absent for a scan that came another way,
 * `origin`: string or list of strings, the scanned files (jpg, png, webp
   or pdf), in page order; relative to the watch's folder when `watch` is
   given.
@@ -688,6 +688,8 @@ the scan skips like every dot-folder:
   entity names the account it arrived from in its `remote:` block, an
   assistant reply the AI account it came through. The secrets stay with the
   app and never enter the vault. `accounts.md#account-files`.
+- `.avelor/watches/` (`av_vault::schema::layout::WATCHES`): one YAML file per
+  folder watch. `import.md#watch-files`.
 - `.avelor/vault.yaml` (`av_vault::schema::layout::VAULT_SETTINGS`): the
   vault's own settings, read when it opens (`vault_settings.rs`; changed
   with `set_vault_settings`, pushed as `vault_settings`). `chat-model`, the model the assistant answers with, `{account, model}`
@@ -700,7 +702,7 @@ chat-model:
   model: gpt-5-mini
 ```
 
-Opening another vault switches to its accounts and settings.
+Opening another vault switches to its accounts, watches and settings.
 
 ## Vault layout <a id="vault-layout"></a>
 
@@ -714,6 +716,7 @@ Vault/
   .avelor/                 # vault config
     accounts/          # *.yaml per account (Google, AI providers), without secrets;
                        # *.spend.yaml: an AI account's spending per month
+    watches/           # watch_<type>.yaml per folder watch
     vault.yaml         # the vault's own settings (the chat model)
   Projects/            # *.md / *.yaml project descriptors
   Conversations/       # *.yaml conversations
@@ -759,7 +762,7 @@ These are the ID card thread's entities; the whole vault has every type.
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its settings (`vault_settings`), then the scan: `vault` (scanning), the scan's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a note if files failed); answered `{google}` once the scan has started | sidebar, lens and counts fill while scanning; the Vault page lists unreadable files |
+| A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its watches (`watches`), its settings (`vault_settings`), then the scan: `vault` (scanning), the scan's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a note if files failed); answered `{google}` once the scan has started | sidebar, lens and counts fill while scanning; the Vault page lists unreadable files |
 | A2 | Switch vault | vault menu → "Switch vault…", or the Vault page → `switchVault`: every editor leaves edit mode (`leaveEditModes`), `save_doc_content` per unsaved edit, then `switch_vault` (no path) | modal folder picker (cancel: `path: null`, nothing else happens); the old vault's jobs and the assistant's replies stopped, the new vault opened once they have ended (`architecture.md#jobs`); `config.vault` saved; new scan as A1 | `vault` (scanning) → `forgetVault`: the page forgets the old vault, the scan fills it with the new one; the next start opens the new vault |
 | A3 | Show in folder | vault menu or Vault page → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
 | A4 | Vault page | Workspace → Vault (op `settings`) → `renderVault` (`features/workspace/vault.js`) | — | name, path, file count ("Scanning" until `vault` says `open`), Show in folder, Switch vault, the unreadable files |
@@ -775,6 +778,8 @@ sequenceDiagram
     P->>S: ready
     S->>S: accounts::open (.avelor/accounts/)
     S-->>P: accounts
+    S->>S: folders::open (.avelor/watches/)
+    S-->>P: watches
     S->>S: vault_settings::open (.avelor/vault.yaml)
     S-->>P: vault_settings
     S->>W: run_scan(root)
@@ -823,5 +828,6 @@ page's vault over (`forgetVault`, `model/events.js`). The page forgets:
   drafts (`features/new.js`).
 
 The lens, the calendar's day, the panel's size and the Vault page stay.
-The accounts arrive before the scan as the new vault's (`accounts`), so
+The accounts and folder watches arrive before the scan as the new
+vault's (`accounts`, `watches`), so
 they aren't touched.

@@ -49,7 +49,7 @@ which answers through a `Req`.
   following as events.
 - **Error codes** are the names of `av_utils::Error`'s variants in
   snake_case (`Error::code()`): `bad_request`, `invalid_argument`,
-  `cancelled`, `not_found` (no entity, account, job or message with that id), `wrong_kind` (the id
+  `cancelled`, `not_found` (no entity, account, watch, job or message with that id), `wrong_kind` (the id
   names something of another kind than the command takes), `not_writable`,
   `changed_outside`, `file_not_found`, `file_write`, `file_exists`, `spend_limit`, `win32`, `gtk`, `http`, …. `Req::fail` answers in the host's own
   words where the page shows the message.
@@ -93,7 +93,7 @@ Host modules: `api.rs`, `vault_scan.rs`, `vault_settings.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one (`vault.md#flows`, A1): its accounts and settings (`accounts`, `vault_settings`), then the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `{google}` once the scan has started: whether this build has Google (`accounts.md#design`). |
+| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one (`vault.md#flows`, A1): its accounts, watches and settings (`accounts`, `watches`, `vault_settings`), then the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `{google}` once the scan has started: whether this build has Google (`accounts.md#design`). |
 | `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), opened once the work bound to the open vault has stopped (`architecture.md#jobs`), and scanned as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. The page sends its unsaved edits first. |
 | `set_vault_settings` | `{ chat_model? }` | Change the open vault's settings (`.avelor/vault.yaml`, `vault.md#vault-config`); only the fields given change. `chat_model` is `{account, model}`, the model the assistant answers with, checked when it is used (`accounts.md#model-choice`). Pushes `vault_settings`, then `null`; `invalid_path` (no vault is open), or the failed save ("Could not save the vault's settings."). |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
@@ -182,6 +182,17 @@ Host module: `ai.rs`. `accounts.md`.
 | `list_ai_models` | `{ account }` | `ok {models: [{id, name, context_window, price: {input, output} \| null}]}`, the price in USD per million tokens (0 for a local Ollama, null if unknown). Pushes `account` first: an Ollama account's status follows the listing. A failed listing answers as a failed `connect_ai` check; `not_connected` for a key provider without its key, `not_found`. |
 | `set_ai_settings` | `{ account, offered?, spend_limit? }` | Only the fields given change: `offered` replaces the models offered in the pickers, `spend_limit: null` removes the limit. Pushes `account`, then `null`; `invalid_argument` for a limit that isn't above 0, `not_found`. |
 
+### Watch commands <a id="watches"></a>
+
+Host module: `folders.rs`. `import.md#folder-watches`.
+
+| Command | Args | Reply and pushes |
+|---|---|---|
+| `create_watch` | `{ type, folder, name?, patterns?, collect? }` | Create a folder watch in the open vault; the page fills in the type's defaults. The folder must exist once its `%VAR%`s are expanded (on Linux `~` and `$NAME`s); an empty name shows the folder's; patterns are trimmed, without empty entries and repeats. Written to the first free `.avelor/watches/watch_<type>[_n].yaml`, enabled and added now. Pushes `watch`, then `ok {id}`. Else, with nothing stored: `invalid_argument` ("Enter a folder."), `file_not_found` ("There's no folder at …"), `invalid_path` (no vault is open to keep it in), or the failed save's error. |
+| `set_watch` | `{ watch, name?, folder?, subfolders?, patterns?, collect?, models?, enabled? }` | Only the fields given change: a new folder is checked as in `create_watch`, `name: ""` removes the name, `patterns` replaces the list; `models` (`{step: {account, model}}`) sets the picks of the steps it names (`read` for reading the files), the others keep theirs; a pick is checked when it is used (`accounts.md#model-choice`). Pushes `watch`, then `null`; `not_found`, or the check's or the save's error, with nothing changed. |
+| `remove_watch` | `{ watch }` | Delete the watch's file; what it imported stays in the vault. Pushes `watch_removed`, then `null`; `not_found`. |
+| `pick_folder` | `{ title? }` | Show the folder picker, headed `title`, owned by the main window: `ok {path}`, the folder chosen, under the user's profile as `%USERPROFILE%\…` (on Linux `~/…`); `path` is null if the dialog was cancelled. |
+
 ### Mail commands <a id="mail"></a>
 
 Host module: `mail.rs`. `mail.md`. The errors of every `mail_*`:
@@ -234,6 +245,9 @@ What the host pushes; the page listens with `rpcOn`.
 | `accounts` | `{ items: [account…] }` | A vault opened: its accounts, from `.avelor/accounts/`, replacing the ones the page has. Each item is an `account`'s data. |
 | `account` | Google: `{ id, kind: "google", email, scope: { email, calendar, contacts, tasks }, connected, last_sync, status, calendars: [{ id, name, color, auto_sync }], mail: { filter, auto_update, last_fetch, analysis, auto_sync: { enabled, filter, since, analysis } \| null } \| null }`; AI: `{ id, kind: "anthropic"\|"openai"\|"mistral"\|"gemini"\|"ollama", key, address, status, connected, offered, spend_limit, spent: { cost, calls, unpriced } }` | An account was connected, changed, used or disconnected. Each `scope` level is `off`/`read`/`full`; `status` is `connected`, `disconnected` or `reconnect`, an Ollama account's `running`/`not running`/`unknown` (`accounts.md#connection`). `key` is only the key's ends (`sk-…4f2a`) or null; `spent` is what the account's calls cost this month (UTC): USD of the priced calls, all calls, and the calls whose price is unknown. A mail `analysis` is `{level, model?}` or null (off). |
 | `account_removed` | `{ id }` | The account was removed (`remove_account`); its files are gone. |
+| `watches` | `{ items: [watch…] }` | A vault opened: its folder watches, from `.avelor/watches/`, replacing the ones the page has. Each item is a `watch`'s data. |
+| `watch` | `{ id, type: "images", name, folder, subfolders, patterns, collect, models, enabled, added }` | A watch was created or changed. `name` is the folder's name if the watch has none; `folder` is as stored (`%USERPROFILE%\…`, on Linux `~/…`); `collect` is `together`, `single`, or null; `models` maps a step (`read`) to its pick, `{account, model}`; empty until one is picked. |
+| `watch_removed` | `{ id }` | The watch was removed (`remove_watch`); its file is gone. |
 | `conversation` | `{ id, title, linked_to, active, messages: [{ id, parent, role: "user"\|"assistant", model, date, content, html, status: "done"\|"writing"\|"stopped"\|"failed", error?, suggestions? }] }` | A conversation changed without the page asking: a reply done, failed or stopped, a branch selected. `chat_open` and `chat_send` answer with the same shape. `suggestions` are questions offered to ask next (the mail analysis's chat, `vault.md#conversation`). `messages` are the file's plus the reply being written and the failed ones, which are never written. The page shows the path from the first message to `active`, then on down the newest children, and derives the siblings from `parent`. |
 | `ai_delta` | `{ conversation, message, html }` | The reply being written, all of it so far, rendered from its markdown. Coalesced: at most one per run of the host's queue, however fast the model writes. The page ignores it for a conversation it doesn't show. |
 | `notice` | `{ level: "error"\|"info", message, entity? }` | `error`: one item of a job failed (a mail, an event; the job's summary counts it too), or the settings couldn't be saved where no command asked for it (the window's size, the vault remembered on a switch), or `config.yaml` couldn't be read at start (on `ready`). `info`: what a job brought — new mail, `"New mail: <title>"` with `entity`, the mail, or `"<n> new mails · <email>"`. A notice without `level` counts as an error. The page shows them in the status bar (`ui.md#status-bar`). |
