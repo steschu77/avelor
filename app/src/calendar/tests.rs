@@ -13,7 +13,8 @@ use super::mapping::{
     EventFields, attendees_of, event_entity, exception, exception_of, exception_to_google,
     from_google, keeps_nothing, looks_like_html, normalize, payload_of, take_exceptions, to_google,
 };
-use super::plan::{calendar_entity, first_sync_start, local_event};
+use super::plan::{build_job, calendar_entity, first_sync_start, local_event};
+use crate::testing::trashed;
 use crate::testing::{CONNECTED, DISCONNECTED, Harness, parse, shape, shown, with_google, words};
 use av_google::calendar::Attendee;
 use av_google::calendar_sync::Report;
@@ -271,6 +272,135 @@ fn a_recurring_event_takes_googles_instances_and_its_conflict_copy_doesnt() {
         .clone();
     let copy = copy.unwrap();
     assert!(copy.exceptions.is_empty() && !copy.schedule.is_empty());
+}
+
+// ------------------------------------------------------------------------
+/// An event file in the trash at `path`: synced from `account` as Google's
+/// `gone`, of the calendar entity `calendar`, with `status`.
+fn trashed_event(
+    path: &'static str,
+    account: &str,
+    calendar: &str,
+    status: &str,
+) -> (&'static str, String) {
+    let id = Id::generate();
+    let text = format!(
+        "---\nid: {id}\ntitle: Gone\ndate: 2026-10-05T08:00:00Z\nremote:\n  account: {account}\n  remote:\n  - event-id: gone\n  - calendar-id: cal1\nevent:\n  calendar: {calendar}\n  status: {status}\n  start: 2026-10-05T08:00:00Z\n---\n"
+    );
+    (path, text)
+}
+
+// ------------------------------------------------------------------------
+/// The job for `cal1`, two-way if `push`, and its planned events.
+fn planned(h: &Harness, push: bool) -> (SyncJob, PlannedEvents) {
+    let source = find_source(&h.app, connected(), "cal1").unwrap();
+    let calendar = Id::parse(CAL).unwrap();
+    build_job(&h.app, connected(), calendar, &source, push)
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn two_way_jobs_take_the_calendars_deleted_events() {
+    let other = Id::generate().to_string();
+    let files = [
+        calendar_file(),
+        trashed_event(
+            ".trash/Calendar/Personal/a.evt.md",
+            CONNECTED,
+            CAL,
+            "confirmed",
+        ),
+        trashed_event(
+            ".trash/Calendar/Personal/b.evt.md",
+            CONNECTED,
+            CAL,
+            "cancelled",
+        ),
+        trashed_event(
+            ".trash/Calendar/Personal/c.evt.md",
+            DISCONNECTED,
+            CAL,
+            "confirmed",
+        ),
+        trashed_event(
+            ".trash/Calendar/Other/d.evt.md",
+            CONNECTED,
+            &other,
+            "confirmed",
+        ),
+    ];
+    let h = with_google("calendar-trashed", FULL, &files);
+    let (job, events) = planned(&h, true);
+    let [l] = &job.calendars[0].events[..] else {
+        panic!("one deleted event");
+    };
+    assert!(l.deleted && l.wants_push());
+    assert_eq!(l.path, Path::new(".trash/Calendar/Personal/a.evt.md"));
+    assert!(events.contains_key(&l.path));
+    let (job, _) = planned(&h, false);
+    assert!(job.calendars[0].events.is_empty(), "pull only: no deletes");
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_deleted_event_changed_in_google_comes_back_from_the_trash() {
+    let files = [calendar_file(), synced_event_file("calendar-back-0")];
+    let mut h = with_google("calendar-back", FULL, &files);
+    let id = Id::parse(EV).unwrap();
+    h.call("set_labels", json!({ "id": EV, "labels": ["dentist"] }));
+    h.call("delete_entity", json!({ "id": EV }));
+    let come_back = |h: &mut Harness| {
+        let (job, events) = planned(h, true);
+        let path = job.calendars[0].events[0].path.clone();
+        let job_id = begin(h, events);
+        let output = SyncOutput {
+            effects: vec![Effect::RestoreLocal {
+                path,
+                remote: google_event(),
+                remote_calendar_id: "cal1".into(),
+                exceptions: Vec::new(),
+            }],
+            report: Report::default(),
+        };
+        apply(&mut h.app, job_id, Ok(output));
+        h.run_queue();
+        parse(&h.take())
+    };
+    let sent = come_back(&mut h);
+    assert_eq!(
+        shown(&sent.last().unwrap()["data"]["summary"]),
+        "1 restored"
+    );
+    let doc = &h.app.vault.index().entry(&id).unwrap().doc;
+    assert_eq!(doc.title(), "Dentist", "Google's version");
+    assert_eq!(doc.labels(), ["dentist"], "its labels kept");
+    let Some(Source::Remote(bookkeeping)) = doc.source() else {
+        panic!("{:?}", doc.source());
+    };
+    assert_eq!(bookkeeping.get(ETAG), Some("\"1\""));
+    assert!(!trashed(&h.vault(), event_file().0));
+
+    // Its place taken: back as a new event, the trashed copy cancelled.
+    h.call("delete_entity", json!({ "id": EV }));
+    fs::write(h.vault().join(event_file().0), "taken\n").unwrap();
+    let sent = come_back(&mut h);
+    assert_eq!(shown(&sent.last().unwrap()["data"]["summary"]), "1 new");
+    let file = h.vault().join(".trash").join(event_file().0);
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(text.contains("status: cancelled"), "{text}");
+    assert!(h.app.vault.index().entry(&id).is_none());
+}
+
+// ------------------------------------------------------------------------
+/// `event_file` as last synced: its snapshot recorded (worked out in a
+/// vault of its own, `name`).
+fn synced_event_file(name: &str) -> (&'static str, String) {
+    let h = with_google(name, FULL, &[calendar_file(), event_file()]);
+    let entry = h.app.vault.index().entry(&Id::parse(EV).unwrap()).unwrap();
+    let snapshot = calendar_sync::snapshot(&payload_of(&entry.doc));
+    let (path, text) = event_file();
+    let recorded = format!("  - snapshot: {snapshot}\n  - etag:");
+    (path, text.replace("  - etag:", &recorded))
 }
 
 // ------------------------------------------------------------------------

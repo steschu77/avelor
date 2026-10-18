@@ -101,6 +101,12 @@ every dot-folder.
   left it). The file still names them in `threads` and `projects`; the app
   doesn't show references to entities that aren't in the vault, the same
   as links (`vault.md#metadata`).
+- **Calendar events.** A two-way calendar sync deletes in Google the
+  trashed events of its calendar that it synced, and rewrites each trashed
+  file with `status: cancelled`: it stays in the trash, and a restore
+  brings it back cancelled. An event changed in Google before that sync is
+  restored instead, with Google's version. An event deleted for good before
+  the sync isn't deleted in Google (`calendar.md#two-way-sync`).
 - **Delete** in the trash and **Empty trash** remove files for good; both
   take two clicks. Empty removes the markdown and YAML files the trash
   lists, and the folders this leaves empty; anything else put into
