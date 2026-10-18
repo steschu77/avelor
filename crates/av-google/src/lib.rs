@@ -1,6 +1,7 @@
 //! Google APIs for Avelor: OAuth sign-in (`auth`), one `Client`
 //! per connected account (`client`), who that account is (`identity`), and
-//! a thin typed module per service — Calendar and Gmail.
+//! a thin typed module per service — Calendar (with its two-way sync
+//! engine) and Gmail.
 //!
 //! Everything blocks: requests go through av-http, each under the caller's
 //! `av_utils::cancel::Cancel`; the caller runs them on a worker thread. Nothing here
@@ -9,6 +10,7 @@
 
 pub mod auth;
 pub mod calendar;
+pub mod calendar_sync;
 pub mod client;
 pub mod gmail;
 pub mod identity;

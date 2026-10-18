@@ -103,7 +103,8 @@ The rules the code follows, and every change to it:
 5. **The vault crate owns the vault's schema**; the app orchestrates; the
    page presents.
 6. **Pure core, thin shell.** Mapping and decision logic are pure functions
-   with tests; I/O sits at the edges.
+   with tests (as `av_google::calendar_sync::plan` is); I/O sits at the
+   edges.
 7. **One coordinator.** `App` (`app.rs`) is the only place that runs
    background work and posts to the page; no worker gets a path of its own to the webview. Each new
    coordination primitive (`Req`, `on_ui`, the re-entrancy net, the jobs
@@ -249,7 +250,7 @@ flowchart BT
     utils["av-utils<br/>error, datetime, base64, sha256,<br/>secret (DPAPI), logger, text, url, fs, cancel"]
     http["av-http<br/>WinHTTP / libsoup client"]
     vault["av-vault<br/>envelope, document, index, schema,<br/>filenames, markdown, email, html, conversation"]
-    google["av-google<br/>OAuth, Gmail, Calendar"]
+    google["av-google<br/>OAuth, Gmail, Calendar, sync engine"]
     llm["av-llm<br/>5 providers, streaming, usage, prices"]
     bundle["av-bundle<br/>the page's scripts: dependency check<br/>(build only)"]
     app["app"]
@@ -265,10 +266,10 @@ flowchart BT
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), DPAPI `secret`, logger, random (BCrypt), url, text normalization, charsets, atomic writes (`fs`), cross-thread `Cancel` | |
+| av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), FNV, DPAPI `secret`, logger, random (BCrypt), url, text normalization, charsets, atomic writes (`fs`), cross-thread `Cancel` | |
 | av-http | blocking `Client` / `Request` / `Response`; the process's one session (`Client::shared`); `Request::send_logged`, the one way the APIs are called: logged as `METHOD host/path`, timed, a non-2xx status as `Error::Http` with the reason the caller's parser reads from the body | WinHTTP; libsoup 3 on Linux, one session per worker thread; WinHTTP's IPv6 fast fallback on (a network whose IPv6 goes nowhere cost 21 s per new connection); a streamed read takes what has arrived (`WinHttpQueryDataAvailable`) |
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes`, the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the scan (`scan`, events applied by `Index::apply`), filenames, `to_html`, `MdWriter`, `plain_title`, HTML → markdown, MIME parser, conversation trees | no network, no UI; also hosts mail parsing |
-| av-google | OAuth loopback + PKCE (the wait under a `av_utils::cancel::Cancel`), token refresh, Gmail (filter → query, ids, headers, raw), Calendar v3 subset; Google's error bodies (`reason`) | sends through `send_logged` |
+| av-google | OAuth loopback + PKCE (the wait under a `av_utils::cancel::Cancel`), token refresh, Gmail (filter → query, ids, headers, raw), Calendar v3 subset, the two-way sync engine (`plan` is pure); Google's error bodies (`reason`) | sends through `send_logged` |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-llm | `Client` over Anthropic, OpenAI (Responses API, not Chat Completions), Mistral, Gemini, Ollama; the providers' facts in one table (`ProviderSpec`, `PROVIDERS`: names, alias, default URL, key, uploads, auth) and one request builder from it (`Client::request`); streaming (SSE/NDJSON); normalized `Usage`, price table, `Ledger`; the providers' error bodies | sends through `send_logged`; dispatch by macro, no trait |
 
@@ -625,9 +626,22 @@ abort. Where the bundle lands and how to measure the size:
   (`accounts.md#model-choice`).
 - **Naming**: a feature's commands, sub-state and module share its name.
 - **Errors**: one `av_utils::Error` for every layer (`av-utils/error.rs`:
-  logging, the operating system), extended when needed; a separate error type only for functions
-  local to one module; expected outcomes are success variants, not errors;
-  a failed write is `FileWrite { path, err }`.
+  logging, vault, OAuth, transport, Win32, GTK), extended when needed; a
+  separate error type only for functions local to one module; expected
+  outcomes are success variants, not errors (`SaveOutcome::Conflict`,
+  `PushOutcome::Conflict` in av-google). An id that names nothing is
+  `NotFound`, one that names something of another kind `WrongKind`; a
+  failed write is `FileWrite { path, err }`. A failed HTTP call is
+  `Error::Http { status, reason, msg }` (`Request::send_logged`, the
+  reason read by the calling crate's parser) or `Error::Network { msg }`;
+  the service module reads the status codes it knows by matching
+  `Error::Http { status, .. }`. A caller that can't ask the user turns a
+  save conflict into `Error::ChangedOutside { path }` through
+  `Vault::require_written` (`saving.md#limits`). A function whose failure
+  is a reason the user reads, not an error a caller matches on, returns
+  those words as a `String`; one that answers a
+  request with a code and the host's words returns both
+  (`ai_accounts::Refusal`).
 - **Entity ops are generic**: a vault or host op is built on a property
   every entity has, for any entity (`Index::set_title`, not
   `rename_project`), even when the UI offers it for one kind. An empty
@@ -651,7 +665,7 @@ abort. Where the bundle lands and how to measure the size:
 | av-utils | primitives with no domain (dates, ids, encodings, hashing, DPAPI, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | av-http | transport, cancellation | know any API |
 | av-vault | the vault's schema, files, index, rules, conversions | do network or UI; start threads (the app decides where scan work runs) |
-| av-google / av-llm | their remote APIs, pricing logic | touch the vault or the page's presets |
+| av-google / av-llm | their remote APIs, pure sync and pricing logic | touch the vault or the page's presets |
 | `app` feature modules | orchestration: plan → run → apply, accounts files | parse messages, render, reach into other features |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
 | page | rendering, user input, the page's copy of the data | resolve filenames, conflicts or structural rules |
