@@ -16,9 +16,41 @@ use serde::{Deserialize, Serialize};
 use serde_yaml_ng::{Mapping, Value};
 
 use crate::config::files::{ConnectionStatus, SecretFile, free_stem, remove_if_exists, write_yaml};
+use crate::texts::Text;
 
 /// The extension of an AI account's secret, its API key.
 const KEY: &str = "key";
+
+// ----------------------------------------------------------------------------
+/// The model a feature picked (accounts.md#model-choice): one of the models
+/// an AI account offers, kept with the feature's settings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelChoice {
+    pub account: Id,
+    pub model: String,
+}
+
+// ----------------------------------------------------------------------------
+/// The account and model of a feature's pick (`AiAccounts::choose`), with a
+/// client for them.
+#[derive(Clone)]
+pub struct Resolved {
+    pub account: Id,
+    pub model: String,
+    pub client: Client,
+    pub provider: Provider,
+    /// Where the API lives, for the words of a failure.
+    pub address: String,
+}
+
+// ----------------------------------------------------------------------------
+/// Why a use can't go to the AI: the error, and the host's words for the
+/// page (`Req::fail`).
+#[derive(Debug)]
+pub struct Refusal {
+    pub error: Error,
+    pub text: Text,
+}
 
 // ----------------------------------------------------------------------------
 /// An AI account's block. Unknown keys are kept, so hand-added settings
@@ -183,6 +215,12 @@ impl AiAccount {
             offered: &self.settings.offered,
             spend_limit: self.settings.spend_limit,
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether it can be called: Ollama always, a key provider with its key.
+    fn usable(&self) -> bool {
+        !self.uses_key() || self.has_key()
     }
 
     // ------------------------------------------------------------------------
@@ -454,6 +492,54 @@ impl AiAccounts {
         self.list.remove(index);
         Ok(())
     }
+
+    // ------------------------------------------------------------------------
+    /// The account, model and client of `choice`, the model a feature picked
+    /// for `what` ("conversations"; accounts.md#model-choice), as the page's
+    /// `aiModelOf` shows it. Refused in words if nothing is picked, the
+    /// account is gone or has no key, or the model isn't offered any more.
+    /// No other model is ever tried: it could send the text elsewhere.
+    pub fn choose(
+        &self,
+        choice: Option<&ModelChoice>,
+        what: Text,
+    ) -> std::result::Result<Resolved, Refusal> {
+        let refuse = |error, text: Text| {
+            let text = text.arg("feature", what.clone());
+            Err(Refusal { error, text })
+        };
+        let no_model = || Error::InvalidArgument {
+            arg: "model".to_string(),
+        };
+        let Some(choice) = choice else {
+            if self.list.is_empty() {
+                return refuse(Error::NotConnected, Text::new("ai.add_provider"));
+            }
+            return refuse(no_model(), Text::new("ai.pick_model"));
+        };
+        let Ok(account) = self.get(choice.account) else {
+            return refuse(no_model(), Text::new("ai.picked_account_gone"));
+        };
+        if !account.usable() {
+            let name = account.provider().spec().display;
+            return refuse(
+                Error::NotConnected,
+                Text::new("ai.key_again").arg("name", name),
+            );
+        }
+        let model = &choice.model;
+        if !account.settings.offered.contains(model) {
+            let text = Text::new("ai.not_offered").arg("model", model.as_str());
+            return refuse(no_model(), text);
+        }
+        Ok(Resolved {
+            account: account.id(),
+            model: model.clone(),
+            client: account.client(),
+            provider: account.provider(),
+            address: account.address().to_string(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -598,5 +684,109 @@ note: top-level kept
     fn key_hints_show_only_the_ends() {
         assert_eq!(key_hint("sk-proj-abcdefghijklmnop4f2a"), "sk-…4f2a");
         assert_eq!(key_hint("short"), "…");
+    }
+
+    // ------------------------------------------------------------------------
+    /// An unsaved account of `provider`, with a key if `key`, offering
+    /// `offered`.
+    fn account(provider: Provider, key: bool, offered: &[&str]) -> AiAccount {
+        let mut account = AiAccount::new(Path::new("accounts"), provider);
+        if key {
+            account.key = Some("sk-0123456789abcdef".into());
+        }
+        account.settings.offered = offered.iter().map(|m| m.to_string()).collect();
+        account
+    }
+
+    fn list(accounts: Vec<AiAccount>) -> AiAccounts {
+        AiAccounts::new(PathBuf::new(), PathBuf::new(), accounts)
+    }
+
+    fn pick(account: &AiAccount, model: &str) -> ModelChoice {
+        ModelChoice {
+            account: account.id(),
+            model: model.to_string(),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_pick_goes_to_its_account_and_model() {
+        let ollama = account(Provider::Ollama, false, &["qwen", "llama"]);
+        let anthropic = account(Provider::Anthropic, true, &["claude"]);
+        let (llama, claude) = (pick(&ollama, "llama"), pick(&anthropic, "claude"));
+        let accounts = list(vec![ollama, anthropic]);
+
+        let chat = accounts
+            .choose(Some(&llama), Text::new("feature.conversations"))
+            .unwrap();
+        assert_eq!(
+            (chat.account, chat.model.as_str(), chat.provider),
+            (llama.account, "llama", Provider::Ollama),
+            "not the first offered model: the one picked"
+        );
+        let ocr = accounts
+            .choose(Some(&claude), Text::new("feature.ocr"))
+            .unwrap();
+        assert_eq!(
+            (ocr.account, ocr.model.as_str(), ocr.provider),
+            (claude.account, "claude", Provider::Anthropic)
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_pick_that_does_not_work_is_refused_in_words_and_nothing_else_tried() {
+        let refusal = |accounts: &AiAccounts, choice: Option<&ModelChoice>| {
+            let refusal = accounts
+                .choose(choice, Text::new("feature.ocr"))
+                .err()
+                .unwrap();
+            (refusal.error.code(), refusal.text.render())
+        };
+        let none = list(vec![]);
+        assert_eq!(
+            refusal(&none, None),
+            (
+                "not_connected",
+                "For OCR, add an AI provider under Accounts.".to_string()
+            )
+        );
+        let keyless = account(Provider::OpenAi, false, &["gpt-5"]);
+        let ollama = account(Provider::Ollama, false, &["qwen"]);
+        let (gpt, unticked) = (pick(&keyless, "gpt-5"), pick(&ollama, "llama"));
+        let gone = ModelChoice {
+            account: Id::generate(),
+            model: "qwen".to_string(),
+        };
+        let accounts = list(vec![keyless, ollama]);
+        assert_eq!(
+            refusal(&accounts, None),
+            ("invalid_argument", "For OCR, pick a model.".to_string()),
+            "never the first offered model"
+        );
+        assert_eq!(
+            refusal(&accounts, Some(&gpt)),
+            (
+                "not_connected",
+                "For OCR, enter OpenAI\u{2019}s key again under Accounts.".to_string()
+            )
+        );
+        assert_eq!(
+            refusal(&accounts, Some(&gone)),
+            (
+                "invalid_argument",
+                "For OCR, the picked model\u{2019}s account is gone; pick another model."
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            refusal(&accounts, Some(&unticked)),
+            (
+                "invalid_argument",
+                "For OCR, llama is no longer offered; tick it under Accounts or pick another model."
+                    .to_string()
+            )
+        );
     }
 }
