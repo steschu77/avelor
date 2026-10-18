@@ -15,6 +15,7 @@ use crate::documents;
 use crate::folders;
 use crate::google;
 use crate::google_accounts::{CalendarSource, Level};
+use crate::scans;
 use crate::structure;
 use crate::trash;
 use crate::{accounts, ai};
@@ -103,6 +104,8 @@ enum Command {
     SetWatch(folders::WatchChange),
     RemoveWatch(OfWatch),
     PickFolder(PickFolder),
+    // Import scans (`scans`).
+    ScanList(OfWatch),
     // Fetch mail (`mail`).
     MailLabels(OfAccount),
     MailSearch(mail::SearchRequest),
@@ -340,6 +343,7 @@ impl Command {
             "set_watch" => Command::SetWatch(from_value(args)?),
             "remove_watch" => Command::RemoveWatch(from_value(args)?),
             "pick_folder" => Command::PickFolder(from_value(args)?),
+            "scan_list" => Command::ScanList(from_value(args)?),
             "mail_labels" => Command::MailLabels(from_value(args)?),
             "mail_search" => Command::MailSearch(from_value(args)?),
             "mail_headers" => Command::MailHeaders(from_value(args)?),
@@ -430,6 +434,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetWatch(a) => folders::set_watch(app, req, a),
         Command::RemoveWatch(a) => folders::remove_watch(app, req, a.watch),
         Command::PickFolder(a) => folders::pick_folder(app, req, a.title),
+        Command::ScanList(a) => scans::scan_list(app, req, a.watch),
         Command::MailLabels(a) => mail::mail_labels(app, req, a.account),
         Command::MailSearch(a) => mail::mail_search(app, req, a),
         Command::MailHeaders(a) => mail::mail_headers(app, req, a),

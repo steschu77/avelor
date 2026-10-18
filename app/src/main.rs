@@ -22,6 +22,7 @@ mod jobs;
 mod mail;
 mod page;
 mod protocol;
+mod scans;
 mod shell;
 mod structure;
 mod sys;

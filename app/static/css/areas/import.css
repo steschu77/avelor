@@ -1,4 +1,40 @@
-/* The import pages (features/import/): Fetch mail. */
+/* The import pages (features/import/): Import scans and Fetch mail. */
+
+/* Import scans (the Import button, features/import/scans.js): the files */
+.scans__where {
+  color: var(--c-label);
+}
+
+.scans__part {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.scans__files {
+  display: flex;
+  flex-direction: column;
+}
+
+.scans__file {
+  --cols: minmax(0, 1fr) 150px 80px;
+  min-height: var(--h-row);
+  padding: 0 8px;
+}
+
+.scans__file--head {
+  min-height: 28px;
+}
+
+.scans__empty {
+  padding: 12px 0;
+}
+
+.import__file {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
 /* Fetch mail (sync button of a Mail source, features/import/mail.js): the filter form, then
    the matches with the fetch button under them */

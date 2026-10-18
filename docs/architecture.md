@@ -61,7 +61,7 @@ read by OCR.
 | `accounts.md` | Google and AI accounts: files, secrets, states, the Accounts page, AI uses and the spend limit |
 | `mail.md` | Fetch mail, the mail auto-sync, the mail analysis |
 | `calendar.md` | calendar sync, its rules, auto-sync and sync points |
-| `import.md` | folder watches |
+| `import.md` | folder watches, Import scans |
 | `assistant.md` | the assistant: conversations, context, streaming |
 
 ## Doc conventions
@@ -82,7 +82,7 @@ read by OCR.
   `av-vault/vault.rs:201`).
 - **Flows** have ids by area (A vault, B navigation, C projects, D
   documents and cards, E threads, F lenses, G sync sources, H Google
-  accounts, I AI accounts, J watches, L assistant): trigger
+  accounts, I AI accounts, J watches, K Import scans, L assistant): trigger
   on the page → page functions → command → what the host does and sends
   back → result. Message names are the protocol's (`api.md`).
 - **Tables are unaligned** (`|---|`); the docs are LF.
@@ -120,6 +120,44 @@ The rules the code follows, and every change to it:
    pause, the saves a conflict refused. Modal dialogs through `on_ui` stay
    the only modal loops. A request the page can answer later (`WM_CLOSE`)
    is asked, with a timeout.
+
+## Big picture
+
+```mermaid
+flowchart LR
+    subgraph page["WebView2 / WebKitGTK page — app/static"]
+        ui["sidebar · lenses · panel<br/>workspace pages · assistant"]
+        ed["editor.js · markdown.js"]
+        br["rpc.js<br/>rpcCall · rpcOn"]
+    end
+    subgraph host["Rust host — app/src"]
+        win["shell.rs · page.rs · sys/"]
+        ses["App<br/>protocol + runtime + all state"]
+        feat["structure · documents · trash · close<br/>api · ai · chat · mail · calendar · scans · folders"]
+        cfg["config · accounts<br/>ai_accounts · watches"]
+    end
+    subgraph crates["crates"]
+        vault["av-vault"]
+        google["av-google"]
+        llm["av-llm"]
+        http["av-http"]
+        utils["av-utils"]
+    end
+    br <-- "JSON envelope" --> win
+    win --> ses --> feat
+    feat --> cfg
+    feat --> vault
+    feat --> google
+    feat --> llm
+    google --> http
+    llm --> http
+    vault --> utils
+    http --> utils
+    vault --> files[("vault folder")]
+    cfg --> conf[("config folder")]
+    google --> gapi(["Google APIs"])
+    llm --> lapi(["LLM providers"])
+```
 
 ## Runtime
 
@@ -350,7 +388,8 @@ side never touches the vault side; `app` is the only bridge.
 | `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); a fetch's new mails handed to the analysis; their tests |
 | `enrich.rs` | the mail analysis (`mail.md#analysis`): the vault's `context`, the request per level, its parser and its writes (pure: `request_for`, `parse`, `apply_lite`, `medium_messages`), the analysis job one mail at a time (`analyse`, `EnrichState`); its tests against a fake Ollama |
 | `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests |
-| `watches.rs`, `folders.rs` | watch files in `.avelor/watches/`, the `Watches` sub-state; the watch commands, the events `watches` / `watch` / `watch_removed`, their dispatch tests |
+| `watches.rs`, `folders.rs` | watch files in `.avelor/watches/`, the `Watches` sub-state, globbing, listing; the watch commands, the events `watches` / `watch` / `watch_removed`, their dispatch tests |
+| `scans.rs` | Import scans: `scan_list`; their dispatch tests |
 
 ## Platforms <a id="platforms"></a>
 
@@ -453,7 +492,7 @@ nothing imports `app.js`.
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`), `aiMissingHint`; its way to the Accounts page is the `accounts.open` action |
 | `features/workspace/folders.js`, `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the folder watches with their types; the accounts, Google and AI; the trash |
-| `features/import/mail.js` | Fetch mail, and an account's mail auto-sync |
+| `features/import/scans.js`, `features/import/mail.js` | Import scans; Fetch mail, and an account's mail auto-sync |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event, with Stop |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |
@@ -529,7 +568,7 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
 | `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `check`, `input`, `menu`, `tile`, `list-row`, `section-head`, the forms, `pane-head`, the dialogs, the vault area's `page`, the list + detail page (`ui/page.js`), … |
-| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, timeline, calendar, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), import (Fetch mail), header (the lens header, the titles edited in place) |
+| `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, timeline, calendar, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), import (Import scans, Fetch mail), header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:
 

@@ -1232,6 +1232,24 @@ impl Index {
     }
 
     // ------------------------------------------------------------------------
+    /// The files imported from the folder watch `watch` (the `origin`s of
+    /// every `scan:` block naming it), each with the entity it went into.
+    pub fn scan_origins(&self, watch: &Id) -> HashMap<String, Id> {
+        let mut origins = HashMap::new();
+        for entry in &self.documents {
+            let Some(Source::Scan(scan)) = entry.doc.source() else {
+                continue;
+            };
+            if scan.watch.as_ref() == Some(watch) {
+                for origin in scan.origin.as_slice() {
+                    origins.insert(origin.clone(), entry.doc.id());
+                }
+            }
+        }
+        origins
+    }
+
+    // ------------------------------------------------------------------------
     /// The members of `thread_id` -- entities whose `message.threads` lists
     /// it -- in thread order: by `date`, ties broken by `id` (UUIDv7).
     pub fn thread_members(&self, thread_id: &Id) -> Vec<&Entry> {
@@ -2686,6 +2704,60 @@ mod tests {
         let text = fs::read_to_string(root.join(&index.entry(&id).unwrap().local)).unwrap();
         assert!(text.ends_with("New body\n") && text.contains("gmail-id: g1"));
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn scan_origins_name_the_files_imported_from_a_watch() {
+        use crate::envelope::{Document as DocumentRole, Scan};
+        use crate::shared::OneOrMany;
+        let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
+        let mut index = Index::default();
+        index.begin(&root);
+        let (watch, other) = (Id::generate(), Id::generate());
+        let mut create = |watch: Option<Id>, origin: &[&str]| {
+            let scan = Scan {
+                watch,
+                origin: OneOrMany::from_vec(origin.iter().map(|o| o.to_string()).collect()),
+            };
+            let roles = Roles {
+                document: Some(DocumentRole::default()),
+                ..Default::default()
+            };
+            let doc = Document::create(
+                roles,
+                Source::Scan(scan),
+                "Letter".into(),
+                Vec::new(),
+                FileFormat::Markdown,
+            );
+            index
+                .create(doc, Path::new("Scans"), &mut Changes::default())
+                .unwrap()
+        };
+        let letter = create(Some(watch), &["p1.jpg", "sub\\p2.jpg"]);
+        let receipt = create(Some(watch), &["r.png"]);
+        create(Some(other), &["x.jpg"]);
+        create(None, &["y.jpg"]);
+
+        let text = fs::read_to_string(root.join(&index.entry(&letter).unwrap().local)).unwrap();
+        let rescanned = Index::scan(&root);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert!(
+            text.contains(&format!("scan:\n  watch: {watch}\n  origin:\n  - p1.jpg\n")),
+            "{text}"
+        );
+        let expected = HashMap::from([
+            ("p1.jpg".to_string(), letter),
+            ("sub\\p2.jpg".to_string(), letter),
+            ("r.png".to_string(), receipt),
+        ]);
+        assert_eq!(index.scan_origins(&watch), expected);
+        assert_eq!(
+            rescanned.scan_origins(&watch),
+            expected,
+            "read back from the files"
+        );
     }
 
     #[test]

@@ -3,16 +3,21 @@
 // PC. The page follows Workspace -> Accounts: a card per watch, a menu of
 // the watch types, and a new watch's pane that asks for its folder first.
 // Once the host has found the folder, the watch is saved with its type's
-// file types, and its full pane shows.
+// file types, and its full pane shows. Import, here, opens the import page
+// of its type (images: features/import/scans.js, through the
+// `watch.import` action).
 
 import { accEl } from '../../core/dom.js';
 import { oncePerFrame } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { pageDate } from '../../core/format.js';
+import { runAction } from '../../core/actions.js';
 import { store } from '../../model/state.js';
 import { watches } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
+import { iconEl } from '../../ui/icons.js';
+import { IMPORT_ICON } from '../../ui/icons.js';
 import {
   addTile, detailFooter, detailHead, detailPane, draftKind, itemCard, listDetailPage, listSection,
   notice, pageList, replaceVaultPage, sentDrafts, setPageFocus,
@@ -294,8 +299,13 @@ function renderWatchPane(watch) {
   const settings = watchSettings(id);
   const pane = detailPane();
 
+  const importButton = accEl('button', 'btn');
+  importButton.type = 'button';
+  importButton.title = 'Read and import the files';
+  importButton.append(iconEl(IMPORT_ICON), 'Import');
+  importButton.addEventListener('click', () => runAction('watch.import', id));
   pane.append(detailHead(`Folder watch \u00b7 ${type.kind} \u00b7 added ${pageDate(watch.added)}`,
-    { icon: type.icon }));
+    { icon: type.icon, button: importButton }));
 
   const [name, nameNote] = renderEditField(id, 'name', {
     saved: settings.name,

@@ -46,6 +46,8 @@ export function getDocIcon(kind, genre) {
   return icon;
 }
 
+export const IMPORT_ICON = '#i-arrow-import';
+
 // ----------------------------------------------------------------------------
 // An `<svg class="icon">` showing the symbol `href` (`#i-<name>`): the
 // markup's icons are written as such, a script's are made here, since an

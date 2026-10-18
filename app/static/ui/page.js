@@ -87,9 +87,9 @@ const vaultAreaTitle = $("vault-area-title");
 
 // Selecting an op titles the vault area and expands it. Each op renders
 // its own body (features/workspace/: accounts.js, folders.js, trash.js;
-// features/import/: mail.js; features/new.js,
-// features/workspace/vault.js). Ops without a sidebar entry (Fetch mail)
-// pass their title.
+// features/import/: mail.js, scans.js; features/new.js,
+// features/workspace/vault.js). Ops without a sidebar entry (Fetch mail,
+// Import scans) pass their title.
 export function openVaultOp(op, title) {
   vaultAreaTitle.textContent = title ?? vaultOpTitles[op];
   if (store.getState().vault_op !== op) {

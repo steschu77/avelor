@@ -25,7 +25,7 @@ button puts the assistant beside the card, over the main view, as the
 full width does (`assistant.md#conversations`). Opening a panel never
 moves the main view's layout. The expanded vault area hosts the
 pages of the vault panel: the Workspace pages (Accounts, Folders, Vault,
-Trash), Fetch mail and New. It is
+Trash), Fetch mail, Import scans and New. It is
 expanded only while one of them is shown: a page opens it (`openVaultOp`,
 `ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
 or a click on a filter closes it (`closeVaultArea`). Menus are popups
@@ -265,7 +265,7 @@ What a key, a menu or a button starts is a registered action
 (`architecture.md#actions`). The page keys:
 
 - **Esc** closes an open menu, else the page in the expanded vault area
-  (Fetch mail, New); in an editor it leaves edit mode.
+  (Fetch mail, Import scans, New); in an editor it leaves edit mode.
 - **Ctrl+Enter** runs the open page's main action (Fetch, Create).
 - **Ctrl+N** opens New.
 - A key the editor already handled (Ctrl+I as italic) is left alone.

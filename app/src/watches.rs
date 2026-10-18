@@ -1,8 +1,10 @@
 //! Folder watches (import.md#watch-files): one YAML file per watch
 //! in the open vault's `.avelor/watches/`, its block named `folder-watch:`. A
 //! watch says which folder on this PC to read, which files to take from it
-//! and how to read them. The open vault's watches are a `Watches`. The
-//! commands: `folders`.
+//! and how to read them. The open vault's watches are a `Watches`. Also
+//! lists the files a watch takes (`list_files`); importing them is up to the
+//! importer of the watch's type (`scans` for images). The commands:
+//! `folders`.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -119,6 +121,13 @@ impl WatchSettings {
         } else {
             self.name.clone()
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The folder with its `%VAR%`s expanded (on Linux `~` and `$NAME`s):
+    /// where the files are.
+    pub fn root(&self) -> PathBuf {
+        sys::expand_env(&self.folder)
     }
 }
 
@@ -321,6 +330,112 @@ pub fn folder_name(folder: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// A file in a watch's folder that the watch takes.
+#[derive(Debug, Clone)]
+pub struct FolderFile {
+    /// The path relative to the watch's folder, as a page and `scan.origin`
+    /// name it (`scan.jpg`, or `2026` + separator + `scan.jpg` in a
+    /// subfolder).
+    pub name: String,
+    pub size: u64,
+    /// When the file was made: its creation time, or its modified time if
+    /// that is earlier (a copied file keeps the original's modified time).
+    pub taken: DateTime,
+}
+
+impl FolderFile {
+    // ------------------------------------------------------------------------
+    fn new(name: String, _path: PathBuf, meta: &fs::Metadata) -> Result<Self> {
+        let modified = meta.modified()?;
+        let created = meta.created().unwrap_or(modified);
+        Ok(Self {
+            name,
+            size: meta.len(),
+            taken: DateTime::from_system_time(created.min(modified)),
+        })
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Whether the file name `name` matches `pattern`: `*` stands for any
+/// characters, `?` for one; letters match in any case, as on Windows.
+pub fn glob_match(pattern: &str, name: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().flat_map(char::to_lowercase).collect();
+    let name: Vec<char> = name.chars().flat_map(char::to_lowercase).collect();
+    let (mut p, mut n) = (0, 0);
+    // Where the last `*` was, and the name position it was last tried at.
+    let mut star: Option<(usize, usize)> = None;
+    while n < name.len() {
+        match pattern.get(p) {
+            Some('*') => {
+                star = Some((p, n));
+                p += 1;
+            }
+            Some(&c) if c == '?' || c == name[n] => {
+                p += 1;
+                n += 1;
+            }
+            _ => match star {
+                // Let the `*` take one more character, and go on after it.
+                Some((star_p, star_n)) => {
+                    star = Some((star_p, star_n + 1));
+                    p = star_p + 1;
+                    n = star_n + 1;
+                }
+                None => return false,
+            },
+        }
+    }
+    pattern[p..].iter().all(|&c| c == '*')
+}
+
+// ----------------------------------------------------------------------------
+/// The files in the folder of `settings` that match its patterns (in its
+/// subfolders too, if it says so), by `taken`, then by name. An unreadable
+/// subfolder is logged and skipped; a missing folder is an error.
+pub fn list_files(settings: &WatchSettings) -> Result<Vec<FolderFile>> {
+    let root = settings.root();
+    if !root.is_dir() {
+        return Err(Error::FileNotFound { path: root });
+    }
+    let mut files = Vec::new();
+    collect_files(&root, &root, settings, &mut files)?;
+    files.sort_by(|a, b| (a.taken, &a.name).cmp(&(b.taken, &b.name)));
+    Ok(files)
+}
+
+// ----------------------------------------------------------------------------
+fn collect_files(
+    root: &Path,
+    dir: &Path,
+    settings: &WatchSettings,
+    files: &mut Vec<FolderFile>,
+) -> Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let meta = entry.metadata()?;
+        if meta.is_dir() {
+            if settings.subfolders {
+                if let Err(e) = collect_files(root, &path, settings, files) {
+                    log::warn!("Skipping the folder {}: {e}", path.display());
+                }
+            }
+            continue;
+        }
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if !settings.patterns.iter().any(|p| glob_match(p, &file_name)) {
+            continue;
+        }
+        let name = path.strip_prefix(root).unwrap_or(&path);
+        let name = name.to_string_lossy().into_owned();
+        files.push(FolderFile::new(name, path, &meta)?);
+    }
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
 /// The folder watches in `dir`: every `*.yaml` with a `folder-watch` block;
 /// other and broken files are logged and skipped.
 fn load_all(dir: &Path) -> Vec<Watch> {
@@ -491,5 +606,67 @@ note: top-level kept
         let scans = sys::collapse_env(&std::env::temp_dir().join("Scans"));
         assert_eq!(folder_name(&scans), "Scans");
         assert_eq!(folder_name("Scans"), "Scans");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn patterns_match_file_names_in_any_case() {
+        assert!(glob_match("*.jpg", "scan_0806.JPG"));
+        assert!(glob_match("*.jpg", ".jpg"));
+        assert!(!glob_match("*.jpg", "scan.jpeg"));
+        assert!(!glob_match("*.jpg", "scan.jpg.txt"));
+        assert!(glob_match(
+            "WhatsApp Chat*.txt",
+            "whatsapp chat with Maya.txt"
+        ));
+        assert!(glob_match("scan_????.png", "scan_0806.png"));
+        assert!(!glob_match("scan_????.png", "scan_806.png"));
+        assert!(glob_match("*a*b*c", "xxaxxbxbxxc"));
+        assert!(glob_match("*", "anything"));
+        assert!(!glob_match("", "x"));
+        assert!(
+            glob_match("K\u{f6}ln*", "K\u{d6}LN.pdf"),
+            "beyond ASCII too"
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn listing_takes_matching_files_and_subfolders_if_asked() {
+        let dir = temp_dir();
+        fs::create_dir_all(dir.join("2026")).unwrap();
+        for (name, content) in [
+            ("b.jpg", "bb"),
+            ("a.PNG", "a"),
+            ("note.txt", "n"),
+            ("2026/c.jpg", "ccc"),
+        ] {
+            fs::write(dir.join(name), content).unwrap();
+        }
+        let mut settings = WatchSettings::new(WatchKind::Images, dir.to_string_lossy().into());
+        settings.patterns = vec!["*.jpg".into(), "*.png".into()];
+
+        let top = list_files(&settings).unwrap();
+        settings.subfolders = true;
+        let all = list_files(&settings).unwrap();
+        settings.folder = dir.join("gone").to_string_lossy().into();
+        let missing = list_files(&settings);
+        fs::remove_dir_all(&dir).unwrap();
+
+        let names = |files: &[FolderFile]| {
+            let mut names: Vec<String> = files.iter().map(|f| f.name.clone()).collect();
+            names.sort();
+            names
+        };
+        assert_eq!(names(&top), ["a.PNG", "b.jpg"]);
+        let sub = Path::new("2026")
+            .join("c.jpg")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(names(&all), [sub.as_str(), "a.PNG", "b.jpg"]);
+        let c = all.iter().find(|f| f.name == sub).unwrap();
+        assert_eq!(c.size, 3);
+        assert!(c.taken <= DateTime::now());
+        assert!(matches!(missing, Err(Error::FileNotFound { .. })));
     }
 }

@@ -1,7 +1,8 @@
 # Avelor — Import from folder watches
 
-> Folder watches: the watch files, the Folders page. The commands are
-> `api.md#watches`.
+> Folder watches and importing from them: the watch files, the Folders
+> page, Import scans. The commands are `api.md#watches` and
+> `api.md#scans`; the `scan:` source, `vault.md#scan`.
 
 ## Overview
 
@@ -10,7 +11,8 @@ A folder watch names a folder on this PC, the files to take from it
 
 ## Folder watches <a id="folder-watches"></a>
 
-Watches belong to a vault, like accounts. Opening another vault switches to its
+Watches belong to a vault, like accounts: the documents a watch imported
+name it by its `id` (`scan.watch`). Opening another vault switches to its
 watches (`folders::open`, on every vault open), and without an open vault
 there are none.
 
@@ -77,6 +79,23 @@ vault), following the Accounts page:
   is there.
 - Removing a watch deletes its file; what it imported stays in the vault.
 
+## Import scans <a id="import-scans"></a>
+
+The Import button of an images watch opens Import scans
+(`features/import/scans.js`) in the expanded vault area:
+
+- **Files in folder** lists the watch's files that aren't in the vault: the
+  files in its folder (and subfolders, if the
+  watch says so) whose names match one of its patterns (`*` and `?`, in
+  any case), with their date and size. A file's date is when it was made:
+  its creation time, or its modified time if that is earlier (a copied
+  file keeps its modified time). The section counts the files already in
+  the vault and says when the folder was listed; the folder can be listed
+  again.
+
+Escape closes the page; opening it again for the same watch lists the
+folder again.
+
 ## Flows
 
 | # | Flow | Trigger → page | Host → events | Result |
@@ -84,3 +103,11 @@ vault), following the Accounts page:
 | J1 | Add a watch | "Watch a folder" → type → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card |
 | J2 | Edit | name, folder, subfolders, patterns, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
 | J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |
+| K1 | Open Import scans | the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files}` | file list |
+
+## Design <a id="design"></a>
+
+- **Listing**: `watches.rs` matches a watch's files (patterns,
+  subfolders, globbing); `scan_list` lists on a worker.
+  A file counts as in the vault by its watch and origin (`scan.watch` +
+  `scan.origin` in the index).

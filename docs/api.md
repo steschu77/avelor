@@ -193,6 +193,14 @@ Host module: `folders.rs`. `import.md#folder-watches`.
 | `remove_watch` | `{ watch }` | Delete the watch's file; what it imported stays in the vault. Pushes `watch_removed`, then `null`; `not_found`. |
 | `pick_folder` | `{ title? }` | Show the folder picker, headed `title`, owned by the main window: `ok {path}`, the folder chosen, under the user's profile as `%USERPROFILE%\…` (on Linux `~/…`); `path` is null if the dialog was cancelled. |
 
+### Scan commands <a id="scans"></a>
+
+Host module: `scans.rs`. `import.md#import-scans`.
+
+| Command | Args | Reply and pushes |
+|---|---|---|
+| `scan_list` | `{ watch }` | List the files of an images watch on a worker: `ok {listed, files: [{ file, size, taken, in_vault }]}`, by when they were taken. `file` is the path relative to the watch's folder; `in_vault` the document it was imported into, or null. `not_found` (also when the watch was removed meanwhile), `file_not_found` ("There's no folder at …"). |
+
 ### Mail commands <a id="mail"></a>
 
 Host module: `mail.rs`. `mail.md`. The errors of every `mail_*`:
