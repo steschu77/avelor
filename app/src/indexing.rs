@@ -14,6 +14,7 @@ use av_vault::vault::{self, IndexControl, IndexEvent};
 use serde::Serialize;
 
 use crate::app::{App, Progress, Task};
+use crate::calendar;
 use crate::email;
 use crate::jobs::JobKind;
 use crate::texts::Text;
@@ -179,8 +180,8 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// The indexing `id` read every file: the vault knows its emails now, so
-    /// the auto-syncs may run.
+    /// The indexing `id` read every file: the vault knows its emails and events
+    /// now, so the auto-syncs may run.
     fn end_indexing(&mut self, id: Id) {
         if !self.indexing.is_running(id) {
             return;
@@ -188,6 +189,7 @@ impl App {
         self.indexing.running = None;
         let now = DateTime::now();
         email::auto_sync(self, now);
+        calendar::auto_sync(self, now);
     }
 }
 
