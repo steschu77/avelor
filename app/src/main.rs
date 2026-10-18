@@ -6,6 +6,7 @@ mod accounts;
 mod ai;
 mod api;
 mod app;
+mod chat;
 mod close;
 mod config;
 mod documents;
@@ -20,6 +21,7 @@ mod sys;
 mod testing;
 mod texts;
 mod trash;
+mod vault_settings;
 
 use av_utils::error::Result;
 use av_utils::logger;

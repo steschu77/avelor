@@ -1,6 +1,6 @@
 //! The app's own commands (`api.md#the-page-side`): `ready`, switching and
 //! revealing the vault, opening a link, and the page's preferences; and
-//! opening a vault with its accounts (`open_vault`).
+//! opening a vault with its accounts and settings (`open_vault`).
 
 use std::path::{Path, PathBuf};
 
@@ -11,6 +11,7 @@ use crate::documents;
 use crate::protocol::Req;
 use crate::sys;
 use crate::texts::{self, Text};
+use crate::vault_settings;
 use av_utils::error::Error;
 use av_utils::url::is_link;
 use serde_json::json;
@@ -37,27 +38,35 @@ pub fn ready(app: &mut App, req: Req) {
 /// picker was cancelled, which keeps the vault that is open.
 pub fn switch_vault(app: &mut App, req: Req, path: Option<PathBuf>) {
     match path {
-        Some(path) => {
-            switch_to(app, path.clone());
-            req.ok(json!({ "path": path }));
-        }
+        Some(path) => switch_answering(app, req, Some(path)),
         None => app.on_ui(
             |owner| sys::pick_folder(owner, texts::text("vault.pick")),
-            |app, picked| {
-                if let Some(path) = &picked {
-                    switch_to(app, path.clone());
-                }
-                req.ok(json!({ "path": picked }));
-            },
+            |app, picked| switch_answering(app, req, picked),
         ),
     }
 }
 
 // ----------------------------------------------------------------------------
-/// Remember `root` as the vault, then open it.
+/// Switch to `path` (none: the dialog was cancelled) and answer `{path}`; a
+/// vault of a newer format is `unsupported`, in words
+/// (`vault_settings::refused`), and the open vault stays.
+fn switch_answering(app: &mut App, req: Req, path: Option<PathBuf>) {
+    if let Some(path) = &path {
+        if let Some(why) = vault_settings::refused(path) {
+            let what = "a vault of a newer format".to_string();
+            return req.fail(Error::Unsupported { what }, why);
+        }
+        switch_to(app, path.clone());
+    }
+    req.ok(json!({ "path": path }));
+}
+
+// ----------------------------------------------------------------------------
+/// Remember `root` as the vault, then open it once the work bound to the
+/// open vault has stopped (`App::switch_vault_when_stopped`).
 pub(crate) fn switch_to(app: &mut App, root: PathBuf) {
     app.remember_vault(root.clone());
-    open_vault(app, &root);
+    app.switch_vault_when_stopped(root);
 }
 
 // ----------------------------------------------------------------------------
@@ -66,9 +75,14 @@ pub(crate) fn switch_to(app: &mut App, root: PathBuf) {
 /// vault still held for the conflict dialog is kept as a conflict copy
 /// there first (`documents::keep_held`).
 pub(crate) fn open_vault(app: &mut App, root: &Path) {
+    if let Some(why) = vault_settings::refused(root) {
+        log::warn!("{}: {why}", root.display());
+        return app.notice(why);
+    }
     documents::keep_held(app);
     app.vault.begin_open(root);
     accounts::open(app, root);
+    vault_settings::open(app, root);
     app.run_indexing(root.to_path_buf());
 }
 
@@ -139,8 +153,8 @@ pub fn set_prefs(app: &mut App, req: Req, prefs: Prefs) {
 mod tests {
     use super::*;
     use crate::config::load_config;
-    use crate::testing::Harness;
     use crate::testing::parse;
+    use crate::testing::{Harness, shown};
     use av_utils::id::Id;
     use serde_json::Value;
     use std::fs;
@@ -149,6 +163,31 @@ mod tests {
     /// The events `ev` among what the page got.
     fn events<'a>(sent: &'a [Value], ev: &str) -> Vec<&'a Value> {
         sent.iter().filter(|m| m["ev"] == ev).collect()
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_vault_of_a_newer_format_isnt_opened() {
+        let mut h = Harness::new("newer-format");
+        let root = h.vault();
+        fs::create_dir_all(root.join(".avelor")).unwrap();
+        fs::write(root.join(".avelor/vault.yaml"), "format: 2\n").unwrap();
+
+        let sent = h.call("switch_vault", json!({ "path": root }));
+        assert_eq!(sent.len(), 1, "only the answer: {sent:?}");
+        assert_eq!(sent[0]["err"]["code"], "unsupported");
+        let message = shown(&sent[0]["err"]["text"]);
+        assert!(
+            message.contains("vault format 2; this one reads 1"),
+            "{message}"
+        );
+        assert_ne!(h.app.config.vault(), Some(&*root), "not remembered");
+
+        open_vault(&mut h.app, &root);
+        let sent = parse(&h.take());
+        assert_eq!(events(&sent, "notice").len(), 1, "{sent:?}");
+        assert!(events(&sent, "vault").is_empty() && h.app.vault.root().is_none());
+        assert!(!root.join(".avelor/accounts").exists(), "nothing written");
     }
 
     // ------------------------------------------------------------------------

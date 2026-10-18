@@ -3,20 +3,24 @@
 // providers: the AI provider menu, an AI account's card and pane, and the
 // pane of a new one until its key or address checks out. A required field
 // (the key, Ollama's address) stays an input until the host has checked
-// it; then it shows as text with a pencil.
+// it; then it shows as text with a pencil. A model picker's way here is the
+// `accounts.open` action (`openAccountsPage`).
 
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { pageDate } from '../../core/format.js';
+import { registerAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
+import { vaultSettings } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
 import {
   addTile, detailFooter, detailHead, detailPane, draftKind, failedRetry, itemCard, listDetailPage,
   listSection, notice, pageList, replaceVaultPage, sentDrafts, setPageFocus, stat, stats,
 } from '../../ui/page.js';
+import { openVaultOp } from '../../ui/page.js';
 import { fieldEditKey, fieldEdits, renderEditField } from '../../ui/field.js';
 import { AI_PROVIDERS, aiHost, aiProvider, aiTitle, aiUsd } from './models.js';
 
@@ -120,9 +124,11 @@ function renderAccountList() {
   return list;
 }
 
-// Re-render while visible when the op, the vault or the accounts change.
+// Re-render while visible when the op, the vault, the accounts, or what
+// picked a model (the vault's settings: "Used by") change.
 store.subscribe([
   state => state.vault_op, state => state.vault_path, state => state.accounts_rev,
+  state => state.settings_rev,
 ], () => scheduleRenderAccounts());
 
 // ----------------------------------------------------------------------------
@@ -173,6 +179,27 @@ function aiErrorText(e, account) {
       return e.message;
   }
 }
+
+// What picked `model` of the AI account `account`: the names the Accounts
+// page shows in its "Used by" column.
+function aiUsersOf(account, model) {
+  const is = choice => choice?.account === account && choice?.model === model;
+  const users = [];
+  if (is(vaultSettings().chat_model)) users.push(t('types.conversations'));
+  return users;
+}
+
+// Open Workspace -> Accounts on `account`'s pane, or on the page as it is:
+// the `accounts.open` action, a model picker's way here
+// (features/workspace/models.js).
+function openAccountsPage(account) {
+  if (account) {
+    selectedAccount = account;
+  }
+  openVaultOp('accounts');
+  scheduleRenderAccounts();
+}
+registerAction({ id: 'accounts.open', title: t('accounts.open'), run: openAccountsPage });
 
 // ----------------------------------------------------------------------------
 // actions
@@ -273,7 +300,8 @@ function aiSettings(account) {
   };
 }
 
-// Tick or untick a model: ticked, the features' pickers offer it.
+// Tick or untick a model: ticked, the features' pickers offer it. A
+// feature that picked an unticked model is refused until it picks another.
 function aiToggleOffered(account, modelId, on) {
   const offered = aiSettings(account).offered.filter(m => m !== modelId);
   if (on) offered.push(modelId);
@@ -447,7 +475,8 @@ function renderAiStats(id, kind, account) {
     accountId);
 }
 
-// The model list: tick to offer a model in the features' pickers.
+// The model list: tick to offer a model in the features' pickers; what
+// picked it is shown, not chosen, here.
 function renderAiModels(account) {
   const provider = aiProvider(account.kind);
   const section = accEl('div', 'ai-models');
@@ -490,7 +519,8 @@ function renderAiModels(account) {
   const rest = list.filter(model => !settings.offered.includes(model.id));
 
   const columns = accEl('div', 'list-row ai-models__row ai-models__row--head label');
-  columns.append(accEl('span'), accEl('span', '', t('accounts.model')), accEl('span', '', t('accounts.per_million')));
+  columns.append(accEl('span'), accEl('span', '', t('accounts.model')), accEl('span', '', t('accounts.per_million')),
+    accEl('span', '', t('accounts.used_by')));
   section.append(columns);
   for (const model of [...ticked, ...rest]) {
     section.append(renderAiModelRow(account, model, !rest.includes(model)));
@@ -516,7 +546,17 @@ function renderAiModelRow(account, model, ticked) {
   const name = accEl('span', 'mono ai-models__id', model.id);
   if (model.name && model.name !== model.id) name.title = model.name;
   const price = accEl('span', 'mono mono--small ai-models__price', model.missing ? '\u2014' : aiPrice(model.price));
-  row.append(check, name, price);
+
+  // Who picked the model, as information; picked where it is used. An
+  // unticked model still names them: they are refused until they pick
+  // another.
+  const uses = accEl('span', 'ai-models__uses');
+  const users = aiUsersOf(account.id, model.id);
+  for (const user of users) uses.append(accEl('span', 'chip', user));
+  if (!ticked) uses.append(accEl('span', 'note', users.length ? t('accounts.not_offered') : t('accounts.hidden_from_pickers')));
+  else if (!users.length) uses.append(accEl('span', 'note', '\u2014'));
+  if (model.missing) uses.append(accEl('span', 'note', t('accounts.no_longer_listed')));
+  row.append(check, name, price, uses);
   return row;
 }
 
@@ -567,6 +607,11 @@ function renderAiPane(account, newKind) {
     return pane;
   }
   pane.append(renderAiModels(account));
+
+  const sends = accEl('div', 'ai-sends');
+  sends.append(accEl('span', 'label', t('accounts.sends')),
+    accEl('span', '', t('accounts.sends_item')));
+  pane.append(sends);
 
   // A key is disconnected (forgotten) first; the account is then removed.
   const [text, op, opLabel, armed] = !provider.local && account.key

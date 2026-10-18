@@ -1,6 +1,10 @@
 //! The names the vault's files use beyond the envelope's typed fields: the
 //! folders entities are written into (vault.md#vault-layout).
 
+/// The vault's format, which its settings carry (vault.md#vault-config): a
+/// vault of a higher one was written by a newer app, and isn't opened.
+pub const VAULT_FORMAT: u32 = 1;
+
 /// The folders the app writes entities into, relative to the vault's root
 /// (vault.md#vault-layout). A convention: entities are found by
 /// their frontmatter, wherever they are.
@@ -19,6 +23,8 @@ pub mod layout {
     pub const LISTS: &str = "Lists";
     /// Records made in the app.
     pub const RECORDS: &str = "Records";
+    /// Conversations with the assistant.
+    pub const CONVERSATIONS: &str = "Conversations";
     /// Deleted entities, kept at their vault-relative path; the scan skips
     /// it like every dot-folder.
     pub const TRASH: &str = ".trash";
@@ -26,4 +32,7 @@ pub mod layout {
     /// entities, and skipped by the scan like every dot-folder. Their
     /// secrets stay with the app.
     pub const ACCOUNTS: &str = ".avelor/accounts";
+    /// The vault's own settings (`vault.md#vault-config`); skipped by the
+    /// scan like every dot-folder.
+    pub const VAULT_SETTINGS: &str = ".avelor/vault.yaml";
 }

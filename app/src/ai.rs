@@ -16,6 +16,7 @@ use crate::texts::Text;
 use av_utils::text::unique_trimmed;
 
 pub(crate) mod accounts;
+pub(crate) mod context;
 
 // ----------------------------------------------------------------------------
 /// Send the account `id` to the page, if there is one: the `account` event.
@@ -79,6 +80,17 @@ fn check_error(provider: Provider, address: &str, err: &Error) -> Text {
     let name = provider.spec().display;
     let failed = || {
         let text = Text::new("ai.check_failed").arg("name", name);
+        text.arg("error", err.to_string())
+    };
+    error_text(provider, address, err).unwrap_or_else(failed)
+}
+
+// ----------------------------------------------------------------------------
+/// What went wrong in a chat, for the page.
+pub fn chat_error(provider: Provider, address: &str, err: &Error) -> Text {
+    let name = provider.spec().display;
+    let failed = || {
+        let text = Text::new("ai.failed").arg("name", name);
         text.arg("error", err.to_string())
     };
     error_text(provider, address, err).unwrap_or_else(failed)

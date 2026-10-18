@@ -34,10 +34,10 @@
   /* the shade over the app behind a dialog */
   --c-scrim: rgba(22, 22, 26, 0.22);
   --shadow-pop: 0 10px 28px rgba(0, 0, 0, .14);
-  /* a pane lifted above the one to its left: the panel, a Workspace
-     page's detail */
+  /* a pane lifted above the one to its left: the panel, the chat, a
+     Workspace page's detail */
   --shadow-raise: -12px 0 24px -14px rgba(22, 22, 26, 0.28);
-  /* a card lifted off paper: thread cards */
+  /* a card lifted off paper: thread cards, the chat's compose box */
   --shadow-card: 0 1px 2px rgba(22, 22, 26, 0.06), 0 8px 18px -8px rgba(22, 22, 26, 0.16);
   /* the top layer: dialogs */
   --shadow-dialog: 0 2px 6px rgba(22, 22, 26, 0.08), 0 28px 56px -16px rgba(22, 22, 26, 0.38);
@@ -83,7 +83,7 @@
 
   /* sidebar and table inset */
   --p-gutter: 12px;
-  /* x inset of content panes: the right panel */
+  /* x inset of content panes: the right panel, the assistant */
   --p-pane: 20px;
   /* y padding of the panel's stacked parts: doc heads, tags, toolbars, text */
   --p-section: 8px;

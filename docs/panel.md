@@ -213,6 +213,12 @@ them, without an × — a member leaves a project on its own card
 shows the thread's own title, with a pen that renames it
 (`panel.md#titles`, `#thread-title`).
 
+Conversations (chat exports, AI sessions) are different: each is a single
+entity with all messages inline, forming a tree with siblings and an
+`active` leaf. The panel doesn't show it as cards; the assistant does
+(`assistant.md`), with the tree helpers of `features/assistant/tree.js`
+(`childrenByParent`, `pathToActive`, `siblingsOf`, `firstLeafFrom`).
+
 ## Switching threads <a id="thread-switch"></a>
 
 An entity in several threads shows the first thread of its `threads` list
@@ -264,8 +270,8 @@ on at midnight.
   `switchThread`) — is shown in the Documents lens. So a link chip, a link in a
   body, or a guest, calendar or assignee in a card's details always shows
   something.
-- The context column's tabs (`contextTarget`) are about the focused day
-  card.
+- The context column's tabs (`contextTarget`) and the assistant are about
+  the focused day card.
 
 ## Context column <a id="context-column"></a>
 
@@ -274,6 +280,7 @@ the panel shows (`features/context.js`: `registerContextTab`,
 `selectContextTab`).
 A tab picked by its button focuses its first field.
 
+- **Conversation** — the assistant (`assistant.md`).
 - **Task** — the New form for a task `linked-to` the selected card, else
   the shown thread (`features/new.js`); a draft per card. The card's Task button
   (`openTaskTab`) selects the card, expands the panel and opens the tab.
@@ -541,7 +548,7 @@ type (`kind`, `Document::kind()`):
 - `thread` → `onThread` into the page's `threads` Map, which
   the Documents lens reads for a thread's row,
 - everything else → `onDocMeta` into `entities`: an entity's rows in the
-  Documents lens, including thread members.
+  Documents lens, including thread members and conversations.
 
 The sidebar's per-project counts are derived on the page,
 never sent: `renderSidebar` counts the `entities` entries whose `projects`

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 // ----------------------------------------------------------------------------
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LineEnding {
@@ -65,9 +67,31 @@ pub fn unique_trimmed(names: impl IntoIterator<Item = String>) -> Vec<String> {
 }
 
 // ----------------------------------------------------------------------------
+/// `text` as it is if it has at most `most` characters, else cut there,
+/// trimmed at its end, with `marker` after it.
+pub fn cut_marked<'a>(text: &'a str, most: usize, marker: &str) -> Cow<'a, str> {
+    match text.char_indices().nth(most) {
+        None => Cow::Borrowed(text),
+        Some((end, _)) => Cow::Owned(format!("{}{marker}", text[..end].trim_end())),
+    }
+}
+
+// ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_text_is_cut_at_a_count_of_characters_and_marked() {
+        assert_eq!(cut_marked("äöü", 2, " [cut]"), "äö [cut]");
+        assert_eq!(
+            cut_marked("ab  cd", 3, "|"),
+            "ab|",
+            "trimmed before the marker"
+        );
+        assert_eq!(cut_marked("short", 5, "|"), "short");
+    }
 
     // ------------------------------------------------------------------------
     #[test]
