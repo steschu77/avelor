@@ -869,11 +869,14 @@ pub(crate) struct SyncChange {
     enabled: Option<bool>,
     #[serde(default)]
     filter: Option<MailFilter>,
+    #[serde(default)]
+    analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
-/// `set_mail_sync {account, enabled?, filter?}`: change the
+/// `set_mail_sync {account, enabled?, filter?, analysis?}`: change the
 /// account's auto-sync. Its filter drops the dates (the host sets them);
+/// its analysis is stored as given (its pick is checked when it runs);
 /// switching it on starts it from now -- only mail that arrives from then on
 /// is fetched -- and switching it off keeps the filter. Answered after the
 /// `account` event.
@@ -888,6 +891,9 @@ pub fn set_mail_sync(app: &mut App, req: Req, change: SyncChange) {
         let sync = mail.auto_sync.get_or_insert_with(|| AutoSync::new(now));
         if let Some(filter) = change.filter {
             sync.filter = without_dates(filter);
+        }
+        if let Some(analysis) = change.analysis {
+            sync.analysis = Some(analysis);
         }
         if let Some(enabled) = change.enabled {
             if enabled && !sync.enabled {
@@ -999,6 +1005,8 @@ fn on_sync_listed(
         .ok()
         .and_then(|a| a.file.google.mail.as_ref()?.auto_sync.as_ref())
         .filter(|sync| sync.enabled);
+    // As it is now: a change made while the search ran counts.
+    let analysis = sync.and_then(|sync| sync.analysis.clone());
     if app.vault.root() != root.as_deref() || sync.is_none() {
         return log::info!("Mail auto-sync of {account}: dropped, the vault or setting changed");
     }
@@ -1039,7 +1047,7 @@ fn on_sync_listed(
         replace: HashSet::new(),
         origin: Origin::AutoSync,
         started,
-        analysis: None,
+        analysis,
     };
     start_fetch(app, format!("Syncing mail · {email}"), plan);
     pump(app);
@@ -1564,6 +1572,21 @@ Content-Type: text/html; charset=utf-8\r\n\
             text.contains("analysis:") && text.contains("level: off") && text.contains("model: m"),
             "off, the model kept: {text}"
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_auto_syncs_analysis_is_stored_as_given() {
+        let mut h = with_google("mail-sync-analysis", MAIL, &[]);
+        let analysis = json!({ "level": "lite" });
+        let args = json!({ "account": CONNECTED, "enabled": true, "analysis": analysis });
+        let sent = h.call("set_mail_sync", args);
+        assert_eq!(shape(&sent), ["account", "reply"]);
+        let sync = &sent[0]["data"]["mail"]["auto_sync"];
+        assert_eq!(sync["analysis"], json!({ "level": "lite" }), "no model yet");
+        let file = h.vault().join(".avelor/accounts/google_a.yaml");
+        let text = fs::read_to_string(file).unwrap();
+        assert!(text.contains("level: lite"), "{text}");
     }
 
     // ------------------------------------------------------------------------

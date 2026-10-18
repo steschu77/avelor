@@ -2,8 +2,9 @@
 // account, opened from the sync button of its Mail source (`syncSource`,
 // features/sidebar.js) and rendered into the expanded vault area while its op
 // is "mail". Also the account's auto-sync under the Mail row of its pane
-// (called by features/workspace/accounts.js), with the same filter form. On
-// the page, Esc closes it and Ctrl+Enter fetches (`registerVaultPage`).
+// (called by features/workspace/accounts.js), with the same filter form. Both
+// can turn on the analysis of new mail, with the model it runs with. On the
+// page, Esc closes it and Ctrl+Enter fetches (`registerVaultPage`).
 //
 // The filter form is built once per opening and never re-rendered on Fetch
 // mail, so its inputs keep focus while typing; only its chips and the matches
@@ -602,6 +603,7 @@ export function renderMailSync(account, rerender) {
   box.append(head);
   if (on) {
     box.append(renderMailFilterForm(form));
+    box.append(renderMailSyncAnalysis(account.id, { ...MAIL_ANALYSIS_OFF, ...sync.analysis }));
   }
   if (form.error) box.append(accEl('div', 'error-note', form.error));
   return box;
@@ -653,8 +655,8 @@ function mailSetSync(account, change) {
 }
 
 // ----------------------------------------------------------------------------
-// the analysis of new mail (mail.md#analysis), of Fetch mail: a level,
-// and the model it runs with
+// the analysis of new mail (mail.md#analysis), of Fetch mail and of an
+// account's auto-sync: a level, and the model it runs with
 
 const MAIL_ANALYSIS_OFF = { level: 'off', model: null };
 
@@ -697,6 +699,18 @@ function renderMailAnalysisSection() {
   const head = accEl('div', 'section-head', '2 \u00b7 Analysis');
   head.append(seg);
   mail.els.analysis.replaceChildren(head, body);
+}
+
+// The auto-sync's analysis, under its filter; saved at once.
+function renderMailSyncAnalysis(account, analysis) {
+  const { seg, body } = renderMailAnalysis(analysis, next => mailSetSync(account, { analysis: next }));
+  const grid = accEl('div', 'form-grid');
+  const field = accEl('div', 'form-field');
+  field.append(seg);
+  grid.append(accEl('span', 'label', 'Analysis'), field);
+  const box = accEl('div', 'mail__filter');
+  box.append(grid, body);
+  return box;
 }
 
 // ----------------------------------------------------------------------------

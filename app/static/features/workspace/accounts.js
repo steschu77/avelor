@@ -528,7 +528,7 @@ function aiErrorText(e, account) {
 
 // What picked `model` of the AI account `account`: the names the Accounts
 // page shows in its "Used by" column. A Google account's mail analysis
-// while it is on.
+// while it is on (the auto-sync's only while it runs).
 function aiUsersOf(account, model) {
   const is = choice => choice?.account === account && choice?.model === model;
   const analyses = analysis => !!analysis && analysis.level !== 'off' && is(analysis.model);
@@ -537,6 +537,8 @@ function aiUsersOf(account, model) {
   for (const google of accounts.values()) {
     const mail = google.mail;
     if (analyses(mail?.analysis)) users.push(`Fetch mail \u00b7 ${google.email}`);
+    const sync = mail?.auto_sync;
+    if (sync?.enabled && analyses(sync.analysis)) users.push(`Auto-sync \u00b7 ${google.email}`);
   }
   return users;
 }

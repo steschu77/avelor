@@ -46,6 +46,8 @@ switched on, then since its last complete run.
 - A run that finds nothing new leaves no trace; one that does is a
   "Syncing mail · <email>" job, and the account's `last-sync` moves on.
 - Mails already in the vault are skipped, never replaced.
+- Its own analysis, set under its filter, takes the new mails after a run
+  (`mail.md#analysis`).
 - A failed run is shown once in the status bar, not again until a run
   succeeds.
 - The Mail source's sync button stays shown, pressed, while auto-sync is
@@ -60,14 +62,16 @@ After a fetch or an auto-sync run wrote new mail, the status bar says so
 ## Mail analysis <a id="analysis"></a>
 
 A filter can have its new mail analysed: Fetch mail's (section 2,
-Analysis, remembered with the filter as `mail.analysis`;
+Analysis, remembered with the filter as `mail.analysis`) and each
+auto-sync's (under its filter, `mail.auto-sync.analysis`;
 `accounts.md#google-file`). It is off by default. A filter's analysis has
 a level, Off or Lite, and the model it runs with, picked as every feature
 picks its model (`accounts.md#model-choice`).
 
 - **Explicit picks**: with the analysis on, Fetch waits for a pick that
   works; the page says why, and the host refuses `mail_fetch` too, before
-  anything is fetched.
+  anything is fetched. An auto-sync's pick is checked when a run has new
+  mail; refused, a notice says why, and the mails stay fetched without it.
 - **The job**: when a fetch ends (not when it was stopped), the mails it
   created go to "Analysing mail · <email>", one mail after another; Stop
   ends it, and so does a vault switch. The spend limit is checked before
@@ -113,16 +117,16 @@ picks its model (`accounts.md#model-choice`).
   told in one notice at its end:
   "Mail analysis · jan@gmail.com: 2 of 20 mails couldn't be analysed;
   “<title>”: <the first error>".
-- The Accounts page's "Used by" names "Fetch mail · <email>" while its
-  analysis is on.
+- The Accounts page's "Used by" names "Fetch mail · <email>" and
+  "Auto-sync · <email>" while their analysis is on.
 
 ## Flows
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | G3 | Fetch mail | Mail source sync button → `openMailFetch` (`features/import/mail.js`) in the expanded vault area → `mail_labels`; filter edits (500 ms debounce) → `mail_search` (Auto-update; Manual: on Update); paging → `mail_headers`; the analysis's level and model; Fetch or Ctrl+Enter → `mail_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `mail_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per mail, `account`; the job's end reads the matches again | mails in `Mail/`; filter remembered |
-| G4 | Auto-sync mail | Mail row of the account pane → Auto-sync check, filter form (500 ms debounce) | `set_mail_sync {account, enabled?, filter?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new mail a "Syncing mail" job, `entity` per mail, `account` | mails in `Mail/` on their own |
-| G5 | Analyse new mail | a fetch with its analysis on ends with new mails | `enrich::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing mail"; per mail `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit → `entity`, `job`, `account`; at the end one `notice` for the failures | mails retitled, labelled, in projects, their kind kept; `email.subject` kept |
+| G4 | Auto-sync mail | Mail row of the account pane → Auto-sync check, filter form (500 ms debounce), its analysis | `set_mail_sync {account, enabled?, filter?, analysis?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new mail a "Syncing mail" job, `entity` per mail, `account` | mails in `Mail/` on their own |
+| G5 | Analyse new mail | a fetch or an auto-sync run with its analysis on ends with new mails | `enrich::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing mail"; per mail `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit → `entity`, `job`, `account`; at the end one `notice` for the failures | mails retitled, labelled, in projects, their kind kept; `email.subject` kept |
 
 ## Design <a id="design"></a>
 
@@ -160,7 +164,7 @@ the model and gathers the vault's context and each mail's text on the UI
 thread; the run is one request at a time under the job's `Cancel`
 (streamed like the assistant's, the pieces unused); the apply reads the
 answer and writes it through the vault edit. Each analysis is its own
-job in `EnrichState`.
+job in `EnrichState`, so a fetch's and an auto-sync's can run side by side.
 
 `KnownMails` (`mail.rs`) tells which mails are in the vault: by `gmail-id`
 from the same account, or by Message-ID from any source. The preview's
