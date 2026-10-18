@@ -8,6 +8,7 @@
 //! (fast at personal-vault scale).
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::{self, DirEntry};
 use std::io::ErrorKind;
 use std::io::Read;
@@ -152,6 +153,9 @@ pub struct Changes {
     pub saved: Vec<Id>,
     /// Entities whose file was moved to `.trash` and which left the index.
     pub trashed: Vec<Id>,
+    /// Entities of `saved` whose body the write changed, so a view showing
+    /// the old body can load the new one.
+    pub content: Vec<Id>,
     /// What each written file held before and after, in the order written:
     /// the operation's step, to undo and redo ([`Index::replay`]).
     pub files: Vec<FileStep>,
@@ -432,7 +436,7 @@ impl Index {
         changes: &mut Changes,
     ) -> Result<SaveOutcome> {
         let before = self.get(id).map(Document::snapshot);
-        let outcome = self.write_change(id, overwrite, |doc| doc.set_content(content))?;
+        let (outcome, _) = self.write_change(id, overwrite, |doc| doc.set_content(content))?;
         if outcome == SaveOutcome::Saved {
             self.keep_step(id, before, changes);
         }
@@ -504,9 +508,12 @@ impl Index {
         change: impl FnOnce(&mut Document),
     ) -> Result<SaveOutcome> {
         let before = self.get(id).map(Document::snapshot);
-        let outcome = self.write_change(id, false, change)?;
+        let (outcome, body_changed) = self.write_change(id, false, change)?;
         if outcome == SaveOutcome::Saved {
             changes.saved.push(*id);
+            if body_changed {
+                changes.content.push(*id);
+            }
             self.keep_step(id, before, changes);
         }
         Ok(outcome)
@@ -619,31 +626,32 @@ impl Index {
     }
 
     /// Apply `change` to `id`'s document and save it if that changed
-    /// anything. On a conflict or a failed save the document's envelope and
-    /// body -- all it holds -- are put back as they were, so memory keeps
-    /// matching the file.
+    /// anything; also whether the body changed. On a conflict or a failed
+    /// save the document's envelope and body -- all it holds -- are put back
+    /// as they were, so memory keeps matching the file.
     fn write_change(
         &mut self,
         id: &Id,
         overwrite: bool,
         change: impl FnOnce(&mut Document),
-    ) -> Result<SaveOutcome> {
+    ) -> Result<(SaveOutcome, bool)> {
         let Some(&i) = self.by_id.get(id) else {
             return Err(Error::NotFound);
         };
         let doc = &mut self.documents[i].doc;
         let before = doc.snapshot();
         change(doc);
+        let body_changed = doc.content() != before.1;
         // An overwrite writes even an unchanged document: the file is what
         // differs (Use ours after the app's own save was written over).
         if !doc.is_dirty() && !overwrite {
-            return Ok(SaveOutcome::Unchanged);
+            return Ok((SaveOutcome::Unchanged, false));
         }
         let saved = self.save(id, overwrite);
         if !matches!(saved, Ok(SaveOutcome::Saved)) {
             self.documents[i].doc.restore(before);
         }
-        saved
+        Ok((saved?, body_changed))
     }
 
     fn check_writable(&self, id: &Id) -> Result<()> {
@@ -739,6 +747,27 @@ impl Index {
     }
 
     // ------------------------------------------------------------------------
+    /// The first entity whose `remote:` source block has the property
+    /// `key: value` (e.g. `message-id`), from `account` if one is given.
+    pub fn find_remote(&self, account: Option<&Id>, key: &str, value: &str) -> Option<Id> {
+        self.documents
+            .iter()
+            .find(|e| remote_values(&e.doc, account, key).any(|v| v == value))
+            .map(|e| e.doc.id())
+    }
+
+    // ------------------------------------------------------------------------
+    /// Every value of the `remote:` property `key` in the vault, from
+    /// `account` if one is given.
+    pub fn remote_values(&self, account: Option<&Id>, key: &str) -> HashSet<String> {
+        self.documents
+            .iter()
+            .flat_map(|e| remote_values(&e.doc, account, key))
+            .map(str::to_string)
+            .collect()
+    }
+
+    // ------------------------------------------------------------------------
     /// The members of `thread_id` -- entities whose `message.threads` lists
     /// it -- in thread order: by `date`, ties broken by `id` (UUIDv7).
     pub fn thread_members(&self, thread_id: &Id) -> Vec<&Entry> {
@@ -763,6 +792,19 @@ impl Index {
 /// order), the undated ones first: thread order.
 pub(crate) fn sort_by_date(entries: &mut [&Entry]) {
     entries.sort_by_key(|e| (e.doc.date(), e.doc.id()));
+}
+
+/// The values of the property `key` in `doc`'s `remote:` source block
+/// (vault.md#remote: a list of `{key: value}` maps), if it came
+/// from `account` (or any account, for `None`).
+fn remote_values<'a>(
+    doc: &'a Document,
+    account: Option<&Id>,
+    key: &'a str,
+) -> impl Iterator<Item = &'a str> + 'a {
+    doc.remote_from(account)
+        .into_iter()
+        .flat_map(move |remote| remote.values(key))
 }
 
 // ----------------------------------------------------------------------------

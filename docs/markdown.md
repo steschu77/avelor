@@ -193,7 +193,7 @@ Inline rules:
   `contenteditable` leaves behind for a typed trailing or leading space;
   markdown has no reason to know about it.
 
-### Escaping
+### Escaping <a id="escaping"></a>
 
 Literal text is escaped so the next `to_html` reads it back as the same
 text, in two tiers:

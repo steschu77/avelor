@@ -1112,6 +1112,121 @@ fn read_only_and_broken_files_are_not_written() {
 }
 
 #[test]
+fn remote_properties_find_imported_entities() {
+    use crate::envelope::{Email, Remote};
+    let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
+    let mut index = Index::default();
+    index.begin(&root);
+    let (account, other) = (Id::generate(), Id::generate());
+
+    let mut remote = Remote {
+        account: Some(account),
+        ..Remote::default()
+    };
+    remote.set("message-id", "<a@x>");
+    remote.set("gmail-id", "g1");
+    let remote = Source::Remote(remote);
+    let roles = Roles {
+        email: Some(Email::default()),
+        ..Default::default()
+    };
+    let mut doc = Document::create(
+        roles,
+        remote,
+        "Email".into(),
+        Vec::new(),
+        FileFormat::Markdown,
+    );
+    doc.set_date(DateTime::from_unix_millis(1_790_503_530_000));
+    doc.set_content("Body\n".into());
+    let mut changes = Changes::default();
+    let id = index.create(doc, Path::new("Email"), &mut changes).unwrap();
+    assert!(index.entry(&id).unwrap().local.starts_with("Email"));
+    assert!(
+        fs::read_to_string(root.join(&index.entry(&id).unwrap().local))
+            .unwrap()
+            .contains("date: 2026-09-27T10:05:30Z")
+    );
+
+    assert_eq!(
+        index.find_remote(Some(&account), "gmail-id", "g1"),
+        Some(id)
+    );
+    assert_eq!(index.find_remote(Some(&other), "gmail-id", "g1"), None);
+    assert_eq!(index.find_remote(None, "message-id", "<a@x>"), Some(id));
+    assert_eq!(index.find_remote(None, "message-id", "<b@x>"), None);
+    assert_eq!(
+        index.remote_values(Some(&account), "gmail-id"),
+        HashSet::from(["g1".to_string()])
+    );
+    assert!(index.remote_values(Some(&other), "gmail-id").is_empty());
+
+    let mut changes = Changes::default();
+    let set = index.set_content(&id, "New body\n".into(), &mut changes);
+    assert_eq!(set.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [id]);
+    let text = fs::read_to_string(root.join(&index.entry(&id).unwrap().local)).unwrap();
+    assert!(text.ends_with("New body\n") && text.contains("gmail-id: g1"));
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn a_write_records_whether_it_changed_the_body() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+
+    let mut changes = Changes::default();
+    let titled = index.set_title(&ids[0], "Renamed".into(), &mut changes);
+    assert_eq!(titled.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [ids[0]]);
+    assert!(changes.content.is_empty(), "only the frontmatter changed");
+
+    let mut changes = Changes::default();
+    let replaced = index.set_content(&ids[1], "New body\n".into(), &mut changes);
+    assert_eq!(replaced.unwrap(), SaveOutcome::Saved);
+    assert_eq!(
+        (changes.saved, changes.content),
+        (vec![ids[1]], vec![ids[1]])
+    );
+
+    // The same body again writes nothing, so it records nothing.
+    let mut changes = Changes::default();
+    let again = index.set_content(&ids[1], "New body\n".into(), &mut changes);
+    assert_eq!(again.unwrap(), SaveOutcome::Unchanged);
+    assert!(changes.saved.is_empty() && changes.content.is_empty());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn an_undo_records_whether_it_changed_the_body() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let mut replaced = Changes::default();
+    let set = index.set_content(&ids[1], "New body\n".into(), &mut replaced);
+    assert_eq!(set.unwrap(), SaveOutcome::Saved);
+    let mut titled = Changes::default();
+    let set = index.set_title(&ids[0], "Renamed".into(), &mut titled);
+    assert_eq!(set.unwrap(), SaveOutcome::Saved);
+
+    let mut changes = Changes::default();
+    let undone = index.replay(&mut titled.files, Op::Undo, &mut changes);
+    assert_eq!(undone.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [ids[0]]);
+    assert!(changes.content.is_empty(), "only the frontmatter went back");
+
+    let mut changes = Changes::default();
+    let undone = index.replay(&mut replaced.files, Op::Undo, &mut changes);
+    assert_eq!(undone.unwrap(), SaveOutcome::Saved);
+    assert_eq!(
+        (changes.saved, changes.content),
+        (vec![ids[1]], vec![ids[1]])
+    );
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn conversations_are_written_and_read_back() {
     use crate::envelope::ConversationMessage;
     let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
