@@ -18,6 +18,7 @@ import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
 import { vaultSettings } from '../../model/entities.js';
 import { entities } from '../../model/entities.js';
+import { watches } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
 import {
@@ -30,6 +31,7 @@ import { accSeg } from '../../ui/segmented.js';
 import { AI_PROVIDERS, aiHost, aiProvider, aiTitle, aiUsd } from './models.js';
 import { aiLimitReached } from './models.js';
 import { isAiAccount } from './models.js';
+import { WATCH_READ_STEP } from './folders.js';
 import { renderEmailSync } from '../import/email.js';
 import { kindName } from '../../ui/icons.js';
 
@@ -469,11 +471,11 @@ function renderAccountPane(account) {
 }
 
 // Re-render while visible when the op, the vault, the accounts, the
-// entities, or what picked a model (the vault's settings:
+// entities, or what picked a model (the watches, the vault's settings:
 // "Used by") change.
 store.subscribe([
   state => state.vault_op, state => state.vault_path, state => state.accounts_rev,
-  state => state.entities_rev, state => state.settings_rev,
+  state => state.entities_rev, state => state.watches_rev, state => state.settings_rev,
 ], () => scheduleRenderAccounts());
 
 // ----------------------------------------------------------------------------
@@ -526,8 +528,9 @@ function aiErrorText(e, account) {
 }
 
 // What picked `model` of the AI account `account`: the names the Accounts
-// page shows in its "Used by" column. A Google account's email analysis
-// while it is on (the auto-sync's only while it runs).
+// page shows in its "Used by" column. A watch is named once, with its steps
+// that run with the model (the reading step as OCR); a Google account's
+// email analysis while it is on (the auto-sync's only while it runs).
 function aiUsersOf(account, model) {
   const is = choice => choice?.account === account && choice?.model === model;
   const analyses = analysis => !!analysis && analysis.level !== 'off' && is(analysis.model);
@@ -538,6 +541,11 @@ function aiUsersOf(account, model) {
     if (analyses(fetchEmail?.analysis)) users.push(t('accounts.used_fetch', { email: google.email }));
     const sync = fetchEmail?.auto_sync;
     if (sync?.enabled && analyses(sync.analysis)) users.push(t('accounts.used_sync', { email: google.email }));
+  }
+  for (const watch of watches.values()) {
+    const models = watch.models ?? {};
+    const steps = is(models[WATCH_READ_STEP]) ? [t('feature.ocr')] : [];
+    if (steps.length) users.push(`${watch.name} \u00b7 ${steps.join(', ')}`);
   }
   return users;
 }
