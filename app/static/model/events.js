@@ -136,13 +136,18 @@ function forgetVault() {
 }
 
 // The vault being opened: its indexing starts (the vault's name, path and file
-// count) and ends.
+// count) and ends, and the files it couldn't read are listed on the Vault
+// page.
 rpcOn('vault', ({ state, name, path, total }) => {
   if (state !== 'indexing') return store.setState({ vault_state: state });
   forgetVault();
   store.setState({
-    vault_name: name, vault_path: path, files_total: total, vault_state: 'indexing',
+    vault_name: name, vault_path: path, files_total: total,
+    vault_state: 'indexing', vault_errors: [],
   });
+});
+rpcOn('vault_error', ({ path, error }) => {
+  store.setState({ vault_errors: [...store.getState().vault_errors, { path, error }] });
 });
 // A vault opened (before its indexing), or its settings changed
 // (vault.md#vault-config).

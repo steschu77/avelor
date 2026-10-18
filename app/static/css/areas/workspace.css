@@ -1,6 +1,6 @@
 /* The pages of the expanded vault area: New (features/new.js) and the
-   Workspace pages (features/workspace/: accounts, trash). The page itself
-   and the list + detail page are components. */
+   Workspace pages (features/workspace/: accounts, vault, trash). The page
+   itself and the list + detail page are components. */
 
 /* New (features/new.js): the sheet of the entity being
    made, raised on the card layer */
@@ -284,6 +284,28 @@
   gap: 10px 14px;
   align-items: baseline;
   font: 400 var(--fs-body)/1.4 var(--f-serif);
+}
+
+/* Vault (Workspace -> Vault, features/workspace/vault.js): the open vault, then the files its
+   scan couldn't read */
+.vault {
+  gap: 16px;
+}
+
+.vault__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.vault__errors {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.vault__file {
+  --cols: minmax(0, 2fr) minmax(0, 3fr);
+  min-height: var(--h-row);
 }
 
 /* Trash (Workspace -> Trash, features/workspace/trash.js): the files in the vault's trash,
