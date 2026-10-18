@@ -775,8 +775,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   min-width: 0;
 }
 
-/* a notice in the detail (prose or an error-note), a button after its
-   text */
+/* a notice in the detail (prose, an error-note or a note), a button after
+   its text */
 .notice {
   display: flex;
   align-items: center;

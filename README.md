@@ -34,6 +34,7 @@ It is a personal project, not a commercial product or a claim to have solved per
 - **A WYSIWYG editor.** Lists, tables, code blocks, links, and images, written back to Markdown; a change made to a file outside the app is taken in without losing yours.
 - **Google account sync.** Gmail and Google Calendar sync into the vault: email fetched by a filter or kept in sync automatically, new email announced; calendars two-way with full access, an event changed on both sides kept as a copy, never overwritten.
 - **An assistant.** Conversations about a document, a thread, or a project, with Anthropic, OpenAI, Mistral, Gemini, or a local Ollama model, within a spend limit.
+- **Analysis.** New email is sorted by a model of your choice (what it is, a clean title, labels, projects).
 - **In your language.** English, German, and Spanish: the system's language or the one set in `config.yaml`, informal by default and formal on request. A new language is a catalog of texts, checked by a script.
 - **Light or dark, by mouse or keyboard.** Avelor follows the system's light or dark theme, on Windows its title bar too; every control is in the keyboard's reach, with a visible focus, and every place and command is found by its name (Ctrl+Shift+P).
 

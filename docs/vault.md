@@ -319,7 +319,10 @@ fields:
 **Type** — *what does the user call it?* A free-text label such as
 "bill", "contract", "letter", or "statement". Purely a user-facing
 distinction with no effect on which fields are valid — easy to change at
-any time, only available for entities with the `document` role.
+any time, only available for entities with the `document` role. A mail
+gets the role for a type from the email analysis (`email.md#analysis`),
+beside its `email` block; its kind stays a mail's
+(`vault.md#kind-derivation`).
 
 Emails can be imported directly from a Google account.
 
@@ -459,7 +462,8 @@ An email is a markdown file holding the email's body with the following
 additional fields:
 
 * `subject`: string, the subject as the email came; written only once the
-  title differs from it, absent otherwise: the title is the subject,
+  title differs from it (the email analysis, `email.md#analysis`), absent
+  otherwise: the title is the subject,
 * `from`: EmailAddress,
 * `to`: [EmailAddress],
 * `cc`: [EmailAddress],

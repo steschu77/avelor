@@ -19,7 +19,9 @@ use av_utils::id::Id;
 use serde::{Deserialize, Serialize};
 use serde_yaml_ng::Value;
 
+use crate::ai::accounts::{AiAccounts, ModelChoice, Refusal};
 use crate::config::files::{ConnectionStatus, SecretFile, remove_if_exists, write_yaml};
+use crate::texts::Text;
 use av_utils::is_false;
 
 /// The extension of a Google account's secret, its refresh token.
@@ -186,6 +188,9 @@ pub struct FetchEmail {
     /// Absent until auto-sync is first switched on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_sync: Option<AutoSync>,
+    /// Fetch email's analysis, remembered with the filter; absent: off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis: Option<Analysis>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
 }
@@ -197,8 +202,47 @@ impl Default for FetchEmail {
             auto_update: auto_update_default(),
             last_fetch: None,
             auto_sync: None,
+            analysis: None,
             rest: BTreeMap::new(),
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// How closely new email is analysed (email.md#analysis): Lite sorts it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnalysisLevel {
+    Off,
+    Lite,
+}
+
+// ----------------------------------------------------------------------------
+/// A filter's email analysis: its level, and the model it runs with
+/// (accounts.md#model-choice), kept while the level is off.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Analysis {
+    pub level: AnalysisLevel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<ModelChoice>,
+}
+
+impl Analysis {
+    // ------------------------------------------------------------------------
+    /// Whether new email is analysed at all.
+    pub fn is_on(&self) -> bool {
+        self.level != AnalysisLevel::Off
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether it can run as `what` ("the email analysis"): nothing to check
+    /// while it is off, else its pick (`AiAccounts::choose`).
+    pub fn check(&self, ai: &AiAccounts, what: Text) -> std::result::Result<(), Refusal> {
+        if !self.is_on() {
+            return Ok(());
+        }
+        ai.choose(self.model.as_ref(), what, DateTime::now())
+            .map(|_| ())
     }
 }
 
@@ -340,6 +384,7 @@ pub struct FetchEmailMeta<'a> {
     pub auto_update: bool,
     pub last_fetch: Option<DateTime>,
     pub auto_sync: Option<&'a AutoSync>,
+    pub analysis: Option<&'a Analysis>,
 }
 
 impl Account {
@@ -423,6 +468,7 @@ impl Account {
                     auto_update: email.auto_update,
                     last_fetch: email.last_fetch,
                     auto_sync: email.auto_sync.as_ref(),
+                    analysis: email.analysis.as_ref(),
                 }),
         }
     }

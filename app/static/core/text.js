@@ -20,6 +20,25 @@ export function t(key, args = {}) {
 }
 
 // ----------------------------------------------------------------------------
+// The text of `key` as `t` gives it, in parts for `append()`: an argument
+// that is a node (a picker within a sentence) stays that node.
+export function parts(key, args = {}) {
+  const nodes = {};
+  const marked = {};
+  for (const [name, value] of Object.entries(args)) {
+    if (value instanceof Node) {
+      nodes[name] = value;
+      marked[name] = MARK + name + MARK;
+    } else {
+      marked[name] = value;
+    }
+  }
+  return lookup(key, marked).split(MARK).map((piece, i) => (i % 2 ? nodes[piece] : piece)).filter(piece => piece !== '');
+}
+
+const MARK = String.fromCharCode(1);
+
+// ----------------------------------------------------------------------------
 // `n` as an ordinal, "2nd" in English, "2." in German: the catalog's forms
 // picked by the locale's ordinal rules.
 export const ordinal = n => t('ordinal', { n, ordinal: true });

@@ -4,6 +4,7 @@
 
 mod accounts;
 mod ai;
+mod analysis;
 mod api;
 mod app;
 mod calendar;

@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::ai::accounts::AiAccounts;
+use crate::analysis::AnalysisState;
 use crate::calendar;
 use crate::calendar::CalendarState;
 use crate::chat::ChatState;
@@ -257,6 +258,9 @@ pub struct App {
     /// The assistant's replies being written, and the failed ones
     /// (`chat`); neither is in the vault.
     pub chat: ChatState,
+
+    /// The email analyses running (`analysis`), each a job.
+    pub analysis: AnalysisState,
 }
 
 impl App {
@@ -282,6 +286,7 @@ impl App {
             calendar: CalendarState::default(),
             close: CloseState::default(),
             chat: ChatState::default(),
+            analysis: AnalysisState::default(),
         }
     }
 

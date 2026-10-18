@@ -6,6 +6,7 @@
 //! through the app never loses user data.
 
 use crate::envelope::Conversation;
+use crate::envelope::Email;
 use crate::envelope::Event;
 use crate::envelope::Message;
 use crate::envelope::Remote;
@@ -364,11 +365,14 @@ impl Document {
 
     // ------------------------------------------------------------------------
     /// Set the type of the `document` role; `None` removes it. A document
-    /// without roles (a plain markdown file) gets the role for a type. Only
-    /// a document has a type: for any other entity nothing changes and
-    /// `false` is returned.
+    /// without roles (a plain markdown file) gets the role for a type, and so
+    /// does a mail, beside its `email` block, its kind a mail's still; a mail's
+    /// block goes with its type when nothing else is in it. Only a document
+    /// or a mail has a type: for any other entity nothing changes and `false`
+    /// is returned.
     pub fn set_doc_type(&mut self, doc_type: Option<DocType>) -> bool {
-        if self.kind() != DocumentType::Document {
+        let kind = self.kind();
+        if kind != DocumentType::Document && kind != DocumentType::Email {
             return false;
         }
         let role = self
@@ -382,6 +386,10 @@ impl Document {
                 roles.document.get_or_insert_with(Default::default).doc_type = Some(doc_type);
             }
             (None, None) => {}
+        }
+        let empty = |role: &Option<_>| role.as_ref().is_some_and(|d| *d == Default::default());
+        if kind == DocumentType::Email && empty(&self.roles().document) {
+            self.envelope_mut().roles.document = None;
         }
         true
     }
@@ -465,6 +473,13 @@ impl Document {
     /// the role.
     pub fn set_event(&mut self, event: Option<Event>) {
         self.envelope_mut().roles.event = event;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's `email` block (vault.md#email); `None` drops the
+    /// role.
+    pub fn set_email(&mut self, email: Option<Email>) {
+        self.envelope_mut().roles.email = email;
     }
 
     // ------------------------------------------------------------------------

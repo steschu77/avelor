@@ -153,12 +153,13 @@ fn the_host_shows_plain_texts_only() {
 fn the_page_uses_the_keys_its_calls_write_out() {
     let js = "const a = t('status.dismiss');\n\
               el.title = `${t(\"status.more\", { n })} and more`;\n\
+              body.append(...parts('scans.read_by', { picker }));\n\
               // t('in.a.comment')\n\
               const s = 't(\\'in.a.string\\')';";
     let keys = page_keys(js).unwrap();
     assert_eq!(
         keys.into_iter().collect::<Vec<_>>(),
-        ["status.dismiss", "status.more"]
+        ["scans.read_by", "status.dismiss", "status.more"]
     );
 }
 

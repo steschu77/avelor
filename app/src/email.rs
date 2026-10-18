@@ -13,6 +13,9 @@
 //! An account's auto-sync fetches the new email that matches its own filter
 //! every 15 minutes, started by the clock (`App::on_clock`): a quiet search
 //! first, then -- only if there is new email -- a fetch job like the page's.
+//!
+//! A fetch whose filter turns the analysis on (email.md#analysis) hands its new
+//! emails to `analysis::analyse` when it ends.
 
 use av_utils::id::Id;
 

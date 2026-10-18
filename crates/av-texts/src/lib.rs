@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 const CATEGORIES: &[&str] = &["zero", "one", "two", "few", "many", "other"];
 
 /// The page's functions whose first argument is a key (`core/text.js`).
-const PAGE_CALLS: &[&str] = &["t"];
+const PAGE_CALLS: &[&str] = &["t", "parts"];
 
 /// The host's call for a text the page shows (`texts.rs`, `Text`).
 const HOST_PAGE_CALL: &str = "Text::new(\"";
@@ -168,7 +168,8 @@ fn is_name(name: &str) -> bool {
 }
 
 // ----------------------------------------------------------------------------
-/// The keys the page's script `js` uses: the first argument of each `t`.
+/// The keys the page's script `js` uses: the first argument of each `t`
+/// and `parts`.
 /// A key that isn't written out is an error, since nothing could check it.
 pub fn page_keys(js: &str) -> Result<BTreeSet<String>, Vec<String>> {
     let allocator = Allocator::default();

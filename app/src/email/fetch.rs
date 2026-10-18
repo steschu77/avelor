@@ -15,8 +15,10 @@ use serde_json::json;
 use super::Origin;
 use super::apply::{Stored, apply_email};
 use super::entities::Downloaded;
+use crate::analysis;
 use crate::app::App;
 use crate::google;
+use crate::google::accounts::Analysis;
 use crate::google::accounts::FetchEmail;
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
@@ -46,6 +48,8 @@ pub(super) struct EmailFetch {
     /// When the fetch (an auto-sync: its search) started: what it fetched
     /// covers the email up to then.
     pub(super) started: DateTime,
+    /// The analysis of the emails it creates, as the fetch's filter has it.
+    pub(super) analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
@@ -58,6 +62,7 @@ pub(super) struct FetchPlan {
     pub(super) replace: HashSet<String>,
     pub(super) origin: Origin,
     pub(super) started: DateTime,
+    pub(super) analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
@@ -98,15 +103,21 @@ pub(crate) struct FetchRequest {
     pub(super) filter: EmailFilter,
     #[serde(default)]
     auto_update: bool,
+    /// Remembered like the filter; with a level other than off, the new
+    /// emails are analysed after the fetch.
+    #[serde(default)]
+    pub(super) analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
-/// `email_fetch {account, ids, replace?, filter?, auto_update?}`:
+/// `email_fetch {account, ids, replace?, filter?, auto_update?, analysis?}`:
 /// fetch the emails into the vault as a job, answering `{job}` once it
 /// started. The job's events follow, an `entity` event per email written
 /// (with `content` for a replaced body), a `notice` per email that failed,
-/// and finally the account (`account`: its last fetch and sync). The filter
-/// and mode are remembered in the account first.
+/// and finally the account (`account`: its last fetch and sync). The filter,
+/// mode and analysis are remembered in the account first. With the analysis
+/// on, its pick is checked first (`AiAccounts::choose`): refused, nothing is
+/// fetched; else the new emails are analysed after the fetch.
 pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
     if app.email.fetch.is_some() {
         let what = "a second email fetch".to_string();
@@ -120,9 +131,16 @@ pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
         Ok(client) => client,
         Err(e) => return google::refuse_account(req, e),
     };
+    let analysis = request.analysis.clone().filter(Analysis::is_on);
+    if let Some(analysis) = &analysis
+        && let Err(refusal) = analysis.check(&app.ai, analysis::email_analysis())
+    {
+        return req.fail(refusal.error, refusal.text);
+    }
     let remembered = Remembered {
         filter: request.filter,
         auto_update: request.auto_update,
+        analysis: request.analysis,
     };
     remember_settings(app, account, remembered);
 
@@ -139,6 +157,7 @@ pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
         replace,
         origin: Origin::Manual,
         started: DateTime::now(),
+        analysis,
     };
     let label = Text::new("email.fetching").arg("email", email.as_str());
     let job_id = start_fetch(app, label, plan);
@@ -177,6 +196,7 @@ pub(super) fn start_fetch(app: &mut App, label: Text, plan: FetchPlan) -> Id {
         },
         origin: plan.origin,
         started: plan.started,
+        analysis: plan.analysis,
     });
     if skipped > 0 {
         app.update_job(job_id, skipped, total);
@@ -220,10 +240,11 @@ pub(super) fn find_account_email(app: &App, account: Id) -> String {
 struct Remembered {
     pub(super) filter: EmailFilter,
     auto_update: bool,
+    pub(super) analysis: Option<Analysis>,
 }
 
 // ----------------------------------------------------------------------------
-/// Store the page's filter and mode in the account file (best
+/// Store the page's filter, mode and analysis in the account file (best
 /// effort: a failed save only costs the pre-filled form next time).
 fn remember_settings(app: &mut App, account: Id, remembered: Remembered) {
     let remembered = app.google.update(account, |account| {
@@ -234,6 +255,7 @@ fn remember_settings(app: &mut App, account: Id, remembered: Remembered) {
             .get_or_insert_with(FetchEmail::default);
         email.filter = remembered.filter;
         email.auto_update = remembered.auto_update;
+        email.analysis = remembered.analysis;
         true
     });
     if let Err(e) = remembered {
@@ -332,7 +354,8 @@ pub fn stop(app: &mut App) {
 /// when it started (the page's "Since last time", or where the next
 /// auto-sync starts) only if it fetched all and nothing failed, so the next
 /// one still covers what it didn't write -- and end the job with its
-/// summary.
+/// summary. Unless it was stopped, the analysis it asks for starts on the
+/// emails it created.
 pub(super) fn finish(app: &mut App) {
     let Some(fetch) = app.email.fetch.take() else {
         return;
@@ -369,6 +392,11 @@ pub(super) fn finish(app: &mut App) {
     };
     if let Some((text, entity)) = new_email_notice(&counts.created, title_of, &email) {
         app.inform(text, entity);
+    }
+    let analysis = fetch.analysis.filter(|a| a.is_on() && !stopped);
+    if let Some(analysis) = analysis.filter(|_| !fetch.counts.created.is_empty()) {
+        let created = fetch.counts.created;
+        analysis::analyse(app, &email, created, &analysis);
     }
 }
 
