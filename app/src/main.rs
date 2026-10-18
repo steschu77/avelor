@@ -27,6 +27,7 @@ mod texts;
 mod trash;
 mod undo;
 mod vault_settings;
+mod watches;
 
 use av_utils::error::Result;
 use av_utils::logger;

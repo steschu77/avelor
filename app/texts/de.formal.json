@@ -47,5 +47,7 @@
   "new.enter_title": "Geben Sie zuerst einen Titel ein",
   "new.pick_date": "Wählen Sie zuerst ein Datum",
   "new.pick_start": "Wählen Sie zuerst ein Startdatum",
-  "panel.select_hint": "Wählen Sie ein Dokument aus der Liste."
+  "panel.select_hint": "Wählen Sie ein Dokument aus der Liste.",
+  "watch.enter_folder": "Geben Sie einen Ordner an.",
+  "watch.open_vault_first": "Öffnen Sie zuerst einen Tresor: Ordnerüberwachungen werden darin gespeichert."
 }
