@@ -12,6 +12,7 @@ use super::apply::{Action, Stored, apply_email, fetch_action};
 use super::auto_sync::{on_sync_listed, sync_query};
 use super::entities::{Downloaded, email_entity};
 use super::fetch::{FetchPlan, finish, new_email_notice, plan_fetch, start_fetch};
+use crate::google::accounts::Analysis;
 use crate::testing::Harness;
 use crate::testing::{CONNECTED, DISCONNECTED, parse, reply, shape, shown, with_google};
 use crate::texts::Text;
@@ -371,6 +372,7 @@ fn auto_sync_waits_for_its_time_a_fetch_and_the_vault_scan() {
         replace: HashSet::new(),
         origin: Origin::Manual,
         started: now,
+        analysis: None,
     };
     start_fetch(&mut h.app, Text::new("email.fetching"), plan);
     auto_sync(&mut h.app, now);
@@ -436,6 +438,7 @@ fn a_listing_with_nothing_new_leaves_no_trace_and_a_failure_shows_once() {
         replace: HashSet::new(),
         origin: Origin::Manual,
         started: now,
+        analysis: None,
     };
     let manual = start_fetch(&mut h.app, Text::new("email.fetching"), plan);
     on_sync_listed(&mut h.app, account, root, now, Ok(vec!["g2".into()]));
@@ -462,6 +465,7 @@ fn a_complete_auto_sync_moves_its_start_on() {
         replace: HashSet::new(),
         origin: Origin::AutoSync,
         started,
+        analysis: None,
     };
     start_fetch(&mut h.app, Text::new("email.fetching"), plan);
     finish(&mut h.app);
@@ -524,6 +528,7 @@ fn a_fetch_that_wrote_email_tells_the_page_after_its_end() {
         replace: HashSet::new(),
         origin: Origin::Manual,
         started: DateTime::now(),
+        analysis: None,
     };
     start_fetch(&mut h.app, Text::new("email.fetching"), plan);
     h.app
@@ -550,4 +555,72 @@ fn a_fetch_that_wrote_email_tells_the_page_after_its_end() {
         shown(&sent[3]["data"]["text"]),
         "New email: Nebenkosten 2026"
     );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_fetch_with_the_analysis_on_needs_a_model_and_remembers_it() {
+    let mut h = with_google("email-fetch-analysis", EMAIL, &[]);
+    let model = json!({ "account": Id::generate(), "model": "m" });
+    let fetch = |level: &str| {
+        let analysis = json!({ "level": level, "model": model });
+        json!({ "account": CONNECTED, "ids": [], "analysis": analysis })
+    };
+    let sent = h.call("email_fetch", fetch("lite"));
+    assert_eq!(shape(&sent), ["reply"], "nothing fetched: {sent:?}");
+    assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+    assert_eq!(
+        shown(&sent[0]["err"]["text"]),
+        "For the email analysis, the picked model\u{2019}s account is gone; pick another model."
+    );
+    let file = h.vault().join(".avelor/accounts/google_a.yaml");
+    assert!(!fs::read_to_string(&file).unwrap().contains("analysis"));
+
+    let sent = h.call("email_fetch", fetch("off"));
+    assert!(sent.iter().any(|m| m["ok"]["job"].is_string()), "{sent:?}");
+    h.run_queue();
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(
+        text.contains("analysis:") && text.contains("level: off") && text.contains("model: m"),
+        "off, the model kept: {text}"
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_finished_fetch_hands_its_new_mails_to_the_analysis() {
+    let mut h = with_google("email-analyse-after", EMAIL, &[]);
+    let account = connected_id();
+    let lite = Analysis {
+        level: crate::google::accounts::AnalysisLevel::Lite,
+        model: None,
+    };
+    for stopped in [false, true] {
+        let client = h.app.google.connected(account).unwrap();
+        let plan = FetchPlan {
+            account,
+            client,
+            queue: VecDeque::new(),
+            skipped: 0,
+            replace: HashSet::new(),
+            origin: Origin::Manual,
+            started: DateTime::now(),
+            analysis: Some(lite.clone()),
+        };
+        let job = start_fetch(&mut h.app, Text::new("email.fetching"), plan);
+        let fetch = h.app.email.fetch.as_mut().unwrap();
+        fetch.counts.created.push(Id::generate());
+        if stopped {
+            crate::jobs::stop(&mut h.app, job);
+        } else {
+            finish(&mut h.app);
+        }
+        let sent = parse(&h.take());
+        // No AI account in this vault: the analysis says so.
+        let refused = sent.iter().any(|m| {
+            let message = shown(&m["data"]["text"]);
+            message.contains("For the email analysis, add an AI provider")
+        });
+        assert_eq!(refused, !stopped, "stopped: {stopped}, {sent:?}");
+    }
 }

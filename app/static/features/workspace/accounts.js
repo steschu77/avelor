@@ -525,11 +525,17 @@ function aiErrorText(e, account) {
 }
 
 // What picked `model` of the AI account `account`: the names the Accounts
-// page shows in its "Used by" column.
+// page shows in its "Used by" column. A Google account's email analysis
+// while it is on.
 function aiUsersOf(account, model) {
   const is = choice => choice?.account === account && choice?.model === model;
+  const analyses = analysis => !!analysis && analysis.level !== 'off' && is(analysis.model);
   const users = [];
   if (is(vaultSettings().chat_model)) users.push(t('types.conversations'));
+  for (const google of accounts.values()) {
+    const fetchEmail = google.fetch_email;
+    if (analyses(fetchEmail?.analysis)) users.push(t('accounts.used_fetch', { email: google.email }));
+  }
   return users;
 }
 
