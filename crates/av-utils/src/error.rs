@@ -45,7 +45,8 @@ pub enum Error {
     InvalidResponse {
         msg: String,
     },
-    /// The service doesn't offer this.
+    /// The service doesn't offer this (e.g. a PDF for a model that only
+    /// reads images).
     Unsupported {
         what: String,
     },
@@ -80,6 +81,9 @@ pub enum Error {
     /// trash: a file in its place, or an entity with its `id`; `path` is
     /// the one in the way.
     FileExists {
+        path: PathBuf,
+    },
+    FileRead {
         path: PathBuf,
     },
     FileWrite {
@@ -153,6 +157,7 @@ impl Error {
             Error::ChangedOutside { .. } => "changed_outside",
             Error::FileNotFound { .. } => "file_not_found",
             Error::FileExists { .. } => "file_exists",
+            Error::FileRead { .. } => "file_read",
             Error::FileWrite { .. } => "file_write",
             Error::FileIo { .. } => "file_io",
             Error::FromUtf8 { .. } => "from_utf8",

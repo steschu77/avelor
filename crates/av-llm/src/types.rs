@@ -1,6 +1,7 @@
 //! The provider-neutral request and answer types.
 
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 
 use av_utils::error::{Error, Result};
@@ -175,7 +176,7 @@ pub enum Role {
 }
 
 // ----------------------------------------------------------------------------
-/// One turn of the conversation.
+/// One turn of the conversation. Files belong in user turns only.
 #[derive(Clone, Debug)]
 pub struct Message {
     pub role: Role,
@@ -198,12 +199,53 @@ impl Message {
             parts: vec![Part::Text(text.into())],
         }
     }
+
+    // ------------------------------------------------------------------------
+    pub fn with(mut self, part: Part) -> Self {
+        self.parts.push(part);
+        self
+    }
 }
 
 // ----------------------------------------------------------------------------
 #[derive(Clone, Debug)]
 pub enum Part {
     Text(String),
+    /// A file sent along with the request.
+    Inline(FileData),
+}
+
+// ----------------------------------------------------------------------------
+/// A file's name, type, and content: to send inline.
+#[derive(Clone, Debug)]
+pub struct FileData {
+    pub name: String,
+    pub mime_type: String,
+    pub data: Vec<u8>,
+}
+
+impl FileData {
+    // ------------------------------------------------------------------------
+    /// Read `path`, its type guessed from the extension.
+    pub fn from_path(path: &Path) -> Result<Self> {
+        let data = std::fs::read(path).map_err(|_| Error::FileRead {
+            path: path.to_path_buf(),
+        })?;
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Ok(Self {
+            name,
+            mime_type: av_utils::mime::type_for(path).to_string(),
+            data,
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn is_image(&self) -> bool {
+        self.mime_type.starts_with("image/")
+    }
 }
 
 // ----------------------------------------------------------------------------

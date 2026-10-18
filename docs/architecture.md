@@ -270,7 +270,7 @@ flowchart BT
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), FNV, DPAPI `secret`, logger, random (BCrypt), url, text normalization, charsets, atomic writes (`fs`), cross-thread `Cancel` | |
+| av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), FNV, DPAPI `secret`, logger, random (BCrypt), url, text normalization, charsets, atomic writes (`fs`), MIME types by extension (`mime`), cross-thread `Cancel` | |
 | av-http | blocking `Client` / `Request` / `Response`; the process's one session (`Client::shared`); `Request::send_logged`, the one way the APIs are called: logged as `METHOD host/path`, timed, a non-2xx status as `Error::Http` with the reason the caller's parser reads from the body | WinHTTP; libsoup 3 on Linux, one session per worker thread; WinHTTP's IPv6 fast fallback on (a network whose IPv6 goes nowhere cost 21 s per new connection); a streamed read takes what has arrived (`WinHttpQueryDataAvailable`) |
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes`, the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the scan (`scan`, events applied by `Index::apply`), filenames, `to_html`, `MdWriter`, `plain_title`, HTML → markdown, MIME parser, conversation trees | no network, no UI; also hosts mail parsing |
 | av-google | OAuth loopback + PKCE (the wait under a `av_utils::cancel::Cancel`), token refresh, Gmail (filter → query, ids, headers, raw), Calendar v3 subset, the two-way sync engine (`plan` is pure); Google's error bodies (`reason`) | sends through `send_logged` |

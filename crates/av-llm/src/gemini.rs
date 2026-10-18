@@ -77,6 +77,10 @@ pub(crate) fn chat_body(req: &ChatRequest) -> Result<Value> {
 fn content_part(part: &Part) -> Result<Value> {
     let part = match part {
         Part::Text(text) => json!({"text": text}),
+        Part::Inline(file) => json!({"inlineData": {
+            "mimeType": file.mime_type,
+            "data": av_utils::base64::to_base64(&file.data),
+        }}),
     };
     Ok(part)
 }
@@ -205,6 +209,7 @@ fn read_stream(body: impl Read, on_delta: &mut dyn FnMut(&str)) -> Result<ChatRe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::FileData;
     use crate::types::Message;
 
     // ------------------------------------------------------------------------
@@ -214,7 +219,11 @@ mod tests {
             .system("Be brief.")
             .message(Message::user("Read."))
             .message(Message::assistant("Read it."))
-            .message(Message::user("Now this."));
+            .message(Message::user("Now this.").with(Part::Inline(FileData {
+                name: "b.png".into(),
+                mime_type: "image/png".into(),
+                data: vec![1, 2, 3],
+            })));
         assert_eq!(
             chat_body(&req).unwrap(),
             json!({
@@ -226,6 +235,7 @@ mod tests {
                     {"role": "model", "parts": [{"text": "Read it."}]},
                     {"role": "user", "parts": [
                         {"text": "Now this."},
+                        {"inlineData": {"mimeType": "image/png", "data": "AQID"}},
                     ]},
                 ],
             })

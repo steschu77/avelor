@@ -13,7 +13,7 @@
 //! `av_utils::cancel::Cancel`; the caller runs them on a worker thread. Failures are
 //! `av_utils::error::Error`: `Http` for an error status (with the provider's
 //! error type as `reason`), `InvalidResponse` for an answer that broke off or
-//! can't be read.
+//! can't be read, `Unsupported` for what a provider doesn't offer.
 
 mod anthropic;
 mod client;
@@ -26,6 +26,7 @@ mod types;
 mod usage;
 
 pub use client::Client;
+pub use types::FileData;
 pub use types::{ChatRequest, ChatResponse, Message, Part, Role, StopReason};
 pub use types::{ModelInfo, PROVIDERS, Provider, ProviderSpec, base_url};
 pub use usage::Price;

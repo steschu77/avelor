@@ -8,6 +8,7 @@ use av_utils::error::Result;
 use serde_json::Value;
 use serde_json::json;
 
+use crate::client::data_url;
 use crate::client::{CHAT_TIMEOUT, cut_short, open, stream_error};
 use crate::client::{Client, count, limit, send_json, string};
 use crate::stream::read_sse;
@@ -56,13 +57,14 @@ pub(crate) fn chat_body(req: &ChatRequest) -> Result<Value> {
                     .collect::<Result<Vec<_>>>()?;
                 messages.push(json!({"role": "user", "content": content}));
             }
-            // Text only.
+            // Text only (checked by the client).
             Role::Assistant => {
                 let text: String = message
                     .parts
                     .iter()
-                    .map(|part| match part {
-                        Part::Text(text) => text.as_str(),
+                    .filter_map(|part| match part {
+                        Part::Text(text) => Some(text.as_str()),
+                        _ => None,
                     })
                     .collect();
                 messages.push(json!({"role": "assistant", "content": text}));
@@ -75,9 +77,16 @@ pub(crate) fn chat_body(req: &ChatRequest) -> Result<Value> {
 }
 
 // ----------------------------------------------------------------------------
+/// Images as `image_url`, documents as `document_url`: data URLs inline.
 fn content_chunk(part: &Part) -> Result<Value> {
     let chunk = match part {
         Part::Text(text) => json!({"type": "text", "text": text}),
+        Part::Inline(file) if file.is_image() => {
+            json!({"type": "image_url", "image_url": data_url(file)})
+        }
+        Part::Inline(file) => json!({
+            "type": "document_url", "document_url": data_url(file), "document_name": file.name,
+        }),
     };
     Ok(chunk)
 }
@@ -182,14 +191,20 @@ fn read_stream(body: impl Read, on_delta: &mut dyn FnMut(&str)) -> Result<ChatRe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::FileData;
     use crate::types::Message;
 
     // ------------------------------------------------------------------------
     #[test]
-    fn chat_body_has_system_message() {
+    fn chat_body_has_system_message_and_url_chunks() {
+        let image = FileData {
+            name: "b.png".into(),
+            mime_type: "image/png".into(),
+            data: vec![1, 2, 3],
+        };
         let req = ChatRequest::new("mistral-medium-latest")
             .system("Be brief.")
-            .message(Message::user("Look."));
+            .message(Message::user("Look.").with(Part::Inline(image)));
         assert_eq!(
             chat_body(&req).unwrap(),
             json!({
@@ -199,6 +214,7 @@ mod tests {
                     {"role": "system", "content": "Be brief."},
                     {"role": "user", "content": [
                         {"type": "text", "text": "Look."},
+                        {"type": "image_url", "image_url": "data:image/png;base64,AQID"},
                     ]},
                 ],
             })

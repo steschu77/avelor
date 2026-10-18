@@ -757,8 +757,11 @@ mod tests {
             .messages
             .iter()
             .map(|m| {
-                let av_llm::Part::Text(text) = &m.parts[0];
-                (m.role, text.clone())
+                let text = match &m.parts[0] {
+                    av_llm::Part::Text(text) => text.clone(),
+                    _ => panic!("text only"),
+                };
+                (m.role, text)
             })
             .collect()
     }
