@@ -23,11 +23,12 @@ export const store = createStore({
   // the page's preferences, strings by key: the host fills them into the
   // page (#prefs, page.rs); `savePrefs` changes them; always replaced
   prefs: JSON.parse($('prefs')?.textContent || '{}'),
-  // *_rev: bumped on every change on projects, threads, accounts, entities,
+  // *_rev: bumped on every change on projects, threads, accounts, folder watches, entities,
   // the vault's settings
   projects_rev: 0,
   threads_rev: 0,
   accounts_rev: 0,
+  watches_rev: 0,
   entities_rev: 0,
   settings_rev: 0,
   selected_project: null, // project filter: one, NO_PROJECT (in none) or null (all), see matchesFilter
