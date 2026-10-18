@@ -7,6 +7,7 @@
 
 use crate::envelope::Conversation;
 use crate::envelope::Message;
+use crate::envelope::Remote;
 use crate::envelope::Task;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
 use crate::shared::{ContactRef, Genre};
@@ -204,6 +205,20 @@ impl Document {
     // ------------------------------------------------------------------------
     pub fn source(&self) -> Option<&Source> {
         self.envelope.as_ref().and_then(|e| e.source.as_ref())
+    }
+
+    // ------------------------------------------------------------------------
+    /// The `remote:` source block (vault.md#remote), if the entity came
+    /// from `account` -- or from any account, for `None`.
+    pub fn remote_from(&self, account: Option<&Id>) -> Option<&Remote> {
+        match self.source() {
+            Some(Source::Remote(remote))
+                if account.is_none_or(|a| remote.account.as_ref() == Some(a)) =>
+            {
+                Some(remote)
+            }
+            _ => None,
+        }
     }
 
     // ------------------------------------------------------------------------

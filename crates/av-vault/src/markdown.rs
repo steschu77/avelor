@@ -27,6 +27,23 @@ pub fn to_html(markdown: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// How the parser reads one line of inline markdown: its text, and how many
+/// spans of emphasis, strong emphasis, and strikethrough it finds. The HTML
+/// conversion checks the delimiters it writes with it (`md_writer`).
+pub(crate) fn read_inline(line: &str) -> (String, usize) {
+    let mut text = String::new();
+    let mut spans = 0;
+    for event in Parser::new_ext(line, options()) {
+        match event {
+            Event::Text(t) => text.push_str(&t),
+            Event::Start(Tag::Emphasis | Tag::Strong | Tag::Strikethrough) => spans += 1,
+            _ => {}
+        }
+    }
+    (text, spans)
+}
+
+// ----------------------------------------------------------------------------
 /// The extensions the vault's markdown uses: tables, strikethrough, task
 /// lists.
 fn options() -> Options {
