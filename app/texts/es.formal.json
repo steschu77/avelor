@@ -61,5 +61,7 @@
   "panel.select_hint": "Seleccione un documento de la lista.",
   "scrub.drag": "Arrastre para elegir un rango de semanas",
   "trash.delete_again": "Haga clic de nuevo para eliminar para siempre",
-  "trash.empty_again": "Haga clic de nuevo para vaciar la papelera"
+  "trash.empty_again": "Haga clic de nuevo para vaciar la papelera",
+  "watch.enter_folder": "Indique una carpeta.",
+  "watch.open_vault_first": "Abra primero una bóveda: las carpetas vigiladas se guardan en ella."
 }

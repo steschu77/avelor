@@ -26,6 +26,7 @@ mod testing;
 mod texts;
 mod trash;
 mod vault_settings;
+mod watches;
 
 use av_utils::error::Result;
 use av_utils::logger;

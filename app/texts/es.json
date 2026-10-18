@@ -728,6 +728,7 @@
   "save.document_gone": "No se pudo guardar el documento: ya no está en la bóveda.",
   "save.settings": "No se pudo guardar la configuración.",
   "save.vault_settings": "No se pudo guardar la configuración de la bóveda.",
+  "save.watch": "No se pudo guardar la carpeta vigilada.",
   "schedule.every_day": {
     "one": "Cada día",
     "other": "Cada {n} días"
@@ -906,9 +907,14 @@
   "vault_op.new": "Nuevo",
   "vault_op.trash": "Papelera",
   "vault_op.vault": "Bóveda",
+  "watch.delete_failed": "No se pudo eliminar el archivo de la carpeta vigilada.",
+  "watch.enter_folder": "Indica una carpeta.",
   "watch.level.lite": "Ligero",
   "watch.level.medium": "Medio",
+  "watch.no_folder": "No hay ninguna carpeta en {path}.",
   "watch.off": "No",
+  "watch.open_vault_first": "Abre primero una bóveda: las carpetas vigiladas se guardan en ella.",
+  "watch.pick": "Elegir una carpeta",
   "watch.step.analysis": "Análisis",
   "week.of": "Semana del {day} · {what}",
   "workspace.accounts": "Cuentas",

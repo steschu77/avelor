@@ -486,7 +486,7 @@ impl Remote {
 // ----------------------------------------------------------------------------
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Scan {
-    /// The folder watch the scan was imported from;
+    /// The folder watch the scan was imported from (`import.md#folder-watches`);
     /// absent for scans that came another way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub watch: Option<Id>,
