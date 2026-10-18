@@ -43,7 +43,9 @@ impl Harness {
             let sent = Rc::clone(&sent);
             Box::new(move |text: &str| sent.borrow_mut().push(text.to_string()))
         };
-        let app = App::new(Arc::clone(&ui), outbox, config);
+        let mut app = App::new(Arc::clone(&ui), outbox, config);
+        // The tests run as a build with Google, whatever its features.
+        app.hides_google = false;
         Self { app, ui, sent, dir }
     }
 

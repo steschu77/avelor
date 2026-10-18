@@ -59,7 +59,12 @@ cargo run -- data/forged
 
 Signing in to Google needs the app's OAuth client (a Desktop client of a
 Google Cloud project) in the build's environment: `AVELOR_GOOGLE_CLIENT_ID` and
-`AVELOR_GOOGLE_CLIENT_SECRET`. A build without them fails.
+`AVELOR_GOOGLE_CLIENT_SECRET`. A build without them fails; one without Google
+needs none:
+
+```sh
+cargo run --features avelor/hide-google
+```
 
 On Linux the desktop shows the app and its icon once they are installed:
 

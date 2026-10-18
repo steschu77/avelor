@@ -1,8 +1,9 @@
 # Avelor — Accounts
 
-> The accounts the app works with: AI providers (chat) — their files, secrets
-> and states, the Accounts page, and how a feature picks its AI model. The
-> assistant is in `assistant.md`.
+> The accounts the app works with: Google accounts (Gmail, Calendar,
+> Contacts, Tasks) and AI providers (chat) — their files, secrets and states, the
+> Accounts page, and how a feature picks its AI model. The assistant is in
+> `assistant.md`.
 
 ## Accounts in a vault
 
@@ -15,11 +16,12 @@ logged); keys the app doesn't know are kept.
 
 ## Secrets <a id="secrets"></a>
 
-An account's secret (an API key) stays with the app, never in a vault: it
-is a file in the configuration folder (`%LOCALAPPDATA%\Avelor\`,
-`architecture.md#storage`) named after the account's id, `<id>.key`,
-DPAPI-encrypted for the current Windows user (`av-utils/secret.rs`). On Linux the file is in
-`$XDG_CONFIG_HOME/avelor`, holds the key as it is, and only the
+An account's secret (a Google refresh token, an API key) stays with the app,
+never in a vault: it is a file in the configuration folder
+(`%LOCALAPPDATA%\Avelor\`, `architecture.md#storage`) named after
+the account's id, `<id>.token` or `<id>.key`, DPAPI-encrypted for the
+current Windows user (`av-utils/secret.rs`). On Linux the file is in
+`$XDG_CONFIG_HOME/avelor`, holds the secret as it is, and only the
 user can read it (0600, `fs::write_private`). So no file in the vault names
 its secret, and a backup of the vault never holds one. Only the key's ends
 reach the page (`sk-…4f2a`).
@@ -31,7 +33,8 @@ reach the page (`sk-…4f2a`).
 - **connected** — the secret can be read;
 - **reconnect** — the secret is missing or can't be decrypted (the vault
   opened on another computer, or as another user), and the file isn't
-  marked `disconnected`: the account shows as "needs a key";
+  marked `disconnected`: the account shows as "needs reconnect" (for an AI
+  provider: "needs a key");
 - **disconnected** — the user disconnected it: the file is marked
   `disconnected`, which tells a deliberate disconnect from a secret
   missing on this computer, and the secret is deleted. Connecting again
@@ -43,7 +46,8 @@ account needs no key; its status is whether the server answers:
 
 ## Account files <a id="account-files"></a>
 
-Files are named `<kind>_<name>.yaml`: a new AI account
+Files are named `<kind>_<name>.yaml`: a Google account
+`google_<email>.yaml`, e.g. `google_jan@gmail.com.yaml`; a new AI account
 `<provider>.yaml`, then `<provider>_2.yaml`, …. The kind of a file is its
 top-level key. One pass over `.avelor/accounts/` when a vault opens
 (`accounts::load`) hands each file to the loader of its kind.
@@ -51,6 +55,33 @@ top-level key. One pass over `.avelor/accounts/` when a vault opens
 Every account file has:
 
 * `id`: UUIDv7, unique identifier for the account
+
+### Google account file <a id="google-file"></a>
+
+* `google`: Google specific account information
+  * `email`: the account's email address, recorded on connect
+  * `scopes`: one `service: level` entry per granted service; a service
+    that isn't listed is off (`accounts.md#access-levels`)
+  * `calendars`: the calendars chosen as sources, each with
+    * `id`: Google's calendar id
+    * `name`, `color`: as Google shows them, refreshed whenever the list is
+      loaded
+  * `connected`: when the account was first connected
+  * `disconnected`: when the account was disconnected (`accounts.md#connection`)
+
+```yaml
+id: 01a0e1cc-a24c-7490-82fe-e75669985b24
+google:
+  email: jan@gmail.com
+  scopes:
+    - email: read
+    - calendar: full
+  calendars:
+    - id: jan@gmail.com
+      name: Jan
+      color: "#9fe1e7"
+  connected: 2026-09-27T10:14:00Z
+```
 
 ### AI account file <a id="ai-account-file"></a>
 
@@ -64,7 +95,7 @@ Every account file has:
   * `spend-limit`: USD a month; once this month's calls cost that much,
     the account takes no more until the next month or a higher limit
   * `connected`: when the account was first connected
-  * `disconnected`: when its key was forgotten
+  * `disconnected`: when its key was forgotten, as for a Google account
 
 ```yaml
 id: 0193a7c1-4b0e-7c1a-9d2f-3a51c8e05be0
@@ -102,11 +133,29 @@ months:
       reasoning: 0
 ```
 
+## Google access levels <a id="access-levels"></a>
+
+Access is chosen per service — `email` (Gmail), `calendar`, `contacts`,
+`tasks` — as Off, Read or Full in the UI, `read` / `full` in the account
+file (a service not listed is off), and `av_google::auth::ScopeAccess {
+None, ReadOnly, Full }` in the code. Full means read and write; for `email`
+it includes sending. Name and email address (identity) are always requested.
+There is no Write or Send level; vocabulary elsewhere
+maps onto these three.
+
 ## The Accounts page <a id="accounts-page"></a>
 
 Workspace → Accounts (`features/workspace/accounts.js`) lists the open vault's
 accounts with a detail pane.
 
+- **Google**: Off/Read/Full per service, then "Sign in with Google"
+  connects an account; reconnecting (also to change the access) keeps the
+  account's id and must sign in as the same email. Disconnecting revokes
+  the token and deletes it but keeps the account file, marked
+  `disconnected`, so connecting the same Google account again keeps the
+  account's `id`. Removing
+  a disconnected account deletes its file. The pane lists the account's
+  calendars; a checked one becomes a source.
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
   and Gemini with an API key, and Ollama by its address. A key or an address
   is checked by listing the provider's models before it is stored; until
@@ -120,8 +169,8 @@ accounts with a detail pane.
   but keeps the account and its id, marked `disconnected`; removing
   deletes its files (Ollama accounts are removed directly).
 - The page widgets the Workspace pages share are `ui/`'s (`ui/page.js`,
-  `ui/field.js`); the model picker every feature uses is
-  `features/workspace/models.js` (`accounts.md#model-choice`).
+  `ui/field.js`, `ui/segmented.js`); the model picker every feature uses
+  is `features/workspace/models.js` (`accounts.md#model-choice`).
 
 ## Model choice and the spend limit <a id="model-choice"></a>
 
@@ -162,21 +211,53 @@ why, with a button to Accounts where the fix is there.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | H1 | Open the page | Workspace → Accounts → `openVaultOp('accounts')` → `renderAccounts` | — (the accounts came with the vault: `accounts`) | list + detail pane; without a vault, a hint |
+| H2 | Connect Google | Off/Read/Full per service → "Sign in with Google" → `connectGoogle` | `connect_google {levels}` → the browser opened after the handler → consent (loopback, PKCE) → code redeemed and user info fetched on workers → `GoogleAccounts::connect`: account YAML in `.avelor/accounts/` + DPAPI token `<id>.token` → `account`, `ok {id}` | card |
+| H3 | Reconnect / change access | same with the account id | as H2 with `{account, levels}`; must be the same email (`wrong_account`) | id kept |
+| H4 | Cancel sign-in | Cancel | `cancel_connect` → `ok`; the connect answers `cancelled` | — |
+| H5 | Calendars as sources | account pane renders → `list_calendars`; checkbox → `set_calendar_source {account, calendar, selected}` | `ok {calendars}` (after `account` if names changed); `account`, `ok` | checked calendars become sources |
+| H6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` (revoke on a worker, file marked `disconnected`, token deleted) → `account`, `ok`; `remove_account` (file and token deleted) → `account_removed`, `ok` | — |
 | I1 | Add an AI provider | "AI provider" menu → draft pane → key or address → Save → `aiConnect` | `connect_ai {provider, key \| address}` (channel `connect_ai`) → models listed with the new values on a worker → only then stored in `.avelor/accounts/` (the key as `<id>.key`) → `account`, `ok {id, models}` | card with models |
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |
 | I3 | Offer a model | tick | `set_ai_settings {account, offered}` → `account`, `ok` | pickers offer it |
 | I8 | Pick a model | a feature's picker → `aiShowModels` → a model | the feature's own command: `set_vault_settings {chat_model}` → `vault_settings`, `ok` | the feature uses it; "Used by" names the feature |
 | I4 | Spend limit | edit field | `set_ai_settings {account, spend_limit}` → `account`, `ok` | enforced: at the limit a chat is refused |
 | I5 | Replace key | edit key | `connect_ai {account, key}` | — |
-| I6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` / `remove_account` | — |
+| I6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` / `remove_account`, shared with Google (H6) | — |
 | I7 | Spending | an assistant reply | `ai::account_used`: what the ledger recorded → this month in `<name>.spend.yaml` → `account` | "This month", also after a restart |
 
 ## Design <a id="design"></a>
 
+```mermaid
+sequenceDiagram
+    participant P as page
+    participant S as App
+    participant W as worker
+    participant B as browser
+    P->>S: connect_google {account?, levels}
+    S->>S: begin_consent (loopback port, PKCE)
+    S->>B: open consent URL (after the handler, on_ui)
+    B->>W: redirect with code
+    W-->>S: on_consent_code
+    S->>W: redeem code, get user info
+    W-->>S: on_consent_redeemed
+    S->>S: GoogleAccounts::connect: YAML in .avelor/accounts/ + DPAPI <id>.token
+    S-->>P: account, ok {id}
+```
+
+The sign-in uses a loopback redirect with PKCE and a 5-minute limit. The
+pending sign-in lives in `App` with its own `av_utils::cancel::Cancel`, which ends
+the OAuth wait and the requests that redeem the code and ask who signed
+in; a new connect, `cancel_connect` or a vault switch cancels it. The
+OAuth client is the build's (`AVELOR_GOOGLE_CLIENT_ID`,
+`AVELOR_GOOGLE_CLIENT_SECRET`, `av-google/auth.rs`); a build without it
+fails, unless it hides Google (the feature `hide-google`): then the host
+loads no Google account, the page offers none to connect (`ready`), and
+a sign-in is refused (`unsupported`).
+
 What the account files share is in `config_files.rs`:
 
 ```rust
-pub struct SecretFile(PathBuf);         // <config folder>/<account id>.key
+pub struct SecretFile(PathBuf);         // <config folder>/<account id>.<token|key>
 impl SecretFile {
     pub fn of(secrets: &Path, id: Id, ext: &str) -> Self;
     pub fn read(&self) -> Result<String>;          // FileNotFound, or DPAPI fails
@@ -189,9 +270,10 @@ pub fn write_yaml(path: &Path, value: &impl Serialize) -> Result<()>;
 ```
 
 plus `load_config_files` and `free_stem` (the next free file name).
-`AiAccounts` (`ai_accounts.rs`) is the sub-state that owns the files;
-`accounts.rs` does the pass on vault open, disconnect, remove, the events
-`accounts` and `account_removed`.
+`GoogleAccounts` (`google_accounts.rs`) and `AiAccounts`
+(`ai_accounts.rs`) are the sub-states that own the files; `accounts.rs`
+does what both kinds share (the pass on vault open, disconnect, remove,
+the events `accounts` and `account_removed`).
 
 av-llm's `Client` speaks to Anthropic, OpenAI (Responses API, not Chat
 Completions), Mistral, Gemini and Ollama, with streaming (SSE/NDJSON), a

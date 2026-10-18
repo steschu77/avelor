@@ -13,6 +13,7 @@ use crate::chat::ChatState;
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
 use crate::documents::DocumentState;
+use crate::google_accounts::GoogleAccounts;
 use crate::jobs::Jobs;
 use crate::protocol::{self, Req};
 use crate::sys::Owner;
@@ -68,6 +69,16 @@ pub struct EntityMeta {
     pub deletable: bool,
     #[serde(flatten)]
     pub roles: Roles,
+}
+
+// ----------------------------------------------------------------------------
+/// An account connect between opening the browser and saving the account.
+struct PendingConnect {
+    /// Names the connect in its continuations (`google::connect_google`).
+    id: Id,
+    /// Ends the wait for the browser redirect early, and the requests that
+    /// redeem the code.
+    cancel: Cancel,
 }
 
 // ----------------------------------------------------------------------------
@@ -187,11 +198,23 @@ pub struct App {
     pub vault: Vault,
     ui: Arc<UiQueue>,
 
+    /// The open vault's Google accounts (`accounts::open`).
+    pub google: GoogleAccounts,
+
+    /// Whether this build hides Google (the feature `hide-google`): no
+    /// Google account is loaded, and the page offers none to connect.
+    pub hides_google: bool,
+
     /// The open vault's AI accounts (`accounts::open`).
     pub ai: AiAccounts,
 
     /// The open vault's own settings (`vault_settings::open`).
     pub settings: VaultSettings,
+
+    /// The account connect waiting for the browser sign-in. Starting
+    /// another replaces (and so cancels) it, like `scan`; so does opening a
+    /// vault.
+    connect: Option<PendingConnect>,
 
     /// The vault scan running (`vault_scan`); a new one replaces it.
     pub scan: VaultScan,
@@ -225,8 +248,11 @@ impl App {
             config,
             vault: Vault::default(),
             ui,
+            google: GoogleAccounts::default(),
+            hides_google: !av_google::auth::has_client(),
             ai: AiAccounts::default(),
             settings: VaultSettings::default(),
+            connect: None,
             scan: VaultScan::default(),
             superseding: HashMap::new(),
             jobs: Jobs::default(),
@@ -429,6 +455,40 @@ impl App {
         if let Err(e) = saved {
             log::warn!("Could not save the settings: {e}");
             self.notice("Could not save the settings.");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Make `id` the pending account connect. The one it replaces is
+    /// cancelled; its own continuation then answers `cancelled`.
+    pub fn begin_connect(&mut self, id: Id, cancel: Cancel) {
+        let pending = PendingConnect { id, cancel };
+        if let Some(old) = self.connect.replace(pending) {
+            log::info!("Connect {}: replaced by {id}", old.id);
+            old.cancel.cancel();
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether `id` is still the pending connect (not cancelled or
+    /// replaced). Every continuation of a connect checks this first.
+    pub fn is_connect_pending(&self, id: Id) -> bool {
+        self.connect.as_ref().is_some_and(|c| c.id == id)
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn cancel_connect(&mut self) {
+        if let Some(old) = self.connect.take() {
+            log::info!("Connect {}: cancelling", old.id);
+            old.cancel.cancel();
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The connect `id` is over (connected or failed).
+    pub fn end_connect(&mut self, id: Id) {
+        if self.is_connect_pending(id) {
+            self.connect = None;
         }
     }
 

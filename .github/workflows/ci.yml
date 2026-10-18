@@ -54,6 +54,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets ${{ env.HIDE_GOOGLE }} -- -D warnings
 
+      - name: Clippy, hiding Google
+        run: cargo clippy --workspace --all-targets --features avelor/hide-google -- -D warnings
+
   test:
     name: Test (Linux only)
     runs-on: ubuntu-latest

@@ -80,7 +80,7 @@ Host modules: `api.rs`, `vault_scan.rs`, `vault_settings.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one (`vault.md#flows`, A1): its accounts and settings (`accounts`, `vault_settings`), then the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `null` once the scan has started. |
+| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one (`vault.md#flows`, A1): its accounts and settings (`accounts`, `vault_settings`), then the scan (`vault`, an `entity` per file, `vault_error`, the scan's `job` events; `vault.md#opening`). `{google}` once the scan has started: whether this build has Google (`accounts.md#design`). |
 | `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), and scanned as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault. The page sends its unsaved edits first. |
 | `set_vault_settings` | `{ chat_model? }` | Change the open vault's settings (`.avelor/vault.yaml`, `vault.md#vault-config`); only the fields given change. `chat_model` is `{account, model}`, the model the assistant answers with, checked when it is used (`accounts.md#model-choice`). Pushes `vault_settings`, then `null`; `invalid_path` (no vault is open), or the failed save ("Could not save the vault's settings."). |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
@@ -144,17 +144,28 @@ Host module: `trash.rs`. `vault.md#trash`.
 | `delete_trashed` | `{ path }` | Delete the trashed file for good: `ok {}`; the errors as for `restore_entity` ("Could not delete … for good."). |
 | `empty_trash` | — | Delete every file `list_trash` lists for good, and the folders this leaves empty: `ok {}`. |
 
+### Google account commands <a id="google"></a>
+
+Host module: `google.rs`, `accounts.rs` (both kinds). `accounts.md`.
+
+| Command | Args | Reply and pushes |
+|---|---|---|
+| `connect_google` | `{ account?, levels }` | Connect a Google account (no `account`) or reconnect one, asking for `levels` (`{"email": "read", "calendar": "full", …}`, each `off`/`read`/`full`). The browser opens for the sign-in (loopback redirect, 5-minute limit); a new connect replaces the pending one, which answers `cancelled`, and so do `cancel_connect` and opening another vault. Reconnecting keeps the account's id and must sign in as the same email (`wrong_account`); a new connect of an email the vault has updates that account. Pushes `account`, then `ok {id}`. Else `timeout` or `denied` (the sign-in), `not_found` (no such account, or it was removed meanwhile), `invalid_path` (no vault is open to keep it in), `unsupported` (a build without the OAuth client, `accounts.md#design`). |
+| `cancel_connect` | — | Abandon the pending sign-in, if there is one: `null`; the connect answers `cancelled`. |
+| `list_calendars` | `{ account }` | The account's calendars: `ok {calendars: [{id, name, color, primary}]}`, the primary calendar first, then by name. Checked calendars take their current names and colors; if that changed any, `account` is pushed first. `not_found`, `not_connected`, or the request's error. |
+| `set_calendar_source` | `{ account, calendar: {id, name, color}, selected }` | Check or uncheck a calendar as a source, stored in the account file. Pushes `account` (also when nothing changed), then `null`. |
+| `disconnect_account` | `{ account }` | Either kind: a Google account's token is revoked at Google (best effort) and deleted, an AI account's key deleted; the account file stays, marked `disconnected` (`accounts.md#connection`). Pushes `account`, then `null`. |
+| `remove_account` | `{ account }` | Forget an account that isn't connected (`disconnected` or `reconnect`; an Ollama account in any state): its file and secret are deleted. Pushes `account_removed`, then `null`; `unsupported` for a connected account. |
+
 ### AI account commands <a id="ai"></a>
 
-Host module: `ai.rs`, `accounts.rs`. `accounts.md`.
+Host module: `ai.rs`. `accounts.md`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
 | `connect_ai` | `{ account?, provider?, key?, address? }` | Check and store a key or an address: for a new account of `provider` (`anthropic`, `openai`, `mistral`, `gemini`, `ollama`; no `account`), or for `account`; what is left out stays. The check lists the provider's models with the new values; only if it works is the account created or updated. Pushes `account`, then `ok {id, models}`, the models as for `list_ai_models`. A failed check answers its error (`http`, `network`, `timeout`, …) with a `message` worded for the page ("The key was rejected: …", "Ollama isn't reachable at … Is it running?"), with nothing stored. A newer `connect_ai` supersedes a running one, which answers `cancelled` (channel `connect_ai`), and so does opening another vault. Else `invalid_argument` (no provider for a new account, no key for a key provider), `not_found`, `invalid_path` (no vault is open to keep it in). |
 | `list_ai_models` | `{ account }` | `ok {models: [{id, name, context_window, price: {input, output} \| null}]}`, the price in USD per million tokens (0 for a local Ollama, null if unknown). Pushes `account` first: an Ollama account's status follows the listing. A failed listing answers as a failed `connect_ai` check; `not_connected` for a key provider without its key, `not_found`. |
 | `set_ai_settings` | `{ account, offered?, spend_limit? }` | Only the fields given change: `offered` replaces the models offered in the pickers, `spend_limit: null` removes the limit. Pushes `account`, then `null`; `invalid_argument` for a limit that isn't above 0, `not_found`. |
-| `disconnect_account` | `{ account }` | An AI account's key deleted; the account file stays, marked `disconnected` (`accounts.md#connection`). Pushes `account`, then `null`. |
-| `remove_account` | `{ account }` | Forget an account that isn't connected (`disconnected` or `reconnect`; an Ollama account in any state): its file and secret are deleted. Pushes `account_removed`, then `null`; `unsupported` for a connected account. |
 
 ### Chat commands <a id="chat"></a>
 
@@ -183,7 +194,7 @@ What the host pushes; the page listens with `rpcOn`.
 | `entity_deleted` | `{ id }` | The entity left the vault: its file was moved to `.trash` (a delete, a dissolved thread) or is gone. |
 | `content` | `{ id, source, html }` | The entity's body as it is now, sent unasked: its file was read again. `load_doc_content` answers with the same `source` and `html`. |
 | `accounts` | `{ items: [account…] }` | A vault opened: its accounts, from `.avelor/accounts/`, replacing the ones the page has. Each item is an `account`'s data. |
-| `account` | `{ id, kind: "anthropic"\|"openai"\|"mistral"\|"gemini"\|"ollama", key, address, status, connected, offered, spend_limit, spent: { cost, calls, unpriced } }` | An account was connected, changed, used or disconnected. `status` is `connected`, `disconnected` or `reconnect`, an Ollama account's `running`/`not running`/`unknown` (`accounts.md#connection`). `key` is only the key's ends (`sk-…4f2a`) or null; `spent` is what the account's calls cost this month (UTC): USD of the priced calls, all calls, and the calls whose price is unknown. |
+| `account` | Google: `{ id, kind: "google", email, scope: { email, calendar, contacts, tasks }, connected, status, calendars: [{ id, name, color }] }`; AI: `{ id, kind: "anthropic"\|"openai"\|"mistral"\|"gemini"\|"ollama", key, address, status, connected, offered, spend_limit, spent: { cost, calls, unpriced } }` | An account was connected, changed, used or disconnected. Each `scope` level is `off`/`read`/`full`; `status` is `connected`, `disconnected` or `reconnect`, an Ollama account's `running`/`not running`/`unknown` (`accounts.md#connection`). `key` is only the key's ends (`sk-…4f2a`) or null; `spent` is what the account's calls cost this month (UTC): USD of the priced calls, all calls, and the calls whose price is unknown. |
 | `account_removed` | `{ id }` | The account was removed (`remove_account`); its files are gone. |
 | `conversation` | `{ id, title, linked_to, active, messages: [{ id, parent, role: "user"\|"assistant", model, date, content, html, status: "done"\|"writing"\|"stopped"\|"failed", error?, suggestions? }] }` | A conversation changed without the page asking: a reply done, failed or stopped, a branch selected. `chat_open` and `chat_send` answer with the same shape. `suggestions` are questions offered to ask next (`vault.md#conversation`). `messages` are the file's plus the reply being written and the failed ones, which are never written. The page shows the path from the first message to `active`, then on down the newest children, and derives the siblings from `parent`. |
 | `ai_delta` | `{ conversation, message, html }` | The reply being written, all of it so far, rendered from its markdown. Coalesced: at most one per run of the host's queue, however fast the model writes. The page ignores it for a conversation it doesn't show. |

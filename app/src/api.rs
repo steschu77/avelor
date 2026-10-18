@@ -18,7 +18,8 @@ use serde_json::json;
 /// `ready`: the page is loaded and listens. A config that couldn't be read
 /// at start, and was set aside (`config::load_config`, which logs why), is
 /// told now, in the status bar. Opens the vault of the last session (or the
-/// command line's, `ConfigStore::vault`), with its accounts; answers `null`.
+/// command line's, `ConfigStore::vault`), with its accounts; answers whether
+/// this build has Google (`App::hides_google`).
 pub fn ready(app: &mut App, req: Req) {
     if app.config.take_error().is_some() {
         app.notice(CONFIG_UNREAD);
@@ -26,7 +27,7 @@ pub fn ready(app: &mut App, req: Req) {
     if let Some(root) = app.config.vault().map(Path::to_path_buf) {
         open_vault(app, &root);
     }
-    req.ok(());
+    req.ok(json!({ "google": !app.hides_google }));
 }
 
 /// The notice of a config that couldn't be read at start.
@@ -175,7 +176,7 @@ mod tests {
     fn ready_answers_at_once() {
         let mut h = Harness::new("ready");
         let sent = h.call("ready", json!({}));
-        assert_eq!(sent, [json!({ "re": 1, "ok": null })]);
+        assert_eq!(sent, [json!({ "re": 1, "ok": { "google": true } })]);
     }
 
     // ------------------------------------------------------------------------
@@ -187,7 +188,7 @@ mod tests {
 
         let sent = h.call("ready", json!({}));
         let notice = json!({ "level": "error", "message": CONFIG_UNREAD });
-        let ready = json!({ "re": 1, "ok": null });
+        let ready = json!({ "re": 1, "ok": { "google": true } });
         assert_eq!(
             sent,
             [json!({ "ev": "notice", "data": notice }), ready.clone()]

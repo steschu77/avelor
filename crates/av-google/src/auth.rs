@@ -53,7 +53,7 @@ const CLIENT: Option<(&str, &str)> = None;
 
 /// Prefix of the per-service scopes.
 const SCOPE_PREFIX: &str = "https://www.googleapis.com/auth/";
-/// Always requested: who the account is.
+/// Always requested: who the account is (accounts.md#access-levels).
 const IDENTITY_SCOPES: [&str; 3] = ["openid", "email", "profile"];
 
 /// How long the user has to finish signing in in the browser.

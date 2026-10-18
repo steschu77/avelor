@@ -13,6 +13,8 @@ mod close;
 mod config;
 mod config_files;
 mod documents;
+mod google;
+mod google_accounts;
 mod jobs;
 mod page;
 mod protocol;

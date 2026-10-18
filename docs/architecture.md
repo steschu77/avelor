@@ -58,7 +58,7 @@ read by OCR.
 | `editor.md` | the WYSIWYG editor |
 | `markdown.md` | markdown ⟷ editor DOM: the contract, both converters, their tests |
 | `saving.md` | dirty state, autosave, the staleness guard, conflicts, closing |
-| `accounts.md` | AI accounts: files, secrets, states, the Accounts page |
+| `accounts.md` | Google and AI accounts: files, secrets, states, the Accounts page, AI uses and the spend limit |
 | `assistant.md` | the assistant: conversations, context, streaming |
 
 ## Doc conventions
@@ -123,7 +123,7 @@ The rules the code follows, and every change to it:
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
 | UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the vault scan's batches into the index; every vault write | — |
-| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the vault scan's walk and reads (`vault_scan.rs`); HTTP (LLMs), LLM streams; the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
+| `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the vault scan's walk and reads (`vault_scan.rs`); HTTP (Google, LLMs), the OAuth wait, LLM streams; the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
 | WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
 
 ### The run family
@@ -131,8 +131,10 @@ The rules the code follows, and every change to it:
 Three variants: plain (`run`), with ordered progress callbacks
 (`run_with_progress`), and superseding per channel (`run_superseding`;
 channels `connect_ai`); continuations are `FnOnce(&mut App, T)`. One OS thread per task is right without an async runtime:
-AI streams block for minutes. `Task(Cancel)` aborts (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
-dropping a `Task` leaves its work running. Continuations re-check identity themselves
+the OAuth wait and AI streams block for minutes. `Task(Cancel)` aborts (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
+dropping a `Task` leaves its work running. A sign-in runs under a
+`Cancel` of its own, the pending connect's (`App::begin_connect`), from
+the OAuth wait to the last request. Continuations re-check identity themselves
 (`writing.id`, batch ids), because an already queued `apply`
 still runs, and so does progress queued before the abort.
 
@@ -237,6 +239,7 @@ flowchart BT
     google --> http
     llm --> http
     app --> vault
+    app --> google
     app --> llm
     app -. build .-> bundle
 ```
@@ -293,7 +296,7 @@ side never touches the vault side; `app` is the only bridge.
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes, the pending sign-in |
 | `vault_scan.rs` | the vault scan (`vault.md#opening`): `run_scan` with av-vault's `scan` on a worker, its batches into the index (`Vault::apply_scanned`) and to the page (`vault`, `entity`, `vault_error`, the scan's `job`), a replaced scan's batches dropped, `scanning`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
@@ -304,7 +307,8 @@ side never touches the vault side; `app` is the only bridge.
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
-| `accounts.rs` | the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
+| `accounts.rs` | both kinds of account: the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
+| `google_accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect) |
 | `config_files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai_context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file, within a budget; its tests |
@@ -409,7 +413,7 @@ nothing imports `app.js`.
 | `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`); its way to the Accounts page is the `accounts.open` action |
-| `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts; the trash |
+| `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the accounts, Google and AI; the trash |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project with their counts, the filter, the vault menu |
@@ -518,7 +522,8 @@ The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
 - `config.yaml`: the vault of the last session (`vault`), the window's
   size and maximized state, and the page's preferences (`prefs`,
   `ui.md#preferences`);
-- the accounts' DPAPI secrets, `<id>.key` (`accounts.md#secrets`);
+- the accounts' DPAPI secrets, `<id>.token` and `<id>.key`
+  (`accounts.md#secrets`);
 - the WebView2 profile in `…\Avelor\WebView2`;
 - the log files, one per run, in `…\Avelor\log`
   (`development.md#diagnosis`).
@@ -573,6 +578,8 @@ abort. Where the bundle lands and how to measure the size:
   `rename_project`), even when the UI offers it for one kind. An empty
   value removes the key (an untitled entity is valid) instead of being
   refused.
+- **Google access** is Off / Read / Full per service, and nothing else
+  (`accounts.md#access-levels`).
 - **Reuse before writing**: `av_vault::markdown::plain_title`,
   `DateTime::from_system_time`, `OneOrMany::{as_slice, from_vec}`; on the
   page the pieces named in `architecture.md#page` and `architecture.md#css`.
