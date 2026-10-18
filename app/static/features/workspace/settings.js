@@ -126,8 +126,8 @@ function settingBox(name, key, label, hint, items) {
 
 function lookPart(language) {
   return {
-    id: 'look', title: t('settings.look'), scope: t('settings.every'), now: languageName(language.run),
-    rows: [languageRow(language)],
+    id: 'look', title: t('settings.look'), scope: t('settings.every'), now: `${languageName(language.run)} \u00b7 ${shownTheme()}`,
+    rows: [languageRow(language), themeRow()],
   };
 }
 
@@ -169,6 +169,38 @@ function nameIn(other, id) {
   return new Intl.DisplayNames([other], { type: 'language' }).of(id);
 }
 
+// The theme, at once, the window's title bar with it (`set_theme`). What is
+// picked is the root's `data-theme` (css/tokens.css), none for the system's.
+const THEMES = [['system', t('settings.system')], ['light', t('settings.light')], ['dark', t('settings.dark')]];
+const THEME_NOTES = { light: t('settings.theme_light'), dark: t('settings.theme_dark') };
+const root = document.documentElement;
+const systemDark = matchMedia('(prefers-color-scheme: dark)');
+
+const pickedTheme = () => root.dataset.theme ?? 'system';
+
+// The theme shown, in a sentence: "dark".
+function shownTheme() {
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : systemDark.matches;
+  return (dark ? t('settings.dark') : t('settings.light')).toLocaleLowerCase(locale);
+}
+
+function themeRow() {
+  const name = t('settings.theme');
+  const picked = pickedTheme();
+  const note = THEME_NOTES[picked] ?? t('settings.theme_system', { theme: shownTheme() });
+  return settingRow(name, [note], settingSeg(name, 'theme', THEMES, picked, setTheme));
+}
+
+function setTheme(theme) {
+  rpcCall('set_theme', { theme }).then(() => {
+    if (theme === 'system') delete root.dataset.theme;
+    else root.dataset.theme = theme;
+    scheduleRenderSettings();
+  }).catch(e => showError(e.message));
+}
+
+systemDark.addEventListener('change', () => scheduleRenderSettings());
+
 function setLanguage(change) {
   const language = { ...store.getState().language, ...change };
   rpcCall('set_language', { language: language.picked, formal: language.formal })
@@ -191,9 +223,13 @@ registerAction({
   id: 'settings', group: 'go', title: t('settings.name'), icon: '#i-settings', also: t('settings.also'),
   shortcut: SHORTCUT, page: true, place: 'page', end: () => t('palette.page'), run: () => openSettings(),
 });
-for (const [key, title, also] of [['language', t('settings.language'), t('settings.language_also')]]) {
+// The rows as commands: the title, the other words, and the control focused.
+for (const [id, title, also, control] of [
+  ['language', t('settings.language'), t('settings.language_also'), () => 'language'],
+  ['theme', t('settings.theme'), t('settings.theme_also'), () => `theme:${pickedTheme()}`],
+]) {
   registerAction({
-    id: `settings.${key}`, group: 'settings', title, icon: '#i-settings', also, page: true, run: () => openSettings(key),
+    id: `settings.${id}`, group: 'settings', title, icon: '#i-settings', also, page: true, run: () => openSettings(control()),
   });
 }
 

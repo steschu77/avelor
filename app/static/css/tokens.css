@@ -10,7 +10,7 @@
      paper, the active content on card, raised with --shadow-raise or
      --shadow-card, and dialogs on top with --shadow-dialog. */
   /* Each color is light-dark(light, dark), the system's theme picking one
-     (color-scheme), or the one set on the root (data-theme). Dark
+     (color-scheme), or the one set on the root (data-theme, Settings). Dark
      keeps Recede's order with warm greys; a shadow
      can't lighten what it lifts there, so the surface's own lightness
      carries the step, and a hairline of light marks a popup's top edge. */

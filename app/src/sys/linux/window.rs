@@ -6,7 +6,7 @@ use gtk::glib;
 use gtk::prelude::*;
 use webkit6::prelude::WebViewExt;
 
-use crate::config::WindowState;
+use crate::config::{Theme, WindowState};
 use crate::shell::{Shell, TITLE};
 
 /// The clock's period: `App::on_clock` once a minute.
@@ -75,6 +75,10 @@ impl UiSignal {
             }
         });
     }
+
+    // ------------------------------------------------------------------------
+    /// The window's frame is in GTK's theme, whatever the page's is.
+    pub fn theme(&self, _theme: Theme) {}
 }
 
 // ----------------------------------------------------------------------------

@@ -1,10 +1,12 @@
 //! What the Settings page sets (ui.md#settings), kept in config.yaml for
-//! every vault: the language and how its texts address the user.
+//! every vault: the language and how its texts address the user, and the
+//! theme.
 
 use av_utils::error::Error;
 use serde::{Deserialize, Serialize};
 
 use crate::app::App;
+use crate::config::Theme;
 use crate::protocol::Req;
 use crate::texts::{self, Address, Language, Text};
 
@@ -70,9 +72,29 @@ pub fn set_language(app: &mut App, req: Req, change: LanguageChange) {
 }
 
 // ----------------------------------------------------------------------------
+/// `set_theme`'s arguments.
+#[derive(Deserialize)]
+pub struct ThemeChange {
+    theme: Theme,
+}
+
+// ----------------------------------------------------------------------------
+/// `set_theme {theme}`: the theme of the window's title bar, at once, and of
+/// the next start; the page changes its own colors. Answers `null`.
+pub fn set_theme(app: &mut App, req: Req, change: ThemeChange) {
+    match app.config.set_theme(change.theme) {
+        Ok(()) => {
+            app.ui().window_theme(change.theme);
+            req.ok(());
+        }
+        Err(e) => req.save_failed(e, Text::new("save.settings")),
+    }
+}
+
+// ----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
-    use crate::config::load_config;
+    use crate::config::{Theme, load_config};
     use crate::testing::Harness;
     use serde_json::{Value, json};
     use std::fs;
@@ -151,5 +173,49 @@ mod tests {
         assert_eq!(load_config(h.dir()).unwrap().language(), None);
         let sent = h.call("set_language", json!({ "language": 4 }));
         assert_eq!(sent[0]["err"]["code"], "bad_request");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_theme_picked_is_the_window_s_and_kept() {
+        let mut h = Harness::new("set-theme");
+        let config = h.dir().join("config.yaml");
+        fs::write(&config, "theme: sepia\nzoom: 2\n").unwrap();
+        h.app.config = load_config(h.dir()).unwrap();
+        assert_eq!(h.app.config.theme(), Theme::System, "none it knows");
+        h.call("set_language", json!({ "language": "de" }));
+        let kept = fs::read_to_string(&config).unwrap();
+        assert!(kept.contains("theme: sepia"), "a save keeps it: {kept}");
+
+        let themes = [("dark", Theme::Dark), ("light", Theme::Light)];
+        for (name, theme) in themes {
+            let sent = h.call("set_theme", json!({ "theme": name }));
+            assert_eq!(sent[0]["ok"], json!(null), "{sent:?}");
+            assert_eq!(h.ui.theme_told(), Some(theme));
+            assert_eq!(load_config(h.dir()).unwrap().theme(), theme);
+        }
+        h.call("set_theme", json!({ "theme": "system" }));
+        assert_eq!(h.ui.theme_told(), Some(Theme::System));
+        let kept = fs::read_to_string(&config).unwrap();
+        assert!(
+            !kept.contains("theme") && kept.contains("zoom: 2"),
+            "{kept}"
+        );
+
+        for theme in [json!("sepia"), json!("Dark"), json!(null)] {
+            let sent = h.call("set_theme", json!({ "theme": theme }));
+            assert_eq!(sent[0]["err"]["code"], "bad_request", "{theme}");
+        }
+        assert_eq!(h.ui.theme_told(), None);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_theme_that_can_t_be_saved_isnt_the_window_s() {
+        let mut h = Harness::new("unsaved-theme");
+        fs::create_dir(h.dir().join("config.yaml")).unwrap();
+        let sent = h.call("set_theme", json!({ "theme": "dark" }));
+        assert_eq!(sent[0]["err"]["text"]["key"], "save.settings");
+        assert_eq!(h.ui.theme_told(), None);
     }
 }

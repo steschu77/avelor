@@ -59,6 +59,7 @@ enum Command {
     SetPrefs(PagePrefs),
     // The Settings page (`settings`).
     SetLanguage(settings::LanguageChange),
+    SetTheme(settings::ThemeChange),
     /// The vault's own settings (`vault_settings`).
     SetVaultSettings(vault_settings::SettingsChange),
     RevealVault,
@@ -311,6 +312,7 @@ impl Command {
             "switch_vault" => Command::SwitchVault(from_value(args)?),
             "set_prefs" => Command::SetPrefs(from_value(args)?),
             "set_language" => Command::SetLanguage(from_value(args)?),
+            "set_theme" => Command::SetTheme(from_value(args)?),
             "set_vault_settings" => Command::SetVaultSettings(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
             "open_url" => Command::OpenUrl(from_value(args)?),
@@ -399,6 +401,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SwitchVault(a) => api::switch_vault(app, req, a.path),
         Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
         Command::SetLanguage(a) => settings::set_language(app, req, a),
+        Command::SetTheme(a) => settings::set_theme(app, req, a),
         Command::SetVaultSettings(a) => vault_settings::set_vault_settings(app, req, a),
         Command::RevealVault => api::reveal_vault(app, req),
         Command::OpenUrl(a) => api::open_url(app, req, a.url),

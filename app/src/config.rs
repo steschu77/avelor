@@ -28,6 +28,9 @@ pub struct AppConfig {
     /// (`localization.md#language`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    /// The theme the user picked (`Theme::name`), else the system's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
     /// UI preferences, owned by the frontend; the host only stores and
     /// replays them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -45,6 +48,30 @@ pub struct WindowState {
     pub height: i32,
     #[serde(default, skip_serializing_if = "is_false")]
     pub maximized: bool,
+}
+
+// ----------------------------------------------------------------------------
+/// The colors of the page and the window's title bar.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl Theme {
+    // ------------------------------------------------------------------------
+    /// As `config.yaml` and the page (`data-theme`) name it; none is the
+    /// system's.
+    pub fn name(self) -> Option<&'static str> {
+        match self {
+            Theme::System => None,
+            Theme::Light => Some("light"),
+            Theme::Dark => Some("dark"),
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -122,6 +149,21 @@ impl ConfigStore {
     /// none for the system's, and write the file.
     pub fn set_language(&mut self, language: Option<String>) -> Result<()> {
         self.config.language = language;
+        self.save()
+    }
+
+    // ------------------------------------------------------------------------
+    /// The theme picked; one this version doesn't know is the system's.
+    pub fn theme(&self) -> Theme {
+        let named = |theme: &Theme| theme.name() == self.config.theme.as_deref();
+        let themes = [Theme::Light, Theme::Dark];
+        themes.into_iter().find(named).unwrap_or_default()
+    }
+
+    // ------------------------------------------------------------------------
+    /// Remember `theme`, and write the file.
+    pub fn set_theme(&mut self, theme: Theme) -> Result<()> {
+        self.config.theme = theme.name().map(str::to_string);
         self.save()
     }
 

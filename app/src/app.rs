@@ -13,7 +13,7 @@ use crate::calendar;
 use crate::calendar::CalendarState;
 use crate::chat::ChatState;
 use crate::close::CloseState;
-use crate::config::{ConfigStore, WindowState};
+use crate::config::{ConfigStore, Theme, WindowState};
 use crate::documents::DocumentState;
 use crate::email;
 use crate::email::EmailState;
@@ -750,6 +750,9 @@ pub struct UiQueue {
     tasks: Mutex<VecDeque<UiTask>>,
     /// Whether `close_window` was called; what a test can look at.
     closed: AtomicBool,
+    /// The theme the window was told last (`window_theme`).
+    #[cfg(test)]
+    theme: Mutex<Option<Theme>>,
 }
 
 // ----------------------------------------------------------------------------
@@ -760,6 +763,8 @@ impl UiQueue {
             signal,
             tasks: Mutex::new(VecDeque::new()),
             closed: AtomicBool::new(false),
+            #[cfg(test)]
+            theme: Mutex::default(),
         }
     }
 
@@ -777,6 +782,22 @@ impl UiQueue {
     #[cfg(test)]
     pub fn window_closed(&self) -> bool {
         self.closed.load(Ordering::Relaxed)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Have the window's frame follow `theme` (`UiSignal::theme`). A queue
+    /// without a window (in tests) only remembers it.
+    pub fn window_theme(&self, theme: Theme) {
+        #[cfg(test)]
+        self.theme.lock().unwrap().replace(theme);
+        self.signal.theme(theme);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The theme the window was told since, taken (`window_theme`).
+    #[cfg(test)]
+    pub fn theme_told(&self) -> Option<Theme> {
+        self.theme.lock().unwrap().take()
     }
 
     // ------------------------------------------------------------------------

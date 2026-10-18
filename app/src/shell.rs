@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::app::Prefs;
 use crate::app::{App, Outbox, UiQueue, UiTask};
 use crate::close;
-use crate::config::{ConfigStore, WindowState};
+use crate::config::{ConfigStore, Theme, WindowState};
 use crate::sys::Owner;
 use crate::sys::UiSignal;
 use av_utils::error::Error;
@@ -57,6 +57,14 @@ impl Shell {
             owner: OnceCell::new(),
             modal: Cell::new(0),
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The theme to start with. `App` tells the window when another is picked
+    /// (`UiQueue::window_theme`).
+    pub fn theme(&self) -> Theme {
+        let config = self.config.borrow();
+        config.as_ref().map(ConfigStore::theme).unwrap_or_default()
     }
 
     // ------------------------------------------------------------------------

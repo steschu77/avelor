@@ -360,7 +360,7 @@ side never touches the vault side; `app` is the only bridge.
 | `accounts.rs` | both kinds of account: the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
 | `google/accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account; the auto-syncs' schedule, `SYNC_EVERY` and `AutoSyncs` |
 | `config/files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
-| `settings.rs` | what the Settings page sets: the language as `ready` tells it (`language`), `set_language`; its dispatch tests |
+| `settings.rs` | what the Settings page sets: the language as `ready` tells it (`language`), `set_language`, `set_theme`; its dispatch tests |
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai/context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file, within a budget; its tests |
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked entity; `create`, a new AI conversation (also the email analysis's chat); dispatch tests against a fake Ollama |
@@ -381,7 +381,7 @@ side never touches the vault side; `app` is the only bridge.
 | Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread, inside the task that woke it) |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
-| Theme | Windows' theme for apps (`AppsUseLightTheme`): the title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the web view's ground before the page paints (`SetDefaultBackgroundColor`), again on `WM_SETTINGCHANGE`; WebView2's `prefers-color-scheme` follows the same setting | `sys/win32/window.rs`, `sys/win32/webview.rs` | GTK's theme: the window's, and through it WebKitGTK's color scheme |
+| Theme | the one picked (`config.yaml` `theme`), else Windows' theme for apps (`AppsUseLightTheme`): the title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the web view's ground before the page paints (`SetDefaultBackgroundColor`), again on `WM_SETTINGCHANGE` and when another is picked (`UiSignal::theme`); WebView2's `prefers-color-scheme` follows Windows' setting | `sys/win32/window.rs`, `sys/win32/webview.rs` | GTK's theme: the window's, whatever is picked, and through it WebKitGTK's color scheme |
 | Language | the display languages (`GetUserPreferredUILanguages`); WebView2's `Language` | `sys/*.rs` (`languages`), `sys/*/webview.rs` | the languages GLib reads from the environment (`language_names`); the web context's preferred languages |
 | Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `gtk::UriLauncher` and `FileLauncher` (they use the XDG desktop portal where there is one) |
 | HTTP | WinHTTP; cancelling closes the handles | `av-http/src/win32.rs`, `linux.rs` | libsoup 3 (`soup3`): it comes with WebKitGTK as WinHTTP comes with Windows; a session per worker thread and timeout, since a libsoup session stays on the thread that made it; cancelled through a `gio::Cancellable` |
@@ -582,14 +582,15 @@ Conventions the page keeps:
 - **Layers** (the Recede design): the chrome sits on `--c-shade`, lists on
   `--c-paper`, the active content on `--c-card` with `--shadow-raise` /
   `--shadow-card`. New UI follows these layers.
-- **Two themes**: every color is a token, `light-dark()` holding its
-  light and its dark value and the system's theme picking one
-  (`color-scheme`); a rule never sets a color of its own, which fails the
-  build (`#build`). Text or an icon on an accent or danger fill takes
-  `--c-on-accent`, dark in both; the accent as a line of 2px or less (a
-  ring, a border) `--c-accent-line`, 3:1 on the grounds, and danger as
-  text, an icon or a thin line `--c-danger-ink`, 4.5:1; the pale accent
-  and danger stay for fills.
+- **Two themes**: every color is a token, `light-dark()` holding its light
+  and its dark value and the theme picking one (`color-scheme`): the
+  system's, or the one on the root (`data-theme`), which the page is loaded
+  with and Settings changes (`ui.md#settings`); a rule never sets a color of
+  its own, which fails the build (`#build`). Text or an icon on an accent or
+  danger fill takes `--c-on-accent`, dark in both; the accent as a line of
+  2px or less (a ring, a border) `--c-accent-line`, 3:1 on the grounds, and
+  danger as text, an icon or a thin line `--c-danger-ink`, 4.5:1; the pale
+  accent and danger stay for fills.
 - **Keyboard**: what is clicked is a `<button>`, or, when it holds
   controls of its own (a row with its buttons), `pressable`
   (`core/dom.js`): Tab reaches it, Enter or Space presses it. A control
@@ -636,7 +637,8 @@ The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
 
 - `config.yaml`: the vault of the last session (`vault`), the window's
   size and maximized state, the language the user picked (`language`,
-  `localization.md#language`), and the page's preferences (`prefs`,
+  `localization.md#language`) and the theme (`theme`: `light` or `dark`,
+  else the system's), and the page's preferences (`prefs`,
   `ui.md#preferences`);
 - the accounts' DPAPI secrets, `<id>.token` and `<id>.key`
   (`accounts.md#secrets`);

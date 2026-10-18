@@ -9,8 +9,10 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 use gtk::{gio, glib};
+use webkit6::prelude::WebViewExt;
 
 use crate::config::ConfigStore;
+use crate::page;
 use crate::shell::Shell;
 use av_utils::error::Result;
 
@@ -45,8 +47,9 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
         end_session_on_request(app, &window, &shell);
         let signal = UiSignal::new(&shell, &window);
         let owner = Owner::new(window.clone());
+        let theme = shell.theme();
         let prefs = shell.start(signal, owner, webview::outbox(&webview));
-        webview::load(&webview, &prefs);
+        webview.load_html(&page::html(&prefs, theme), None);
     });
     // GTK isn't handed the command line: it has no options of its own.
     app.run_with_args::<&str>(&[]);

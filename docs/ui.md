@@ -367,6 +367,8 @@ start says so in the row. Another vault opening leaves the page open.
     catalogs', each by its own name (`localization.md#language`); beside it
     the form of address ("du" or "Sie"), where the language has both. From
     the next start.
+  - **Theme**: System, Light or Dark, the page (`architecture.md#css`) and on
+    Windows the title bar (`architecture.md#platforms`).
 
 ## Preferences <a id="preferences"></a>
 
@@ -401,6 +403,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | A7 | Job progress | the `job` event → `renderJob` (`features/jobs.js`) | — | a card per job, removed 1.5 s after done (8 s with a summary) |
 | A8 | Stop a job | the card's Stop | `cancel_job` → the job's requests cancelled; it ends `stopped · …` | email fetch, calendar sync |
 | A9 | Language | Settings → the language or its form of address → `setLanguage` (`features/workspace/settings.js`) | `set_language {language, formal}` → `config.yaml` `language` | the row says what the next start shows (`localization.md#language`) |
+| A10 | Theme | Settings → System, Light, Dark → `setTheme` | `set_theme {theme}` → `config.yaml` `theme`, the title bar (`UiSignal::theme`) | the page in the theme (`data-theme`) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `<account>\nemail`, `<account>\ncalendar\n<id>` |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |

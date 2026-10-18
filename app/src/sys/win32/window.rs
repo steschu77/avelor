@@ -3,8 +3,8 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::app::Prefs;
-use crate::config::WindowState;
+use crate::config::{Theme, WindowState};
+use crate::page;
 use crate::shell::Shell;
 use crate::sys::win32::dialogs::Owner;
 use crate::sys::win32::webview;
@@ -27,6 +27,10 @@ use windows::core::{BOOL, HSTRING, PCWSTR, w};
 const WM_TASK: u32 = WM_USER + 1;
 /// The app's close, once the page is ready (`UiSignal::close`).
 const WM_CLOSE_NOW: u32 = WM_USER + 2;
+/// The theme the user picked (`UiSignal::theme`): `wparam` is its place in
+/// `THEMES`.
+const WM_THEME: u32 = WM_USER + 3;
+const THEMES: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
 const WINDOW_CLASS: PCWSTR = w!("Avelor");
 /// The clock's timer (`WM_TIMER`): `App::on_clock` once a minute.
 const TIMER_CLOCK: usize = 1;
@@ -58,22 +62,31 @@ impl UiSignal {
     // ------------------------------------------------------------------------
     /// Have the window run the queue (`WM_TASK`).
     pub fn wake(&self) {
-        self.post(WM_TASK);
+        self.post(WM_TASK, 0);
     }
 
     // ------------------------------------------------------------------------
     /// Have the window close (`WM_CLOSE_NOW`).
     pub fn close(&self) {
-        self.post(WM_CLOSE_NOW);
+        self.post(WM_CLOSE_NOW, 0);
     }
 
     // ------------------------------------------------------------------------
-    fn post(&self, msg: u32) {
+    /// Have the window follow `theme` (`WM_THEME`).
+    pub fn theme(&self, theme: Theme) {
+        if let Some(at) = THEMES.iter().position(|t| *t == theme) {
+            self.post(WM_THEME, at);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    fn post(&self, msg: u32, wparam: usize) {
         if self.hwnd == 0 {
             return;
         }
         unsafe {
-            let _ = PostMessageW(Some(HWND(self.hwnd as *mut _)), msg, WPARAM(0), LPARAM(0));
+            let hwnd = HWND(self.hwnd as *mut _);
+            let _ = PostMessageW(Some(hwnd), msg, WPARAM(wparam), LPARAM(0));
         }
     }
 }
@@ -92,6 +105,7 @@ pub struct WindowProc {
     /// Where the web view keeps its profile.
     webview_dir: PathBuf,
     shell: Shell,
+    theme: Cell<Theme>,
     maximized: Cell<bool>,
 }
 
@@ -128,12 +142,14 @@ impl WindowProc {
         unsafe { RegisterClassW(&wc) };
 
         let state = shell.window_state();
+        let theme = shell.theme();
 
         let window = Rc::new(WindowProc {
             hwnd: Cell::new(HWND::default()),
             controller: RefCell::new(None),
             webview_dir,
             shell,
+            theme: Cell::new(theme),
             maximized: Cell::new(state.maximized),
         });
 
@@ -188,27 +204,26 @@ impl WindowProc {
 
     // ------------------------------------------------------------------------
     /// The controller finished creating; store it and size it to the window.
-    /// The app starts, posting to the page in `webview`. Returns the page's
-    /// preferences, which the page is loaded with.
+    /// The app starts, posting to the page in `webview`. Returns the page.
     pub fn on_controller(
         &self,
         controller: ICoreWebView2Controller,
         webview: &ICoreWebView2,
-    ) -> Prefs {
+    ) -> String {
         unsafe {
             let mut rect = RECT::default();
             let _ = GetClientRect(self.hwnd(), &mut rect);
             let _ = controller.SetBounds(rect);
             let _ = controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
         }
-        webview::set_background(&controller, apps_dark());
+        webview::set_background(&controller, self.dark());
         let signal = UiSignal::new(self.hwnd());
         let owner = Owner::new(self.hwnd());
         let prefs = self
             .shell
             .start(signal, owner, webview::outbox(webview.clone()));
         self.controller.replace(Some(controller));
-        prefs
+        page::html(&prefs, self.theme.get())
     }
 
     // ------------------------------------------------------------------------
@@ -219,10 +234,9 @@ impl WindowProc {
 
     // ------------------------------------------------------------------------
     /// The title bar and the web view's ground before the page paints in
-    /// Windows' theme for apps, as the page's colors are (`prefers-color-scheme`,
-    /// which WebView2 takes from the same setting).
+    /// the theme, as the page's colors are.
     fn follow_theme(&self) {
-        let dark = BOOL::from(apps_dark());
+        let dark = BOOL::from(self.dark());
         let _ = unsafe {
             DwmSetWindowAttribute(
                 self.hwnd(),
@@ -234,6 +248,28 @@ impl WindowProc {
         if let Some(controller) = self.controller.borrow().as_ref() {
             webview::set_background(controller, dark.as_bool());
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether the theme is the dark one, by the user's pick or by Windows'
+    /// theme for apps (WebView2 takes `prefers-color-scheme` from the same
+    /// setting).
+    fn dark(&self) -> bool {
+        match self.theme.get() {
+            Theme::System => apps_dark(),
+            Theme::Light => false,
+            Theme::Dark => true,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The user picked the theme at `at` in `THEMES`.
+    fn on_theme(&self, at: usize) -> LRESULT {
+        if let Some(theme) = THEMES.get(at) {
+            self.theme.set(*theme);
+            self.follow_theme();
+        }
+        LRESULT(0)
     }
 
     // ------------------------------------------------------------------------
@@ -274,6 +310,7 @@ impl WindowProc {
             WM_DESTROY => self.on_destroy(),
             WM_CLOSE => self.on_close(),
             WM_CLOSE_NOW => self.on_close_now(),
+            WM_THEME => self.on_theme(wparam.0),
             WM_QUERYENDSESSION => self.on_query_end_session(lparam),
             WM_ENDSESSION => self.on_end_session(wparam.0 != 0),
             WM_SIZE => {
