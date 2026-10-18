@@ -237,7 +237,7 @@ replaces. A file another program holds open without
 delete sharing can't be replaced; that save fails visibly (its error in
 the status bar).
 
-### Limits
+### Limits <a id="limits"></a>
 
 - A change that keeps both the size and the modified time (FAT's 2-second
   resolution, tools that restore the time) isn't found.

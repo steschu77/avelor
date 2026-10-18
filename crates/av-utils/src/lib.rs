@@ -3,6 +3,7 @@ pub mod cancel;
 pub mod charsets;
 pub mod datetime;
 pub mod error;
+pub mod fnv;
 pub mod fs;
 pub mod id;
 pub mod logger;
