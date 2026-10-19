@@ -89,6 +89,8 @@ pub struct WindowProc {
     webview_dir: PathBuf,
     shell: Shell,
     maximized: Cell<bool>,
+    /// The placement before fullscreen, while the window is fullscreen.
+    fullscreen: Cell<Option<WINDOWPLACEMENT>>,
 }
 
 impl WindowProc {
@@ -131,6 +133,7 @@ impl WindowProc {
             webview_dir,
             shell,
             maximized: Cell::new(state.maximized),
+            fullscreen: Cell::new(None),
         });
 
         let hwnd = unsafe {
@@ -209,6 +212,69 @@ impl WindowProc {
     /// A message arrived from the page's JS via `window.host.post`.
     pub fn on_web_message(&self, message: String) {
         self.shell.on_web_message(message);
+    }
+
+    // ------------------------------------------------------------------------
+    /// F11: the window fills its monitor without a frame, or goes back to
+    /// its placement from before (Raymond Chen, "How do I switch a window
+    /// between normal and fullscreen?"). A maximized window stays maximized
+    /// underneath, so it comes back maximized.
+    pub fn toggle_fullscreen(&self) {
+        let hwnd = self.hwnd();
+        let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) };
+        let frame = WS_OVERLAPPEDWINDOW.0 as isize;
+        if let Some(placement) = self.fullscreen.take() {
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, style | frame);
+                let _ = SetWindowPlacement(hwnd, &placement);
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
+                );
+            }
+            return;
+        }
+
+        let mut placement = WINDOWPLACEMENT {
+            length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+            ..Default::default()
+        };
+        let mut monitor = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        unsafe {
+            if GetWindowPlacement(hwnd, &mut placement).is_err()
+                || !GetMonitorInfoW(
+                    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                    &mut monitor,
+                )
+                .as_bool()
+            {
+                return;
+            }
+        }
+        // Set before the window changes: its `WM_SIZE` must not save the
+        // monitor as the window's size.
+        self.fullscreen.set(Some(placement));
+        let rect = monitor.rcMonitor;
+        unsafe {
+            SetWindowLongPtrW(hwnd, GWL_STYLE, style & !frame);
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOP),
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
+            );
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -409,8 +475,12 @@ impl WindowProc {
 
     /// Hand the window state to the shell, which persists it. The size is
     /// the restored (non-maximized) one from the window placement, so
-    /// maximizing never overwrites it.
+    /// maximizing never overwrites it. Fullscreen isn't kept: the window
+    /// starts as it was before.
     fn save_window_state(&self) {
+        if self.fullscreen.get().is_some() {
+            return;
+        }
         let mut placement = WINDOWPLACEMENT {
             length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
             ..Default::default()

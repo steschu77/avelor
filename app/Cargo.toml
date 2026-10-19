@@ -18,7 +18,7 @@ hide-google = ["av-google/hide-google"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 webview2-com = { workspace = true }
-windows = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_UI_Shell", "Win32_System_LibraryLoader", "Win32_Graphics_Imaging", "Win32_System_Com_StructuredStorage", "Win32_System_Variant"] }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_UI_Shell", "Win32_System_LibraryLoader", "Win32_Graphics_Imaging", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Input_KeyboardAndMouse"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 glib = { workspace = true, features = ["v2_72"] }

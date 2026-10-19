@@ -1,9 +1,8 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::rc::Weak;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
-use gtk::glib;
 use gtk::prelude::*;
+use gtk::{gdk, glib};
 use webkit6::prelude::WebViewExt;
 
 use crate::config::WindowState;
@@ -126,6 +125,33 @@ pub fn create(
         }
     });
 
+    // F11 enters and leaves fullscreen, as in a browser: the window takes it
+    // in the capture phase, before the web view. GTK has no repeat flag; a
+    // held key's repeats come before its release.
+    let keys = gtk::EventControllerKey::new();
+    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let held = Rc::new(Cell::new(false));
+    let pressing = Rc::clone(&held);
+    let fullscreening = Rc::clone(shell);
+    keys.connect_key_pressed(move |keys, key, _, _| {
+        if key != gdk::Key::F11 {
+            return glib::Propagation::Proceed;
+        }
+        let window = keys.widget().and_downcast::<gtk::ApplicationWindow>();
+        if let Some(window) = window
+            && !pressing.replace(true)
+        {
+            toggle_fullscreen(&window, &fullscreening);
+        }
+        glib::Propagation::Stop
+    });
+    keys.connect_key_released(move |_, key, _, _| {
+        if key == gdk::Key::F11 {
+            held.set(false);
+        }
+    });
+    window.add_controller(keys);
+
     // The clock: what the app does on its own (mail auto-sync).
     let ticking = Rc::clone(shell);
     glib::timeout_add_seconds_local(CLOCK_SECONDS, move || {
@@ -138,9 +164,25 @@ pub fn create(
 }
 
 // ----------------------------------------------------------------------------
+/// F11: fullscreen, or back. Fullscreen isn't kept, so the state from
+/// before is saved first: GTK saves the size only on close.
+fn toggle_fullscreen(window: &gtk::ApplicationWindow, shell: &Shell) {
+    if window.is_fullscreen() {
+        window.unfullscreen();
+    } else {
+        save_window_state(window, shell);
+        window.fullscreen();
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// Hand the window state to the shell, which persists it. The size is the
-/// restored (non-maximized) one: GTK keeps it as the default size.
+/// restored (non-maximized) one: GTK keeps it as the default size. Never
+/// while fullscreen: the window starts as it was before.
 pub fn save_window_state(window: &gtk::ApplicationWindow, shell: &Shell) {
+    if window.is_fullscreen() {
+        return;
+    }
     let (width, height) = window.default_size();
     let state = WindowState {
         width,

@@ -8,17 +8,19 @@ use crate::app::Prefs;
 use crate::page;
 use crate::sys::win32::window::WindowProc;
 use webview2_com::{
-    CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
+    AcceleratorKeyPressedEventHandler, CreateCoreWebView2ControllerCompletedHandler,
+    CreateCoreWebView2EnvironmentCompletedHandler,
     Microsoft::Web::WebView2::Win32::{
-        CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2, ICoreWebView2Controller,
-        ICoreWebView2Environment, ICoreWebView2Settings3,
+        COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
+        COREWEBVIEW2_PHYSICAL_KEY_STATUS, CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2,
+        ICoreWebView2Controller, ICoreWebView2Environment, ICoreWebView2Settings3,
     },
 };
 use webview2_com::{WebMessageReceivedEventHandler, take_pwstr};
 use windows::Win32::Foundation::{E_POINTER, HWND};
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
-use windows::core::PWSTR;
-use windows::core::{Error, HSTRING, Interface, PCWSTR, Result};
+use windows::Win32::UI::Input::KeyboardAndMouse::VK_F11;
+use windows::core::{Error, HSTRING, Interface, PCWSTR, PWSTR, Result};
 
 // ----------------------------------------------------------------------------
 /// The page's bridge to the host (`architecture.md#platforms`): WebView2's
@@ -75,7 +77,36 @@ fn on_controller_created(hwnd: HWND, controller: ICoreWebView2Controller) -> Res
     WindowProc::with_window(hwnd, |window| {
         prefs = window.on_controller(controller.clone(), &webview)
     });
+    take_f11(hwnd, &controller)?;
     setup(hwnd, &webview, &prefs)
+}
+
+// ----------------------------------------------------------------------------
+/// F11 goes to the window, never to the page: fullscreen, as in a browser
+/// (`WindowProc::toggle_fullscreen`). A held key's repeats are left out.
+fn take_f11(hwnd: HWND, controller: &ICoreWebView2Controller) -> Result<()> {
+    let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_sender, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
+        let mut key = 0;
+        let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
+        unsafe {
+            args.KeyEventKind(&mut kind)?;
+            args.VirtualKey(&mut key)?;
+            args.PhysicalKeyStatus(&mut status)?;
+        }
+        if kind == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && key == u32::from(VK_F11.0) {
+            unsafe { args.SetHandled(true)? };
+            if !status.WasKeyDown.as_bool() {
+                WindowProc::with_window(hwnd, WindowProc::toggle_fullscreen);
+            }
+        }
+        Ok(())
+    }));
+    let mut token: i64 = 0;
+    unsafe { controller.add_AcceleratorKeyPressed(&handler, &mut token) }
 }
 
 // ----------------------------------------------------------------------------
