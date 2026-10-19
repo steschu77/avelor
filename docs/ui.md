@@ -278,6 +278,14 @@ What a key, a menu or a button starts is a registered action
 The host switches off the browser's accelerator keys so they reach the page
 (`sys/win32/webview.rs`).
 
+**F11** enters and leaves fullscreen, as in a browser: the host takes it
+before the page, and a held key's repeats are left out. Fullscreen isn't
+kept: the next start opens the window as it was before.
+
+**Ctrl+Plus**, **Ctrl+Minus** and **Ctrl+0** zoom the page in, out and back
+to 100%, in a browser's steps; so do Ctrl+wheel and a pinch. The host takes
+the keys before the page: the browser's own went with its accelerator keys.
+
 ## New
 
 The New item, the "+" of "Created Here" and Ctrl+N open a menu of types
