@@ -418,6 +418,8 @@ side never touches the vault side; `app` is the only bridge.
 |---|---|---|---|
 | Folders | `%LOCALAPPDATA%\Avelor` (known folder): config, log, WebView2 profile | `sys/*/paths.rs` | `$XDG_CONFIG_HOME/avelor` for the config; `$XDG_STATE_HOME/avelor/log`; `$XDG_DATA_HOME/avelor/webkit` and the cache folder for the web view |
 | Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread, inside the task that woke it) |
+| Fullscreen | F11 from the controller's `AcceleratorKeyPressed`; the frame removed and the monitor filled, the placement from before restored | `sys/*/window.rs`, `sys/win32/webview.rs` | F11 from an `EventControllerKey` in the capture phase, ahead of the web view; `fullscreen()`, `unfullscreen()` |
+| Zoom | Ctrl+Plus, Ctrl+Minus and Ctrl+0 from the controller's `AcceleratorKeyPressed`, `SetZoomFactor`; Ctrl+wheel and a pinch are WebView2's own (`SetIsZoomControlEnabled`) | `sys.rs` (`Zoom`: Chromium's levels), `sys/linux/window.rs`, `sys/win32/webview.rs` | the keys from F11's `EventControllerKey`, Ctrl+wheel from an `EventControllerScroll`, both in the capture phase, ahead of the web view; `set_zoom_level`; a pinch is WebKitGTK's own |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
 | Language | the display languages (`GetUserPreferredUILanguages`); WebView2's `Language` | `sys/*.rs` (`languages`), `sys/*/webview.rs` | the languages GLib reads from the environment (`language_names`); the web context's preferred languages |
@@ -465,7 +467,7 @@ so the subtle part is written once:
 | Close | `WM_CLOSE` | `close-request` |
 | Activation | `WM_ACTIVATE` | `notify::is-active` |
 | Clock | `WM_TIMER` | `timeout_add_seconds_local(60)` |
-| Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
+| Window state | `WM_EXITSIZEMOVE`, a change of maximized; never while fullscreen | `notify::maximized`; the size on close (GTK4 has no window position); before fullscreen, never during it |
 
 **The page's bridge.** `page.rs` builds the page for both platforms:
 the bundle, the preferences and texts blocks and the platform's

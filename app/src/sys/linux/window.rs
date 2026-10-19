@@ -1,13 +1,13 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::rc::Weak;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
-use gtk::glib;
 use gtk::prelude::*;
+use gtk::{gdk, glib};
 use webkit6::prelude::WebViewExt;
 
 use crate::config::WindowState;
 use crate::shell::{Shell, TITLE};
+use crate::sys::Zoom;
 
 /// The clock's period: `App::on_clock` once a minute.
 const CLOCK_SECONDS: u32 = 60;
@@ -126,6 +126,58 @@ pub fn create(
         }
     });
 
+    // F11 enters and leaves fullscreen, as in a browser, and the zoom keys
+    // zoom the page (`zoom_key`): the window takes them in the capture phase,
+    // before the web view. GTK has no repeat flag; a held F11's repeats come
+    // before its release.
+    let keys = gtk::EventControllerKey::new();
+    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let held = Rc::new(Cell::new(false));
+    let pressing = Rc::clone(&held);
+    let fullscreening = Rc::clone(shell);
+    let zooming = webview.clone();
+    keys.connect_key_pressed(move |keys, key, _, state| {
+        if let Some(zoom) = zoom_key(key, state) {
+            zooming.set_zoom_level(zoom.level_after(zooming.zoom_level()));
+            return glib::Propagation::Stop;
+        }
+        if key != gdk::Key::F11 {
+            return glib::Propagation::Proceed;
+        }
+        let window = keys.widget().and_downcast::<gtk::ApplicationWindow>();
+        if let Some(window) = window
+            && !pressing.replace(true)
+        {
+            toggle_fullscreen(&window, &fullscreening);
+        }
+        glib::Propagation::Stop
+    });
+    keys.connect_key_released(move |_, key, _, _| {
+        if key == gdk::Key::F11 {
+            held.set(false);
+        }
+    });
+    window.add_controller(keys);
+
+    // Ctrl+wheel zooms the page, as WebView2 does: the window takes it before
+    // the web view, which would scroll. A touchpad's small deltas add up to
+    // whole steps; its pinch is WebKitGTK's own.
+    let wheel = gtk::EventControllerScroll::new(
+        gtk::EventControllerScrollFlags::VERTICAL | gtk::EventControllerScrollFlags::DISCRETE,
+    );
+    wheel.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let zooming = webview.clone();
+    wheel.connect_scroll(move |wheel, _, dy| {
+        let state = wheel.current_event_state();
+        if !state.contains(gdk::ModifierType::CONTROL_MASK) {
+            return glib::Propagation::Proceed;
+        }
+        let zoom = if dy < 0.0 { Zoom::In } else { Zoom::Out };
+        zooming.set_zoom_level(zoom.level_after(zooming.zoom_level()));
+        glib::Propagation::Stop
+    });
+    window.add_controller(wheel);
+
     // The clock: what the app does on its own (email auto-sync).
     let ticking = Rc::clone(shell);
     glib::timeout_add_seconds_local(CLOCK_SECONDS, move || {
@@ -138,9 +190,43 @@ pub fn create(
 }
 
 // ----------------------------------------------------------------------------
+/// F11: fullscreen, or back. Fullscreen isn't kept, so the state from
+/// before is saved first: GTK saves the size only on close.
+fn toggle_fullscreen(window: &gtk::ApplicationWindow, shell: &Shell) {
+    if window.is_fullscreen() {
+        window.unfullscreen();
+    } else {
+        save_window_state(window, shell);
+        window.fullscreen();
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The zoom of `key` with Ctrl, as on Windows: Plus (or `=`, on its key on
+/// a US keyboard), Minus or 0, on the main keys or the number pad; not with
+/// Alt.
+fn zoom_key(key: gdk::Key, state: gdk::ModifierType) -> Option<Zoom> {
+    if !state.contains(gdk::ModifierType::CONTROL_MASK)
+        || state.contains(gdk::ModifierType::ALT_MASK)
+    {
+        return None;
+    }
+    match key {
+        gdk::Key::plus | gdk::Key::equal | gdk::Key::KP_Add => Some(Zoom::In),
+        gdk::Key::minus | gdk::Key::underscore | gdk::Key::KP_Subtract => Some(Zoom::Out),
+        gdk::Key::_0 | gdk::Key::KP_0 => Some(Zoom::Reset),
+        _ => None,
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// Hand the window state to the shell, which persists it. The size is the
-/// restored (non-maximized) one: GTK keeps it as the default size.
+/// restored (non-maximized) one: GTK keeps it as the default size. Never
+/// while fullscreen: the window starts as it was before.
 pub fn save_window_state(window: &gtk::ApplicationWindow, shell: &Shell) {
+    if window.is_fullscreen() {
+        return;
+    }
     let (width, height) = window.default_size();
     let state = WindowState {
         width,
