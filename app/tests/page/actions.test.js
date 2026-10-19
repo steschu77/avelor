@@ -15,7 +15,7 @@ test("a shortcut's keys as the run's language names them", () => {
 });
 
 test('the keys told by a sign', () => {
-  equal(shortcutKeys('Ctrl+Up+Left'), ['key.ctrl', '\u2191', '\u2190']);
+  equal(shortcutKeys('Ctrl+Plus+Minus+Up+Left'), ['key.ctrl', '+', '\u2212', '\u2191', '\u2190']);
 });
 
 test('an action runs while it applies, with what its caller gives', () => {

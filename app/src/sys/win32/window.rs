@@ -8,6 +8,7 @@ use crate::page;
 use crate::shell::Shell;
 use crate::sys::win32::dialogs::Owner;
 use crate::sys::win32::webview;
+use crate::sys::{WindowStep, Zoom};
 use av_utils::error::{Error, Result};
 use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
 use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -27,9 +28,18 @@ use windows::core::{BOOL, HSTRING, PCWSTR, w};
 const WM_TASK: u32 = WM_USER + 1;
 /// The app's close, once the page is ready (`UiSignal::close`).
 const WM_CLOSE_NOW: u32 = WM_USER + 2;
+/// The page's zoom or fullscreen (`UiSignal::step`): `wparam` is its place in
+/// `STEPS`.
+const WM_STEP: u32 = WM_USER + 3;
+const STEPS: [WindowStep; 4] = [
+    WindowStep::ZoomIn,
+    WindowStep::ZoomOut,
+    WindowStep::ZoomReset,
+    WindowStep::Fullscreen,
+];
 /// The theme the user picked (`UiSignal::theme`): `wparam` is its place in
 /// `THEMES`.
-const WM_THEME: u32 = WM_USER + 3;
+const WM_THEME: u32 = WM_USER + 4;
 const THEMES: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
 const WINDOW_CLASS: PCWSTR = w!("Avelor");
 /// The clock's timer (`WM_TIMER`): `App::on_clock` once a minute.
@@ -72,6 +82,14 @@ impl UiSignal {
     }
 
     // ------------------------------------------------------------------------
+    /// Have the window do `step` (`WM_STEP`).
+    pub fn step(&self, step: WindowStep) {
+        if let Some(at) = STEPS.iter().position(|s| *s == step) {
+            self.post(WM_STEP, at);
+        }
+    }
+
+    // ------------------------------------------------------------------------
     /// Have the window follow `theme` (`WM_THEME`).
     pub fn theme(&self, theme: Theme) {
         if let Some(at) = THEMES.iter().position(|t| *t == theme) {
@@ -107,6 +125,8 @@ pub struct WindowProc {
     shell: Shell,
     theme: Cell<Theme>,
     maximized: Cell<bool>,
+    /// The placement before fullscreen, while the window is fullscreen.
+    fullscreen: Cell<Option<WINDOWPLACEMENT>>,
 }
 
 impl WindowProc {
@@ -151,6 +171,7 @@ impl WindowProc {
             shell,
             theme: Cell::new(theme),
             maximized: Cell::new(state.maximized),
+            fullscreen: Cell::new(None),
         });
 
         let hwnd = unsafe {
@@ -233,6 +254,90 @@ impl WindowProc {
     }
 
     // ------------------------------------------------------------------------
+    /// The page's zoom or fullscreen: the step at `at` in `STEPS`.
+    fn on_step(&self, at: usize) -> LRESULT {
+        match STEPS.get(at).map(|step| step.zoom()) {
+            Some(Some(zoom)) => self.zoom(zoom),
+            Some(None) => self.toggle_fullscreen(),
+            None => {}
+        }
+        LRESULT(0)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Zoom the page a step.
+    pub fn zoom(&self, zoom: Zoom) {
+        if let Some(controller) = self.controller.borrow().as_ref()
+            && let Err(e) = webview::zoom(controller, zoom)
+        {
+            log::warn!("The page could not be zoomed: {e}");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// F11: the window fills its monitor without a frame, or goes back to
+    /// its placement from before (Raymond Chen, "How do I switch a window
+    /// between normal and fullscreen?"). A maximized window stays maximized
+    /// underneath, so it comes back maximized.
+    pub fn toggle_fullscreen(&self) {
+        let hwnd = self.hwnd();
+        let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) };
+        let frame = WS_OVERLAPPEDWINDOW.0 as isize;
+        if let Some(placement) = self.fullscreen.take() {
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, style | frame);
+                let _ = SetWindowPlacement(hwnd, &placement);
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
+                );
+            }
+            return;
+        }
+
+        let mut placement = WINDOWPLACEMENT {
+            length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+            ..Default::default()
+        };
+        let mut monitor = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        unsafe {
+            if GetWindowPlacement(hwnd, &mut placement).is_err()
+                || !GetMonitorInfoW(
+                    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                    &mut monitor,
+                )
+                .as_bool()
+            {
+                return;
+            }
+        }
+        // Set before the window changes: its `WM_SIZE` must not save the
+        // monitor as the window's size.
+        self.fullscreen.set(Some(placement));
+        let rect = monitor.rcMonitor;
+        unsafe {
+            SetWindowLongPtrW(hwnd, GWL_STYLE, style & !frame);
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOP),
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------------
     /// The title bar and the web view's ground before the page paints in
     /// the theme, as the page's colors are.
     fn follow_theme(&self) {
@@ -310,6 +415,7 @@ impl WindowProc {
             WM_DESTROY => self.on_destroy(),
             WM_CLOSE => self.on_close(),
             WM_CLOSE_NOW => self.on_close_now(),
+            WM_STEP => self.on_step(wparam.0),
             WM_THEME => self.on_theme(wparam.0),
             WM_QUERYENDSESSION => self.on_query_end_session(lparam),
             WM_ENDSESSION => self.on_end_session(wparam.0 != 0),
@@ -480,8 +586,12 @@ impl WindowProc {
 
     /// Hand the window state to the shell, which persists it. The size is
     /// the restored (non-maximized) one from the window placement, so
-    /// maximizing never overwrites it.
+    /// maximizing never overwrites it. Fullscreen isn't kept: the window
+    /// starts as it was before.
     fn save_window_state(&self) {
+        if self.fullscreen.get().is_some() {
+            return;
+        }
         let mut placement = WINDOWPLACEMENT {
             length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
             ..Default::default()

@@ -24,6 +24,7 @@ use crate::protocol::{self, Req};
 use crate::scans::ScanState;
 use crate::sys::Owner;
 use crate::sys::UiSignal;
+use crate::sys::WindowStep;
 use crate::texts::Text;
 use crate::undo::History;
 use crate::vault_settings::VaultSettings;
@@ -756,6 +757,9 @@ pub struct UiQueue {
     tasks: Mutex<VecDeque<UiTask>>,
     /// Whether `close_window` was called; what a test can look at.
     closed: AtomicBool,
+    /// What the window was asked (`window_step`).
+    #[cfg(test)]
+    steps: Mutex<Vec<WindowStep>>,
     /// The theme the window was told last (`window_theme`).
     #[cfg(test)]
     theme: Mutex<Option<Theme>>,
@@ -769,6 +773,8 @@ impl UiQueue {
             signal,
             tasks: Mutex::new(VecDeque::new()),
             closed: AtomicBool::new(false),
+            #[cfg(test)]
+            steps: Mutex::default(),
             #[cfg(test)]
             theme: Mutex::default(),
         }
@@ -788,6 +794,22 @@ impl UiQueue {
     #[cfg(test)]
     pub fn window_closed(&self) -> bool {
         self.closed.load(Ordering::Relaxed)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Have the window do `step` (`UiSignal::step`), a zoom or fullscreen. A
+    /// queue without a window (in tests) only remembers it.
+    pub fn window_step(&self, step: WindowStep) {
+        #[cfg(test)]
+        self.steps.lock().unwrap().push(step);
+        self.signal.step(step);
+    }
+
+    // ------------------------------------------------------------------------
+    /// What the window was asked since, taken (`window_step`).
+    #[cfg(test)]
+    pub fn window_steps(&self) -> Vec<WindowStep> {
+        std::mem::take(&mut *self.steps.lock().unwrap())
     }
 
     // ------------------------------------------------------------------------

@@ -17,6 +17,7 @@ use crate::google::accounts::{CalendarSource, Level};
 use crate::scans;
 use crate::settings;
 use crate::structure;
+use crate::sys::WindowStep;
 use crate::texts::Text;
 use crate::trash;
 use crate::undo;
@@ -64,6 +65,8 @@ enum Command {
     /// The vault's own settings (`vault_settings`).
     SetVaultSettings(vault_settings::SettingsChange),
     RevealVault,
+    /// The window's zoom or fullscreen (`api::window`).
+    Window(Step),
     /// Open a web, email or phone link in its default app.
     OpenUrl(Url),
     /// Stop the job `id` (`jobs::cancel_job`).
@@ -155,6 +158,12 @@ struct PagePrefs {
 #[derive(Deserialize)]
 struct Url {
     url: String,
+}
+
+/// `{step}`
+#[derive(Deserialize)]
+struct Step {
+    step: WindowStep,
 }
 
 /// `{id}`: the entity or job the command is about.
@@ -322,6 +331,7 @@ impl Command {
             "set_theme" => Command::SetTheme(from_value(args)?),
             "set_vault_settings" => Command::SetVaultSettings(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
+            "window" => Command::Window(from_value(args)?),
             "open_url" => Command::OpenUrl(from_value(args)?),
             "cancel_job" => Command::CancelJob(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
@@ -416,6 +426,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetTheme(a) => settings::set_theme(app, req, a),
         Command::SetVaultSettings(a) => vault_settings::set_vault_settings(app, req, a),
         Command::RevealVault => api::reveal_vault(app, req),
+        Command::Window(a) => api::window(app, req, a.step),
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::CancelJob(a) => jobs::cancel_job(app, req, a.id),
         Command::CloseReady(a) => close::close_ready(app, req, a),

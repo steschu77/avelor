@@ -37,6 +37,7 @@ import './features/new.js';
 import './features/linked.js';
 import './features/undo.js';
 import './features/layout.js';
+import './features/window.js';
 import { scheduleRenderSidebar } from './features/sidebar.js';
 import { initDocumentsLens } from './features/lenses/documents.js';
 import { revealInDocuments } from './features/lenses/documents.js';

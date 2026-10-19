@@ -10,20 +10,20 @@
 import { typing } from './dom.js';
 import { t } from './text.js';
 
-const actions = []; // { id, title, shortcut, outsideFields, when, run, group, place, icon, also, page, end, archived }, in registration order
+const actions = []; // { id, title, shortcut, outsideFields, host, when, run, group, place, icon, also, page, end, archived }, in registration order
 const sources = []; // functions, each giving the actions of what the vault has
 
 // `shortcut`: the key with its modifiers, like 'Ctrl+N', 'Ctrl+Enter' or
 // 'Escape' (see `shortcutOf`), or several that do the same;
 // `outsideFields`: the key is a field's or an editor's own while one has
-// the focus; `when()`: whether the action applies now (always, if not
-// given). `group`: where Go to lists it (features/palette.js), by its
-// `title`, a text or a function giving it as it is now, with its `icon`;
-// `also`: other words it is found by, with commas between; `page`: it opens
-// a page. `place`: it goes to a place Go to finds by name, a lens, a page, a
-// project, a source; `end()`: what stands at its row's end then; `archived`:
-// a place after the others. Without a group or a place only a key or a caller
-// runs it.
+// the focus; `host`: the host takes the key, before the page; `when()`:
+// whether the action applies now (always, if not given). `group`: where Go
+// to lists it (features/palette.js), by its `title`, a text or a function
+// giving it as it is now, with its `icon`; `also`: other words it is found
+// by, with commas between; `page`: it opens a page. `place`: it goes to a
+// place Go to finds by name, a lens, a page, a project, a source; `end()`:
+// what stands at its row's end then; `archived`: a place after the others.
+// Without a group or a place only a key or a caller runs it.
 export function registerAction(action) {
   actions.push(action);
 }
@@ -83,7 +83,8 @@ export function shortcutOf(e) {
 // text: "Ctrl+Enter".
 const KEY_NAMES = {
   Ctrl: t('key.ctrl'), Shift: t('key.shift'), Enter: t('key.enter'), Escape: t('key.esc'), Tab: t('key.tab'),
-  Space: t('key.space'), Backspace: t('key.backspace'), Up: '\u2191', Down: '\u2193', Left: '\u2190', Right: '\u2192',
+  Space: t('key.space'), Backspace: t('key.backspace'), Plus: '+', Minus: '\u2212', Up: '\u2191', Down: '\u2193',
+  Left: '\u2190', Right: '\u2192',
 };
 export function shortcutKeys(shortcut) {
   return shortcut.split('+').map(key => KEY_NAMES[key] ?? key);
@@ -101,7 +102,7 @@ export function shortcutHint(id) {
 document.addEventListener('keydown', e => {
   if (e.defaultPrevented || e.isComposing || document.querySelector('dialog[open]')) return;
   const shortcut = shortcutOf(e);
-  const action = actions.find(a => shortcutsOf(a).includes(shortcut) && !(a.outsideFields && typing())
+  const action = actions.find(a => !a.host && shortcutsOf(a).includes(shortcut) && !(a.outsideFields && typing())
     && applies(a));
   if (!action) return;
   e.preventDefault();

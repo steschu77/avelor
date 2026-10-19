@@ -12,7 +12,7 @@ use crate::documents;
 use crate::email;
 use crate::protocol::Req;
 use crate::settings;
-use crate::sys;
+use crate::sys::{self, WindowStep};
 use crate::texts::{self, Text};
 use crate::vault_settings;
 use crate::watches;
@@ -120,6 +120,14 @@ pub fn reveal_vault(app: &mut App, req: Req) {
             }
         },
     );
+}
+
+// ----------------------------------------------------------------------------
+/// `window {step}`: what the host's own keys do, asked by the page: the page
+/// zoomed in, out or back to 100%, or fullscreen and back. Answers `null`.
+pub fn window(app: &mut App, req: Req, step: WindowStep) {
+    app.ui().window_step(step);
+    req.ok(());
 }
 
 // ----------------------------------------------------------------------------
@@ -258,6 +266,27 @@ mod tests {
         let at = |m: &Value| sent.iter().position(|s| s == m).unwrap();
         assert!(at(vault[0]) < at(failed) && at(failed) < at(vault[1]));
         assert_eq!(events(&sent, "entity").len(), 1);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_page_zooms_and_goes_fullscreen() {
+        let mut h = Harness::new("window-step");
+        for step in ["zoom_in", "zoom_out", "zoom_reset", "fullscreen"] {
+            let sent = h.call("window", json!({ "step": step }));
+            assert_eq!(sent, [json!({ "re": 1, "ok": null })], "{step}");
+        }
+        let steps = [
+            WindowStep::ZoomIn,
+            WindowStep::ZoomOut,
+            WindowStep::ZoomReset,
+            WindowStep::Fullscreen,
+        ];
+        assert_eq!(h.ui.window_steps(), steps);
+
+        let sent = h.call("window", json!({ "step": "close" }));
+        assert_eq!(sent[0]["err"]["code"], "bad_request");
+        assert!(h.ui.window_steps().is_empty());
     }
 
     // ------------------------------------------------------------------------

@@ -424,6 +424,8 @@ side never touches the vault side; `app` is the only bridge.
 |---|---|---|---|
 | Folders | `%LOCALAPPDATA%\Avelor` (known folder): config, log, WebView2 profile | `sys/*/paths.rs` | `$XDG_CONFIG_HOME/avelor` for the config; `$XDG_STATE_HOME/avelor/log`; `$XDG_DATA_HOME/avelor/webkit` and the cache folder for the web view |
 | Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread, inside the task that woke it) |
+| Fullscreen | F11 from the controller's `AcceleratorKeyPressed`, or the page's `window`; the frame removed and the monitor filled, the placement from before restored | `sys/*/window.rs`, `sys/win32/webview.rs` | F11 from an `EventControllerKey` in the capture phase, ahead of the web view; `fullscreen()`, `unfullscreen()` |
+| Zoom | Ctrl+Plus, Ctrl+Minus and Ctrl+0 from the controller's `AcceleratorKeyPressed`, or the page's `window`, `SetZoomFactor`; Ctrl+wheel and a pinch are WebView2's own (`SetIsZoomControlEnabled`) | `sys.rs` (`Zoom`: Chromium's levels), `sys/linux/window.rs`, `sys/win32/webview.rs` | the keys from F11's `EventControllerKey`, Ctrl+wheel from an `EventControllerScroll`, both in the capture phase, ahead of the web view; `set_zoom_level`; a pinch is WebKitGTK's own |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
 | Theme | the one picked (`config.yaml` `theme`), else Windows' theme for apps (`AppsUseLightTheme`): the title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the web view's ground before the page paints (`SetDefaultBackgroundColor`), again on `WM_SETTINGCHANGE` and when another is picked (`UiSignal::theme`); WebView2's `prefers-color-scheme` follows Windows' setting | `sys/win32/window.rs`, `sys/win32/webview.rs` | GTK's theme: the window's, whatever is picked, and through it WebKitGTK's color scheme |
@@ -445,7 +447,8 @@ the only `cfg(target_os)` in `app/src`:
 - `paths()`: the config, log and web view folders.
 - `run(paths, config)`: the window, the web view and the main loop;
   returns once the window is gone.
-- `UiSignal` (`Send + Sync`): `wake()` and `close()`. `UiQueue` holds one instead of an
+- `UiSignal` (`Send + Sync`): `wake()`, `close()` and `step()`, the page's zoom
+  or fullscreen (`WindowStep`). `UiQueue` holds one instead of an
   `HWND`; tests use `UiSignal::none()`.
 - `Owner`: what a `UiTask::Modal` gets instead of an `HWND`.
   `pick_folder(&Owner, title)` waits in the platform's modal loop
@@ -472,7 +475,7 @@ so the subtle part is written once:
 | Close | `WM_CLOSE` | `close-request` |
 | Activation | `WM_ACTIVATE` | `notify::is-active` |
 | Clock | `WM_TIMER` | `timeout_add_seconds_local(60)` |
-| Window state | `WM_EXITSIZEMOVE`, a change of maximized | `notify::maximized`; the size on close (GTK4 has no window position) |
+| Window state | `WM_EXITSIZEMOVE`, a change of maximized; never while fullscreen | `notify::maximized`; the size on close (GTK4 has no window position); before fullscreen, never during it |
 
 **The page's bridge.** `page.rs` builds the page for both platforms:
 the bundle, the preferences and texts blocks and the platform's
@@ -528,6 +531,7 @@ nothing imports `app.js`.
 | `features/palette.js` | Go to (`ui.md#go-to`): the dialog; the hints naming a key |
 | `features/palette-found.js` | what Go to finds: the places, the commands and the keys, as blocks of rows |
 | `features/keys.js` | the keys that are no command, by where they work (Go to's Keys) |
+| `features/window.js` | the page's zoom and full screen as commands |
 | `features/undo.js` | Ctrl+Z and Ctrl+Y as the actions `undo` and `redo` |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |
 | `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
@@ -579,17 +583,18 @@ an account's email labels (`features/import/email.js`).
 ### Actions <a id="actions"></a>
 
 What a key, a menu, a button or Go to (`ui.md#go-to`) starts is registered
-once (`registerAction({id, title, shortcut, outsideFields, when, run, group,
-place, icon, also, page, end, archived})`, `runAction(id, …args)`,
+once (`registerAction({id, title, shortcut, outsideFields, host, when, run,
+group, place, icon, also, page, end, archived})`, `runAction(id, …args)`,
 `core/actions.js`). One `keydown` handler runs the first action with the
 key's shortcut, or one of its shortcuts, whose `when` holds; a key something
 else already handled (`defaultPrevented`, Ctrl+I as italic in an editor) is
 left alone, so is one of an action `outsideFields` while a field or an
-editor has the focus, and none acts behind an open dialog. An action with a
-`group` is a command Go to lists by its `title`, found by `also` too, while
-its `when` holds; one with a `place` is a place it goes to, with `end()` at
-its row's end. Its list of keys has the commands with a shortcut, those that
-don't apply now too. The commands and places of what the vault has come from
+editor has the focus, none acts behind an open dialog, and one of a `host`
+action is only shown: the host takes it. An action with a `group` is a
+command Go to lists by its `title`, found by `also` too, while its `when`
+holds; one with a `place` is a place it goes to, with `end()` at its row's
+end. Its list of keys has the commands with a shortcut, those that don't
+apply now too. The commands and places of what the vault has come from
 functions asked each time it opens (`registerActions(list)`), a source's
 import or sync, a project, a source. A global command is registered beside
 what it runs. The pages of the expanded vault area register what Esc and
