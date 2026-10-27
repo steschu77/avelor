@@ -35,6 +35,12 @@ impl Paths {
     pub fn log_dir(&self) -> PathBuf {
         self.app_dir.join("log")
     }
+
+    // ------------------------------------------------------------------------
+    /// `%LOCALAPPDATA%\Avelor\catalog`: the vaults' catalogs.
+    pub fn catalog_dir(&self) -> PathBuf {
+        self.app_dir.join("catalog")
+    }
 }
 
 // ----------------------------------------------------------------------------

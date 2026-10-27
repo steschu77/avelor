@@ -22,6 +22,15 @@
   not) is the end of a file's path in the repository, `src/` left out
   (`av-vault/envelope.rs`); a link names a file there. An id is at most 16
   characters, unique in its doc and referred to; the docs are LF.
+- The catalog: av-store's tests make their catalogs in the temporary
+  folder; a `Harness` keeps its vault's in its own folder (`catalog`),
+  closed before the folder goes (`CatalogThread::close`), and reads the
+  rows with `CatalogThread::locals` and `cached`. A file the tests write
+  is too new to be cached (`vault.md#catalog`); one whose modified time is
+  set an hour back (`File::set_modified`) is. CI runs the tests on Linux
+  only, so a change to the indexing or the catalog is tested on Windows by
+  hand too: there the walk's stamps come from the directory listing
+  (av-vault's `indexing_given_its_own_reads_loads_the_same_without_reading`).
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
   tests. It checks the catalogs too (`localization.md#check`), with
@@ -91,6 +100,11 @@ multiples of 21 s are TCP connect timeouts on a network whose IPv6 goes
 nowhere, not the code: compare the `in N ms` lines with older logs, then
 `curl -4` and `curl -6` to the host. av-http's IPv6 fast fallback
 (`architecture.md#crates`) covers the usual case.
+
+A vault's indexing logs how many files came from the catalog ("N of M files
+from the catalog"); a catalog that couldn't be opened or written is
+logged. A file the app shows as it was before a change outside it:
+deleting `…\Avelor\catalog` has every file read again.
 
 ## Measuring size <a id="measuring-size"></a>
 

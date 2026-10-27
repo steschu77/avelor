@@ -1,9 +1,10 @@
 //! Indexing: a vault read into the index on a worker, the events it sends and
 //! how it is stopped.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::{Entry, Index, load, walk};
+use super::{Entry, FileText, Found, Index, parse_file, read_file, walk};
 use av_utils::id::Id;
 
 // ----------------------------------------------------------------------------
@@ -22,6 +23,9 @@ pub enum IndexEvent {
         index: usize,
         total: usize,
         entry: Entry,
+        /// The file's text as read; `None` when it came from the texts the
+        /// indexing was given.
+        read: Option<FileText>,
     },
     Failed {
         path: PathBuf,
@@ -43,7 +47,7 @@ impl Index {
     pub fn build(root: &Path) -> Index {
         let mut index = Index::default();
         index.begin(root);
-        self::index_vault(root, |event| {
+        self::index_vault(root, &mut HashMap::new(), |event| {
             index.apply(event);
             IndexControl::Continue
         });
@@ -98,13 +102,19 @@ impl Index {
 /// Phases: collect eligible files, emit `Start`; load them one by one,
 /// emitting `Entry`/`Failed` per file; emit `Done`. `on_event` answering
 /// `Stop` ends the indexing there.
-pub fn index_vault(root: &Path, mut on_event: impl FnMut(IndexEvent) -> IndexControl) {
+///
+/// `known` holds texts read before, by vault-relative path. A file whose
+/// stamp in the directory listing is its known text's is loaded from that
+/// text, not read; a file read is sent with its text (`read`). Either way
+/// its path leaves `known`, so once `Done` is sent, what is left there is
+/// gone or couldn't be read.
+pub fn index_vault(
+    root: &Path,
+    known: &mut HashMap<PathBuf, FileText>,
+    mut on_event: impl FnMut(IndexEvent) -> IndexControl,
+) {
     let mut files = Vec::new();
-    walk(
-        root,
-        &PathBuf::new(),
-        &mut |path, local, readonly, format| files.push((path, local, readonly, format)),
-    );
+    walk(root, &PathBuf::new(), &mut |found| files.push(found));
 
     let total = files.len();
     let start = IndexEvent::Start {
@@ -119,13 +129,46 @@ pub fn index_vault(root: &Path, mut on_event: impl FnMut(IndexEvent) -> IndexCon
     if matches!(on_event(start), IndexControl::Stop) {
         return;
     }
-    for (i, (path, local, readonly, format)) in files.into_iter().enumerate() {
-        let event = match load(path.clone(), local, readonly, format) {
-            Ok(entry) => IndexEvent::Entry {
-                index: i + 1,
-                total,
-                entry,
-            },
+    for (i, found) in files.into_iter().enumerate() {
+        let Found {
+            path,
+            local,
+            readonly,
+            format,
+            stamp,
+        } = found;
+        if local.to_str().is_none() {
+            // The app's catalog keeps a file by its path as text.
+            let error = "its name isn't valid Unicode".to_string();
+            if matches!(
+                on_event(IndexEvent::Failed { path, error }),
+                IndexControl::Stop
+            ) {
+                return;
+            }
+            continue;
+        }
+        let unchanged = known
+            .get(&local)
+            .is_some_and(|file| Some(file.stamp) == stamp);
+        let (file, read) = if unchanged && let Some(file) = known.remove(&local) {
+            (Ok(file), false)
+        } else {
+            (read_file(&path), true)
+        };
+        let event = match file {
+            Ok(file) => {
+                if read {
+                    known.remove(&local);
+                }
+                let read = read.then(|| file.clone());
+                IndexEvent::Entry {
+                    index: i + 1,
+                    total,
+                    entry: parse_file(path, local, readonly, format, file),
+                    read,
+                }
+            }
             Err(error) => IndexEvent::Failed {
                 path,
                 error: error.to_string(),

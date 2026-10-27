@@ -8,6 +8,7 @@ mod analysis;
 mod api;
 mod app;
 mod calendar;
+mod catalog;
 mod chat;
 mod close;
 mod config;
