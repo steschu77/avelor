@@ -38,10 +38,10 @@ events from Google Calendar, scanned pictures read by OCR.
 | Constraint | Consequence |
 |---|---|
 | Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM, WinHTTP, DPAPI, WIC (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
-| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `pulldown-cmark`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4` (with the `gdk_pixbuf` it brings), `webkit6`, `soup3`, `gio`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. UUIDv7, dates are hand-written |
+| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `pulldown-cmark`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4` (with the `gdk_pixbuf` it brings), `webkit6`, `soup3`, `gio`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. SQLite is the system's (`winsqlite3.dll`, libsqlite3), a library of the platform as WinHTTP and libsoup are, through a hand-written binding (`av-store`). UUIDv7, dates are hand-written |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
-| The vault is the source of truth | No database, no drafts; every edit is written to the file; the index is rebuilt by an indexing |
+| The vault is the source of truth | No database of record, no drafts; every edit is written to the file; the index is rebuilt by an indexing, and the catalog beside the vault (`av-store`) holds nothing the files don't |
 | Host resolves, page presents | Filenames, conflicts, structural rules live in Rust; the page renders and forwards intents |
 | One coordinator | `App` alone runs background work (`run*`, `UiQueue`) and posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
 
@@ -308,6 +308,7 @@ flowchart BT
     utils["av-utils<br/>error, datetime, base64, sha256,<br/>secret (DPAPI), logger, text, url, fs, cancel"]
     http["av-http<br/>WinHTTP / libsoup client"]
     vault["av-vault<br/>envelope, document, index, schema,<br/>filenames, markdown, email, html, conversation"]
+    store["av-store<br/>SQLite binding, catalog"]
     google["av-google<br/>OAuth, Gmail, Calendar, sync engine"]
     llm["av-llm<br/>5 providers, streaming, usage, prices"]
     bundle["av-bundle<br/>the page's scripts: dependency check<br/>(build only)"]
@@ -315,6 +316,7 @@ flowchart BT
     app["app"]
     http --> utils
     vault --> utils
+    store --> utils
     google --> http
     llm --> http
     app --> vault
@@ -329,6 +331,7 @@ flowchart BT
 | av-utils | shared `Error`, `DateTime`, the serde skip `is_false`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), FNV, DPAPI `secret`, logger, random (BCrypt), url (the link schemes, `is_link`), text normalization, unique names and a text cut with a marker (`text`), charsets, a file's stamp and atomic writes (`fs`: `FileStamp`, `write_atomic`), MIME types by extension (`mime`), cross-thread `Cancel` | |
 | av-http | blocking `Client` / `Request` / `Response`; the process's one session (`Client::shared`); `Request::send_logged`, the one way the APIs are called: logged as `METHOD host/path`, timed, a non-2xx status as `Error::Http` with the reason the caller's parser reads from the body | WinHTTP; libsoup 3 on Linux, one session per worker thread; WinHTTP's IPv6 fast fallback on (a network whose IPv6 goes nowhere cost 21 s per new connection); a streamed read takes what has arrived (`WinHttpQueryDataAvailable`) |
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops, `Changes` and their steps undone and redone (`vault.rs`, its parts in `vault/`: `indexing.rs`, `create.rs`, `structure.rs`, `properties.rs`, `trash.rs`, the tests in `vault/tests.rs`), the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the indexing (`index_vault`, events applied by `Index::apply`), filenames, `to_html`, `MdWriter`, `plain_title`, HTML → markdown, MIME parser, conversation trees | no network, no UI; also hosts email parsing |
+| av-store | what Avelor keeps beside a vault, nothing only it holds: the catalog, a row per file of the index (`Catalog`: `open`, `cached` with each file's `FileStamp`, `put`, `forget`, `keep_only`; `SETTLED`), the SQLite binding (`sqlite.rs`: `Db`, `Stmt`, closed on drop) | plain types only, no av-vault; the system's SQLite (`architecture.md#platforms`); a connection stays on the thread that opened it |
 | av-google | OAuth loopback + PKCE (the wait under a `av_utils::cancel::Cancel`), token refresh, Gmail (filter → query, ids, headers, raw), Calendar v3 subset, the two-way sync engine (`plan` is pure); Google's error bodies (`reason`) | sends through `send_logged` |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-texts | the app's texts (`localization.md#catalogs`): a catalog read (`Catalog::parse`) and checked against English and the keys used (`check`), a language over English (`over`), the keys the page's script uses (its `t` calls, through oxc) and the host's (`texts::text`) | build-only: `app`'s build dependency, nothing of it in the exe |
@@ -433,6 +436,7 @@ side never touches the vault side; `app` is the only bridge.
 | Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `gtk::UriLauncher` and `FileLauncher` (they use the XDG desktop portal where there is one) |
 | Image previews, EXIF, HEIC | WIC | `sys/*/images.rs` | gdk-pixbuf (`apply_embedded_orientation`); WebP and HEIC where their loaders are installed |
 | HTTP | WinHTTP; cancelling closes the handles | `av-http/src/win32.rs`, `linux.rs` | libsoup 3 (`soup3`): it comes with WebKitGTK as WinHTTP comes with Windows; a session per worker thread and timeout, since a libsoup session stays on the thread that made it; cancelled through a `gio::Cancellable` |
+| SQLite | `winsqlite3.dll` in System32, linked by `raw-dylib` (no import library) | `av-store/sqlite.rs` | libsqlite3, which WebKitGTK brings; `libsqlite3-dev` to link |
 | Secrets at rest | DPAPI | `av-utils/secret.rs`, `fs.rs` | a key file only the user can read: `protect` keeps the bytes, `fs::write_private` writes the file (0600) |
 | Random | BCrypt | `av-utils/random.rs` | `getrandom` |
 | SHA-256 | BCrypt | `av-utils/sha256.rs` | GLib's `Checksum`, as glib comes with GTK |
@@ -490,6 +494,8 @@ literal.
 multipart, `send_logged`), with a backend module per platform behind the
 same `Client` / `Request` / `Response`; a `Response` isn't
 `Send` on either. av-utils picks its `random` and `secret` per platform.
+av-store's binding is the same on both; only the library it links
+differs (`cfg_attr` on its `extern` block).
 
 ## Page <a id="page"></a>
 
@@ -758,7 +764,7 @@ abort. Where the bundle lands and how to measure the size:
   (`accounts.md#model-choice`).
 - **Naming**: a feature's commands, sub-state and module share its name. A module of several parts keeps its file and puts its parts in a folder of its name beside it (`sys.rs` and `sys/win32.rs`), a split module its tests in a file of their own there; modules that belong to another go into its folder.
 - **Errors**: one `av_utils::Error` for every layer (`av-utils/error.rs`:
-  logging, vault, OAuth, transport, Win32, GTK), extended when needed; a
+  logging, vault, OAuth, transport, Win32, GTK, SQLite), extended when needed; a
   separate error type only for functions local to one module; expected
   outcomes are success variants, not errors (`SaveOutcome::Conflict`,
   `PushOutcome::Conflict` in av-google). An id that names nothing is
@@ -807,6 +813,7 @@ abort. Where the bundle lands and how to measure the size:
 | av-utils | primitives with no domain (dates, ids, encodings, hashing, DPAPI, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | av-http | transport, cancellation | know any API |
 | av-vault | the vault's schema, files, index, rules, conversions | do network or UI; start threads (the app decides where indexing runs) |
+| av-store | the SQLite binding, the catalog's tables | know av-vault; hold anything the vault's files don't |
 | av-google / av-llm | their remote APIs, pure sync and pricing logic | touch the vault or the page's presets |
 | `app` feature modules | orchestration: plan → run → apply, accounts and watches files | parse messages, render, reach into other features |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |
