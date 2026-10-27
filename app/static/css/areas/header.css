@@ -26,6 +26,17 @@
   flex: none;
 }
 
+/* the words filtering, as a chip before the labels */
+.chip--words>.icon {
+  width: 10px;
+  height: 10px;
+  color: var(--c-ink-mute);
+}
+
+.chip--words>span {
+  font-family: var(--f-serif);
+}
+
 /* the project's name and description, a card's or the thread's title,
    while edited in place; an empty title still has room for the caret */
 .project-name[contenteditable],

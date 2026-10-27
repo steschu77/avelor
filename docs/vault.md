@@ -930,7 +930,8 @@ the envelope's texts: the names, places, items and messages its roles
 hold, and every string a record keeps (`Envelope::text`); no ids, dates,
 states or sources. The catalog keeps every file's words
 (`vault.md#catalog`). The command `search` finds the entities holding
-every word of a text (`search.rs`):
+every word of a text (`search.rs`), for the vault panel's words box
+(`ui.md#words`):
 
 - **The rule**: every word is in the title, a label or the text, in any
   order and case, also inside a longer word ("rechnung" finds

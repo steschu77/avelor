@@ -191,6 +191,25 @@ Documents lens. Clicking inside the editor body itself (read-only text,
 or placing a cursor while editing) still selects the card — a card is mostly editor
 body, and exempting more than buttons would leave most of it unclickable.
 
+## Finding the words <a id="find"></a>
+
+While the vault panel's words filter (`ui.md#words`), the cards shown mark
+them, and the find strip over the panel's views steps through them
+(`features/panel/find.js`).
+
+- **The marks** are CSS highlights over the cards' text (`::highlight`),
+  so the editor's DOM stays the file's: only where a search reads, a
+  card's title, its details, its labels and its text, not its path,
+  project chips or tools. They follow the cards: a content that arrives,
+  an edit, a refreshed chip mark again (a `MutationObserver`, once per
+  frame).
+- **The strip**: the words, "2 of 5" ("not in this card" without any),
+  Previous and Next (Shift+F3, F3). A new selection or new words start at
+  the first mark in the selected card; the current mark is scrolled into
+  view when it is out of it.
+- A web view without highlights (WebKitGTK before 2.42) still counts and
+  steps, unmarked.
+
 ## Threads
 
 Threads are created by the user and are linear: their members are separate
@@ -316,7 +335,7 @@ other side is derived.
   focused:
   "Links to", "Linked from" (chats and transactions included), and a
   search over the titles of the entities and threads in the vault panel's
-  filter (project, source, labels; `matchesFilter`), so narrowing the
+  filter (words, project, source, labels; `matchesFilter`), so narrowing the
   filter narrows what is offered. Picking a result (a click or Enter)
   links the card to it, replacing an older link. With only a thread shown,
   the tab is about the thread.

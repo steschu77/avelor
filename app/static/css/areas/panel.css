@@ -54,6 +54,34 @@
   overflow: hidden;
 }
 
+/* the find strip over the views (features/panel/find.js): the words, which
+   of them is current, previous and next */
+.find {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px var(--p-pane);
+  background: var(--c-paper);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.find>.icon {
+  width: 12px;
+  height: 12px;
+  color: var(--c-ink-mute);
+}
+
+.find__q {
+  font: 400 var(--fs-body)/1 var(--f-serif);
+  color: var(--c-ink);
+}
+
+.find__n {
+  margin-left: auto;
+  margin-right: 4px;
+}
+
 .panel__context {
   grid-area: context;
   /* anchors its .grip to the context's left edge */

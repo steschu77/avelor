@@ -26,6 +26,10 @@
   --c-accent: #8fd0d6;
   /* pressed tools, tags */
   --c-accent-soft: rgba(143, 208, 214, 0.22);
+  /* a word of the vault panel's filter, marked in a row or a card, and the
+     one the panel's find strip is on */
+  --c-hit: rgba(143, 208, 214, 0.5);
+  --c-hit-current: var(--c-accent);
   --c-danger: #de9193;
   /* a filled warning: an overdue task's chip */
   --c-danger-soft: rgba(222, 145, 147, 0.26);

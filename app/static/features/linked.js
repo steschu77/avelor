@@ -38,7 +38,7 @@ const scheduleLinkedLists = oncePerFrame(() => {
 });
 store.subscribe([
   state => state.entities_rev, state => state.threads_rev, state => state.selected_project,
-  state => state.selected_source, state => state.selected_labels,
+  state => state.selected_source, state => state.selected_labels, state => state.word_filter,
 ], scheduleLinkedLists);
 
 // Whether the entity or thread `id` can be written: its link set.

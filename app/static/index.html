@@ -90,6 +90,14 @@
           <span id="vault-name"></span>
         </div>
         <div class="sidebar__scroll">
+          <!-- Filter by words (features/words.js) -->
+          <label class="search" id="words-box">
+            <svg class="icon"><use href="#i-search" /></svg>
+            <input class="search__input" id="words-input" placeholder="Filter by words" aria-label="Filter by words"
+              autocomplete="off" spellcheck="false">
+            <button type="button" class="search__clear" id="words-clear" title="Clear the filter (Esc)"><svg class="icon"><use href="#i-dismiss" /></svg></button>
+            <kbd>CTRL+S</kbd>
+          </label>
           <a class="nav-item nav-item--compact" id="new-item" data-vault-op="new" data-action="new"
             aria-haspopup="menu">
             <svg class="icon"><use href="#i-add" /></svg>
@@ -232,6 +240,14 @@
         <button type="button" class="tool push" id="doc-close-btn"><svg class="icon"><use href="#i-dismiss" /></svg></button>
       </div>
       <div class="panel__body" id="panel-body">
+        <!-- The find strip (features/panel/find.js) -->
+        <div class="find" id="find" hidden>
+          <svg class="icon"><use href="#i-search" /></svg>
+          <span class="find__q" id="find-q"></span>
+          <span class="meta find__n" id="find-n"></span>
+          <button type="button" class="tool" id="find-prev" title="Previous (Shift+F3)"><svg class="icon"><use href="#i-chevron-up" /></svg></button>
+          <button type="button" class="tool" id="find-next" title="Next (F3)"><svg class="icon"><use href="#i-chevron-down" /></svg></button>
+        </div>
         <!-- Document View -->
         <div class="stack" id="panel-doc-view">
           <div id="doc-content" class="msg-list"></div>

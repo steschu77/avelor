@@ -18,6 +18,7 @@ import { entities, matchesFilter, projectNames } from '../../model/entities.js';
 import { leaveThreadLocal } from '../../model/structure.js';
 import { addDays, weekStartOf } from '../../model/calendar.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
+import { excerptNodes, markedNodes } from '../../ui/marks.js';
 import { endDragPreview, startDragPreview, takeMemberDrops } from '../../ui/dropzone.js';
 import { TASK_STATUSES, parseContact, repeatsText } from '../panel/details.js';
 import { markSelection, selectDocument } from '../selection.js';
@@ -219,7 +220,7 @@ $('tl-today').addEventListener('click', () => {
 const monthEls = new Map(); // year * 12 + month -> its heading
 const dayEls = new Map(); // `YYYY-MM-DD` -> its block
 const rowEls = new Map(); // doc id -> its row
-const rowFills = new WeakMap(); // a row -> { doc, fill } it was filled from
+const rowFills = new WeakMap(); // a row -> { doc, fill, word_filter } it was filled from
 const todayEl = accEl('div', 'label tl__today');
 const emptyEl = accEl('p', 'note tl__empty');
 
@@ -245,9 +246,12 @@ function dayEl(day) {
   return el;
 }
 
-// An entity's row: refilled when `entities` holds a new object for it, or
-// `fill` (what else its meta names: the projects, the filter) changed.
-function rowEl(doc, fill) {
+// An entity's row: refilled when `entities` holds a new object for it,
+// `fill` (what else its meta names: the projects, the filter) changed, or
+// the words' answer is another: its title and labels with the words
+// marked, and as its meta where they are if the title lacks some
+// (ui.md#words).
+function rowEl(doc, fill, word_filter) {
   let el = rowEls.get(doc.doc_id);
   if (!el) {
     el = accEl('div', 'tl__row');
@@ -261,13 +265,17 @@ function rowEl(doc, fill) {
     rowEls.set(doc.doc_id, el);
   }
   const filled = rowFills.get(el);
-  if (filled?.doc !== doc || filled.fill !== fill) {
+  if (filled?.doc !== doc || filled.fill !== fill || filled.word_filter !== word_filter) {
     const [icon, text, labels] = el.children;
+    const terms = word_filter?.terms;
+    const hit = word_filter?.hits.get(doc.doc_id);
     icon.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.genre));
-    text.firstChild.textContent = doc.title;
-    text.lastChild.textContent = summaryOf(doc);
-    labels.textContent = (doc.tags ?? []).join(' \u00b7 ');
-    rowFills.set(el, { doc, fill });
+    text.firstChild.replaceChildren(...markedNodes(doc.title, terms));
+    text.lastChild.classList.toggle('tl__hit', Boolean(hit?.excerpt));
+    if (hit?.excerpt) text.lastChild.replaceChildren(...excerptNodes(hit, terms));
+    else text.lastChild.textContent = summaryOf(doc);
+    labels.replaceChildren(...markedNodes((doc.tags ?? []).join(' \u00b7 '), terms));
+    rowFills.set(el, { doc, fill, word_filter });
   }
   return el;
 }
@@ -275,7 +283,7 @@ function rowEl(doc, fill) {
 // The entries, newest first, as day blocks under their months' headings;
 // the Today line before the first day that isn't to come, while today is
 // in the range.
-function renderFeed(listed, today, fill) {
+function renderFeed(listed, today, fill, word_filter) {
   const days = [];
   for (const doc of listed) {
     const day = dayStart(doc.date);
@@ -298,7 +306,7 @@ function renderFeed(listed, today, fill) {
     }
     const block = dayEl(day);
     block.classList.toggle('tl__day--future', future);
-    placeChildren(block.lastChild, docs.map(doc => rowEl(doc, fill)));
+    placeChildren(block.lastChild, docs.map(doc => rowEl(doc, fill, word_filter)));
     nodes.push(block);
   }
   if (!todayPlaced) nodes.push(todayEl);
@@ -334,7 +342,7 @@ function renderTimeline() {
   for (const id of rowEls.keys()) if (!entities.has(id)) rowEls.delete(id);
   renderTrack(onTrack, today);
   markRange(range);
-  renderFeed(listed, today, `${state.projects_rev}\n${state.selected_project}`);
+  renderFeed(listed, today, `${state.projects_rev}\n${state.selected_project}`, state.word_filter);
   markRows();
   if (scrollToToday && listed.length) {
     feedEl.scrollTop = todayEl.isConnected ? todayEl.offsetTop : 0;

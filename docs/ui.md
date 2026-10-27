@@ -33,12 +33,15 @@ or a click on a filter closes it (`closeVaultArea`). Menus are popups
 
 ## Vault panel <a id="vault-panel"></a>
 
-The vault panel defines the view on the vault: a project and a source
-filter what the lens shows, and so do the labels picked in the lens head.
-Filtering is entirely on the page: all metadata
-arrives with the scan (`renderSidebar`, `features/sidebar.js`;
-`matchesFilter`, `model/entities.js`). The counts per project and source are derived on
-the page, once per frame (`panel.md#host-pushes`).
+The vault panel defines the view on the vault: words, a project and a
+source filter what the lens shows, and so do the labels picked in the lens
+head. Filtering is on the page, where all metadata arrives with the scan
+(`renderSidebar`, `features/sidebar.js`; `matchesFilter`,
+`model/entities.js`); only the words are found by the host
+(`ui.md#words`). The counts per project and source are derived on the
+page, once per frame (`panel.md#host-pushes`), and don't follow the words.
+
+- **Filter by words**: the box at the top (`ui.md#words`).
 
 - **Projects**: "All Projects" clears the filter; "No project" shows the
   entities in no project of the vault (`NO_PROJECT` as
@@ -63,7 +66,35 @@ filter (`tagChips`, `features/panel/panel.js`), then a "+" while any label
 is in use (`#label-add-btn`, `features/header.js`). Its menu lists the
 labels in use but the active ones, with a filter box, each with the
 entities in the filter carrying it; one with none is dim. Selecting
-several shows the entities carrying all of them.
+several shows the entities carrying all of them. The words filtering come
+first, as a chip with the words and a × that empties the box.
+
+### Filter by words <a id="words"></a>
+
+`features/words.js`: the box at the top of the vault panel, "Filter by
+words", is a filter like a project or a source, which every lens follows.
+It filters, it doesn't search: what holds every word stays in the lens,
+in its own groups and order; the rest drops out.
+
+- **The words**: every one, in any order and case, also inside a longer
+  word, in the title, a label or the text; the host finds them (`search`,
+  `vault.md#search`). The box asks at most every 120 ms with the words as
+  they are then, a newer question superseding the one before (the channel
+  `search`); until the answer comes, the lenses keep the last one
+  (`word_filter`). It asks again while the entities change, and when an
+  editor saves a body (`saved_rev`), so an edit's new words count.
+- **The box** is marked while it filters, with a × that empties it; Esc
+  empties it, a second Esc leaves it; Ctrl+S goes to it, unless an editor
+  or a field has the focus.
+- **The rows** mark the words (`<mark>`, `ui/marks.js`); a row whose title
+  lacks some says where they are: the line of the text or the label
+  (`ui.md#documents`, `ui.md#timeline`).
+- **The lens head** names them as a chip before the labels, its × empties
+  the box (`features/header.js`).
+- **The panel** marks them in its cards, and its find strip steps through
+  them (`panel.md#find`).
+- A vault switch empties the box; showing an entity in Documents
+  (`showInDocuments`) does too if it doesn't hold the words.
 
 ## Lenses <a id="lenses"></a>
 
@@ -147,6 +178,10 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   (below) opens a folded group for the session only. Threads fold while
   the app runs: folded at first, a thread unfolded shows unfolded in every
   group.
+- **The words**: while the vault panel's words filter (`ui.md#words`),
+  the titles mark them, and an entity's row whose title lacks some shows
+  where they are after the title (`.docs__hit`): the line of its text, or
+  the label marked "Label".
 - **Selecting**: a row is selected by a click, an entity's in the thread
   it shows under (`selectDocument(id, thread)`), a thread's row selects
   the thread (`selectById`). The selected entity's rows are marked
@@ -208,7 +243,10 @@ day — a series on its first start, a task on its own date — but calendars
   list's items, a contact's phone or mail, a bank account's bank and
   number, transactions' bookings, a document's author or sender and genre
   — then its projects while no project is selected (`projectNames`), its
-  labels at the right. A click or Enter selects it, the selected one
+  labels at the right. While the words filter (`ui.md#words`), the title
+  and the labels mark them, and a row whose title lacks some shows where
+  they are instead of what its kind tells (`.tl__hit`). A click or Enter
+  selects it, the selected one
   marked (`markSelection`). It drags as a Documents row does; the lens
   takes a card dragged out of a thread, which leaves it
   (`takeMemberDrops`, `panel.md#structural-edits`).
@@ -270,6 +308,10 @@ What a key, a menu or a button starts is a registered action
 - **Ctrl+Enter** runs the open page's main action (Fetch, Import all,
   Create).
 - **Ctrl+N** opens New.
+- **Ctrl+S** goes to the words box, unless an editor or a field has the
+  focus; in the box, Esc empties it, then leaves it (`ui.md#words`).
+- **F3** and **Shift+F3** step through the words marked in the panel
+  (`panel.md#find`).
 - A key the editor already handled (Ctrl+I as italic) is left alone.
 
 The host switches off the browser's accelerator keys so they reach the page
@@ -329,6 +371,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
 | B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
+| B6 | Filter by words | typing in the box (`features/words.js`) → `selectFilter({words})`, at most every 120 ms `search` on the channel `search`; the chip's ×, the box's × or Esc → `NO_WORDS` | `search {text}` → `ok {terms, hits}` | the lenses keep what holds every word, its words marked, an excerpt where the title lacks some; the chip in the lens head; the find strip in the panel |
 | D7 | New | New item, the "+" of "Created Here" or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
 | F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Recent files or Recent chats → `selectDocument` | — | the entity in the panel, its rows marked on the dashboard |

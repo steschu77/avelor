@@ -80,15 +80,19 @@ export function projectScope({ selected_project } = store.getState()) {
 // ----------------------------------------------------------------------------
 // The vault panel's filter: `doc` is in `selected_project` (if one is set;
 // in none for `NO_PROJECT`), came from `selected_source` (if one is set),
-// and carries every one of `selected_labels`. The lenses show only matching
-// entities; thread membership is never filtered.
-export function matchesFilter(doc, { selected_project, selected_source, selected_labels } = store.getState()) {
+// holds the words (if the box filters: `word_filter`, the host's answer)
+// and carries every one of `selected_labels`. The lenses show only
+// matching entities; thread membership is never filtered.
+export function matchesFilter(doc, {
+  selected_project, selected_source, selected_labels, word_filter,
+} = store.getState()) {
   if (selected_project === NO_PROJECT) {
     if (projectsOf(doc).length) return false;
   } else if (selected_project && !doc.projects?.includes(selected_project)) {
     return false;
   }
   if (selected_source && sourceKeyOf(doc) !== selected_source) return false;
+  if (word_filter && !word_filter.hits.has(doc.doc_id)) return false;
   return selected_labels.every(tag => doc.tags?.includes(tag));
 }
 
