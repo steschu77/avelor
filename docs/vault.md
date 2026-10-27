@@ -2,8 +2,8 @@
 
 > The vault's file format and its life cycle: what an entity file holds,
 > identity, roles, types and sources, file names, the layout; opening,
-> switching and indexing a vault, the catalog, the trash, the Vault
-> page. The account
+> switching and indexing a vault, the catalog, the search, the trash,
+> the Vault page. The account
 > and watch files in `.avelor/` are described in `accounts.md` and
 > `import.md`, how an edited document reaches its file in `saving.md`.
 
@@ -808,7 +808,7 @@ sequenceDiagram
         W->>W: parse the files: the cached from their rows, the others read
         W->>S: [Entry, Failed, …]
         S-->>P: entity, vault_error, job
-        S->>C: the reads the index took
+        S->>C: the reads the index took, with their words
     end
     W->>S: […, Done]
     S-->>P: vault (open), job (done)
@@ -860,9 +860,9 @@ they aren't touched.
 
 ## The catalog <a id="catalog"></a>
 
-The vault's files as the app holds them, a row per file of the index, in
-SQLite outside the vault (`av-store`'s `Catalog`, on a thread of its own,
-`catalog.rs`). What memory doesn't hold is looked up there before a file
+The vault's files as the app holds them, a row per file of the index with
+the words a search reads (`vault.md#search`), in SQLite outside the vault
+(`av-store`'s `Catalog`, on a thread of its own, `catalog.rs`). What memory doesn't hold is looked up there before a file
 is read: an indexing takes a file unchanged since its row from the row. It
 holds nothing the files don't: deleting it costs one full read.
 
@@ -877,6 +877,11 @@ holds nothing the files don't: deleting it costs one full read.
   the app wrote it (`Entry::file_text`). A file whose path isn't Unicode
   can't have one, so the indexing reports it as unreadable (`vault_error`),
   and it isn't in the index either.
+- **Its words**: the file's title, labels and text as a search reads them
+  (`search::words_of`, made on the indexing's worker for a read, on the UI
+  thread for the app's own rows), in an FTS5 table of trigrams under the
+  row's rowid, written in the same transaction. The app makes them, so a
+  change of how is another format.
 - **The stamp** makes a row a cache (`saving.md#the-stamp`). A text read
   from its file keeps the stamp the file had then, once the file had
   settled: changed at least 2 s before it was read (`SETTLED`), since a
@@ -894,8 +899,8 @@ holds nothing the files don't: deleting it costs one full read.
   app just wrote or read again hasn't settled, and is read again at the
   next open. What is asked of the catalog after a change sees it.
 - **What goes**: once an indexing read every file, the catalog keeps exactly
-  the index's files: the rows of the files gone or unreadable go, and
-  those of a file whose id another file has. A file the app made meanwhile
+  the index's files: the rows of the files gone or unreadable go with
+  their words, and those of a file whose id another file has. A file the app made meanwhile
   stays. A stopped or replaced indexing drops nothing.
 - **Rebuild index** on the Vault page empties the catalog and opens the
   vault again as a switch to it does (flow A5), so every file is read: for
@@ -915,6 +920,18 @@ holds nothing the files don't: deleting it costs one full read.
 - **Several instances** share a file (WAL, a busy timeout): a row counts
   only while its stamp is the file's, so two writers cost at most a read,
   never a wrong text. Another instance's indexing can drop the row of a file
-  this one made, until this one opens the vault again.
-- **Size**: about the vault's markdown and YAML. The catalog of a vault no
-  longer opened stays until the folder is deleted.
+  this one made, and its Rebuild index empties this one's rows, until this
+  one opens the vault again.
+- **Size**: a few times the vault's markdown and YAML: the texts, the
+  words and their trigrams. The catalog of a vault no longer opened stays
+  until the folder is deleted.
+
+## Search <a id="search"></a>
+
+A search reads an entity's words: its title, its labels and its text
+(`search::words_of`). The text is the body as plain text, a line per
+block, list item, table row and code line (`markdown::plain_text`), then
+the envelope's texts: the names, places, items and messages its roles
+hold, and every string a record keeps (`Envelope::text`); no ids, dates,
+states or sources. The catalog keeps every file's words
+(`vault.md#catalog`).
