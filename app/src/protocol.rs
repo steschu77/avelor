@@ -56,6 +56,7 @@ enum Command {
     /// The vault's own settings (`vault_settings`).
     SetVaultSettings(vault_settings::SettingsChange),
     RevealVault,
+    RebuildIndex,
     /// Open a web, email or phone link in its default app.
     OpenUrl(Url),
     /// Stop the job `id` (`jobs::cancel_job`).
@@ -309,6 +310,7 @@ impl Command {
             "set_prefs" => Command::SetPrefs(from_value(args)?),
             "set_vault_settings" => Command::SetVaultSettings(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
+            "rebuild_index" => Command::RebuildIndex,
             "open_url" => Command::OpenUrl(from_value(args)?),
             "cancel_job" => Command::CancelJob(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
@@ -396,6 +398,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
         Command::SetVaultSettings(a) => vault_settings::set_vault_settings(app, req, a),
         Command::RevealVault => api::reveal_vault(app, req),
+        Command::RebuildIndex => api::rebuild_index(app, req),
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::CancelJob(a) => jobs::cancel_job(app, req, a.id),
         Command::CloseReady(a) => close::close_ready(app, req, a),

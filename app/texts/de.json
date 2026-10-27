@@ -933,6 +933,8 @@
   "vault.none_text": "Kein Tresor ist geöffnet. Ein Tresor ist ein Ordner: Jede Markdown- und YAML-Datei darin ist ein Eintrag.",
   "vault.open_dots": "Tresor öffnen …",
   "vault.pick": "Tresor auswählen",
+  "vault.rebuild": "Index neu aufbauen",
+  "vault.rebuild_title": "Jede Datei des Tresors erneut lesen",
   "vault.show_failed": "Der Ordner des Tresors konnte nicht angezeigt werden.",
   "vault.unreadable_files": "Dateien, die nicht gelesen werden konnten",
   "vault_op.accounts": "Konten einrichten",

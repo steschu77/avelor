@@ -984,6 +984,8 @@
   "vault.none_text": "No hay ninguna bóveda abierta. Una bóveda es una carpeta: cada archivo Markdown y YAML que contiene es un elemento.",
   "vault.open_dots": "Abrir una bóveda…",
   "vault.pick": "Seleccionar bóveda",
+  "vault.rebuild": "Reconstruir el índice",
+  "vault.rebuild_title": "Volver a leer todos los archivos de la bóveda",
   "vault.show_failed": "No se pudo mostrar la carpeta de la bóveda.",
   "vault.unreadable_files": "Archivos que no se pudieron leer",
   "vault_op.accounts": "Configurar cuentas",
