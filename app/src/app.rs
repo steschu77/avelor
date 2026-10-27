@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use crate::ai_accounts::AiAccounts;
 use crate::calendar;
 use crate::calendar::CalendarState;
-use crate::catalog::CatalogThread;
+use crate::catalog::{CatalogState, CatalogThread};
 use crate::chat::ChatState;
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
@@ -344,7 +344,7 @@ impl Vault {
 // ----------------------------------------------------------------------------
 /// A vault-relative path as the catalog keeps it: its parts joined by `/`,
 /// whichever separator it was written with; `None` if it isn't Unicode.
-fn catalog_key(local: &Path) -> Option<String> {
+pub fn catalog_key(local: &Path) -> Option<String> {
     let parts: Option<Vec<&str>> = local
         .components()
         .map(|part| part.as_os_str().to_str())
@@ -584,6 +584,31 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
+    /// Run `work` like `run`, but on the catalog's thread (`catalog.rs`),
+    /// after every change of the index queued before it, so what it reads of
+    /// the catalog is as the index is now. Aborting the returned task skips
+    /// `work` if it hasn't started, and `apply`.
+    pub fn run_on_catalog<T: Send + 'static>(
+        &self,
+        work: impl FnOnce(&CatalogState, &Cancel) -> T + Send + 'static,
+        apply: impl FnOnce(&mut App, T) + Send + 'static,
+    ) -> Task {
+        let cancel = Cancel::new();
+        let task = Task(cancel.clone());
+        let ui = Arc::clone(&self.ui);
+        self.vault.catalog.queue(move |state| {
+            if cancel.is_cancelled() {
+                return;
+            }
+            let out = work(state, &cancel);
+            if !cancel.is_cancelled() {
+                ui.send_to_ui(move |app| apply(app, out));
+            }
+        });
+        task
+    }
+
+    // ------------------------------------------------------------------------
     /// The UI queue, for what must run after the current task.
     pub(crate) fn ui(&self) -> &UiQueue {
         &self.ui
@@ -602,14 +627,45 @@ impl App {
         work: impl FnOnce(&Cancel) -> T + Send + 'static,
         apply: impl FnOnce(&mut App, T) + Send + 'static,
     ) {
-        let latest = req_id.to_string();
-        let task = self.run(work, move |app, out| {
-            let current = app.superseding.get(channel);
-            if current.is_some_and(|(req_id, _)| *req_id == latest) {
-                app.superseding.remove(channel);
-                apply(app, out);
-            }
+        self.supersede(channel, req_id, apply, |app, apply| app.run(work, apply));
+    }
+
+    // ------------------------------------------------------------------------
+    /// `run_superseding` on the catalog's thread (`run_on_catalog`).
+    pub fn run_superseding_on_catalog<T: Send + 'static>(
+        &mut self,
+        channel: &'static str,
+        req_id: &str,
+        work: impl FnOnce(&CatalogState, &Cancel) -> T + Send + 'static,
+        apply: impl FnOnce(&mut App, T) + Send + 'static,
+    ) {
+        self.supersede(channel, req_id, apply, |app, apply| {
+            app.run_on_catalog(work, apply)
         });
+    }
+
+    // ------------------------------------------------------------------------
+    /// Make the request `req_id`, which `start` starts, the latest on
+    /// `channel`: the one before is aborted, and `apply` runs only while
+    /// `req_id` is still the latest (`run_superseding`).
+    fn supersede<T: Send + 'static>(
+        &mut self,
+        channel: &'static str,
+        req_id: &str,
+        apply: impl FnOnce(&mut App, T) + Send + 'static,
+        start: impl FnOnce(&App, Box<dyn FnOnce(&mut App, T) + Send>) -> Task,
+    ) {
+        let latest = req_id.to_string();
+        let task = start(
+            self,
+            Box::new(move |app, out| {
+                let current = app.superseding.get(channel);
+                if current.is_some_and(|(req_id, _)| *req_id == latest) {
+                    app.superseding.remove(channel);
+                    apply(app, out);
+                }
+            }),
+        );
         // `apply` runs on this (the UI) thread, so it can't look before
         // this insert.
         let previous = self.superseding.insert(channel, (req_id.to_string(), task));

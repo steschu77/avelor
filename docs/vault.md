@@ -907,8 +907,9 @@ holds nothing the files don't: deleting it costs one full read.
   opens, unless another instance holds them.
 - **Failures** are logged; the page sees nothing. A catalog that can't be
   opened leaves the vault without one, and every file is read at each
-  open. A write that fails leaves its rows as they were; the next open
-  sets them right, since such a row's stamp isn't its file's. Only a file
+  open. A write that fails leaves its rows as they were and the catalog
+  behind, so a search fails (`vault.md#search`) until the next open sets
+  them right, since such a row's stamp isn't its file's. Only a file
   SQLite calls no database, or damaged, is removed and made anew; one
   that is busy or can't be written is left alone.
 - **Several instances** share a file (WAL, a busy timeout): a row counts
@@ -928,4 +929,27 @@ block, list item, table row and code line (`markdown::plain_text`), then
 the envelope's texts: the names, places, items and messages its roles
 hold, and every string a record keeps (`Envelope::text`); no ids, dates,
 states or sources. The catalog keeps every file's words
-(`vault.md#catalog`).
+(`vault.md#catalog`). The command `search` finds the entities holding
+every word of a text (`search.rs`):
+
+- **The rule**: every word is in the title, a label or the text, in any
+  order and case, also inside a longer word ("rechnung" finds
+  "Stromrechnung"); one function decides (`search::holds`).
+- **The catalog's rows** are read on its thread, after every change asked
+  before it (`run_superseding_on_catalog`), so an edit is found by its new
+  words at once: the words of 3 characters or more narrow the rows by
+  their trigrams (FTS5's MATCH, each word as a string); shorter ones are
+  left to the rule, which then reads every row. A row stands for the
+  entity at its path now.
+- **The excerpt**, for an entity whose title lacks some of the words: the
+  first line of its text holding one, from a word at most 40 characters
+  before it, at most 200 long, with "…" where it was cut; else such a
+  label, as `where: "Label"`.
+- **Failures**: without a catalog, or after a write to it failed, the
+  search fails until the vault opens again; so does a catalog that can't
+  be read.
+- **Limits**: a word of 1 or 2 letters reads every row. SQLite, Rust and
+  the page fold a few letters' case differently (`İ`, `ẞ`), so such a
+  word may miss a row or a mark. Diacritics count: "Koln" doesn't find
+  "Köln". A change made outside the app is found once the app takes it
+  in (`vault.md#catalog`).

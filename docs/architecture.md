@@ -170,7 +170,7 @@ flowchart LR
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
 | UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the vault scan's batches into the index; every vault write; every change of the index queued for the catalog | — |
-| `avelor-catalog`, one for the app's life (`catalog.rs`) | the open vault's catalog (`vault.md#catalog`): its opening, the changes `Vault` queues, in that order, and what a worker asks of it after them (`CatalogThread::ask`: the scan's cached rows) | nothing comes back; a worker's `ask` waits for its answer, the UI thread never does |
+| `avelor-catalog`, one for the app's life (`catalog.rs`) | the open vault's catalog (`vault.md#catalog`): its opening, the changes `Vault` queues, in that order, and what is asked of it after them: a worker's `CatalogThread::ask` (the scan's cached rows), and `App::run_on_catalog`'s work (a search, `search.rs`) | a worker's `ask` waits for its answer, the UI thread never does; `run_on_catalog` as the run family |
 | `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the vault scan's walk and reads (`vault_scan.rs`); HTTP (Google, LLMs), the OAuth wait, LLM streams, WIC previews (gdk-pixbuf on Linux); mail header pages fan out to 8 scoped threads (`mail::fetch_headers`); the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
 | WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
 
@@ -178,8 +178,10 @@ flowchart LR
 
 Three variants: plain (`run`), with ordered progress callbacks
 (`run_with_progress`), and superseding per channel (`run_superseding`;
-channels `connect_ai`, `mail-preview`); continuations are `FnOnce(&mut
-App, T)`. One OS thread per task is right without an async runtime:
+channels `connect_ai`, `mail-preview`, `search`); continuations are
+`FnOnce(&mut App, T)`. `run_on_catalog` and `run_superseding_on_catalog`
+run the work on the catalog's thread instead, after the changes queued
+there before it (`catalog.rs`). One OS thread per task is right without an async runtime:
 the OAuth wait and AI streams block for minutes, and a bounded pool would
 queue previews behind a sign-in. `Task(Cancel)` aborts
 (`av-utils/cancel.rs`) and skips `apply` if it isn't queued yet;
@@ -384,8 +386,9 @@ knows neither: `app` turns the scan's texts into its rows.
 | `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; the clock (a GLib timeout); `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/images.rs` | the same with gdk-pixbuf |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App` (all state) and `Vault` (the open vault's folder, av-vault's `Index` and the catalog's thread, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`; every change of the index sent to the catalog in its order, `catalog_key`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes, the pending sign-in, `on_clock` |
-| `catalog.rs` | the catalog's thread (`CatalogThread`, `vault.md#catalog`): `open`, the writes `put`, `forget`, `keep_only`, logged when they fail, and `ask` for a worker |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder, av-vault's `Index` and the catalog's thread, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`; every change of the index sent to the catalog in its order, `catalog_key`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*` (with `run_on_catalog`), `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes, the pending sign-in, `on_clock` |
+| `catalog.rs` | the catalog's thread (`CatalogThread`, `vault.md#catalog`): `open`, the writes `put`, `forget`, `keep_only`, logged when they fail and leaving the catalog behind, `ask` for a worker; what it holds (`CatalogState::current`, `Unavailable`) |
+| `search.rs` | `search` (`vault.md#search`): an entity's words (`words_of`), the catalog's rows on its thread, one rule for them (`holds`), the excerpt; its dispatch tests |
 | `vault_scan.rs` | the vault scan (`vault.md#opening`): `run_scan` with av-vault's `scan` on a worker, which asks the catalog for its cached rows, its batches into the index (`Vault::apply_scanned`, the reads to the catalog with `keep_scanned`, the catalog left with the index's files by `scan_done`) and to the page (`vault`, `entity`, `vault_error`, the scan's `job`), a replaced scan's batches dropped, `scanning`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
