@@ -80,7 +80,7 @@ which answers through a `Req`.
 - Of the calls on one channel only the latest counts: the one before is
   rejected as `superseded` at once (a code the page adds), and its late
   reply is ignored. Channels in use: `connect_ai`, `email-preview`,
-  `chat-open`.
+  `chat-open`, `search`.
 - `rpcOn(event, fn)` listens for the pushes.
 - A failed call nobody handles is shown in the status bar as an error that
   stays until dismissed, unless it is `superseded` or `cancelled`, so no
@@ -93,7 +93,8 @@ The structural commands go through `structureCall`
 
 ### Vault commands
 
-Host modules: `api.rs`, `settings.rs`, `indexing.rs`, `vault_settings.rs`.
+Host modules: `api.rs`, `settings.rs`, `indexing.rs`, `vault_settings.rs`,
+`search.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
@@ -106,6 +107,7 @@ Host modules: `api.rs`, `settings.rs`, `indexing.rs`, `vault_settings.rs`.
 | `reveal_vault` | — | Open the vault's folder in Explorer (on Linux the file manager) once the handler has returned. `null`; `invalid_path` ("No vault is open."), or the shell's error ("Could not show the vault's folder."). |
 | `rebuild_index` | — | Empty the open vault's catalog and open the vault again, as `switch_vault` to the same folder does, so every file is read (`vault.md#catalog`); not remembered. With a switch waiting for the old vault's jobs, its vault is the one rebuilt. `null` once it is under way; `not_initialized` ("No vault is open."). The page sends its unsaved edits first. |
 | `window` | `{ step }` | What the host's own keys do, from the page (`ui.md#go-to`): `zoom_in`, `zoom_out` and `zoom_reset` zoom the page a step in or out or back to 100%, `fullscreen` enters or leaves fullscreen. `null`; `bad_request` for another step. |
+| `search` | `{ text }` | The entities holding every word of `text`, in any order and case, also inside a longer word (`vault.md#search`). `ok {terms, hits: [{id, excerpt?, where?}]}` in no order: `terms`, the words as searched (lower case, each once); per hit, when its title lacks a word, `excerpt`, the first line of its text holding one, cut around it, or a label with `where`, the text "Label". A newer `search` supersedes a running one, which answers `cancelled` (channel `search`). `invalid_argument` without a word; `not_initialized` ("No vault is open."); `unsupported` ("Search isn't available: the catalog couldn't be opened.", or "… is behind; open the vault again." after a failed write); `sqlite` ("… can't be read."). |
 | `open_url` | `{ url }` | Open a link in its default app (the browser, the email app). Only `http://`, `https://`, `mailto:` and `tel:` links, else `invalid_argument`: anything else could start a program or open a file. `null` once the shell has taken the link, or the shell's error ("Could not open …"). An `id:` link never reaches the host (`editor.md#links`). |
 
 ### Document commands <a id="documents"></a>

@@ -15,6 +15,7 @@ use crate::documents;
 use crate::google;
 use crate::google::accounts::{CalendarSource, Level};
 use crate::scans;
+use crate::search;
 use crate::settings;
 use crate::structure;
 use crate::sys::WindowStep;
@@ -68,6 +69,8 @@ enum Command {
     RebuildIndex,
     /// The window's zoom or fullscreen (`api::window`).
     Window(Step),
+    /// The entities holding the words (`search`).
+    Search(Query),
     /// Open a web, email or phone link in its default app.
     OpenUrl(Url),
     /// Stop the job `id` (`jobs::cancel_job`).
@@ -202,6 +205,12 @@ struct Title {
     title: String,
 }
 
+/// `{text}`
+#[derive(Deserialize)]
+struct Query {
+    text: String,
+}
+
 /// `{id, thread}`
 #[derive(Deserialize)]
 struct InThread {
@@ -334,6 +343,7 @@ impl Command {
             "reveal_vault" => Command::RevealVault,
             "rebuild_index" => Command::RebuildIndex,
             "window" => Command::Window(from_value(args)?),
+            "search" => Command::Search(from_value(args)?),
             "open_url" => Command::OpenUrl(from_value(args)?),
             "cancel_job" => Command::CancelJob(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
@@ -430,6 +440,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::RevealVault => api::reveal_vault(app, req),
         Command::RebuildIndex => api::rebuild_index(app, req),
         Command::Window(a) => api::window(app, req, a.step),
+        Command::Search(a) => search::search(app, req, a.text),
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::CancelJob(a) => jobs::cancel_job(app, req, a.id),
         Command::CloseReady(a) => close::close_ready(app, req, a),

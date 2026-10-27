@@ -56,6 +56,7 @@
   "scans.nothing_written": "Nichts wird geschrieben, bevor Sie importieren.",
   "scans.proposed_title": "Vorgeschlagener Titel · bearbeiten Sie ihn vor dem Import",
   "scans.read_running": "Ein anderer Ordner wird noch gelesen; stoppen Sie ihn oder warten Sie darauf.",
+  "search.catalog_behind": "Die Suche ist nicht verfügbar: Der Katalog ist nicht aktuell; öffnen Sie den Tresor erneut.",
   "settings.intro": "Wie Avelor für Sie auf diesem PC arbeitet. Eine Änderung gilt sofort; was auf den nächsten Start wartet, sagt es. Was alle teilen, die den Tresor öffnen, steht auf seinen eigenen Seiten.",
   "watch.enter_folder": "Geben Sie einen Ordner an.",
   "watch.no_vault": "Ordnerüberwachungen werden im Tresor aufbewahrt: Öffnen Sie einen Tresor, um sie zu sehen.",
