@@ -20,6 +20,7 @@ mod jobs;
 mod page;
 mod protocol;
 mod scans;
+mod search;
 mod settings;
 mod shell;
 mod structure;

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use av_store::catalog::{CachedFile, Catalog};
+use av_store::catalog::{CachedFile, Catalog, Words};
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
@@ -21,6 +21,7 @@ use crate::calendar;
 use crate::catalog::CatalogThread;
 use crate::email;
 use crate::jobs::JobKind;
+use crate::search;
 use crate::texts::Text;
 
 /// A batch holds at most this many events ...
@@ -29,9 +30,9 @@ const BATCH_SIZE: usize = 100;
 /// disk shows its files as they come.
 const BATCH_TIME: Duration = Duration::from_millis(50);
 
-/// an indexing event, with the time a read was read at: the catalog decides by
-/// it whether the file had settled (`av_store::catalog::SETTLED`).
-type Indexed = (IndexEvent, Option<SystemTime>);
+/// an indexing event, with the time of a read and its words: the catalog decides
+/// by the time whether the file had settled (`av_store::catalog::SETTLED`).
+type Indexed = (IndexEvent, Option<(SystemTime, Words)>);
 
 // ----------------------------------------------------------------------------
 /// The indexing running, if any (`App::run_indexing`).
@@ -120,17 +121,17 @@ impl App {
         if !self.indexing.is_running(id) {
             return;
         }
-        for (event, read_at) in batch {
-            self.on_index_event(event, read_at);
+        for (event, read) in batch {
+            self.on_index_event(event, read);
         }
         self.vault.keep_indexed();
     }
 
     // ------------------------------------------------------------------------
-    /// Apply one indexing event to the vault's index, with the time of its read,
-    /// and tell the page: the events `vault` (the start and the end),
-    /// `entity`, `vault_error` and the indexing's `job`.
-    fn on_index_event(&mut self, event: IndexEvent, read_at: Option<SystemTime>) {
+    /// Apply one indexing event to the vault's index, with the time of a read
+    /// and its words, and tell the page: the events `vault` (the start and
+    /// the end), `entity`, `vault_error` and the indexing's `job`.
+    fn on_index_event(&mut self, event: IndexEvent, read: Option<(SystemTime, Words)>) {
         let Some(run) = &mut self.indexing.running else {
             return;
         };
@@ -181,7 +182,7 @@ impl App {
                 }
             }
         }
-        let added = self.vault.apply_indexed(event, read_at);
+        let added = self.vault.apply_indexed(event, read);
         if let Some(entry) = added.and_then(|id| self.vault.index().entry(&id)) {
             self.post_entity(entry);
         }
@@ -210,7 +211,7 @@ impl App {
 /// The worker's part: av-vault's `indexing` of `root`, its events sent in
 /// batches, until the indexing is done or `cancel` is set. The vault's catalog
 /// gives the texts of the files whose stamps are its rows'; every other file
-/// is read, and goes with the time of its read.
+/// is read, and goes with the time of its read and its words.
 fn read_files(
     root: &Path,
     catalog: &CatalogThread,
@@ -236,11 +237,15 @@ fn read_files(
     let mut sent = Instant::now();
     let (mut total, mut unchanged) = (0, 0);
     vault::index_vault(root, &mut known, |event| {
-        let mut read_at = None;
+        let mut read = None;
         match &event {
             IndexEvent::Start { total: files, .. } => total = *files,
             IndexEvent::Entry { read: None, .. } => unchanged += 1,
-            IndexEvent::Entry { read: Some(_), .. } => read_at = Some(SystemTime::now()),
+            IndexEvent::Entry {
+                entry,
+                read: Some(_),
+                ..
+            } => read = Some((SystemTime::now(), search::words_of(&entry.doc))),
             IndexEvent::Failed { .. } => {}
             IndexEvent::Done => log::info!(
                 "{}: {unchanged} of {total} files from the catalog",
@@ -249,7 +254,7 @@ fn read_files(
         }
         // The start shows the vault at once; the end goes with the last files.
         let flush = matches!(event, IndexEvent::Start { .. } | IndexEvent::Done);
-        batch.push((event, read_at));
+        batch.push((event, read));
         if flush || batch.len() >= BATCH_SIZE || sent.elapsed() >= BATCH_TIME {
             progress.send(std::mem::take(&mut batch));
             sent = Instant::now();
