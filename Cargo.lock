@@ -73,6 +73,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "av-store"
+version = "0.1.0"
+dependencies = [
+ "av-utils",
+ "log",
+]
+
+[[package]]
 name = "av-utils"
 version = "0.1.0"
 dependencies = [

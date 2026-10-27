@@ -1,0 +1,11 @@
+[package]
+name = "av-store"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = { workspace = true }
+av-utils = { path = "../av-utils" }
+
+[lints]
+workspace = true
