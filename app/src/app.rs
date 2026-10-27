@@ -23,12 +23,13 @@ use crate::mail;
 use crate::mail::MailState;
 use crate::protocol::{self, Req};
 use crate::scans::ScanState;
+use crate::search;
 use crate::sys::Owner;
 use crate::sys::UiSignal;
 use crate::vault_scan::VaultScan;
 use crate::vault_settings::VaultSettings;
 use crate::watches::Watches;
-use av_store::catalog::{FileRow, Read};
+use av_store::catalog::{FileRow, Read, Words};
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
@@ -132,20 +133,21 @@ impl Vault {
 
     // ------------------------------------------------------------------------
     /// Put one event of the vault's scan into the index (`Index::apply`),
-    /// with the time a read was read at: the id of the entry it added. A read
-    /// the index took goes to the catalog with its batch (`keep_scanned`).
+    /// with the time of a read and its words: the id of the entry it added.
+    /// A read the index took goes to the catalog with its batch
+    /// (`keep_scanned`).
     pub fn apply_scanned(
         &mut self,
         mut event: ScanEvent,
-        read_at: Option<SystemTime>,
+        read: Option<(SystemTime, Words)>,
     ) -> Option<Id> {
-        let read = match &mut event {
+        let text = match &mut event {
             ScanEvent::Entry { entry, read, .. } => read.take().zip(catalog_key(&entry.local)),
             _ => None,
         };
         let added = self.index.apply(event);
         if added.is_some()
-            && let (Some((file, local)), Some(at)) = (read, read_at)
+            && let (Some((file, local)), Some((at, words))) = (text, read)
         {
             let read = Read {
                 modified: file.stamp.modified(),
@@ -156,6 +158,7 @@ impl Vault {
                 local,
                 text: file.text,
                 read: Some(read),
+                words,
             });
         }
         added
@@ -275,11 +278,12 @@ impl Vault {
             .into_iter()
             .filter_map(|id| {
                 let local = self.local_of(id)?;
-                let text = self.index.entry(id)?.file_text();
+                let entry = self.index.entry(id)?;
                 Some(FileRow {
                     local,
-                    text,
+                    text: entry.file_text(),
                     read: None,
+                    words: search::words_of(&entry.doc),
                 })
             })
             .collect();

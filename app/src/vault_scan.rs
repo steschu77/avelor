@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use av_store::catalog::{CachedFile, Catalog};
+use av_store::catalog::{CachedFile, Catalog, Words};
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
@@ -21,6 +21,7 @@ use crate::calendar;
 use crate::catalog::CatalogThread;
 use crate::jobs::JobKind;
 use crate::mail;
+use crate::search;
 
 /// A batch holds at most this many events ...
 const BATCH_SIZE: usize = 100;
@@ -28,9 +29,9 @@ const BATCH_SIZE: usize = 100;
 /// disk shows its files as they come.
 const BATCH_TIME: Duration = Duration::from_millis(50);
 
-/// A scan event, with the time a read was read at: the catalog decides by
-/// it whether the file had settled (`av_store::catalog::SETTLED`).
-type Scanned = (ScanEvent, Option<SystemTime>);
+/// A scan event, with the time of a read and its words: the catalog decides
+/// by the time whether the file had settled (`av_store::catalog::SETTLED`).
+type Scanned = (ScanEvent, Option<(SystemTime, Words)>);
 
 // ----------------------------------------------------------------------------
 /// The vault scan running, if any (`App::run_scan`).
@@ -119,17 +120,17 @@ impl App {
         if !self.scan.is_running(id) {
             return;
         }
-        for (event, read_at) in batch {
-            self.on_scan_event(event, read_at);
+        for (event, read) in batch {
+            self.on_scan_event(event, read);
         }
         self.vault.keep_scanned();
     }
 
     // ------------------------------------------------------------------------
-    /// Apply one scan event to the vault's index, with the time of its read,
-    /// and tell the page: the events `vault` (the start and the end),
-    /// `entity`, `vault_error` and the scan's `job`.
-    fn on_scan_event(&mut self, event: ScanEvent, read_at: Option<SystemTime>) {
+    /// Apply one scan event to the vault's index, with the time of a read
+    /// and its words, and tell the page: the events `vault` (the start and
+    /// the end), `entity`, `vault_error` and the scan's `job`.
+    fn on_scan_event(&mut self, event: ScanEvent, read: Option<(SystemTime, Words)>) {
         let Some(scan) = &mut self.scan.running else {
             return;
         };
@@ -181,7 +182,7 @@ impl App {
                 }
             }
         }
-        let added = self.vault.apply_scanned(event, read_at);
+        let added = self.vault.apply_scanned(event, read);
         if let Some(entry) = added.and_then(|id| self.vault.index().entry(&id)) {
             self.post_entity(entry);
         }
@@ -210,7 +211,7 @@ impl App {
 /// The worker's part: av-vault's `scan` of `root`, its events sent in
 /// batches, until the scan is done or `cancel` is set. The vault's catalog
 /// gives the texts of the files whose stamps are its rows'; every other file
-/// is read, and goes with the time of its read.
+/// is read, and goes with the time of its read and its words.
 fn read_files(
     root: &Path,
     catalog: &CatalogThread,
@@ -236,11 +237,15 @@ fn read_files(
     let mut sent = Instant::now();
     let (mut total, mut unchanged) = (0, 0);
     vault::scan(root, &mut known, |event| {
-        let mut read_at = None;
+        let mut read = None;
         match &event {
             ScanEvent::Start { total: files, .. } => total = *files,
             ScanEvent::Entry { read: None, .. } => unchanged += 1,
-            ScanEvent::Entry { read: Some(_), .. } => read_at = Some(SystemTime::now()),
+            ScanEvent::Entry {
+                entry,
+                read: Some(_),
+                ..
+            } => read = Some((SystemTime::now(), search::words_of(&entry.doc))),
             ScanEvent::Failed { .. } => {}
             ScanEvent::Done => log::info!(
                 "{}: {unchanged} of {total} files from the catalog",
@@ -249,7 +254,7 @@ fn read_files(
         }
         // The start shows the vault at once; the end goes with the last files.
         let flush = matches!(event, ScanEvent::Start { .. } | ScanEvent::Done);
-        batch.push((event, read_at));
+        batch.push((event, read));
         if flush || batch.len() >= BATCH_SIZE || sent.elapsed() >= BATCH_TIME {
             progress.send(std::mem::take(&mut batch));
             sent = Instant::now();

@@ -22,6 +22,7 @@
   only, so a change to the scan or the catalog is tested on Windows by
   hand too: there the walk's stamps come from the directory listing
   (av-vault's `a_scan_given_its_own_reads_loads_the_same_without_reading`).
+  The words need SQLite's FTS5 with the trigram tokenizer, 3.34 or later.
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
   tests.
@@ -93,7 +94,8 @@ nowhere, not the code: compare the `in N ms` lines with older logs, then
 
 A vault's scan logs how many files came from the catalog ("N of M files
 from the catalog"); a catalog that couldn't be opened or written is
-logged. A file the app shows as it was before a change outside it:
+logged, and "no such tokenizer: trigram" is a system SQLite older than
+3.34. A file the app shows as it was before a change outside it:
 Rebuild index on the Vault page, or deleting `…\Avelor\catalog`, has every
 file read again.
 

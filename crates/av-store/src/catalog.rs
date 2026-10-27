@@ -1,7 +1,8 @@
 //! The catalog: a row per file of a vault's index, its text as the app
-//! holds it, in an SQLite file per vault outside it. A text read from its
-//! file once it had settled keeps the file's stamp: it is cached, and stands
-//! for the file while the two stamps agree; the caller compares them.
+//! holds it and the words a search reads (`vault.md#search`), in an SQLite
+//! file per vault outside it. A text read from its file once it had settled
+//! keeps the file's stamp: it is cached, and stands for the file while the
+//! two stamps agree; the caller compares them.
 
 use std::collections::HashSet;
 use std::ffi::{CStr, OsString};
@@ -16,8 +17,9 @@ use av_utils::fnv::fnv1a_64;
 use crate::sqlite::{self, Db};
 
 /// The version of what a row holds, part of the file's name: another
-/// version is another file, read afresh, never migrated.
-pub const FORMAT: u32 = 1;
+/// version is another file, read afresh, never migrated. The app makes the
+/// words (`search::words_of`), so a change to how is another version too.
+pub const FORMAT: u32 = 2;
 
 /// A file read sooner than this after its last change keeps no stamp: a
 /// second change within the same clock tick and of the same size keeps the
@@ -36,6 +38,14 @@ const SCHEMA: &CStr = c"
         text TEXT NOT NULL
     );";
 
+/// A row's words, under its rowid in `files`. In trigrams, so a word is
+/// found inside a longer one; without case, but with its diacritics.
+const WORDS: &CStr = c"CREATE VIRTUAL TABLE IF NOT EXISTS words
+    USING fts5(title, labels, body, tokenize = 'trigram')";
+
+const FORGET_WORDS: &CStr =
+    c"DELETE FROM words WHERE rowid = (SELECT rowid FROM files WHERE local = ?1)";
+
 // ----------------------------------------------------------------------------
 /// A file's text for its row.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +57,17 @@ pub struct FileRow {
     pub text: String,
     /// For a text read from the file: the file's stamp then, and when.
     pub read: Option<Read>,
+    pub words: Words,
+}
+
+// ----------------------------------------------------------------------------
+/// What a search reads of a file: its title, its labels and its text, a
+/// line each.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Words {
+    pub title: String,
+    pub labels: String,
+    pub body: String,
 }
 
 // ----------------------------------------------------------------------------
@@ -137,43 +158,65 @@ impl Catalog {
     }
 
     // ------------------------------------------------------------------------
-    /// Replace the rows of `files`' paths, in one transaction. A read keeps
-    /// its stamp if the file had settled by then (`SETTLED`) and the time
-    /// fits nanoseconds in an `i64`.
+    /// Replace the rows of `files`' paths with their words, in one
+    /// transaction. A read keeps its stamp if the file had settled by then
+    /// (`SETTLED`) and the time fits nanoseconds in an `i64`.
     pub fn put(&mut self, files: &[FileRow]) -> Result<()> {
         if files.is_empty() {
             return Ok(());
         }
         self.transaction(|db| {
-            let mut insert = db.prepare(
-                c"INSERT OR REPLACE INTO files(local, modified, size, text) VALUES(?1, ?2, ?3, ?4)",
+            // An update keeps the row's rowid, which its words go by; a
+            // replace would give it a new one.
+            let mut upsert = db.prepare(
+                c"INSERT INTO files(local, modified, size, text) VALUES(?1, ?2, ?3, ?4)
+                  ON CONFLICT(local) DO UPDATE SET
+                  modified = excluded.modified, size = excluded.size, text = excluded.text",
+            )?;
+            let mut forget_words = db.prepare(FORGET_WORDS)?;
+            let mut insert_words = db.prepare(
+                c"INSERT INTO words(rowid, title, labels, body)
+                  SELECT rowid, ?2, ?3, ?4 FROM files WHERE local = ?1",
             )?;
             for file in files {
-                insert.bind_text(1, &file.local)?;
+                upsert.bind_text(1, &file.local)?;
                 match file.read.as_ref().and_then(stamp_of) {
                     Some((modified, size)) => {
-                        insert.bind_i64(2, modified)?;
-                        insert.bind_i64(3, size)?;
+                        upsert.bind_i64(2, modified)?;
+                        upsert.bind_i64(3, size)?;
                     }
                     None => {
-                        insert.bind_null(2)?;
-                        insert.bind_null(3)?;
+                        upsert.bind_null(2)?;
+                        upsert.bind_null(3)?;
                     }
                 }
-                insert.bind_text(4, &file.text)?;
-                insert.step()?;
-                insert.reset()?;
+                upsert.bind_text(4, &file.text)?;
+                upsert.step()?;
+                upsert.reset()?;
+                forget_words.bind_text(1, &file.local)?;
+                forget_words.step()?;
+                forget_words.reset()?;
+                insert_words.bind_text(1, &file.local)?;
+                insert_words.bind_text(2, &file.words.title)?;
+                insert_words.bind_text(3, &file.words.labels)?;
+                insert_words.bind_text(4, &file.words.body)?;
+                insert_words.step()?;
+                insert_words.reset()?;
             }
             Ok(())
         })
     }
 
     // ------------------------------------------------------------------------
-    /// Drop the rows of `locals`, in one transaction.
+    /// Drop the rows of `locals` with their words, in one transaction.
     pub fn forget<'a>(&mut self, locals: impl IntoIterator<Item = &'a str>) -> Result<()> {
         self.transaction(|db| {
+            let mut forget_words = db.prepare(FORGET_WORDS)?;
             let mut delete = db.prepare(c"DELETE FROM files WHERE local = ?1")?;
             for local in locals {
+                forget_words.bind_text(1, local)?;
+                forget_words.step()?;
+                forget_words.reset()?;
                 delete.bind_text(1, local)?;
                 delete.step()?;
                 delete.reset()?;
@@ -191,6 +234,53 @@ impl Catalog {
             .filter(|local| !locals.contains(local.as_str()))
             .collect();
         self.forget(gone.iter().map(String::as_str))
+    }
+
+    // ------------------------------------------------------------------------
+    /// Hand `each` the path and the words of every row that may hold all of
+    /// `terms` (lower case): the terms of 3 characters or more narrow the
+    /// rows by their trigrams, shorter ones are left to `each`, which returns
+    /// whether to go on.
+    pub fn search(
+        &self,
+        terms: &[String],
+        mut each: impl FnMut(String, Words) -> bool,
+    ) -> Result<()> {
+        let query = match_query(terms);
+        let mut select = if query.is_empty() {
+            self.db.prepare(
+                c"SELECT files.local, words.title, words.labels, words.body
+                  FROM words JOIN files ON files.rowid = words.rowid",
+            )?
+        } else {
+            let mut select = self.db.prepare(
+                c"SELECT files.local, words.title, words.labels, words.body
+                  FROM words JOIN files ON files.rowid = words.rowid WHERE words MATCH ?1",
+            )?;
+            select.bind_text(1, &query)?;
+            select
+        };
+        while select.step()? {
+            let (Some(local), Some(title), Some(labels), Some(body)) = (
+                select.column_text(0),
+                select.column_text(1),
+                select.column_text(2),
+                select.column_text(3),
+            ) else {
+                continue;
+            };
+            if !each(
+                local,
+                Words {
+                    title,
+                    labels,
+                    body,
+                },
+            ) {
+                break;
+            }
+        }
+        Ok(())
     }
 
     // ------------------------------------------------------------------------
@@ -227,6 +317,18 @@ pub fn settled(modified: SystemTime, at: SystemTime) -> bool {
 }
 
 // ----------------------------------------------------------------------------
+/// The FTS5 query that requires each of `terms` of 3 characters or more,
+/// as a string, so nothing in it is read as an operator; empty if none is.
+fn match_query(terms: &[String]) -> String {
+    let strings: Vec<String> = terms
+        .iter()
+        .filter(|term| term.chars().count() >= 3)
+        .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+        .collect();
+    strings.join(" AND ")
+}
+
+// ----------------------------------------------------------------------------
 /// The stamp `read` keeps, as stored: none for a file that hadn't settled.
 fn stamp_of(read: &Read) -> Option<(i64, i64)> {
     if !settled(read.modified, read.at) {
@@ -240,11 +342,14 @@ fn stamp_of(read: &Read) -> Option<(i64, i64)> {
 fn open(path: &Path, root: &Path, rebuild: bool) -> Result<Catalog> {
     let db = Db::open(path)?;
     db.exec(SCHEMA)?;
+    db.exec(WORDS)?;
     let mut catalog = Catalog { db };
     let root = root.to_string_lossy();
     if rebuild || catalog.root()?.as_deref() != Some(&*root) {
         catalog.transaction(|db| {
-            db.exec(c"DELETE FROM files")?;
+            // Dropped and made again: FTS5 would delete its rows one by one.
+            db.exec(c"DELETE FROM files; DROP TABLE words;")?;
+            db.exec(WORDS)?;
             let mut set =
                 db.prepare(c"INSERT OR REPLACE INTO meta(key, value) VALUES('root', ?1)")?;
             set.bind_text(1, &root)?;
@@ -366,6 +471,7 @@ mod tests {
                 size: text.len() as u64,
                 at: modified + Duration::from_secs(3600),
             }),
+            words: Words::default(),
         }
     }
 
@@ -463,6 +569,7 @@ mod tests {
             local: "written.md".to_string(),
             text: "W".to_string(),
             read: None,
+            words: Words::default(),
         };
         catalog.put(&[settled.clone(), unsettled, written]).unwrap();
 
@@ -597,5 +704,138 @@ mod tests {
         fs::write(dir.join("file"), "x").unwrap();
         let below_a_file = dir.join("file").join("catalog");
         assert!(Catalog::open(&below_a_file, Path::new("/vault"), false).is_err());
+    }
+
+    // ------------------------------------------------------------------------
+    fn words(title: &str, labels: &str, body: &str) -> Words {
+        Words {
+            title: title.to_string(),
+            labels: labels.to_string(),
+            body: body.to_string(),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// `local`'s settled read with `words`.
+    fn worded(local: &str, words: Words) -> FileRow {
+        FileRow {
+            words,
+            ..read(local, "x", at(1))
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The paths a search of `catalog` for `terms` hands over, sorted.
+    fn found(catalog: &Catalog, terms: &[&str]) -> Vec<String> {
+        let terms: Vec<String> = terms.iter().map(|term| term.to_string()).collect();
+        let mut locals = Vec::new();
+        catalog
+            .search(&terms, |local, _| {
+                locals.push(local);
+                true
+            })
+            .unwrap();
+        sorted(locals)
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn words_are_found_inside_longer_ones_in_any_column_and_case() {
+        let (dir, root) = (temp_dir("search"), Path::new("/vault"));
+        let mut catalog = Catalog::open(&dir, root, false).unwrap();
+        catalog
+            .put(&[
+                worded(
+                    "a.md",
+                    words("Stromrechnung", "Haus", "Bitte bis Freitag zahlen"),
+                ),
+                worded("b.md", words("Brief", "", "Die RECHNUNG kommt")),
+                worded("c.md", words("Notiz", "Rechnung", "")),
+            ])
+            .unwrap();
+
+        assert_eq!(found(&catalog, &["rechnung"]), ["a.md", "b.md", "c.md"]);
+        assert_eq!(found(&catalog, &["rechnung", "freitag"]), ["a.md"]);
+        assert_eq!(found(&catalog, &["haus", "zahlen"]), ["a.md"]);
+        assert!(found(&catalog, &["rechnungen"]).is_empty());
+        // Short terms leave every row to the caller.
+        assert_eq!(found(&catalog, &["ab"]), ["a.md", "b.md", "c.md"]);
+        assert_eq!(found(&catalog, &["ab", "brief"]), ["b.md"]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_term_is_found_as_written_whatever_it_holds() {
+        let (dir, root) = (temp_dir("search-quoted"), Path::new("/vault"));
+        let mut catalog = Catalog::open(&dir, root, false).unwrap();
+        let title = "Say \"hi\" AND-more *now* (near)";
+        catalog
+            .put(&[worded("a.md", words(title, "", ""))])
+            .unwrap();
+        for term in ["\"hi\"", "and-more", "*now*", "and", "(near)", "near("] {
+            let expected: &[&str] = if term == "near(" { &[] } else { &["a.md"] };
+            assert_eq!(found(&catalog, &[term]), expected, "{term}");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_put_replaces_the_words_and_forget_and_keep_only_drop_them() {
+        let (dir, root) = (temp_dir("search-replaced"), Path::new("/vault"));
+        let mut catalog = Catalog::open(&dir, root, false).unwrap();
+        catalog
+            .put(&[worded("a.md", words("Old title", "", "old body"))])
+            .unwrap();
+        catalog
+            .put(&[worded("a.md", words("New title", "", "new body"))])
+            .unwrap();
+        assert!(found(&catalog, &["old"]).is_empty());
+        assert_eq!(found(&catalog, &["new", "body"]), ["a.md"]);
+
+        catalog.forget(["a.md"]).unwrap();
+        assert!(found(&catalog, &["new"]).is_empty());
+        catalog
+            .put(&[
+                worded("b.md", words("Same", "", "")),
+                worded("c.md", words("Same", "", "")),
+            ])
+            .unwrap();
+        catalog.keep_only(&HashSet::from(["c.md"])).unwrap();
+        assert_eq!(found(&catalog, &["same"]), ["c.md"]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_rebuild_leaves_no_words() {
+        let (dir, root) = (temp_dir("search-rebuild"), Path::new("/vault"));
+        let mut catalog = Catalog::open(&dir, root, false).unwrap();
+        catalog
+            .put(&[worded("a.md", words("Title", "", ""))])
+            .unwrap();
+        drop(catalog);
+        let catalog = Catalog::open(&dir, root, true).unwrap();
+        assert!(found(&catalog, &["title"]).is_empty());
+        assert!(found(&catalog, &["ti"]).is_empty());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_search_stops_when_told() {
+        let (dir, root) = (temp_dir("search-stop"), Path::new("/vault"));
+        let mut catalog = Catalog::open(&dir, root, false).unwrap();
+        let rows: Vec<FileRow> = ["a.md", "b.md", "c.md"]
+            .iter()
+            .map(|local| worded(local, words("Same", "", "")))
+            .collect();
+        catalog.put(&rows).unwrap();
+        let mut seen = 0;
+        let terms = ["same".to_string()];
+        catalog
+            .search(&terms, |_, _| {
+                seen += 1;
+                false
+            })
+            .unwrap();
+        assert_eq!(seen, 1);
     }
 }

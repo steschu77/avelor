@@ -24,6 +24,7 @@ mod mail;
 mod page;
 mod protocol;
 mod scans;
+mod search;
 mod shell;
 mod structure;
 mod sys;
