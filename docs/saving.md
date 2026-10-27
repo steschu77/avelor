@@ -175,8 +175,8 @@ is the point to act on what was edited. The calendar sync uses it
 edit mode, and a calendar's auto-sync waits while one of its events is in
 edit mode, so a change from Google never lands in an open editor. The host
 forgets the list when a vault opens, and the page loading opens one.
-Before a vault switch every editor leaves edit mode, saving
-(`leaveEditModes`, as closing the app does). When the new vault opens, the
+Before a vault switch or Rebuild index every editor leaves edit mode,
+saving (`leaveEditModes`, as closing the app does). When the new vault opens, the
 page forgets its unsaved state, so nothing of the old vault is saved into
 the new one (`vault.md#opening`).
 
@@ -266,12 +266,13 @@ the status bar).
 
 - A change that keeps both the size and the modified time (FAT's 2-second
   resolution, tools that restore the time) isn't found, and with the
-  catalog not at the next start either, until the file changes again.
+  catalog not at the next start either, until the file changes again or
+  Rebuild index reads every file (`vault.md#catalog`).
 - On Windows the scan takes a file's stamp from the directory listing,
   which can lag behind a file another program holds open, or behind an SMB
   client's cache: a change that leaves the listing's stamp as the catalog
   has it shows the row's text, until the first save or file check finds
-  the change.
+  the change, or Rebuild index.
 - A file changed outside the app is found before a write, on load and when
   the window becomes active — not while the app stays in front, and not
   for files no editor shows.

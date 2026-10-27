@@ -94,7 +94,8 @@ nowhere, not the code: compare the `in N ms` lines with older logs, then
 A vault's scan logs how many files came from the catalog ("N of M files
 from the catalog"); a catalog that couldn't be opened or written is
 logged. A file the app shows as it was before a change outside it:
-deleting `…\Avelor\catalog` has every file read again.
+Rebuild index on the Vault page, or deleting `…\Avelor\catalog`, has every
+file read again.
 
 ## Measuring size <a id="measuring-size"></a>
 

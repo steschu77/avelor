@@ -120,13 +120,13 @@ impl Vault {
     }
 
     // ------------------------------------------------------------------------
-    /// Make `root` the open vault with its catalog, and reset the index
-    /// ready to receive scan events (`App::run_scan`).
-    pub fn begin_open(&mut self, root: &Path) {
+    /// Make `root` the open vault with its catalog, emptied for `rebuild`,
+    /// and reset the index ready to receive scan events (`App::run_scan`).
+    pub fn begin_open(&mut self, root: &Path, rebuild: bool) {
         self.index.begin(root);
         self.scanned.clear();
         self.catalog
-            .open(self.catalog_dir.clone(), root.to_path_buf());
+            .open(self.catalog_dir.clone(), root.to_path_buf(), rebuild);
         self.root = Some(root.to_path_buf());
     }
 

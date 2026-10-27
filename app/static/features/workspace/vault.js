@@ -44,14 +44,19 @@ function vaultSummary({ vault_state, files_total }) {
   return vault_state === 'scanning' ? `Scanning \u00b7 ${files}` : files;
 }
 
-// Show in folder (only for an open vault) and Switch vault.
+// Show in folder and Rebuild index (only for an open vault), and Switch
+// vault.
 function renderVaultActions(open) {
   const actions = accEl('div', 'vault__actions');
   if (open) {
     const reveal = accEl('button', 'btn', 'Show in folder');
     reveal.type = 'button';
     reveal.addEventListener('click', revealVault);
-    actions.append(reveal);
+    const rebuild = accEl('button', 'btn', 'Rebuild index');
+    rebuild.type = 'button';
+    rebuild.title = 'Read every file of the vault again';
+    rebuild.addEventListener('click', rebuildIndex);
+    actions.append(reveal, rebuild);
   }
   const change = accEl('button', 'btn', open ? 'Switch vault\u2026' : 'Open a vault\u2026');
   change.type = 'button';
@@ -83,14 +88,25 @@ store.subscribe([
 ], () => scheduleRenderVault());
 
 // ----------------------------------------------------------------------------
-// Open another vault, picked on the host. Every editor leaves edit mode
-// first and unsaved edits are sent, so they reach the vault they belong to
-// and nothing typed while the old vault closes is lost (`forgetVault`); a
-// cancelled picker loses nothing.
-export function switchVault() {
+// Before the vault opens again (a switch, Rebuild index), every editor
+// leaves edit mode and unsaved edits are sent, so they reach the vault they
+// belong to and nothing typed while it closes is lost (`forgetVault`).
+function sendEdits() {
   leaveEditModes();
   for (const doc_id of store.getState().dirty_docs) trySave(doc_id);
+}
+
+// Open another vault, picked on the host; a cancelled picker loses nothing.
+export function switchVault() {
+  sendEdits();
   rpcCall('switch_vault');
+}
+
+// Read every file of the open vault again: its catalog starts over
+// (vault.md#catalog), and the vault opens again as a switch to it does.
+function rebuildIndex() {
+  sendEdits();
+  rpcCall('rebuild_index').catch(e => showError(e.message));
 }
 
 // Show the open vault's folder in Explorer (the vault menu, the Vault

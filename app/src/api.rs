@@ -1,6 +1,7 @@
-//! The app's own commands (`api.md#the-page-side`): `ready`, switching and
-//! revealing the vault, opening a link, and the page's preferences; and
-//! opening a vault with its accounts, watches and settings (`open_vault`).
+//! The app's own commands (`api.md#the-page-side`): `ready`, switching,
+//! revealing and rebuilding the vault, opening a link, and the page's
+//! preferences; and opening a vault with its accounts, watches and settings
+//! (`open_vault`).
 
 use std::path::{Path, PathBuf};
 
@@ -28,7 +29,7 @@ pub fn ready(app: &mut App, req: Req) {
         app.notice(CONFIG_UNREAD);
     }
     if let Some(root) = app.config.vault().map(Path::to_path_buf) {
-        open_vault(app, &root);
+        open_vault(app, &root, false);
     }
     req.ok(json!({ "google": !app.hides_google }));
 }
@@ -65,17 +66,31 @@ pub fn switch_vault(app: &mut App, req: Req, path: Option<PathBuf>) {
 /// open vault has stopped (`App::switch_vault_when_stopped`).
 pub(crate) fn switch_to(app: &mut App, root: PathBuf) {
     app.remember_vault(root.clone());
-    app.switch_vault_when_stopped(root);
+    app.switch_vault_when_stopped(root, false);
+}
+
+// ----------------------------------------------------------------------------
+/// `rebuild_index`: open the vault again with its catalog emptied, so
+/// every file is read (`vault.md#catalog`), as a switch to the same
+/// folder does; nothing is remembered, unlike a switch. Answers `null` once
+/// it is under way; `not_initialized` if no vault is open.
+pub fn rebuild_index(app: &mut App, req: Req) {
+    if app.rebuild_when_stopped() {
+        req.ok(());
+    } else {
+        req.fail(Error::NotInitialized, "No vault is open.");
+    }
 }
 
 // ----------------------------------------------------------------------------
 /// Make `root` the open vault with its accounts and folder watches, then
 /// kick off a scan that streams progress and results back via
-/// `on_scan_event`. A save of the old vault still held for the conflict
-/// dialog is kept as a conflict copy there first (`documents::keep_held`).
-pub(crate) fn open_vault(app: &mut App, root: &Path) {
+/// `on_scan_event`, its catalog emptied first for `rebuild`. A save of
+/// the old vault still held for the conflict dialog is kept as a conflict
+/// copy there first (`documents::keep_held`).
+pub(crate) fn open_vault(app: &mut App, root: &Path, rebuild: bool) {
     documents::keep_held(app);
-    app.vault.begin_open(root);
+    app.vault.begin_open(root, rebuild);
     documents::vault_opened(app);
     accounts::open(app, root);
     folders::open(app, root);
@@ -246,6 +261,16 @@ mod tests {
         let sent = h.call("reveal_vault", json!({}));
         let err = json!({ "code": "invalid_path", "message": "No vault is open." });
         assert_eq!(sent, [json!({ "re": 1, "err": err })]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn rebuilding_the_index_needs_a_vault() {
+        let mut h = Harness::new("rebuild");
+        let sent = h.call("rebuild_index", json!({}));
+        let err = json!({ "code": "not_initialized", "message": "No vault is open." });
+        assert_eq!(sent, [json!({ "re": 1, "err": err })]);
+        assert!(!h.app.scanning());
     }
 
     // ------------------------------------------------------------------------

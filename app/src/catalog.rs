@@ -48,12 +48,13 @@ impl CatalogThread {
 
     // ------------------------------------------------------------------------
     /// Open the catalog of the vault at `root` in `dir` in place of the one
-    /// open. One that can't be opened is logged, and the vault goes without.
-    pub fn open(&self, dir: PathBuf, root: PathBuf) {
+    /// open, emptied for `rebuild`. One that can't be opened is logged, and
+    /// the vault goes without.
+    pub fn open(&self, dir: PathBuf, root: PathBuf, rebuild: bool) {
         self.queue(move |catalog| {
             // The old one first: it may be the same file.
             *catalog = None;
-            match Catalog::open(&dir, &root, false) {
+            match Catalog::open(&dir, &root, rebuild) {
                 Ok(opened) => *catalog = Some(opened),
                 Err(err) => log::warn!("{}: no catalog: {err}", root.display()),
             }

@@ -770,9 +770,10 @@ These are the ID card thread's entities; the whole vault has every type.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | A1 | Startup | page load → `rpcCall('ready')` (`app.js`) | the page comes with its preferences (`ui.md#preferences`); `api::ready`: if `config.vault` is set, `open_vault`: its accounts (`accounts`), its watches (`watches`), its settings (`vault_settings`), then the scan: `vault` (scanning), the scan's `job`, per file an `entity` and a `job` update, `vault_error` per unreadable file, `vault` (open), the `job` ended (with a note if files failed); answered `{google}` once the scan has started | sidebar, lens and counts fill while scanning; the Vault page lists unreadable files |
-| A2 | Switch vault | vault menu → "Switch vault…", or the Vault page → `switchVault`: every editor leaves edit mode (`leaveEditModes`), `save_doc_content` per unsaved edit, then `switch_vault` (no path) | modal folder picker (cancel: `path: null`, nothing else happens); the old vault's jobs and the assistant's replies stopped, the new vault opened once they have ended (`architecture.md#jobs`); `config.vault` saved; new scan as A1 | `vault` (scanning) → `forgetVault`: the page forgets the old vault, the scan fills it with the new one; the next start opens the new vault |
+| A2 | Switch vault | vault menu → "Switch vault…", or the Vault page → `switchVault`: `sendEdits` (every editor leaves edit mode, `leaveEditModes`; `save_doc_content` per unsaved edit), then `switch_vault` (no path) | modal folder picker (cancel: `path: null`, nothing else happens); the old vault's jobs and the assistant's replies stopped, the new vault opened once they have ended (`architecture.md#jobs`); `config.vault` saved; new scan as A1 | `vault` (scanning) → `forgetVault`: the page forgets the old vault, the scan fills it with the new one; the next start opens the new vault |
 | A3 | Show in folder | vault menu or Vault page → `reveal_vault` | `sys::open_path` on the vault folder after the handler (`on_ui`); `invalid_path` if none is open, shown in the status bar | Explorer (on Linux the file manager) shows the vault |
-| A4 | Vault page | Workspace → Vault (op `settings`) → `renderVault` (`features/workspace/vault.js`) | — | name, path, file count ("Scanning" until `vault` says `open`), Show in folder, Switch vault, the unreadable files |
+| A4 | Vault page | Workspace → Vault (op `settings`) → `renderVault` (`features/workspace/vault.js`) | — | name, path, file count ("Scanning" until `vault` says `open`), Show in folder, Rebuild index, Switch vault, the unreadable files |
+| A5 | Rebuild index | Vault page → `rebuildIndex`: `sendEdits` as A2, then `rebuild_index` | the vault's jobs stopped as for a switch, then the vault opened again with its catalog emptied (`vault.md#catalog`); nothing remembered; new scan as A1, every file read; `not_initialized` if none is open, shown in the status bar | `vault` (scanning) → `forgetVault`: the page starts over as on a switch, the selection gone; the log says 0 files came from the catalog |
 | E6 | Restore | Workspace > Trash, Restore → `restore_entity` | `Index::restore` moves the file back → `entity` | the restored entity selected; a thread the delete dissolved stays dissolved |
 
 ## Opening and scanning <a id="opening"></a>
@@ -840,7 +841,7 @@ page's vault over (`forgetVault`, `model/events.js`). The page forgets:
 - the entities, projects and threads and their content (`docContent`);
 - the unsaved state. No editor of the old vault saves any more: its edits
   were sent before the switch, when every editor left edit mode
-  (`switchVault`).
+  (`sendEdits`).
 - the conflicts;
 - the selection and the filter;
 - a page about the old vault: New, Fetch mail, Import scans, and the Task
@@ -890,6 +891,9 @@ holds nothing the files don't: deleting it costs one full read.
   the index's files: the rows of the files gone or unreadable go, and
   those of a file whose id another file has. A file the app made meanwhile
   stays. A stopped or replaced scan drops nothing.
+- **Rebuild index** on the Vault page empties the catalog and opens the
+  vault again as a switch to it does (flow A5), so every file is read: for
+  a change the stamp can't tell (`saving.md#limits`).
 - **Changes outside the app** reach the catalog as they reach the index:
   when the app looks at the file again (`saving.md#file-checks`), or at the
   next open. Until then both hold the old text.

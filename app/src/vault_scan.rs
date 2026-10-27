@@ -432,6 +432,20 @@ mod tests {
         write_note(&path, id, "Newer", then);
         open(&mut h, &root);
         assert_eq!(title(&h, &id), "Newer");
+
+        // Rebuild index reads every file again, and the page starts over.
+        write_note(&path, id, "Final", then);
+        let mut sent = h.call("rebuild_index", serde_json::json!({}));
+        h.wait_scanned();
+        sent.extend(parse(&h.take()));
+        let reply = sent.iter().find(|m| m["re"] == 1).unwrap();
+        assert_eq!(reply["ok"], Value::Null);
+        let states: Vec<&str> = events(&sent, "vault")
+            .iter()
+            .map(|v| v["data"]["state"].as_str().unwrap())
+            .collect();
+        assert_eq!(states, ["scanning", "open"]);
+        assert_eq!(title(&h, &id), "Final");
     }
 
     // ------------------------------------------------------------------------

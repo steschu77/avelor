@@ -5,7 +5,7 @@
 //! opens the new vault once they have ended.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use av_utils::cancel::Cancel;
 use av_utils::error::Error;
@@ -68,8 +68,9 @@ struct Job {
 pub struct Jobs {
     running: HashMap<Id, Job>,
     /// The vault to open once the stopped jobs bound to the open vault have
-    /// ended (`App::switch_vault_when_stopped`).
-    pending_vault: Option<PathBuf>,
+    /// ended (`App::switch_vault_when_stopped`), and whether its catalog
+    /// starts over.
+    pending_vault: Option<(PathBuf, bool)>,
 }
 
 // ----------------------------------------------------------------------------
@@ -223,8 +224,9 @@ impl App {
     /// assistant's replies being written keep what they have so far (as
     /// Stop does), mail fetch, calendar sync, the reading of scans and the
     /// mail analyses are stopped, and a sync first records what it already did. A newer
-    /// switch replaces this one.
-    pub fn switch_vault_when_stopped(&mut self, root: PathBuf) {
+    /// switch replaces this one. `rebuild` empties the vault's catalog
+    /// first (`vault.md#catalog`).
+    pub fn switch_vault_when_stopped(&mut self, root: PathBuf, rebuild: bool) {
         chat::stop_all(self);
         let bound: Vec<Id> = self
             .jobs
@@ -236,8 +238,25 @@ impl App {
         for id in bound {
             stop(self, id);
         }
-        self.jobs.pending_vault = Some(root);
+        self.jobs.pending_vault = Some((root, rebuild));
         self.open_pending_vault();
+    }
+
+    // ------------------------------------------------------------------------
+    /// Rebuild index: open the vault again with its catalog emptied, as
+    /// a switch to it does. With a switch waiting, its vault is the one
+    /// rebuilt. False when no vault is open or waiting.
+    pub fn rebuild_when_stopped(&mut self) -> bool {
+        let waiting = self
+            .jobs
+            .pending_vault
+            .as_ref()
+            .map(|(root, _)| root.clone());
+        let Some(root) = waiting.or_else(|| self.vault.root().map(Path::to_path_buf)) else {
+            return false;
+        };
+        self.switch_vault_when_stopped(root, true);
+        true
     }
 
     // ------------------------------------------------------------------------
@@ -247,8 +266,8 @@ impl App {
         if self.jobs.running.values().any(|job| job.kind.vault_bound()) {
             return;
         }
-        if let Some(root) = self.jobs.pending_vault.take() {
-            api::open_vault(self, &root);
+        if let Some((root, rebuild)) = self.jobs.pending_vault.take() {
+            api::open_vault(self, &root, rebuild);
         }
     }
 }
@@ -453,6 +472,25 @@ mod tests {
         h.wait_scanned();
         let sent = h.take();
         assert!(!events(&sent, "vault").is_empty(), "{sent:?}");
+        assert_eq!(h.app.vault.root(), Some(other.as_path()));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_rebuild_while_a_switch_waits_rebuilds_the_vault_switched_to() {
+        let mut h = Harness::with_vault("switch-rebuild", &[note_file(0)]);
+        let other = h.vault().parent().unwrap().join("other");
+        let (name, text) = note_file(1);
+        fs_write(&other.join(name), &text);
+
+        let sync = h.app.start_job(JobKind::CalendarSync, "Sync".into(), 1);
+        api::switch_to(&mut h.app, other.clone());
+        assert!(h.app.rebuild_when_stopped());
+        h.run_queue();
+        assert_eq!(h.app.vault.root(), Some(h.vault().as_path()), "still waits");
+
+        h.app.end_job(sync, "stopped");
+        h.wait_scanned();
         assert_eq!(h.app.vault.root(), Some(other.as_path()));
     }
 
