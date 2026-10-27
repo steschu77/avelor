@@ -678,6 +678,8 @@
   "lens.calendar": "Calendario",
   "lens.dashboard": "Resumen",
   "lens.documents": "Documentos",
+  "lens.read_only": "solo lectura",
+  "lens.read_only_file": "Su archivo es de solo lectura o su frontmatter no se puede leer: aquí no se puede cambiar.",
   "lens.timeline": "Cronología",
   "linked.from": "Enlazado desde",
   "linked.link_this": "Enlazar con esto",

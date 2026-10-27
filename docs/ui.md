@@ -171,7 +171,11 @@ know is dropped, a card they don't name joins at the end.
 `features/lenses/documents.js`: the entities in
 the vault panel's filter as rows, in columns Name (the fold, the type
 icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
-`sort_state`; `kind` is its last tiebreak, no column sorts by it).
+`sort_state`; `kind` is its last tiebreak, no column sorts by it). A
+title is tagged read-only for an entity whose file can't be written and
+for an event of a calendar read-only in Google (`calendar.md#two-way-sync`),
+its tooltip saying which (`readOnlyTag`, `features/lenses/read-only.js`);
+so is the Timeline's.
 
 - **Groups**: under All Projects, a group row per project in the vault
   panel's order (`projectsInOrder`): its fold, name, count of entities

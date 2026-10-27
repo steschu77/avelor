@@ -627,6 +627,8 @@
   "lens.calendar": "Kalender",
   "lens.dashboard": "Übersicht",
   "lens.documents": "Dokumente",
+  "lens.read_only": "schreibgeschützt",
+  "lens.read_only_file": "Seine Datei ist schreibgeschützt oder ihr Frontmatter nicht lesbar: hier lässt es sich nicht ändern.",
   "lens.timeline": "Chronik",
   "linked.from": "Verknüpft von",
   "linked.link_this": "Hiermit verknüpfen",

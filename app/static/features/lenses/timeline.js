@@ -21,6 +21,7 @@ import { endDragPreview, startDragPreview, takeMemberDrops } from '../../ui/drop
 import { TASK_STATUSES, parseContact, scheduleText } from '../panel/details.js';
 import { markSelection, selectDocument } from '../selection.js';
 import { invalidateLenses, registerLens } from './registry.js';
+import { readOnlyTag } from './read-only.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
 
 const lensEl = $('lens-timeline');
@@ -261,17 +262,19 @@ function rowEl(doc, fill, word_filter) {
     rowEls.set(doc.doc_id, el);
   }
   const filled = rowFills.get(el);
-  if (filled?.doc !== doc || filled.fill !== fill || filled.word_filter !== word_filter) {
+  // an event's calendar names whether Google keeps it as it is
+  const calendar = entities.get(doc.event?.calendar);
+  if (filled?.doc !== doc || filled.fill !== fill || filled.word_filter !== word_filter || filled.calendar !== calendar) {
     const [icon, text, labels] = el.children;
     const terms = word_filter?.terms;
     const hit = word_filter?.hits.get(doc.doc_id);
     icon.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.type));
-    text.firstChild.replaceChildren(...markedNodes(doc.title, terms));
+    text.firstChild.replaceChildren(...markedNodes(doc.title, terms), ...readOnlyTag(doc));
     text.lastChild.classList.toggle('tl__hit', Boolean(hit?.excerpt));
     if (hit?.excerpt) text.lastChild.replaceChildren(...excerptNodes(hit, terms));
     else text.lastChild.textContent = summaryOf(doc);
     labels.replaceChildren(...markedNodes((doc.labels ?? []).join(' \u00b7 '), terms));
-    rowFills.set(el, { doc, fill, word_filter });
+    rowFills.set(el, { doc, fill, word_filter, calendar });
   }
   return el;
 }

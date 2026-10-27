@@ -627,6 +627,8 @@
   "lens.calendar": "Calendar",
   "lens.dashboard": "Dashboard",
   "lens.documents": "Documents",
+  "lens.read_only": "read-only",
+  "lens.read_only_file": "Its file is read-only or its frontmatter can't be read: it can't be changed here.",
   "lens.timeline": "Timeline",
   "linked.from": "Linked from",
   "linked.link_this": "Link to this",

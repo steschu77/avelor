@@ -38,6 +38,7 @@ import {
 import { markSelection, selectById, selectDocument } from '../selection.js';
 import { selectFilter } from '../selection.js';
 import { selectLens } from '../selection.js';
+import { readOnlyTag } from './read-only.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
 import { invalidateLenses, registerLens } from './registry.js';
 
@@ -324,10 +325,12 @@ function docRow(group, thread_id, doc, depth, word_filter) {
     return row;
   });
   const filled = rowFills.get(el);
-  if (filled?.doc !== doc || filled.word_filter !== word_filter) {
+  // an event's calendar names whether Google keeps it as it is
+  const calendar = entities.get(doc.event?.calendar);
+  if (filled?.doc !== doc || filled.word_filter !== word_filter || filled.calendar !== calendar) {
     const [, icon, title] = el.firstChild.children;
     icon.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.type));
-    title.replaceChildren(...markedNodes(doc.title, word_filter?.terms), title.lastChild);
+    title.replaceChildren(...markedNodes(doc.title, word_filter?.terms), ...readOnlyTag(doc), title.lastChild);
     const hit = word_filter?.hits.get(doc.doc_id);
     let hitEl = title.nextElementSibling;
     if (hit?.excerpt) {
@@ -340,7 +343,7 @@ function docRow(group, thread_id, doc, depth, word_filter) {
       hitEl?.remove();
     }
     el.lastChild.textContent = doc.date ? DATE_FORMAT.format(doc.date) : '\u2014';
-    rowFills.set(el, { doc, word_filter });
+    rowFills.set(el, { doc, word_filter, calendar });
   }
   return el;
 }
