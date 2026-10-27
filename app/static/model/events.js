@@ -12,6 +12,7 @@
 import { rpcOn } from '../core/rpc.js';
 import { parseDate } from '../core/format.js';
 import { store } from './state.js';
+import { NO_WORDS } from './state.js';
 import { entities } from './entities.js';
 import { projects } from './entities.js';
 import { threads } from './entities.js';
@@ -165,7 +166,7 @@ function forgetVault() {
   const { projects_rev, threads_rev, entities_rev } = store.getState();
   store.setState({
     selected_entity: null, selected_thread: null,
-    selected_project: null, selected_source: null, selected_labels: [],
+    selected_project: null, selected_source: null, selected_labels: [], ...NO_WORDS,
     projects_rev: projects_rev + 1, threads_rev: threads_rev + 1, entities_rev: entities_rev + 1,
   });
 }
