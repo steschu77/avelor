@@ -565,10 +565,10 @@ impl Envelope {
         self.extra.insert(key.into(), value.into());
     }
 
-    /// The texts a search reads besides the title, the labels and the
-    /// body: the roles' names, places, items and messages, then every
-    /// string a record keeps in `extra`. Typed fields that are ids, dates,
-    /// states or codes are left out by naming the others.
+    /// The texts a search reads besides the title, the labels and the body
+    /// (`vault.md#search`): the roles' names, places, items and messages,
+    /// then every string a record keeps in `extra`. Typed fields that are
+    /// ids, dates, states or codes are left out by naming the others.
     pub fn text(&self) -> Vec<&str> {
         let mut out = Vec::new();
         let roles = &self.roles;

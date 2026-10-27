@@ -331,8 +331,9 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
-    /// The text a search reads besides the title and the labels: the
-    /// body as plain text, then the envelope's texts, a line each.
+    /// The text a search reads besides the title and the labels
+    /// (`vault.md#search`): the body as plain text, then the envelope's
+    /// texts, a line each.
     pub fn plain_text(&self) -> String {
         let mut text = markdown::plain_text(&self.content);
         for line in self.envelope.iter().flat_map(Envelope::text) {

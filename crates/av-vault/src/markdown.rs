@@ -28,10 +28,10 @@ pub fn to_html(markdown: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
-/// A markdown body as the words a search reads: a line per block, list
-/// item, table row and code line, the cells of a row joined by " · "; link
-/// and image text without their URLs, no marks. Raw HTML stays text, as the
-/// editor shows it.
+/// A markdown body as the words a search reads (`vault.md#search`): a line
+/// per block, list item, table row and code line, the cells of a row joined
+/// by " · "; link and image text without their URLs, no marks. Raw HTML
+/// stays text, as the editor shows it.
 pub fn plain_text(markdown: &str) -> String {
     let mut out = String::new();
     let mut first_cell = false;
