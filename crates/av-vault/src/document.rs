@@ -12,6 +12,7 @@ use crate::envelope::Message;
 use crate::envelope::Remote;
 use crate::envelope::Task;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
+use crate::markdown;
 use crate::shared::{ContactRef, Genre};
 use crate::vault::FileStamp;
 use av_utils::datetime::DateTime;
@@ -300,6 +301,21 @@ impl Document {
             FileFormat::Markdown => DocumentType::Document,
             FileFormat::YAML => DocumentType::Record,
         })
+    }
+
+    // ------------------------------------------------------------------------
+    /// The text a search reads besides the title and the labels
+    /// (`vault.md#search`): the body as plain text, then the envelope's
+    /// texts, a line each.
+    pub fn plain_text(&self) -> String {
+        let mut text = markdown::plain_text(&self.content);
+        for line in self.envelope.iter().flat_map(Envelope::text) {
+            if !text.is_empty() {
+                text.push('\n');
+            }
+            text.push_str(line);
+        }
+        text
     }
 
     // ------------------------------------------------------------------------
@@ -671,6 +687,20 @@ mod tests {
         assert_eq!(md.kind(), DocumentType::Document);
         let yaml = Document::load("title: x\n".into(), FileFormat::YAML);
         assert_eq!(yaml.kind(), DocumentType::Record);
+    }
+
+    #[test]
+    fn the_plain_text_is_the_body_then_the_envelopes_texts() {
+        let text = "---\ntitle: Letter\ntags: [tax]\nevent:\n  location: Town hall\n---\n# Dear *Jane*\n\nThe deadline.\n";
+        let doc = Document::load(text.into(), FileFormat::Markdown);
+        assert_eq!(doc.plain_text(), "Dear Jane\nThe deadline.\nTown hall");
+        let yaml = Document::load(
+            "title: List\nlist:\n  items: [Milk]\n".into(),
+            FileFormat::YAML,
+        );
+        assert_eq!(yaml.plain_text(), "Milk");
+        let plain = Document::load("Body\n".into(), FileFormat::Markdown);
+        assert_eq!(plain.plain_text(), "Body");
     }
 
     #[test]

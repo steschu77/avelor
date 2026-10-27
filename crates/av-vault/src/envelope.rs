@@ -564,6 +564,98 @@ impl Envelope {
     pub fn set_extra(&mut self, key: &str, value: impl Into<serde_yaml_ng::Value>) {
         self.extra.insert(key.into(), value.into());
     }
+
+    /// The texts a search reads besides the title, the labels and the body
+    /// (`vault.md#search`): the roles' names, places, items and messages,
+    /// then every string a record keeps in `extra`. Typed fields that are
+    /// ids, dates, states or codes are left out by naming the others.
+    pub fn text(&self) -> Vec<&str> {
+        let mut out = Vec::new();
+        let roles = &self.roles;
+        if let Some(document) = &roles.document {
+            names(&mut out, &document.author);
+        }
+        if let Some(message) = &roles.message {
+            names(&mut out, message.sender.iter().chain(&message.recipient));
+        }
+        if let Some(transactions) = &roles.transactions {
+            for transaction in &transactions.transactions {
+                out.extend(transaction.title.as_deref());
+                names(
+                    &mut out,
+                    transaction.sender.iter().chain(&transaction.receiver),
+                );
+            }
+        }
+        if let Some(event) = &roles.event {
+            out.extend(event.location.as_deref());
+            names(&mut out, &event.attendees);
+            for exception in &event.exceptions {
+                out.extend(exception.title.as_deref());
+                out.extend(exception.location.as_deref());
+            }
+        }
+        if let Some(task) = &roles.task {
+            names(&mut out, &task.assignee);
+        }
+        if let Some(contact) = &roles.contact {
+            let lists = [&contact.email, &contact.phone, &contact.address];
+            out.extend(lists.into_iter().flatten().map(String::as_str));
+            out.extend(contact.iban.as_deref());
+        }
+        if let Some(list) = &roles.list {
+            out.extend(list.items.iter().map(String::as_str));
+        }
+        if let Some(email) = &roles.email {
+            out.extend(email.subject.as_deref());
+            out.extend(email.from.as_deref());
+            let to = [&email.to, &email.cc, &email.bcc];
+            out.extend(
+                to.into_iter()
+                    .flat_map(OneOrMany::as_slice)
+                    .map(String::as_str),
+            );
+        }
+        if let Some(conversation) = &roles.conversation {
+            let contents = conversation
+                .messages
+                .iter()
+                .filter_map(|m| m.content.as_deref());
+            out.extend(contents);
+        }
+        if let Some(account) = &roles.bank_account {
+            out.extend(account.number.as_deref());
+            out.extend(account.institution.as_deref());
+            names(&mut out, &account.owner);
+        }
+        for value in self.extra.values() {
+            strings(&mut out, value);
+        }
+        out.retain(|text| !text.trim().is_empty());
+        out
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The names among `contacts`; a link to a contact is its id.
+fn names<'a>(out: &mut Vec<&'a str>, contacts: impl IntoIterator<Item = &'a ContactRef>) {
+    out.extend(contacts.into_iter().filter_map(|contact| match contact {
+        ContactRef::Name(name) => Some(name.as_str()),
+        ContactRef::Id(_) => None,
+    }));
+}
+
+// ----------------------------------------------------------------------------
+/// The strings in `value`, at any depth.
+fn strings<'a>(out: &mut Vec<&'a str>, value: &'a serde_yaml_ng::Value) {
+    use serde_yaml_ng::Value;
+    match value {
+        Value::String(text) => out.push(text),
+        Value::Sequence(values) => values.iter().for_each(|v| strings(out, v)),
+        Value::Mapping(map) => map.values().for_each(|v| strings(out, v)),
+        Value::Tagged(tagged) => strings(out, &tagged.value),
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
 }
 
 #[cfg(test)]
@@ -653,6 +745,76 @@ custom_key: kept
 
         let env2 = Envelope::parse(&env.compose().unwrap()).unwrap();
         assert_eq!(env, env2);
+    }
+
+    #[test]
+    fn the_text_is_the_roles_words_and_the_records_strings() {
+        let yaml = "id: 01a06d07-2b70-708c-9c71-7ddfaa46c0f5
+title: Title
+date: 2026-09-21T09:15:00Z
+tags: [label]
+remote:
+  account: 01a077f7-7e89-7263-b36d-ad63c20809e2
+  remote: [{message-id: \"<abc@example.com>\"}]
+email:
+  kind: request
+  from: \"Alex <alex@example.com>\"
+  to: [\"Office <office@example.com>\"]
+message:
+  sender: '@01a077f7-7e89-7263-b36d-ad63c20809e2'
+  recipient: Jane Doe
+transactions:
+  transactions:
+    - title: Tyres
+      date: 2026-09-01T10:00:00Z
+      status: booked
+      amount: -89.5
+      sender: Garage Miller
+list:
+  items: [Milk, Bread]
+event:
+  status: confirmed
+  location: Town hall
+  timeZone: Europe/Berlin
+plate: AB-123
+service:
+  - {date: 2026-03-01, note: oil changed, km: 42000}
+";
+        let envelope = Envelope::parse(yaml).unwrap();
+        assert_eq!(
+            envelope.text(),
+            [
+                "Jane Doe",
+                "Tyres",
+                "Garage Miller",
+                "Town hall",
+                "Milk",
+                "Bread",
+                "Alex <alex@example.com>",
+                "Office <office@example.com>",
+                "AB-123",
+                "2026-03-01",
+                "oil changed",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_conversation_and_a_contact_give_their_texts() {
+        let yaml = "conversation:
+  messages:
+    - {id: 01a06d07-2b70-708c-9c71-7ddfaa46c0f5, model: some-model, content: The answer}
+contact:
+  type: personal
+  email: [jane@example.com]
+  phone: ['+49 30 1234']
+  IBAN: DE02 1203
+";
+        let envelope = Envelope::parse(yaml).unwrap();
+        assert_eq!(
+            envelope.text(),
+            ["jane@example.com", "+49 30 1234", "DE02 1203", "The answer"]
+        );
     }
 
     #[test]

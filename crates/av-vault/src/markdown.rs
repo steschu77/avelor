@@ -1,5 +1,6 @@
-//! Markdown -> HTML rendering for the WYSIWYG editor, and a markdown line
-//! as a plain title ([`plain_title`]).
+//! Markdown -> HTML rendering for the WYSIWYG editor, a markdown body as
+//! plain text ([`plain_text`]), and a markdown line as a plain title
+//! ([`plain_title`]).
 //!
 //! [`to_html`] renders a markdown body into the exact DOM shape that
 //! `app/static/editor/editor.js` edits — no whitespace between blocks, bare
@@ -24,6 +25,83 @@ pub fn to_html(markdown: &str) -> String {
         writer.event(event);
     }
     writer.out
+}
+
+// ----------------------------------------------------------------------------
+/// A markdown body as the words a search reads (`vault.md#search`): a line
+/// per block, list item, table row and code line, the cells of a row joined
+/// by " · "; link and image text without their URLs, no marks. Raw HTML
+/// stays text, as the editor shows it.
+pub fn plain_text(markdown: &str) -> String {
+    let mut out = String::new();
+    let mut first_cell = false;
+    for event in Parser::new_ext(markdown, options()) {
+        match event {
+            Event::Text(text)
+            | Event::Code(text)
+            | Event::Html(text)
+            | Event::InlineHtml(text)
+            | Event::FootnoteReference(text)
+            | Event::InlineMath(text)
+            | Event::DisplayMath(text) => out.push_str(&text),
+            Event::SoftBreak => out.push(' '),
+            Event::HardBreak | Event::Rule => new_line(&mut out),
+            Event::TaskListMarker(_) => {}
+            Event::Start(Tag::TableHead | Tag::TableRow) => {
+                new_line(&mut out);
+                first_cell = true;
+            }
+            Event::Start(Tag::TableCell) => {
+                if !first_cell {
+                    out.push_str(" \u{b7} ");
+                }
+                first_cell = false;
+            }
+            Event::Start(tag) if !is_inline(&tag) => new_line(&mut out),
+            Event::End(tag) if !is_inline_end(tag) => new_line(&mut out),
+            Event::Start(_) | Event::End(_) => {}
+        }
+    }
+    out.truncate(out.trim_end().len());
+    out
+}
+
+// ----------------------------------------------------------------------------
+/// End the line being written, unless it is empty.
+fn new_line(out: &mut String) {
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+}
+
+// ----------------------------------------------------------------------------
+fn is_inline(tag: &Tag) -> bool {
+    matches!(
+        tag,
+        Tag::Emphasis
+            | Tag::Strong
+            | Tag::Strikethrough
+            | Tag::Superscript
+            | Tag::Subscript
+            | Tag::Link { .. }
+            | Tag::Image { .. }
+            | Tag::TableCell
+    )
+}
+
+// ----------------------------------------------------------------------------
+fn is_inline_end(tag: TagEnd) -> bool {
+    matches!(
+        tag,
+        TagEnd::Emphasis
+            | TagEnd::Strong
+            | TagEnd::Strikethrough
+            | TagEnd::Superscript
+            | TagEnd::Subscript
+            | TagEnd::Link
+            | TagEnd::Image
+            | TagEnd::TableCell
+    )
 }
 
 // ----------------------------------------------------------------------------
@@ -616,5 +694,54 @@ mod tests {
             plain_title("Supercalifragilistic", 10),
             "Supercalif\u{2026}"
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn plain_text_has_a_line_per_block() {
+        assert_eq!(
+            plain_text("# Title\n\nOne\ntwo\n\n> quoted\n\n---\n\nafter"),
+            "Title\nOne two\nquoted\nafter"
+        );
+        assert_eq!(plain_text("a  \nb"), "a\nb");
+        assert_eq!(plain_text(""), "");
+        assert_eq!(plain_text("\n\n"), "");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn plain_text_has_a_line_per_item_without_markers() {
+        assert_eq!(
+            plain_text("- [x] done\n- [ ] open\n  - nested\n\n1. first"),
+            "done\nopen\nnested\nfirst"
+        );
+        assert_eq!(plain_text("- a\n\n- b"), "a\nb");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn plain_text_joins_a_table_row_cells() {
+        assert_eq!(
+            plain_text("| Item | Price |\n|---|--:|\n| Tyre | 89 |\n| Oil | 12 |"),
+            "Item \u{b7} Price\nTyre \u{b7} 89\nOil \u{b7} 12"
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn plain_text_keeps_the_words_not_the_marks_or_urls() {
+        assert_eq!(
+            plain_text("**Bold**, *em*, ~~old~~ and `code`: [the site](http://x/a \"T\")"),
+            "Bold, em, old and code: the site"
+        );
+        assert_eq!(
+            plain_text("![a scanned *page*](scan.png)"),
+            "a scanned page"
+        );
+        assert_eq!(
+            plain_text("```\nline one\nline two\n```"),
+            "line one\nline two"
+        );
+        assert_eq!(plain_text("x <b>bold</b> z"), "x <b>bold</b> z");
     }
 }
