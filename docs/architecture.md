@@ -526,7 +526,7 @@ nothing imports `app.js`.
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js`, `core/match.js` | the action registry, the commands and the keys Go to lists (`listedActions`, `keyedActions`), the one global key handler and the keys' names (`shortcutKeys`, `shortcutText`); names found by words typed (`fit`) |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`, which makes its parts for each editor (`editor/selection.js`, `editor/blocks.js`, `editor/tables.js`, `editor/shortcuts.js`, `editor/paste.js`); `isLink` (`editor/links.js`); the tags both read (`editor/tags.js`); `serializeMarkdown` |
-| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `setNotice`, `showError` |
+| `model/state.js` | the store and its schema (the vault's state, the selection and filters, the words and their answer cleared by `NO_WORDS`, the counters, `dirty_docs`, `conflicts`, `notices`, the preferences); `savePrefs`, `setNotice`, `showError` |
 | `model/entities.js` | the Maps `entities`, `projects`, `threads`, `accounts`, `watches`, the vault's settings (`vaultSettings()`); the selectors (`matchesFilter` with `NO_PROJECT`, `projectScope`, `projectsInOrder`, `projectNames`, `sourceKeyOf`, `getMeta`, `knownThreads`, `threadMembers`, `threadProjects`, the conversations with an AI); the selection published minus what is gone (`commitExistingSelection`) |
 | `model/calendar.js` | what the calendar shows: the events in the filter with their recurring events expanded (RFC 5545 lines), the tasks due, the day an entity shows on (`calendarDayOf`) |
 | `model/schedule.js` | the schedules, an event's: their RFC 5545 lines read (`parseSchedule`, `ruleSupported`) and expanded from a first start (`scheduleStarts`) |
@@ -534,10 +534,11 @@ nothing imports `app.js`.
 | `model/structure.js`, `model/events.js` | the structural requests (`structureCall`, the panel's `joinThreadLocal`, …, `editEntityLocal`, `reloadEntity`); the host's events into the model (`entity`, `entity_deleted`, `content`, the accounts and watches, `vault`, `vault_settings`, `activated`; `forgetVault`), the only writer of the Maps |
 | `ui/icons.js`, `ui/menu.js`, `ui/confirm.js`, `ui/toolbar.js` | the icons (`KIND_ICONS`, `getDocIcon`, `iconEl`); the popup menu (`showMenu`) with its Esc, and a drop-down box that opens one (`dropBox`); the two-click confirm (`armedButton`: one armed button page-wide, which a page rebuilt on every change names by a key); the editors' toolbars |
 | `ui/page.js`, `ui/field.js`, `ui/segmented.js` | the vault area (`openVaultOp`, `closeVaultArea`) and its pages: their Esc and Ctrl+Enter (`registerVaultPage`), `replaceVaultPage`, which keeps the focus; the parts of a list + detail page (`listDetailPage`, `pageList`, `itemCard`, `addTile`, `detailPane`, `detailHead`, `stats`, `notice`, `failedRetry`, `detailFooter`) and the changes a page shows until the host has them (`sentDrafts`); editing in place (`editTextInPlace`) and the Workspace pages' editable field (`renderEditField`); the segmented control (`accSeg`) |
+| `ui/marks.js` | the words of the vault panel's filter marked (`ui.md#words`): `termsRegex`, `markedNodes`, `excerptNodes` |
 | `ui/statusbar.js`, `ui/dropzone.js` | the snackbar of the store's notices, failed calls nobody handled among them, an info notice going on its own; what takes a drop and marks where it would land (`dropTarget`, one mark page-wide, every drop target of the page), and dragging an entity between the lenses and the panel (the drag preview, `MEMBER_DRAG` and the lenses that take it, the panel's drop zones) |
 | `features/selection.js`, `features/context.js` | the selection (`selectDocument`, `selectById`, `selectDay`, the filter, `openLink`, `panelMode`, the day view's listing, the marks on what shows the selected entity: `markSelection`; kept across restarts: `restoreSelection`); the context column's tabs and the card's buttons that open them |
 | `features/lenses/registry.js` | the lens registry: the tabs, the lenses' elements and renders (`registerLens`), at most one render per frame of the shown lens (`invalidateLenses`), the lens shown last on start (`restoreLens`) |
-| `features/panel/details.js`, `features/panel/panel.js` | what a card shows of its event, task, email or document, a task's fields and a type editable in place; the side panel renderer (day view, thread, standalone card), its chips, the structural edits it starts, its subscriptions |
+| `features/panel/details.js`, `features/panel/panel.js`, `features/panel/find.js` | what a card shows of its event, task, email or document, a task's fields and a type editable in place; the side panel renderer (day view, thread, standalone card), its chips, the structural edits it starts, its subscriptions; the find strip, the words marked in the cards shown and stepped through (`panel.md#find`) |
 | `features/dashboard/dashboard.js`, `features/dashboard/cards.js` | the Dashboard lens: its cards' order and the closed ones, the Cards menu, dragging a card; the cards Week, Tasks (a task dragged to another column), Upcoming, Recent files and Recent conversations |
 | `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`showInDocuments`, `revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
@@ -551,7 +552,8 @@ nothing imports `app.js`.
 | `features/keys.js` | the keys that are no command, by where they work (Go to's Keys) |
 | `features/window.js` | the page's zoom and full screen as commands |
 | `features/undo.js` | Ctrl+Z and Ctrl+Y as the actions `undo` and `redo` |
-| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |
+| `features/words.js` | the vault panel's words box (`ui.md#words`): `search` at most every 120 ms, its answer as `word_filter`, Esc and Ctrl+F |
+| `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the words' chip, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |
 | `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
 | `features/workspace/vault.js` | the Vault page; `switchVault`, `revealVault`, Rebuild index |
 | `features/workspace/settings.js` | the Settings page (`ui.md#settings`), its rows as commands, Help and settings |
@@ -602,24 +604,25 @@ an account's email labels (`features/import/email.js`).
 
 What a key, a menu, a button or Go to (`ui.md#go-to`) starts is registered
 once (`registerAction({id, title, shortcut, outsideFields, host, when, run,
-group, place, icon, also, page, end, archived})`, `runAction(id, …args)`,
-`core/actions.js`). One `keydown` handler runs the first action with the
-key's shortcut, or one of its shortcuts, whose `when` holds; a key something
-else already handled (`defaultPrevented`, Ctrl+I as italic in an editor) is
-left alone, so is one of an action `outsideFields` while a field or an
-editor has the focus, none acts behind an open dialog, and one of a `host`
-action is only shown: the host takes it. An action with a `group` is a
-command Go to lists by its `title`, found by `also` too, while its `when`
+group, place, icon, also, page, end, archived, where})`, `runAction(id,
+…args)`, `core/actions.js`). One `keydown` handler runs the first action
+with the key's shortcut, or one of its shortcuts, whose `when` holds; a key
+something else already handled (`defaultPrevented`, Ctrl+I as italic in an
+editor) is left alone, so is one of an action `outsideFields` while a field
+or an editor has the focus, none acts behind an open dialog, and one of a
+`host` action is only shown: the host takes it. An action with a `group` is
+a command Go to lists by its `title`, found by `also` too, while its `when`
 holds; one with a `place` is a place it goes to, with `end()` at its row's
 end. Its list of keys has the commands with a shortcut, those that don't
-apply now too. The commands and places of what the vault has come from
-functions asked each time it opens (`registerActions(list)`), a source's
-import or sync, a project, a source. A global command is registered beside
-what it runs. The pages of the expanded vault area register what Esc and
-Ctrl+Enter do on them (`registerVaultPage`, `ui/page.js`). An action is also
-how a lower layer starts something above it: a new email's notice in the
-status bar runs `documents.show` (`showInDocuments`,
-`features/lenses/documents.js`). The keys in use: `ui.md#keys-and-actions`.
+apply now too, under the part of the app they work in (`where`). The
+commands and places of what the vault has come from functions asked each
+time it opens (`registerActions(list)`), a source's import or sync, a
+project, a source. A global command is registered beside what it runs. The
+pages of the expanded vault area register what Esc and Ctrl+Enter do on them
+(`registerVaultPage`, `ui/page.js`). An action is also how a lower layer
+starts something above it: a new email's notice in the status bar runs
+`documents.show` (`showInDocuments`, `features/lenses/documents.js`). The
+keys in use: `ui.md#keys-and-actions`.
 
 ### CSS <a id="css"></a>
 
@@ -633,7 +636,7 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/tokens.css` | the colors, each light and dark, the fonts, sizes, insets, heights, radii, shadows and layers |
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
-| `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `check`, `input`, `menu`, `tile`, `list-row`, `section-head`, the forms, `pane-head`, the dialogs, the vault area's `page`, the list + detail page (`ui/page.js`), … |
+| `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `check`, `input`, `menu`, `tile`, `list-row`, `section-head`, the words marked (`mark`, `::highlight`), the forms, `pane-head`, the dialogs, the vault area's `page`, the list + detail page (`ui/page.js`), … |
 | `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, timeline, calendar, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), import (Import scans, Fetch email), header (the lens header, the titles edited in place), palette (Go to) |
 
 Conventions the page keeps:

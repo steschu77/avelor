@@ -1,17 +1,18 @@
 // The lens header (panel.md#projects): the selected project's name, the
-// active labels with the "+" that filters by another one
-// (ui.md#vault-panel), and the project's details -- a toolbar (rename, edit
+// words filtering (ui.md#words) and the active labels with the "+" that
+// filters by another one (ui.md#vault-panel), and the project's details -- a toolbar (rename, edit
 // description, archive, delete) and the description, an editor bound like
 // any document's (saving.md). Also `leaveEditModes`, which takes every
 // editor out of edit mode, the cards' and the description (closing the
 // app, switching the vault).
 
-import { $, oncePerFrame } from '../core/dom.js';
+import { $, accEl, oncePerFrame } from '../core/dom.js';
+import { titled } from '../core/dom.js';
 import { compareText } from '../core/format.js';
 import { t } from '../core/text.js';
 import { createEditor } from '../editor/editor.js';
 import { serializeMarkdown } from '../editor/markdown.js';
-import { store } from '../model/state.js';
+import { NO_WORDS, store } from '../model/state.js';
 import { NO_PROJECT, entities, matchesFilter, projects } from '../model/entities.js';
 import { projectScope } from '../model/entities.js';
 import {
@@ -20,6 +21,7 @@ import {
 import { beginEditSession, endEditSession, reportEditing } from '../model/documents.js';
 import { structureCall } from '../model/structure.js';
 import { armedButton } from '../ui/confirm.js';
+import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { createEditorToolbar } from '../ui/toolbar.js';
 import { editTextInPlace } from '../ui/field.js';
@@ -43,15 +45,30 @@ store.subscribe(
     else projectNameEl.textContent = t('sidebar.all_projects');
   });
 
-// After the name, the header names the active labels, each with an x that
-// takes it out of the filter, and a "+" that adds one, while any label is
-// in use: looked at once per frame, not once per entity of an indexing.
+// After the name, the header names the words filtering and the active
+// labels, each with an x that takes it out of the filter, and a "+" that
+// adds a label, while any label is in use: looked at once per frame, not
+// once per entity of an indexing.
 const labelFilterEl = $('label-filter');
 const labelAddBtn = $('label-add-btn');
-store.subscribe(state => state.selected_labels, selected_labels =>
-  labelFilterEl.replaceChildren(...labelChips(selected_labels,
-    next => selectFilter({ selected_labels: next }),
-    label => t('header.stop_label', { label }))));
+store.subscribe([state => state.selected_labels, state => state.word_filter],
+  ([selected_labels, word_filter]) => labelFilterEl.replaceChildren(
+    ...(word_filter ? [wordsChip(word_filter.text)] : []),
+    ...labelChips(selected_labels,
+      next => selectFilter({ selected_labels: next }),
+      label => t('header.stop_label', { label }))));
+
+// The words' chip: the words searched, and an x that empties the box.
+function wordsChip(text) {
+  const chip = accEl('span', 'chip chip--words');
+  chip.title = t('header.every_word');
+  const remove = accEl('button', 'chip__remove', '\u00d7');
+  remove.type = 'button';
+  titled(remove, t('header.clear_filter'));
+  remove.addEventListener('click', () => selectFilter({ ...NO_WORDS }));
+  chip.append(iconEl('#i-search'), accEl('span', '', text.trim()), remove);
+  return chip;
+}
 const scheduleLabelAdd = oncePerFrame(() => {
   labelAddBtn.hidden = ![...entities.values()].some(doc => doc.labels?.length);
 });

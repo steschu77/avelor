@@ -33,12 +33,18 @@ filter closes it (`closeVaultArea`). Menus are popups (`showMenu`,
 
 ## Vault panel <a id="vault-panel"></a>
 
-The vault panel defines the view on the vault: a project and a source
-filter what the lens shows, and so do the labels picked in the lens head.
-Filtering is entirely on the page: all metadata
-arrives with the indexing (`renderSidebar`, `features/sidebar.js`;
-`matchesFilter`, `model/entities.js`). The counts per project and source are derived on
-the page, once per frame (`panel.md#host-pushes`).
+The vault panel defines the view on the vault: words, a project and a
+source filter what the lens shows, and so do the labels picked in the lens
+head. Filtering is on the page, where all metadata arrives with the indexing
+(`renderSidebar`, `features/sidebar.js`; `matchesFilter`,
+`model/entities.js`); only the words are found by the host
+(`ui.md#words`). The counts per project and source are derived on the
+page, once per frame (`panel.md#host-pushes`), and follow no filter:
+each the vault's entries of its project or source, All Projects and All
+Sources every entry, as the lenses count them; the files are counted on
+the Vault page alone.
+
+- **Filter by words**: the box at the top (`ui.md#words`).
 
 - **Go to**: under New, places, commands and keys by name (`ui.md#go-to`).
 
@@ -70,7 +76,38 @@ filter (`labelChips`, `features/panel/panel.js`), then a "+" while any label
 is in use (`#label-add-btn`, `features/header.js`). Its menu lists the
 labels in use but the active ones, with a filter box, each with the
 entities in the filter carrying it; one with none is dim. Selecting
-several shows the entities carrying all of them.
+several shows the entities carrying all of them. The words filtering come
+first, as a chip with the words and a × that empties the box.
+
+### Filter by words <a id="words"></a>
+
+`features/words.js`: the box at the top of the vault panel, "Filter by
+words", is a filter like a project or a source, which every lens follows.
+It filters, it doesn't search: what holds every word stays in the lens,
+in its own groups and order; the rest drops out. A type switched off
+hides no hit from sight: the type bars show while the words filter, each
+type with its hits counted, and Documents lists the hits of the types
+switched off at its rows' end (`ui.md#documents`).
+
+- **The words**: every one, in any order and case, also inside a longer
+  word, in the title, a label or the text; the host finds them (`search`,
+  `vault.md#search`). The box asks at most every 120 ms with the words as
+  they are then, a newer question superseding the one before (the channel
+  `search`); until the answer comes, the lenses keep the last one
+  (`word_filter`). It asks again while the entities change, and when an
+  editor saves a body (`saved_rev`), so an edit's new words count.
+- **The box** is marked while it filters, with a × that empties it; Esc
+  empties it, a second Esc leaves it; Ctrl+F goes to it, unless an editor
+  or a field has the focus.
+- **The rows** mark the words (`<mark>`, `ui/marks.js`); a row whose title
+  lacks some says where they are: the line of the text or the label
+  (`ui.md#documents`, `ui.md#timeline`).
+- **The lens head** names them as a chip before the labels, its × empties
+  the box (`features/header.js`).
+- **The panel** marks them in its cards, and its find strip steps through
+  them (`panel.md#find`).
+- A vault switch empties the box; showing an entity in Documents
+  (`showInDocuments`) does too if it doesn't hold the words.
 
 ## Lenses <a id="lenses"></a>
 
@@ -155,6 +192,13 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   (below) opens a folded group for the session only. Threads fold while
   the app runs: folded at first, a thread unfolded shows unfolded in every
   group.
+- **The words**: while the vault panel's words filter (`ui.md#words`),
+  the titles mark them, and an entity's row whose title lacks some shows
+  where they are after the title (`.docs__hit`): the line of its text, or
+  the label marked "Label". The hits of the types switched off stand at
+  the rows' end, each in no group or thread, under a head of their own
+  ("In hidden types: 2 conversations and 1 contact", `.docs__found`) in
+  place of what is hidden and Show all types.
 - **Selecting**: a row is selected by a click, an entity's in the thread
   it shows under (`selectDocument(id, thread)`), a thread's row selects
   the thread (`selectById`). The selected entity's rows are marked
@@ -171,8 +215,9 @@ icon, the title) and Date, with a multi-key sort (`onSortClick`, kept in
   faint at none. Every type but Events, which have a lens of
   their own, is shown at first. The lens head says how many entities are
   shown and hidden ("62 entries · 34 hidden"), and its Types button
-  folds the bar; the rows end with what is hidden and Show all types. The
-  types switched off and the bar's fold are preferences.
+  folds the bar, which shows whatever its fold while the words filter,
+  Types gone meanwhile; the rows end with what is hidden and Show all
+  types. The types switched off and the bar's fold are preferences.
 - **Dragging**: an entity's row drags (with a drag preview chip) onto a
   project pill, a standalone card or the thread panel
   (`panel.md#structural-edits`), or onto a project's or a thread's row
@@ -218,7 +263,10 @@ day — a recurring event on its first start, a task on its own date — but cal
   list's items, a contact's phone or email, a bank account's bank and
   number, statements' transactions, a document's author or sender and type
   — then its projects while no project is selected (`projectNames`), its
-  labels at the right. A click or Enter selects it, the selected one
+  labels at the right. While the words filter (`ui.md#words`), the title
+  and the labels mark them, and a row whose title lacks some shows where
+  they are instead of what its kind tells (`.tl__hit`). A click or Enter
+  selects it, the selected one
   marked (`markSelection`). It drags as a Documents row does; the lens
   takes a card dragged out of a thread, which leaves it
   (`takeMemberDrops`, `panel.md#structural-edits`).
@@ -290,7 +338,28 @@ What a key, a menu, a button or Go to starts is a registered action
 - **Ctrl+N** opens New.
 - **Ctrl+Z** undoes the last edit, **Ctrl+Y** or **Ctrl+Shift+Z** does it
   again, outside a field or an editor (`saving.md#undo`).
+- **Ctrl+F** goes to the words box, unless an editor or a field has the
+  focus; in the box, Esc empties it, then leaves it (`ui.md#words`).
+- **F3** and **Shift+F3** step through the words marked in the panel
+  (`panel.md#find`).
+- **F6** and **Shift+F6** move between the areas: the lens tabs, the vault
+  panel, the main view and the panel, onto what is current or selected
+  there, else its first control.
+- **Ctrl+1** to **Ctrl+5** show the lenses, in the tabs' order.
 - A key the editor already handled (Ctrl+I as italic) is left alone.
+
+Every control is in the keyboard's reach (`architecture.md#css`): **Tab**
+goes from one to the next, a row or a day included, and **Enter** or
+**Space** presses it, as a click would. A control shown on hover shows
+while its row has the focus too. In a menu **Up** and **Down** move the
+highlight and **Enter** runs it; a focused grip moves with **Left** and
+**Right**. In an editor Tab indents where it can, in a list, a quote, a
+table or code, and goes on elsewhere (`editor.md#keys`); Esc leaves edit
+mode, back on the Edit button. Left to the mouse: joining or making a
+thread by drag, the Dashboard's cards reordered, a scan's pages in any
+order (a first or last page still moves to the next document by its
+button), the scrubber's range of weeks (Clear and Today remain), the
+editor's toolbar, and a chat message edited by clicking it.
 
 The host switches off the browser's accelerator keys so they reach the page
 (`sys/win32/webview.rs`).
@@ -312,10 +381,10 @@ of rows `features/palette-found.js`). With nothing typed it lists the
 commands: the actions that have a group and apply now
 (`architecture.md#actions`), under their groups: New, Assistant, Get things
 in, Go to (the lenses, the Workspace pages, Settings, the next and the
-previous area), Window, Vault, Settings (a row of the page each, which it
-opens with the focus there) and Help. What the vault has brings its own: an
-enabled folder watch its import, an account's Email its Fetch email, a
-checked calendar its sync.
+previous area), Filter, Window, Vault, Settings (a row of the page each,
+which it opens with the focus there) and Help. What the vault has brings its
+own: an enabled folder watch its import, an account's Email its Fetch email,
+a checked calendar its sync.
 
 - **What is typed** is looked for in the names and in the other words one is
   found by: every word, in any order, case and accents aside (`fit`,
@@ -338,11 +407,12 @@ checked calendar its sync.
   **Shift+Tab**, which go round what it can be narrowed to. **Backspace** in
   the empty box is back at All, and **Ctrl+Shift+P** too, the box emptied.
 - **Narrowed to Keys**, by a press, Tab or its command Keyboard shortcuts,
-  it lists the keys by where they work: anywhere, in a text being edited, in
-  a menu or at a divider, in Go to itself (`KEY_GROUPS`, `features/keys.js`,
-  with the commands'). One is found by what it does or by its keys, in the
-  run's language or in English ("ctrl e"). Enter runs a command that applies
-  now; of any other key the foot says where it works.
+  it lists the keys by where they work: anywhere, in the side panel, in a
+  text being edited, in a menu or at a divider, in Go to itself
+  (`KEY_GROUPS`, `features/keys.js`, with the commands'). One is found by
+  what it does or by its keys, in the run's language or in English ("ctrl
+  e"). Enter runs a command that applies now; of any other key the foot
+  says where it works.
 - **Its keys** stand at a command's end, each drawn as a key and named in
   the run's language (`shortcutKeys`, `core/actions.js`).
 - **Up** and **Down** move the highlight, round the ends of the list, and
@@ -422,6 +492,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
 | B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
+| B6 | Filter by words | typing in the box (`features/words.js`) → `selectFilter({words})`, at most every 120 ms `search` on the channel `search`; the chip's ×, the box's × or Esc → `NO_WORDS` | `search {text}` → `ok {terms, hits}` | the lenses keep what holds every word, its words marked, an excerpt where the title lacks some; the chip in the lens head; the find strip in the panel |
 | D7 | New | New item, the "+" of "Created Here" or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
 | F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Recent files or Recent conversations → `selectDocument` | — | the entity in the panel, its rows marked on the dashboard |

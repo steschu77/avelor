@@ -56,13 +56,14 @@ export function hiddenText(shown, counts) {
 }
 
 // ----------------------------------------------------------------------------
-// The lens head's Types button, shown under a lens with a bar.
+// The lens head's Types button, shown under a lens with a bar while the
+// words don't filter (then the bar shows, see `typeBar`).
 const typesBtn = $('types-btn');
 const bars = new Map(); // lens id -> { el, barPref }
 
 function showTypesBtn(selected_lens) {
   const bar = bars.get(selected_lens);
-  typesBtn.hidden = !bar;
+  typesBtn.hidden = !bar || !!store.getState().word_filter;
   if (bar) typesBtn.setAttribute('aria-expanded', String(!bar.el.hidden));
 }
 store.subscribe(state => state.selected_lens, showTypesBtn);
@@ -75,9 +76,10 @@ typesBtn.addEventListener('click', () => {
 // The bar of the lens `lens` in `el`: the types switched off are the
 // preference `pref` (their ids joined by commas; `hiddenAtFirst` while it
 // is missing), so a type added since is shown; the bar's fold `barPref`
-// (`open` / `closed`). A change renders the lens again. `render(shown,
-// counts)` sets the toggles; `shown()` the types shown; `show(type_id)` and
-// `showAll()` switch types on.
+// (`open` / `closed`), shown whatever it is while the words filter, so
+// their hits in every type are counted. A change renders the lens again.
+// `render(shown, counts)` sets the toggles; `shown()` the types shown;
+// `show(type_id)` and `showAll()` switch types on.
 export function typeBar({ lens, el, pref, barPref, hiddenAtFirst = [] }) {
   function shown() {
     const saved = store.getState().prefs[pref];
@@ -116,8 +118,8 @@ export function typeBar({ lens, el, pref, barPref, hiddenAtFirst = [] }) {
   }
 
   bars.set(lens, { el, barPref });
-  store.subscribe(({ prefs }) => prefs[barPref], value => {
-    el.hidden = value === 'closed';
+  store.subscribe([({ prefs }) => prefs[barPref], state => !!state.word_filter], ([value, words]) => {
+    el.hidden = value === 'closed' && !words;
     showTypesBtn(store.getState().selected_lens);
   });
   store.subscribe(({ prefs }) => prefs[pref], () => invalidateLenses(lens));

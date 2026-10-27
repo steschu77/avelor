@@ -28,13 +28,14 @@ export const store = createStore({
   // page (#prefs, page.rs); `savePrefs` changes them; always replaced
   prefs: JSON.parse($('prefs')?.textContent || '{}'),
   // *_rev: bumped on every change on projects, threads, accounts, folder watches, entities,
-  // the vault's settings
+  // the vault's settings, and on every body an editor saved
   projects_rev: 0,
   threads_rev: 0,
   accounts_rev: 0,
   watches_rev: 0,
   entities_rev: 0,
   settings_rev: 0,
+  saved_rev: 0,
   selected_project: null, // project filter: one, NO_PROJECT (in none) or null (all), see matchesFilter
   selected_source: null, // source filter: one or none (all), keyed as `sourceKeyOf`
   vault_op: null, // the Workspace op shown in the expanded vault area ("accounts", "email", "new", "trash")
@@ -43,6 +44,11 @@ export const store = createStore({
   // context column beside it, `toggleCardChat`) or 'expanded' (full width)
   panel_size: 'normal',
   selected_labels: [], // label filter: a doc must carry all of them; always replaced, never mutated
+  // the words filter (features/words.js): the box as typed, and the host's
+  // answer for it, { text, terms, hits: Map id -> { excerpt, where } } or
+  // null; a doc must be among the hits. Cleared only with NO_WORDS
+  words: '',
+  word_filter: null,
   selected_entity: null,
   selected_thread: null, // the thread shown in the panel, see renderPanel
   selected_day: dayStart(new Date()), // the day the calendar's panel shows (features/lenses/calendar.js)
@@ -58,6 +64,9 @@ export const store = createStore({
 
 // Whether a vault is open, or being indexed.
 export const vaultOpen = () => store.getState().vault_state !== 'none';
+
+// The words filter cleared: the box empty, its answer gone.
+export const NO_WORDS = Object.freeze({ words: '', word_filter: null });
 
 // ----------------------------------------------------------------------------
 // Merge `patch` into the page's preferences and send them all to the host

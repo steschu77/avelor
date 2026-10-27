@@ -18,7 +18,7 @@ import { shortDate } from '../../core/format.js';
 
 import { registerAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
-import { store } from '../../model/state.js';
+import { NO_WORDS, store } from '../../model/state.js';
 import { savePrefs } from '../../model/state.js';
 import { showError } from '../../model/state.js';
 import { isDirty } from '../../model/documents.js';
@@ -30,6 +30,7 @@ import { calendarDayOf } from '../../model/calendar.js';
 import { joinProjectLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
+import { excerptNodes, markedNodes } from '../../ui/marks.js';
 import { closeVaultArea } from '../../ui/page.js';
 import {
   dropTarget, endDragPreview, startDragPreview, takeMemberDrops,
@@ -45,6 +46,14 @@ const rowsEl = $('doc-rows');
 const countEl = $('doc-count');
 const hiddenEl = $('doc-hidden');
 const hiddenTextEl = $('doc-hidden-text');
+
+// While the words filter, the hits of the types switched off stand at the
+// rows' end under a head of their own, each a row in no group or thread
+// (the group key `FOUND`).
+const FOUND = '*found';
+const foundEl = accEl('div', 'lens-hidden docs__found');
+const foundTextEl = accEl('span', 'note');
+foundEl.append(foundTextEl);
 
 // ----------------------------------------------------------------------------
 // The type selection (features/lenses/types.js): every type shown at first
@@ -176,7 +185,7 @@ function toggleThread(thread_id) {
 // the lens every frame.
 const rows = new Map();
 const rowFor = new WeakMap(); // row element -> { group, thread_id, doc_id }
-const rowDocs = new WeakMap(); // a document's row -> the entity it was filled from
+const rowFills = new WeakMap(); // a document's row -> { doc, word_filter } it was filled from
 
 const groupKey = key => `g\n${key}`;
 const threadKey = (group, thread_id) => `t\n${group}\n${thread_id}`;
@@ -192,7 +201,7 @@ export function getDocRows(doc_id) {
 function pruneRows() {
   for (const [key, el] of rows) {
     const { group, thread_id, doc_id } = rowFor.get(el);
-    const gone = (group && !projects.has(group))
+    const gone = (group && group !== FOUND && !projects.has(group))
       || (thread_id && !threads.has(thread_id)) || (doc_id && !entities.has(doc_id));
     if (gone) rows.delete(key);
   }
@@ -253,10 +262,10 @@ function groupRow(group) {
 // project after them; its end is the separator between the two.
 const projectsEl = accEl('div', 'docs__projects');
 
-// A thread's row: its fold, icon, title, "5 of 6, 14/08 - 23/09" (its
-// members shown here of all of them, and their days) and its newest
-// member's date. A click shows the thread in the panel.
-function threadRow(group, item, depth, total) {
+// A thread's row: its fold, icon, title (the words marked), "5 of 6,
+// 14/08 - 23/09" (its members shown here of all of them, and their days)
+// and its newest member's date. A click shows the thread in the panel.
+function threadRow(group, item, depth, total, word_filter) {
   const key = threadKey(group, item.thread_id);
   const el = cachedRow(key, { group, thread_id: item.thread_id }, () => {
     const row = pressable(accEl('div', 'list-row table__row'));
@@ -274,7 +283,7 @@ function threadRow(group, item, depth, total) {
   const unfolded = unfoldedThreads.has(item.thread_id);
   fold.setAttribute('aria-expanded', String(unfolded));
   fold.title = unfolded ? t('docs.fold_thread') : t('docs.unfold_thread');
-  title.textContent = item.title;
+  title.replaceChildren(...markedNodes(item.title, word_filter?.terms));
   const count = item.members.length === total ? `${total}` : t('count.of_total', { at: item.members.length, n: total });
   const days = memberDays(item.members);
   members.textContent = days ? `${count} \u00b7 ${days}` : count;
@@ -292,9 +301,10 @@ function memberDays(members) {
 
 // An entity's row, in the thread `thread_id` (or none): created on first
 // use, refilled when `entities` holds a new object for it (`onDocMeta`
-// always stores a fresh one). Any entity can be dragged into a thread or a
-// project.
-function docRow(group, thread_id, doc, depth) {
+// always stores a fresh one) or the words' answer is another: its title
+// with the words marked, then where they are if the title lacks some
+// (ui.md#words). Any entity can be dragged into a thread or a project.
+function docRow(group, thread_id, doc, depth, word_filter) {
   const el = cachedRow(docKey(group, thread_id, doc.doc_id), { group, thread_id, doc_id: doc.doc_id }, () => {
     const row = pressable(accEl('div', 'list-row table__row'));
     row.dataset.id = doc.doc_id;
@@ -302,9 +312,8 @@ function docRow(group, thread_id, doc, depth) {
     row.draggable = true;
     const cell = nameCell(depth);
     const gap = accEl('span', 'docs__gap');
-    // the title text node comes first, so refilling it keeps the dot
+    // the dot comes last, so refilling the title keeps it
     const title = accEl('span', 'row-title');
-    title.appendChild(document.createTextNode(''));
     const dirtyDot = accEl('span', 'dirty-dot');
     dirtyDot.title = t('docs.unsaved');
     dirtyDot.hidden = !isDirty(doc.doc_id);
@@ -314,12 +323,24 @@ function docRow(group, thread_id, doc, depth) {
     row.append(cell, date);
     return row;
   });
-  if (rowDocs.get(el) !== doc) {
+  const filled = rowFills.get(el);
+  if (filled?.doc !== doc || filled.word_filter !== word_filter) {
     const [, icon, title] = el.firstChild.children;
     icon.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.type));
-    title.firstChild.data = doc.title;
+    title.replaceChildren(...markedNodes(doc.title, word_filter?.terms), title.lastChild);
+    const hit = word_filter?.hits.get(doc.doc_id);
+    let hitEl = title.nextElementSibling;
+    if (hit?.excerpt) {
+      if (!hitEl) {
+        hitEl = accEl('span', 'docs__hit');
+        title.after(hitEl);
+      }
+      hitEl.replaceChildren(...excerptNodes(hit, word_filter.terms));
+    } else {
+      hitEl?.remove();
+    }
     el.lastChild.textContent = doc.date ? DATE_FORMAT.format(doc.date) : '\u2014';
-    rowDocs.set(el, doc);
+    rowFills.set(el, { doc, word_filter });
   }
   return el;
 }
@@ -363,14 +384,17 @@ store.subscribe(state => state.selected_thread, markThreadRows);
 function renderDocuments() {
   const state = store.getState();
   const shown = docTypes.shown();
-  // the filter's entities, counted by type; those of a type shown are listed
+  // the filter's entities, counted by type; those of a type shown are listed,
+  // the others found while the words filter
   const counts = new Map();
   const listed = [];
+  const found = [];
   for (const doc of entities.values()) {
     if (!matchesFilter(doc, state)) continue;
     const type = typeOf(doc);
     counts.set(type, (counts.get(type) ?? 0) + 1);
     if (shown.has(type)) listed.push(doc);
+    else if (state.word_filter) found.push(doc);
   }
   const memberTotals = new Map(); // thread id -> its members in the vault
   for (const doc of entities.values()) {
@@ -393,13 +417,19 @@ function renderDocuments() {
     }
     for (const item of itemsOf(group.docs)) {
       if (!item.members) {
-        into.push(docRow(group.key, null, item, depth));
+        into.push(docRow(group.key, null, item, depth, state.word_filter));
         continue;
       }
-      into.push(threadRow(group.key, item, depth, memberTotals.get(item.thread_id)));
+      into.push(threadRow(group.key, item, depth, memberTotals.get(item.thread_id), state.word_filter));
       if (!unfoldedThreads.has(item.thread_id)) continue;
-      for (const doc of item.members) into.push(docRow(group.key, item.thread_id, doc, depth + 1));
+      for (const doc of item.members) {
+        into.push(docRow(group.key, item.thread_id, doc, depth + 1, state.word_filter));
+      }
     }
+  }
+  if (found.length) {
+    foundTextEl.textContent = t('docs.in_hidden', { list: hiddenText(shown, counts) });
+    nodes.push(foundEl, ...sortItems(found).map(doc => docRow(FOUND, null, doc, 0, state.word_filter)));
   }
   placeChildren(projectsEl, projectNodes);
   placeChildren(rowsEl, projectNodes.length ? [projectsEl, ...nodes] : nodes);
@@ -411,7 +441,7 @@ function renderDocuments() {
   const hidden = [...counts].reduce((n, [type, count]) => n + (shown.has(type) ? 0 : count), 0);
   const listedText = t('count.entries', { n: listed.length });
   countEl.textContent = hidden ? `${listedText} \u00b7 ${t('docs.hidden_count', { n: hidden })}` : listedText;
-  hiddenEl.hidden = !hidden;
+  hiddenEl.hidden = !hidden || found.length > 0;
   hiddenTextEl.textContent = hidden ? t('types.hidden', { list: hiddenText(shown, counts) }) : '';
 }
 
@@ -437,7 +467,7 @@ rowsEl.addEventListener('click', ev => {
 rowsEl.addEventListener('dragstart', ev => {
   const row = ev.target.closest('.table__row[data-id]');
   if (!row) return;
-  const doc = rowDocs.get(row);
+  const { doc } = rowFills.get(row);
   ev.dataTransfer.setData('text/plain', row.dataset.id);
   startDragPreview(ev, getDocIcon(doc.kind, doc.type), doc.title);
 });
@@ -539,7 +569,7 @@ registerAction({ id: 'documents.show_made', run: showMade });
 // A filter that would hide every one of `members` cleared.
 function showingAny(members) {
   if (members.some(doc => matchesFilter(doc))) return;
-  store.setState({ selected_project: null, selected_source: null, selected_labels: [] });
+  store.setState({ selected_project: null, selected_source: null, selected_labels: [], ...NO_WORDS });
 }
 
 // The lens `lens` shown, the open vault page closed; `behind`: under it (a

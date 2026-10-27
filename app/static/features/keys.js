@@ -17,12 +17,12 @@ function editorKey({ command, shortcut }) {
 }
 
 // Each group's `head`, what the foot says of a key of it (`works`), its keys
-// (`first` before the commands', `keys` after them) and whether it has a
-// command's (`commands`, of an action); `inGoTo`: those of Go to itself,
+// (`first` before the commands', `keys` after them) and the commands whose
+// keys it has (`commands`, of an action); `inGoTo`: those of Go to itself,
 // which it doesn't look through with everything else.
 export const KEY_GROUPS = [
   {
-    head: t('keys.anywhere'), works: t('keys.works_anywhere'), commands: () => true,
+    head: t('keys.anywhere'), works: t('keys.works_anywhere'), commands: action => !action.where,
     first: [key(t('palette.name'), [GO_TO], '#i-arrow-right')],
     keys: [
       key(t('keys.next_control'), ['Tab']),
@@ -31,6 +31,9 @@ export const KEY_GROUPS = [
       key(t('keys.create'), ['Ctrl+Enter'], '#i-checkmark'),
       key(t('keys.discard'), ['Escape'], '#i-dismiss'),
     ],
+  },
+  {
+    head: t('keys.panel'), works: t('keys.works_in_panel'), commands: action => action.where === 'panel', keys: [],
   },
   {
     head: t('keys.text'), works: t('keys.works_in_text'),

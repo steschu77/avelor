@@ -5,7 +5,7 @@ import { parseDate } from '../../static/core/format.js';
 import { entities, projects } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
-const UNFILTERED = { selected_project: null, selected_source: null, selected_labels: [] };
+const UNFILTERED = { selected_project: null, selected_source: null, selected_labels: [], word_filter: null };
 
 // The vault of `metas`, each an entity as its event brings it
 // (api.md#events), in place of the one before.

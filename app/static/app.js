@@ -25,6 +25,8 @@ import './features/dashboard/dashboard.js';
 import './features/close.js';
 import './features/jobs.js';
 import './features/header.js';
+import './features/words.js';
+import './features/panel/find.js';
 import './features/conflict.js';
 import './features/workspace/folders.js';
 import './features/import/scans.js';
@@ -83,7 +85,8 @@ store.subscribe(state => state.dirty_docs, dirty_docs => {
 // The filter changed: re-render the filtered lenses and the sidebar's
 // highlights.
 store.subscribe(
-  [state => state.selected_project, state => state.selected_source, state => state.selected_labels],
+  [state => state.selected_project, state => state.selected_source, state => state.selected_labels,
+    state => state.word_filter],
   () => {
     invalidateLenses();
     scheduleRenderSidebar();

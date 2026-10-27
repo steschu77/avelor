@@ -10,7 +10,7 @@
 import { typing } from './dom.js';
 import { t } from './text.js';
 
-const actions = []; // { id, title, shortcut, outsideFields, host, when, run, group, place, icon, also, page, end, archived }, in registration order
+const actions = []; // { id, title, shortcut, outsideFields, host, when, run, group, place, icon, also, page, end, archived, where }, in registration order
 const sources = []; // functions, each giving the actions of what the vault has
 
 // `shortcut`: the key with its modifiers, like 'Ctrl+N', 'Ctrl+Enter' or
@@ -23,7 +23,8 @@ const sources = []; // functions, each giving the actions of what the vault has
 // by, with commas between; `page`: it opens a page. `place`: it goes to a
 // place Go to finds by name, a lens, a page, a project, a source; `end()`:
 // what stands at its row's end then; `archived`: a place after the others.
-// Without a group or a place only a key or a caller runs it.
+// Without a group or a place only a key or a caller runs it. `where`: the
+// part of the app its key works in, 'panel', anywhere if not given.
 export function registerAction(action) {
   actions.push(action);
 }

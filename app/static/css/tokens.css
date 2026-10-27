@@ -37,8 +37,10 @@
   --c-on-accent: #16161a;
   /* pressed tools, tags */
   --c-accent-soft: light-dark(rgba(143, 208, 214, 0.22), rgba(143, 208, 214, 0.18));
-  /* a word typed in Go to, marked in its list */
+  /* a word of the vault panel's filter, marked in a row or a card, and the
+     one the panel's find strip is on */
   --c-hit: light-dark(rgba(143, 208, 214, 0.5), rgba(143, 208, 214, 0.3));
+  --c-hit-current: var(--c-accent);
   --c-danger: #de9193;
   /* danger as text, an icon or a thin line, 4.5:1 on the shade */
   --c-danger-ink: light-dark(#a64b4e, #de9193);

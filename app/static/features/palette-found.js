@@ -13,6 +13,7 @@ const GROUPS = [
   ['assistant', t('palette.assistant')],
   ['get', t('palette.get')],
   ['go', t('palette.name')],
+  ['filter', t('palette.filter')],
   ['window', t('palette.window')],
   ['vault', t('workspace.vault')],
   ['settings', t('settings.name')],
