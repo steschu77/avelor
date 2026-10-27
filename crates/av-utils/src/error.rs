@@ -124,6 +124,10 @@ pub enum Error {
     Gtk {
         msg: String,
     },
+    Sqlite {
+        code: i32, // SQLite's result code
+        msg: String,
+    },
 }
 
 // ----------------------------------------------------------------------------
@@ -167,6 +171,7 @@ impl Error {
             Error::Serde { .. } => "serde",
             Error::Win32 { .. } => "win32",
             Error::Gtk { .. } => "gtk",
+            Error::Sqlite { .. } => "sqlite",
         }
     }
 }
