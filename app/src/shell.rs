@@ -4,6 +4,7 @@
 
 use std::cell::RefCell;
 use std::cell::{Cell, OnceCell};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::app::Prefs;
@@ -30,6 +31,8 @@ const DEFAULT_STATE: WindowState = WindowState {
 pub struct Shell {
     /// The app config, held until `App` exists and takes it over.
     config: RefCell<Option<ConfigStore>>,
+    /// The folder of the vaults' catalogs, handed to `App`.
+    catalog_dir: PathBuf,
     /// Taken only by `run_tasks`, for one task at a time. A message that
     /// finds it taken came from a modal loop inside that task, and its work
     /// waits in the queue until the task returns.
@@ -48,9 +51,10 @@ pub struct Shell {
 
 impl Shell {
     // ------------------------------------------------------------------------
-    pub fn new(config: ConfigStore) -> Self {
+    pub fn new(config: ConfigStore, catalog_dir: PathBuf) -> Self {
         Self {
             config: RefCell::new(Some(config)),
+            catalog_dir,
             app: RefCell::new(None),
             ui: OnceCell::new(),
             deferred: Cell::new(false),
@@ -70,7 +74,7 @@ impl Shell {
         };
         let prefs = config.prefs().clone();
         let ui = Arc::new(UiQueue::new(signal));
-        let app = App::new(Arc::clone(&ui), outbox, config);
+        let app = App::new(Arc::clone(&ui), outbox, config, self.catalog_dir.clone());
         if let Ok(mut slot) = self.app.try_borrow_mut() {
             *slot = Some(app);
         }
@@ -218,7 +222,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("avelor-shell-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
 
-        let shell = Shell::new(load_config(&dir).unwrap());
+        let shell = Shell::new(load_config(&dir).unwrap(), dir.join("catalog"));
         assert_eq!(shell.window_state(), DEFAULT_STATE);
         shell.start(UiSignal::none(), Owner::none(), Box::new(|_| {}));
         let state = WindowState {
@@ -228,7 +232,7 @@ mod tests {
         };
         shell.on_window_state(state);
 
-        let shell = Shell::new(load_config(&dir).unwrap());
+        let shell = Shell::new(load_config(&dir).unwrap(), dir.join("catalog"));
         assert_eq!(shell.window_state(), state);
         std::fs::remove_dir_all(&dir).unwrap();
     }

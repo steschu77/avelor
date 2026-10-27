@@ -25,7 +25,7 @@ pub use window::UiSignal;
 /// web view, and run the message loop until the window is gone.
 pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
     let webview_dir = paths.webview_dir();
-    let shell = Shell::new(config);
+    let shell = Shell::new(config, paths.catalog_dir());
     let window = window::WindowProc::create(TITLE, Some("APP_ICON"), webview_dir, shell)?;
     window::run_message_loop();
     drop(window);

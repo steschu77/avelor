@@ -2,7 +2,8 @@
 
 > The vault's file format and its life cycle: what an entity file holds,
 > identity, roles, types and sources, file names, the layout; opening,
-> switching and scanning a vault, the trash, the Vault page. The account
+> switching and scanning a vault, the catalog, the trash, the Vault
+> page. The account
 > and watch files in `.avelor/` are described in `accounts.md` and
 > `import.md`, how an edited document reaches its file in `saving.md`.
 
@@ -15,8 +16,10 @@
 3. **One Structured Format**: YAML everywhere: frontmatter, standalone
    records, lists.
 4. **Source of Truth**: the vault files are the source of truth for both
-   documents (markdown) and structured records. There is no database; the
-   index is rebuilt by a scan.
+   documents (markdown) and structured records. The index is built by a
+   scan; the catalog outside the vault holds nothing the files don't, and
+   spares it reading the files that didn't change (`vault.md#catalog`), so
+   deleting it loses nothing.
 5. **ID-based Links**: every file has a unique ID (UUIDv7). Files can be
    renamed and moved freely; identity lives in frontmatter, not in the path.
 6. **Transparency**: the vault's state is always accessible to the user,
@@ -74,6 +77,8 @@ The vault files can be edited by other programs at any time. The app
 detects such a change before it writes and when it looks at a file again;
 if nothing of the app's own is lost, it takes the change in, otherwise it
 asks the user which version to keep. The rules are in `saving.md#conflicts`.
+A file changed while the app was closed shows by its stamp at the next
+open (`vault.md#catalog`).
 
 ## Saving and Versioning <a id="versioning"></a>
 
@@ -776,6 +781,7 @@ These are the ID card thread's entities; the whole vault has every type.
 sequenceDiagram
     participant P as page
     participant S as App (UI thread)
+    participant C as catalog thread
     participant W as worker (av-vault scan)
     P->>S: ready
     S->>S: accounts::open (.avelor/accounts/)
@@ -784,33 +790,44 @@ sequenceDiagram
     S-->>P: watches
     S->>S: vault_settings::open (.avelor/vault.yaml)
     S-->>P: vault_settings
+    S->>C: open the vault's catalog
     S->>W: run_scan(root)
+    W->>C: the cached rows?
+    C-->>W: their texts and stamps
     W->>W: walk the tree
     W->>S: [Start]
     S-->>P: vault (scanning), job (running)
     loop a batch: at most 100 files, or what 50 ms read
-        W->>W: read and parse the files
+        W->>W: parse the files: the cached from their rows, the others read
         W->>S: [Entry, Failed, …]
         S-->>P: entity, vault_error, job
+        S->>C: the reads the index took
     end
-    W->>S: […, Done], then the end
+    W->>S: […, Done]
     S-->>P: vault (open), job (done)
+    W->>S: the end
+    S->>C: keep the index's files only
 ```
 
-The worker walks the vault and reads its files (`vault_scan.rs`,
-av-vault's `scan`), and sends what it read in batches through
+The worker asks the vault's catalog for its cached rows
+(`vault.md#catalog`), walks the vault and reads its files
+(`vault_scan.rs`, av-vault's `scan`), taking a file whose stamp is its
+row's from the row instead, and sends what it read in batches through
 `run_with_progress`: the start alone, then a batch once it holds 100
 events or 50 ms have passed since the one before, the end with the last
-one. The UI thread puts each batch into the index and tells the page, so
-a file that is slow to read (a network share, an online-only file of a
-cloud folder) never blocks the window. The page gets one `entity` per
-file, as from any edit. When it ends, the log says how many files the
-scan read in how many milliseconds, and the auto-syncs that are due
-start.
+one. The UI thread puts each batch into the index, hands the reads the
+index took to the catalog and tells the page, so a file that is slow to
+read (a network share, an online-only file of a cloud folder) never
+blocks the window. The page gets one `entity` per file, as from any edit.
+When it ends, the log says how many files the scan read in how many
+milliseconds and how many came from the catalog, the catalog keeps the
+index's files only, and the auto-syncs that are due start.
 
 A vault scan can't be stopped; a new one replaces it (a vault switch). A
 scan is named by an id: the one replaced is aborted, and the batches and
-the end it already queued are dropped. While the worker walks, the app
+the end it already queued are dropped, so none of it reaches the index or
+the catalog; its worker runs on until it next looks. While
+the worker walks, the app
 may write a file the walk then finds too (New, a restore): `Index::apply`
 skips an entry whose id the index already has, since the app's own entry
 is the newer one. Until the scan ends (`App::scanning`), the index holds
@@ -833,3 +850,61 @@ The lens, the calendar's day, the panel's size and the Vault page stay.
 The accounts and folder watches arrive before the scan as the new
 vault's (`accounts`, `watches`), so
 they aren't touched.
+
+## The catalog <a id="catalog"></a>
+
+The vault's files as the app holds them, a row per file of the index, in
+SQLite outside the vault (`av-store`'s `Catalog`, on a thread of its own,
+`catalog.rs`). What memory doesn't hold is looked up there before a file
+is read: a scan takes a file unchanged since its row from the row. It
+holds nothing the files don't: deleting it costs one full read.
+
+- **Where**: an SQLite file per vault in `%LOCALAPPDATA%\Avelor\catalog`,
+  on Linux `$XDG_CACHE_HOME/avelor/catalog` (`architecture.md#platforms`),
+  named by a hash of the vault's path and the format,
+  `<fnv1a_64 in hex>-v<format>.db`. The path is kept inside: a file made
+  for another vault under the same name starts empty. Not in the vault,
+  where a sync service or git would carry it along (`vault.md#principles`).
+- **A row** is a file's vault-relative path, its parts joined by `/`, and
+  its text as the app holds it: as read, BOM and line endings kept, or as
+  the app wrote it (`Entry::file_text`). A file whose path isn't Unicode
+  can't have one, so the scan reports it as unreadable (`vault_error`),
+  and it isn't in the index either.
+- **The stamp** makes a row a cache (`saving.md#the-stamp`). A text read
+  from its file keeps the stamp the file had then, once the file had
+  settled: changed at least 2 s before it was read (`SETTLED`), since a
+  second change within the same clock tick and of the same size keeps the
+  stamp, and the stale text would come back on every start. The walk
+  takes each file's stamp from the directory listing; a file whose stamp
+  is its row's is parsed from the row, as a file read is, and isn't
+  opened. Every other file is read, and its row replaced. A change of the
+  parser never makes a row wrong.
+- **One writer**: `Vault`, the one way the index changes, sends every
+  change to the catalog's thread in the order it changed the index: the
+  reads of a scan's batch the index took, an edit (`App::edit`), an
+  editor's save, a change taken in (`Vault::reload`, `Vault::refresh`), a
+  trashed file's row dropped. The app's own rows have no stamp: a file the
+  app just wrote or read again hasn't settled, and is read again at the
+  next open. What is asked of the catalog after a change sees it.
+- **What goes**: once a scan read every file, the catalog keeps exactly
+  the index's files: the rows of the files gone or unreadable go, and
+  those of a file whose id another file has. A file the app made meanwhile
+  stays. A stopped or replaced scan drops nothing.
+- **Changes outside the app** reach the catalog as they reach the index:
+  when the app looks at the file again (`saving.md#file-checks`), or at the
+  next open. Until then both hold the old text.
+- **Formats**: another format is another file; the next scan reads every
+  file once into it. A vault's files of other formats are removed when it
+  opens, unless another instance holds them.
+- **Failures** are logged; the page sees nothing. A catalog that can't be
+  opened leaves the vault without one, and every file is read at each
+  open. A write that fails leaves its rows as they were; the next open
+  sets them right, since such a row's stamp isn't its file's. Only a file
+  SQLite calls no database, or damaged, is removed and made anew; one
+  that is busy or can't be written is left alone.
+- **Several instances** share a file (WAL, a busy timeout): a row counts
+  only while its stamp is the file's, so two writers cost at most a read,
+  never a wrong text. Another instance's scan can drop the row of a file
+  this one made, until this one opens the vault again.
+- **Size**: about the vault's markdown and YAML. The catalog of a vault no
+  longer opened stays until the folder is deleted.

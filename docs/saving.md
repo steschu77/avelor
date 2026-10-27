@@ -214,6 +214,10 @@ and nothing is written. A conflict is an expected outcome, not an error:
 saves return `SaveOutcome::{Saved, Unchanged, Conflict}`, and the reply is
 `{"ok": {"conflict": …}}`.
 
+The catalog keeps a file's text with its stamp (`vault.md#catalog`), so a
+stamp also tells the next start whether the file changed; a file read
+within 2 s of its last change, or one the app wrote, keeps none.
+
 ### The dialog <a id="the-dialog"></a>
 
 A `conflict` in the answer of `load_doc_content`, `save_doc_content` or
@@ -261,7 +265,13 @@ the status bar).
 ### Limits <a id="limits"></a>
 
 - A change that keeps both the size and the modified time (FAT's 2-second
-  resolution, tools that restore the time) isn't found.
+  resolution, tools that restore the time) isn't found, and with the
+  catalog not at the next start either, until the file changes again.
+- On Windows the scan takes a file's stamp from the directory listing,
+  which can lag behind a file another program holds open, or behind an SMB
+  client's cache: a change that leaves the listing's stamp as the catalog
+  has it shows the row's text, until the first save or file check finds
+  the change.
 - A file changed outside the app is found before a write, on load and when
   the window becomes active — not while the app stays in front, and not
   for files no editor shows.

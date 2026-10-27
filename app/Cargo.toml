@@ -7,6 +7,7 @@ edition = "2024"
 log = { workspace = true }
 av-google = { path = "../crates/av-google" }
 av-llm = { path = "../crates/av-llm" }
+av-store = { path = "../crates/av-store" }
 av-utils = { path = "../crates/av-utils" }
 av-vault = { path = "../crates/av-vault" }
 serde = { workspace = true }

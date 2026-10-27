@@ -4,8 +4,9 @@
 //! YAML frontmatter and standalone YAML records, each with an `id` and
 //! any number of role blocks.
 //! Membership (project → documents, kind → entities) is always computed
-//! here, never stored on disk. This structure is rebuilt by a full scan
-//! (fast at personal-vault scale).
+//! here, never stored on disk. This structure is built by a scan, which
+//! takes a file unchanged since its text was kept from that text instead
+//! of reading it (the app's catalog, vault.md#catalog).
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -42,7 +43,7 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileStamp {
     modified: SystemTime,
-    len: u64,
+    size: u64,
 }
 
 impl FileStamp {
@@ -50,12 +51,21 @@ impl FileStamp {
     pub fn of(metadata: &Metadata) -> Self {
         Self {
             modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-            len: metadata.len(),
+            size: metadata.len(),
         }
+    }
+
+    /// A stamp kept apart from its file (the app's catalog).
+    pub fn new(modified: SystemTime, size: u64) -> Self {
+        Self { modified, size }
     }
 
     pub fn modified(&self) -> SystemTime {
         self.modified
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
     }
 
     /// The stamp of the file at `path` now; `None` if there is no file.
@@ -66,6 +76,15 @@ impl FileStamp {
             Err(err) => Err(Error::FileIo { err }),
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+/// A file's text as read, its BOM and line endings kept, with the stamp the
+/// file had when it was read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileText {
+    pub stamp: FileStamp,
+    pub text: String,
 }
 
 // ----------------------------------------------------------------------------
@@ -142,6 +161,12 @@ impl Entry {
         }
     }
 
+    /// The text the app writes to the entry's file: its document, with the
+    /// file's BOM and line endings.
+    pub fn file_text(&self) -> String {
+        renormalize(&self.bom, self.crlf, self.doc.save())
+    }
+
     /// Whether this entry has no file yet.
     pub fn is_unsaved(&self) -> bool {
         self.path.as_os_str().is_empty()
@@ -188,6 +213,8 @@ pub struct Changes {
     pub saved: Vec<Id>,
     /// Entities whose file was moved to `.trash` and which left the index.
     pub trashed: Vec<Id>,
+    /// The vault-relative paths their files had.
+    pub trashed_files: Vec<PathBuf>,
     /// Entities of `saved` whose body the write changed, so a view showing
     /// the old body can load the new one.
     pub content: Vec<Id>,
@@ -244,6 +271,9 @@ pub enum ScanEvent {
         index: usize,
         total: usize,
         entry: Entry,
+        /// The file's text as read; `None` when it came from the texts the
+        /// scan was given.
+        read: Option<FileText>,
     },
     Failed {
         path: PathBuf,
@@ -275,7 +305,7 @@ impl Index {
     pub fn scan(root: &Path) -> Index {
         let mut index = Index::default();
         index.begin(root);
-        self::scan(root, |event| {
+        self::scan(root, &mut HashMap::new(), |event| {
             index.apply(event);
             ScanControl::Continue
         });
@@ -360,8 +390,7 @@ impl Index {
         if !overwrite && entry.changed_on_disk()? {
             return Ok(SaveOutcome::Conflict(*id));
         }
-        let text = renormalize(&entry.bom, entry.crlf, entry.doc.save());
-        write_atomic(&entry.path, text.as_bytes())?;
+        write_atomic(&entry.path, entry.file_text().as_bytes())?;
         // Without a stamp the next save is a conflict: the safe side.
         let stamp = FileStamp::read(&entry.path).ok().flatten();
 
@@ -938,7 +967,9 @@ impl Index {
             fs::create_dir_all(parent)?;
         }
         fs::rename(&entry.path, &target)?;
-        self.remove(id);
+        if let Some(entry) = self.remove(id) {
+            changes.trashed_files.push(entry.local);
+        }
         changes.trashed.push(*id);
         Ok(())
     }
@@ -949,11 +980,16 @@ impl Index {
         let mut files: Vec<Trashed> = self
             .trash_files()
             .into_iter()
-            .map(|(path, local, readonly, format)| Trashed {
-                doc: load(path, local.clone(), readonly, format)
-                    .map(|entry| entry.doc)
-                    .map_err(|err| err.to_string()),
-                local,
+            .map(|found| Trashed {
+                doc: load(
+                    found.path,
+                    found.local.clone(),
+                    found.readonly,
+                    found.format,
+                )
+                .map(|entry| entry.doc)
+                .map_err(|err| err.to_string()),
+                local: found.local,
             })
             .collect();
         files.sort_by(|a, b| b.date().cmp(&a.date()).then_with(|| a.local.cmp(&b.local)));
@@ -1017,8 +1053,7 @@ impl Index {
         if !entry.doc.is_dirty() {
             return Ok(SaveOutcome::Unchanged);
         }
-        let text = renormalize(&entry.bom, entry.crlf, entry.doc.save());
-        write_atomic(&entry.path, text.as_bytes())?;
+        write_atomic(&entry.path, entry.file_text().as_bytes())?;
         Ok(SaveOutcome::Saved)
     }
 
@@ -1043,16 +1078,15 @@ impl Index {
     /// files were deleted, and stops at the first that can't be.
     pub fn empty_trash(&self) -> Result<usize> {
         let files = self.trash_files();
-        for (_, local, _, _) in &files {
-            self.delete_trashed(local)?;
+        for found in &files {
+            self.delete_trashed(&found.local)?;
         }
         Ok(files.len())
     }
 
     /// The markdown and YAML files under `<root>/.trash`, as the scan's walk
-    /// finds them: `(path, local, readonly, format)`, `local` relative to
-    /// the trash. None without a vault.
-    fn trash_files(&self) -> Vec<(PathBuf, PathBuf, bool, FileFormat)> {
+    /// finds them, `local` relative to the trash. None without a vault.
+    fn trash_files(&self) -> Vec<Found> {
         let mut files = Vec::new();
         if self.root.as_os_str().is_empty() {
             return files;
@@ -1060,7 +1094,7 @@ impl Index {
         walk(
             &self.root.join(layout::TRASH),
             Path::new(""),
-            &mut |path, local, readonly, format| files.push((path, local, readonly, format)),
+            &mut |found| files.push(found),
         );
         files
     }
@@ -1286,13 +1320,19 @@ pub(crate) fn sort_by_date(entries: &mut [&Entry]) {
 /// Phases: collect eligible files, emit `Start`; load them one by one,
 /// emitting `Entry`/`Failed` per file; emit `Done`. `on_event` answering
 /// `Stop` ends the scan there.
-pub fn scan(root: &Path, mut on_event: impl FnMut(ScanEvent) -> ScanControl) {
+///
+/// `known` holds texts read before, by vault-relative path. A file whose
+/// stamp in the directory listing is its known text's is loaded from that
+/// text, not read; a file read is sent with its text (`read`). Either way
+/// its path leaves `known`, so once `Done` is sent, what is left there is
+/// gone or couldn't be read.
+pub fn scan(
+    root: &Path,
+    known: &mut HashMap<PathBuf, FileText>,
+    mut on_event: impl FnMut(ScanEvent) -> ScanControl,
+) {
     let mut files = Vec::new();
-    walk(
-        root,
-        &PathBuf::new(),
-        &mut |path, local, readonly, format| files.push((path, local, readonly, format)),
-    );
+    walk(root, &PathBuf::new(), &mut |found| files.push(found));
 
     let total = files.len();
     let start = ScanEvent::Start {
@@ -1307,13 +1347,46 @@ pub fn scan(root: &Path, mut on_event: impl FnMut(ScanEvent) -> ScanControl) {
     if matches!(on_event(start), ScanControl::Stop) {
         return;
     }
-    for (i, (path, local, readonly, format)) in files.into_iter().enumerate() {
-        let event = match load(path.clone(), local, readonly, format) {
-            Ok(entry) => ScanEvent::Entry {
-                index: i + 1,
-                total,
-                entry,
-            },
+    for (i, found) in files.into_iter().enumerate() {
+        let Found {
+            path,
+            local,
+            readonly,
+            format,
+            stamp,
+        } = found;
+        if local.to_str().is_none() {
+            // The app's catalog keeps a file by its path as text.
+            let error = "its name isn't valid Unicode".to_string();
+            if matches!(
+                on_event(ScanEvent::Failed { path, error }),
+                ScanControl::Stop
+            ) {
+                return;
+            }
+            continue;
+        }
+        let unchanged = known
+            .get(&local)
+            .is_some_and(|file| Some(file.stamp) == stamp);
+        let (file, read) = if unchanged && let Some(file) = known.remove(&local) {
+            (Ok(file), false)
+        } else {
+            (read_file(&path), true)
+        };
+        let event = match file {
+            Ok(file) => {
+                if read {
+                    known.remove(&local);
+                }
+                let read = read.then(|| file.clone());
+                ScanEvent::Entry {
+                    index: i + 1,
+                    total,
+                    entry: parse_file(path, local, readonly, format, file),
+                    read,
+                }
+            }
             Err(error) => ScanEvent::Failed {
                 path,
                 error: error.to_string(),
@@ -1375,21 +1448,38 @@ fn write_new(path: &Path, text: &str) -> Result<()> {
 }
 
 // ----------------------------------------------------------------------------
-fn load(path: PathBuf, local: PathBuf, readonly: bool, doc_type: FileFormat) -> Result<Entry> {
-    let mut file = fs::File::open(&path)?;
+fn load(path: PathBuf, local: PathBuf, readonly: bool, format: FileFormat) -> Result<Entry> {
+    let file = read_file(&path)?;
+    Ok(parse_file(path, local, readonly, format, file))
+}
+
+// ----------------------------------------------------------------------------
+fn read_file(path: &Path) -> Result<FileText> {
+    let mut file = fs::File::open(path)?;
     // Stamped before reading: a change in between shows up as a conflict
     // on the next save, never as an overwrite.
-    let stamp = Some(FileStamp::of(&file.metadata()?));
-    let mut t = String::new();
-    file.read_to_string(&mut t)?;
-    let (bom, crlf, text) = normalize(t);
+    let stamp = FileStamp::of(&file.metadata()?);
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    Ok(FileText { stamp, text })
+}
 
-    let doc = Document::load(text, doc_type).stamped(stamp);
+// ----------------------------------------------------------------------------
+/// The entry of the file at `path` holding `file`'s text.
+fn parse_file(
+    path: PathBuf,
+    local: PathBuf,
+    readonly: bool,
+    format: FileFormat,
+    file: FileText,
+) -> Entry {
+    let (bom, crlf, text) = normalize(file.text);
+    let doc = Document::load(text, format).stamped(Some(file.stamp));
     if let Some(e) = doc.error() {
         log::error!("{path:?}: {e}");
     }
 
-    Ok(Entry {
+    Entry {
         path,
         local,
         readonly,
@@ -1397,7 +1487,7 @@ fn load(path: PathBuf, local: PathBuf, readonly: bool, doc_type: FileFormat) -> 
         crlf,
         written: false,
         doc,
-    })
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1456,28 +1546,43 @@ fn file_format(path: &Path) -> Option<FileFormat> {
 }
 
 // ----------------------------------------------------------------------------
-fn visit(
-    root: &Path,
-    local: &Path,
-    file: &DirEntry,
-    cb: &mut impl FnMut(PathBuf, PathBuf, bool, FileFormat),
-) {
+/// A file the walk found, `local` relative to the walk's root.
+struct Found {
+    path: PathBuf,
+    local: PathBuf,
+    readonly: bool,
+    format: FileFormat,
+    /// As the directory listing has it: on Windows it can lag behind a
+    /// file another process holds open (saving.md#limits).
+    stamp: Option<FileStamp>,
+}
+
+// ----------------------------------------------------------------------------
+fn visit(root: &Path, local: &Path, file: &DirEntry, cb: &mut impl FnMut(Found)) {
     let path = root.join(local);
-    let Some(doc_type) = file_format(&path) else {
+    let Some(format) = file_format(&path) else {
         return;
     };
 
-    let metadata = file.metadata();
+    // On Windows from the directory listing, without opening the file.
+    let metadata = file.metadata().ok();
     let readonly = metadata
-        .map(|m| m.permissions().readonly())
-        .unwrap_or(false);
+        .as_ref()
+        .is_some_and(|m| m.permissions().readonly());
+    let stamp = metadata.as_ref().map(FileStamp::of);
 
-    cb(path, local.to_path_buf(), readonly, doc_type);
+    cb(Found {
+        path,
+        local: local.to_path_buf(),
+        readonly,
+        format,
+        stamp,
+    });
 }
 
 // ----------------------------------------------------------------------------
 /// Recursive walk, skipping dot-directories (`.assistant`, `.obsidian`, …).
-fn walk(root: &Path, folders: &Path, cb: &mut impl FnMut(PathBuf, PathBuf, bool, FileFormat)) {
+fn walk(root: &Path, folders: &Path, cb: &mut impl FnMut(Found)) {
     let path = root.join(folders);
     let Ok(entries) = fs::read_dir(&path) else {
         return;
@@ -1506,6 +1611,7 @@ mod tests {
     use super::*;
     use crate::envelope::DocumentType;
     use av_utils::id::Id;
+    use std::time::Duration;
 
     fn fixture_vault() -> (PathBuf, Id, Id, Id, Id, Id, Id) {
         let vault_id = Id::generate();
@@ -1626,7 +1732,7 @@ mod tests {
         index.add(Entry::unsaved(Document::load(text, FileFormat::Markdown)));
 
         let mut added = Vec::new();
-        scan(&root, |event| {
+        scan(&root, &mut HashMap::new(), |event| {
             added.extend(index.apply(event));
             ScanControl::Continue
         });
@@ -1647,7 +1753,7 @@ mod tests {
     fn a_scan_ends_where_it_is_told_to_stop() {
         let (root, ..) = fixture_vault();
         let mut events = 0;
-        scan(&root, |event| {
+        scan(&root, &mut HashMap::new(), |event| {
             events += 1;
             match event {
                 ScanEvent::Entry { .. } => ScanControl::Stop,
@@ -1655,6 +1761,182 @@ mod tests {
             }
         });
         assert_eq!(events, 2, "the start and the first file");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_whose_name_isnt_unicode_fails_to_load() {
+        use std::os::unix::ffi::OsStrExt;
+        let (root, ..) = fixture_vault();
+        let name = std::ffi::OsStr::from_bytes(b"Notes/K\xf6ln.md");
+        fs::write(root.join(name), "Text").unwrap();
+        let mut failed = Vec::new();
+        scan(&root, &mut HashMap::new(), |event| {
+            if let ScanEvent::Failed { path, error } = event {
+                failed.push((path, error));
+            }
+            ScanControl::Continue
+        });
+        assert_eq!(
+            failed,
+            [(root.join(name), "its name isn't valid Unicode".to_string())]
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// A scan of `root` given `known`: its entries, each with what it read.
+    fn scan_known(
+        root: &Path,
+        known: &mut HashMap<PathBuf, FileText>,
+    ) -> Vec<(Entry, Option<FileText>)> {
+        let mut entries = Vec::new();
+        scan(root, known, |event| {
+            if let ScanEvent::Entry { entry, read, .. } = event {
+                entries.push((entry, read));
+            }
+            ScanControl::Continue
+        });
+        entries
+    }
+
+    /// What an entry shows, without its id: a file without one gets a new
+    /// one per scan.
+    fn shown(
+        entry: &Entry,
+    ) -> (
+        PathBuf,
+        String,
+        String,
+        String,
+        LineEnding,
+        Option<FileStamp>,
+    ) {
+        let doc = &entry.doc;
+        let (title, content) = (doc.title().to_string(), doc.content().to_string());
+        (
+            entry.local.clone(),
+            title,
+            content,
+            entry.bom.clone(),
+            entry.crlf,
+            doc.stamp(),
+        )
+    }
+
+    #[test]
+    fn a_known_text_with_the_files_stamp_is_loaded_instead_of_the_file() {
+        let (root, _, doc_id, ..) = fixture_vault();
+        let local = Path::new("Notes").join("plan.md");
+        let stamp = FileStamp::read(&root.join(&local)).unwrap().unwrap();
+        let text = format!("---\nid: {doc_id}\ntitle: Kept\n---\nKept body\n");
+        let mut known = HashMap::from([(local.clone(), FileText { stamp, text })]);
+
+        let entries = scan_known(&root, &mut known);
+        let (plan, read) = entries.iter().find(|(e, _)| e.local == local).unwrap();
+        assert_eq!(plan.doc.title(), "Kept");
+        assert_eq!(plan.doc.content(), "Kept body\n");
+        assert_eq!(plan.doc.stamp(), Some(stamp));
+        assert!(read.is_none());
+        assert!(known.is_empty());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_scan_given_its_own_reads_loads_the_same_without_reading() {
+        let (root, ..) = fixture_vault();
+        let id = Id::generate();
+        let text = format!("\u{feff}---\r\nid: {id}\r\ntitle: Windows\r\n---\r\nLine\r\n");
+        fs::write(root.join("Notes/crlf.md"), text).unwrap();
+
+        let first = scan_known(&root, &mut HashMap::new());
+        let mut known: HashMap<PathBuf, FileText> = first
+            .iter()
+            .map(|(entry, read)| (entry.local.clone(), read.clone().unwrap()))
+            .collect();
+        let second = scan_known(&root, &mut known);
+
+        // The stamps from the directory listing are those of the open files.
+        assert!(second.iter().all(|(_, read)| read.is_none()));
+        assert!(known.is_empty());
+        let shown_by = |entries: &[(Entry, Option<FileText>)]| {
+            entries.iter().map(|(e, _)| shown(e)).collect::<Vec<_>>()
+        };
+        assert_eq!(shown_by(&second), shown_by(&first));
+        let crlf = second.iter().find(|(e, _)| e.doc.title() == "Windows");
+        let (crlf, _) = crlf.unwrap();
+        assert_eq!(
+            (crlf.bom.as_str(), crlf.crlf),
+            ("\u{feff}", LineEnding::CRLF)
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_changed_stamp_has_the_file_read_again() {
+        let (root, ..) = fixture_vault();
+        let local = Path::new("Notes").join("plan.md");
+        let stamp = FileStamp::read(&root.join(&local)).unwrap().unwrap();
+        let older = FileStamp::new(stamp.modified() - Duration::from_secs(1), stamp.size());
+        let kept = FileText {
+            stamp: older,
+            text: "---\ntitle: Kept\n---\n".to_string(),
+        };
+        let mut known = HashMap::from([(local.clone(), kept)]);
+
+        let entries = scan_known(&root, &mut known);
+        let (plan, read) = entries.iter().find(|(e, _)| e.local == local).unwrap();
+        assert_eq!(plan.doc.title(), "Plan");
+        assert_eq!(read.as_ref().unwrap().stamp, stamp);
+        assert!(known.is_empty());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn after_a_scan_the_gone_and_unreadable_files_are_left_known() {
+        let (root, ..) = fixture_vault();
+        fs::write(root.join("Notes/latin1.md"), b"caf\xe9\n").unwrap();
+        let any = FileText {
+            stamp: FileStamp::new(SystemTime::UNIX_EPOCH, 1),
+            text: String::new(),
+        };
+        let paths = ["gone.md", "latin1.md", "plan.md"].map(|n| Path::new("Notes").join(n));
+        let mut known: HashMap<PathBuf, FileText> =
+            paths.iter().map(|p| (p.clone(), any.clone())).collect();
+
+        let mut done = false;
+        scan(&root, &mut known, |event| {
+            done |= matches!(event, ScanEvent::Done);
+            ScanControl::Continue
+        });
+        assert!(done);
+        let mut left: Vec<PathBuf> = known.into_keys().collect();
+        left.sort();
+        assert_eq!(left, paths[..2]);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_stopped_scan_leaves_what_it_didnt_reach_known() {
+        let (root, ..) = fixture_vault();
+        let first = scan_known(&root, &mut HashMap::new());
+        let mut known: HashMap<PathBuf, FileText> = first
+            .iter()
+            .map(|(entry, read)| (entry.local.clone(), read.clone().unwrap()))
+            .collect();
+
+        scan(&root, &mut known, |event| match event {
+            ScanEvent::Entry { .. } => ScanControl::Stop,
+            _ => ScanControl::Continue,
+        });
+        assert_eq!(known.len(), first.len() - 1);
+        assert!(!known.contains_key(&first[0].0.local));
 
         fs::remove_dir_all(&root).ok();
     }

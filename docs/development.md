@@ -13,6 +13,15 @@
   runs the queue with `wait_scanned`, which waits for the scan's end.
   av-vault's `forged_vault_loads_with_multi_roles` scans `data/forged`, so
   every file there must load.
+- The catalog: av-store's tests make their catalogs in the temporary
+  folder; a `Harness` keeps its vault's in its own folder (`catalog`),
+  closed before the folder goes (`CatalogThread::close`), and reads the
+  rows with `CatalogThread::locals` and `cached`. A file the tests write
+  is too new to be cached (`vault.md#catalog`); one whose modified time is
+  set an hour back (`File::set_modified`) is. CI runs the tests on Linux
+  only, so a change to the scan or the catalog is tested on Windows by
+  hand too: there the walk's stamps come from the directory listing
+  (av-vault's `a_scan_given_its_own_reads_loads_the_same_without_reading`).
 - The build bundles the page's modules and checks them
   (`development.md#the-bundled-page`); `av-bundle`'s rules have their own
   tests.
@@ -81,6 +90,11 @@ multiples of 21 s are TCP connect timeouts on a network whose IPv6 goes
 nowhere, not the code: compare the `in N ms` lines with older logs, then
 `curl -4` and `curl -6` to the host. av-http's IPv6 fast fallback
 (`architecture.md#crates`) covers the usual case.
+
+A vault's scan logs how many files came from the catalog ("N of M files
+from the catalog"); a catalog that couldn't be opened or written is
+logged. A file the app shows as it was before a change outside it:
+deleting `…\Avelor\catalog` has every file read again.
 
 ## Measuring size <a id="measuring-size"></a>
 

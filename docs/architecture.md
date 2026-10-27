@@ -41,7 +41,7 @@ read by OCR.
 | Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `pulldown-cmark`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4` (with the `gdk_pixbuf` it brings), `webkit6`, `soup3`, `gio`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. SQLite is the system's (`winsqlite3.dll`, libsqlite3), a library of the platform as WinHTTP and libsoup are, through a hand-written binding (`av-store`). UUIDv7, dates are hand-written |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
-| The vault is the source of truth | No database of record, no drafts; every edit is written to the file; the index is rebuilt by a scan, and the catalog beside the vault (`av-store`) holds nothing the files don't |
+| The vault is the source of truth | No database of record, no drafts; every edit is written to the file; the index is built by a scan; the catalog beside the vault holds nothing the files don't, and spares the scan reading unchanged files (`vault.md#catalog`) |
 | Host resolves, page presents | Filenames, conflicts, structural rules live in Rust; the page renders and forwards intents |
 | One coordinator | `App` alone runs background work (`run*`, `UiQueue`) and posts to the page; workers never reach the webview (no `Send` wrapper around `ICoreWebView2`) |
 
@@ -51,7 +51,7 @@ read by OCR.
 |---|---|
 | **`architecture.md`** | this file: what the app is, principles, structure, runtime, storage, build, conventions |
 | `development.md` | checks, the bundled page, testing session end, diagnosis, measuring size, line endings |
-| `vault.md` | the file format: identity, roles, types, sources, metadata, file names, layout; opening and scanning a vault, the trash, the Vault page |
+| `vault.md` | the file format: identity, roles, types, sources, metadata, file names, layout; opening and scanning a vault, the catalog, the trash, the Vault page |
 | `api.md` | the protocol: transport, rules, the page's side, every command and event |
 | `ui.md` | the main window: layout, vault panel and filters, lenses, status bar, jobs panel, keys, New, preferences |
 | `panel.md` | the side panel: cards, threads, the day view, the context column, links, labels, projects, structural edits and how they are saved |
@@ -110,7 +110,7 @@ The rules the code follows, and every change to it:
 7. **One coordinator.** `App` (`app.rs`) is the only place that runs
    background work and posts to the page; no worker gets a path of its own to the webview. Each new
    coordination primitive (`Req`, `on_ui`, the re-entrancy net, the jobs
-   helper, the clock) is designed with
+   helper, the clock, the catalog's thread) is designed with
    the user before it is built.
 8. **The UI thread never waits for the page.** The page is reached only
    through the UI thread's message queue, so a wait for it there needs a
@@ -138,6 +138,7 @@ flowchart LR
     end
     subgraph crates["crates"]
         vault["av-vault"]
+        store["av-store"]
         google["av-google"]
         llm["av-llm"]
         http["av-http"]
@@ -147,13 +148,16 @@ flowchart LR
     win --> ses --> feat
     feat --> cfg
     feat --> vault
+    feat --> store
     feat --> google
     feat --> llm
     google --> http
     llm --> http
     vault --> utils
+    store --> utils
     http --> utils
     vault --> files[("vault folder")]
+    store --> catalog[("catalog")]
     cfg --> conf[("config folder")]
     google --> gapi(["Google APIs"])
     llm --> lapi(["LLM providers"])
@@ -165,7 +169,8 @@ flowchart LR
 
 | Thread | Runs | Back to the UI thread via |
 |---|---|---|
-| UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the vault scan's batches into the index; every vault write | — |
+| UI thread | Win32 message loop (GTK's main loop on Linux); owns `App` and everything in it; every command handler; the vault scan's batches into the index; every vault write; every change of the index queued for the catalog | — |
+| `avelor-catalog`, one for the app's life (`catalog.rs`) | the open vault's catalog (`vault.md#catalog`): its opening, the changes `Vault` queues, in that order, and what a worker asks of it after them (`CatalogThread::ask`: the scan's cached rows) | nothing comes back; a worker's `ask` waits for its answer, the UI thread never does |
 | `avelor-worker`, one new OS thread per `App::run*` (`app.rs`) | the vault scan's walk and reads (`vault_scan.rs`); HTTP (Google, LLMs), the OAuth wait, LLM streams, WIC previews (gdk-pixbuf on Linux); mail header pages fan out to 8 scoped threads (`mail::fetch_headers`); the close's wait | `UiQueue::send_to_ui` → `PostMessageW(WM_TASK)` → `Shell::run_tasks` (`app.rs`, `shell.rs`; on Linux an idle callback) |
 | WebView2 processes (WebKitGTK's on Linux) | the page | `PostWebMessageAsString` / `WebMessageReceived` (on Linux `evaluate_javascript` / the script message handler) |
 
@@ -307,6 +312,7 @@ flowchart BT
     google --> http
     llm --> http
     app --> vault
+    app --> store
     app --> google
     app --> llm
     app -. build .-> bundle
@@ -317,13 +323,14 @@ flowchart BT
 | av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), FNV, DPAPI `secret`, logger, random (BCrypt), url, text normalization, charsets, atomic writes (`fs`), MIME types by extension (`mime`), cross-thread `Cancel` | |
 | av-http | blocking `Client` / `Request` / `Response`; the process's one session (`Client::shared`); `Request::send_logged`, the one way the APIs are called: logged as `METHOD host/path`, timed, a non-2xx status as `Error::Http` with the reason the caller's parser reads from the body | WinHTTP; libsoup 3 on Linux, one session per worker thread; WinHTTP's IPv6 fast fallback on (a network whose IPv6 goes nowhere cost 21 s per new connection); a streamed read takes what has arrived (`WinHttpQueryDataAvailable`) |
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes`, the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the scan (`scan`, events applied by `Index::apply`), filenames, `to_html`, `MdWriter`, `plain_title`, HTML → markdown, MIME parser, conversation trees | no network, no UI; also hosts mail parsing |
-| av-store | what Avelor keeps beside a vault, nothing only it holds: the catalog, a row per file of the index (`Catalog`: `open`, `cached`, `put`, `forget`, `keep_only`; `SETTLED`), the SQLite binding (`sqlite.rs`: `Db`, `Stmt`, closed on drop) | plain types only, no av-vault; the system's SQLite (`architecture.md#platforms`); a connection stays on the thread that opened it |
+| av-store | what Avelor keeps beside a vault, nothing only it holds: the catalog, a row per file of the index (`Catalog`: `open`, `cached`, `put`, `forget`, `keep_only`; `SETTLED`; `vault.md#catalog`), the SQLite binding (`sqlite.rs`: `Db`, `Stmt`, closed on drop) | plain types only, no av-vault; the system's SQLite (`architecture.md#platforms`); a connection stays on the thread that opened it |
 | av-google | OAuth loopback + PKCE (the wait under a `av_utils::cancel::Cancel`), token refresh, Gmail (filter → query, ids, headers, raw), Calendar v3 subset, the two-way sync engine (`plan` is pure); Google's error bodies (`reason`) | sends through `send_logged` |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
 | av-llm | `Client` over Anthropic, OpenAI (Responses API, not Chat Completions), Mistral, Gemini, Ollama; the providers' facts in one table (`ProviderSpec`, `PROVIDERS`: names, alias, default URL, key, uploads, auth) and one request builder from it (`Client::request`); streaming (SSE/NDJSON); normalized `Usage`, price table, `Ledger`; the providers' error bodies | sends through `send_logged`; dispatch by macro, no trait |
 
 The graph is acyclic and the network
-side never touches the vault side; `app` is the only bridge.
+side never touches the vault side; `app` is the only bridge. av-store
+knows neither: `app` turns the scan's texts into its rows.
 
 ### av-vault's core
 
@@ -368,7 +375,7 @@ side never touches the vault side; `app` is the only bridge.
 | `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net, Close to `App` (`architecture.md#platforms`) |
 | `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences and the platform's `BRIDGE_JS` |
 | `sys/mod.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
-| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile); folder picker, message boxes, ShellExecute |
+| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile, the catalogs); folder picker, message boxes, ShellExecute |
 | `sys/win32/mod.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; the clock's timer (`WM_TIMER` → `App::on_clock`); `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
 | `sys/win32/images.rs` | image previews with WIC (`preview`): decoded, upright by the EXIF orientation, scaled to fit, JPEG; COM on a worker (`ComThread`) |
 | `sys/win32/webview.rs` | WebView2 environment/controller, message handler, `NavigateToString`; App's outbox (`PostWebMessageAsString`) |
@@ -376,8 +383,9 @@ side never touches the vault side; `app` is the only bridge.
 | `sys/linux/mod.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; the clock (a GLib timeout); `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/images.rs` | the same with gdk-pixbuf |
 | `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
-| `app.rs` | `App` (all state) and `Vault` (the open vault's folder and av-vault's `Index`, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes, the pending sign-in, `on_clock` |
-| `vault_scan.rs` | the vault scan (`vault.md#opening`): `run_scan` with av-vault's `scan` on a worker, its batches into the index (`Vault::apply_scanned`) and to the page (`vault`, `entity`, `vault_error`, the scan's `job`), a replaced scan's batches dropped, `scanning`; its dispatch tests |
+| `app.rs` | `App` (all state) and `Vault` (the open vault's folder, av-vault's `Index` and the catalog's thread, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`; every change of the index sent to the catalog in its order, `catalog_key`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit`, `run*`, `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes, the pending sign-in, `on_clock` |
+| `catalog.rs` | the catalog's thread (`CatalogThread`, `vault.md#catalog`): `open`, the writes `put`, `forget`, `keep_only`, logged when they fail, and `ask` for a worker |
+| `vault_scan.rs` | the vault scan (`vault.md#opening`): `run_scan` with av-vault's `scan` on a worker, which asks the catalog for its cached rows, its batches into the index (`Vault::apply_scanned`, the reads to the catalog with `keep_scanned`, the catalog left with the index's files by `scan_done`) and to the page (`vault`, `entity`, `vault_error`, the scan's `job`), a replaced scan's batches dropped, `scanning`; its dispatch tests |
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
@@ -406,7 +414,7 @@ side never touches the vault side; `app` is the only bridge.
 
 | Area | Windows | Where | Linux |
 |---|---|---|---|
-| Folders | `%LOCALAPPDATA%\Avelor` (known folder): config, log, WebView2 profile | `sys/*/paths.rs` | `$XDG_CONFIG_HOME/avelor` for the config; `$XDG_STATE_HOME/avelor/log`; `$XDG_DATA_HOME/avelor/webkit` and the cache folder for the web view |
+| Folders | `%LOCALAPPDATA%\Avelor` (known folder): config, log, WebView2 profile, catalogs | `sys/*/paths.rs` | `$XDG_CONFIG_HOME/avelor` for the config; `$XDG_STATE_HOME/avelor/log`; `$XDG_DATA_HOME/avelor/webkit` and the cache folder for the web view; `$XDG_CACHE_HOME/avelor/catalog` for the catalogs |
 | Window, main loop, UI queue | Win32 window; `PostMessageW(WM_TASK)` wakes `run_tasks` | `sys/*/window.rs` (`UiSignal`) | `gtk::Application` (`NON_UNIQUE`, one process per start as on Windows) and an `ApplicationWindow`; `glib::idle_add_once` wakes the queue (`MainContext::invoke` would run it at once on the UI thread, inside the task that woke it) |
 | Fullscreen | F11 from the controller's `AcceleratorKeyPressed`; the frame removed and the monitor filled, the placement from before restored | `sys/*/window.rs`, `sys/win32/webview.rs` | F11 from an `EventControllerKey` in the capture phase, ahead of the web view; `fullscreen()`, `unfullscreen()` |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux/mod.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
@@ -426,7 +434,7 @@ side never touches the vault side; `app` is the only bridge.
 `sys/mod.rs` states the contract and re-exports one backend's items. It is
 the only `cfg(target_os)` in `app/src`:
 
-- `paths()`: the config, log and web view folders.
+- `paths()`: the config, log, web view and catalog folders.
 - `run(paths, config)`: the window, the web view and the main loop;
   returns once the window is gone.
 - `UiSignal` (`Send + Sync`): `wake()` and `close()`. `UiQueue` holds one instead of an
@@ -629,7 +637,9 @@ The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
   (`accounts.md#secrets`);
 - the WebView2 profile in `…\Avelor\WebView2`;
 - the log files, one per run, in `…\Avelor\log`
-  (`development.md#diagnosis`).
+  (`development.md#diagnosis`);
+- the vaults' catalogs in `…\Avelor\catalog` (`vault.md#catalog`),
+  written through SQLite's transactions.
 
 A broken `config.yaml` is set aside at start, without a question, as
 `config.yaml.broken`; an older one is kept, and the broken file is

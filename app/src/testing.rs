@@ -44,7 +44,7 @@ impl Harness {
             let sent = Rc::clone(&sent);
             Box::new(move |text: &str| sent.borrow_mut().push(text.to_string()))
         };
-        let mut app = App::new(Arc::clone(&ui), outbox, config);
+        let mut app = App::new(Arc::clone(&ui), outbox, config, dir.join("catalog"));
         // The tests run as a build with Google, whatever its features.
         app.hides_google = false;
         Self { app, ui, sent, dir }
@@ -159,6 +159,8 @@ impl Harness {
 
 impl Drop for Harness {
     fn drop(&mut self) {
+        // Its file is held open until then.
+        self.app.vault.catalog().close();
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }

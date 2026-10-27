@@ -11,6 +11,7 @@ use std::time::SystemTime;
 use crate::ai_accounts::AiAccounts;
 use crate::calendar;
 use crate::calendar::CalendarState;
+use crate::catalog::CatalogThread;
 use crate::chat::ChatState;
 use crate::close::CloseState;
 use crate::config::{ConfigStore, WindowState};
@@ -27,6 +28,7 @@ use crate::sys::UiSignal;
 use crate::vault_scan::VaultScan;
 use crate::vault_settings::VaultSettings;
 use crate::watches::Watches;
+use av_store::catalog::{FileRow, Read};
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
@@ -89,29 +91,107 @@ struct PendingConnect {
 }
 
 // ----------------------------------------------------------------------------
-/// The open vault: its folder and av-vault's `Index`, private so nothing
-/// else can change the index unseen. The scan has its method here.
-#[derive(Default)]
+/// The open vault: its folder, av-vault's `Index` and the catalog, private so
+/// nothing else can change the index unseen, and every change of it goes
+/// to the catalog (`vault.md#catalog`). The scan has its methods here.
 pub struct Vault {
     root: Option<PathBuf>,
     index: Index,
+    /// The folder of the vaults' catalogs.
+    catalog_dir: PathBuf,
+    catalog: CatalogThread,
+    /// The reads of the scan's batch the index took, for the catalog
+    /// (`keep_scanned`).
+    scanned: Vec<FileRow>,
 }
 
 // ----------------------------------------------------------------------------
 impl Vault {
     // ------------------------------------------------------------------------
-    /// Make `root` the open vault and reset the index ready to receive scan
-    /// events (`App::run_scan`).
+    /// No vault open yet; its catalog will be in `catalog_dir`.
+    pub fn new(catalog_dir: PathBuf) -> Self {
+        Self {
+            root: None,
+            index: Index::default(),
+            catalog_dir,
+            catalog: CatalogThread::start(),
+            scanned: Vec::new(),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Make `root` the open vault with its catalog, and reset the index
+    /// ready to receive scan events (`App::run_scan`).
     pub fn begin_open(&mut self, root: &Path) {
         self.index.begin(root);
+        self.scanned.clear();
+        self.catalog
+            .open(self.catalog_dir.clone(), root.to_path_buf());
         self.root = Some(root.to_path_buf());
     }
 
     // ------------------------------------------------------------------------
-    /// Put one event of the vault's scan into the index (`Index::apply`):
-    /// the id of the entry it added.
-    pub fn apply_scanned(&mut self, event: ScanEvent) -> Option<Id> {
-        self.index.apply(event)
+    /// Put one event of the vault's scan into the index (`Index::apply`),
+    /// with the time a read was read at: the id of the entry it added. A read
+    /// the index took goes to the catalog with its batch (`keep_scanned`).
+    pub fn apply_scanned(
+        &mut self,
+        mut event: ScanEvent,
+        read_at: Option<SystemTime>,
+    ) -> Option<Id> {
+        let read = match &mut event {
+            ScanEvent::Entry { entry, read, .. } => read.take().zip(catalog_key(&entry.local)),
+            _ => None,
+        };
+        let added = self.index.apply(event);
+        if added.is_some()
+            && let (Some((file, local)), Some(at)) = (read, read_at)
+        {
+            let read = Read {
+                modified: file.stamp.modified(),
+                size: file.stamp.size(),
+                at,
+            };
+            self.scanned.push(FileRow {
+                local,
+                text: file.text,
+                read: Some(read),
+            });
+        }
+        added
+    }
+
+    // ------------------------------------------------------------------------
+    /// The scan's batch is in the index: its reads go to the catalog.
+    pub fn keep_scanned(&mut self) {
+        self.catalog.put(std::mem::take(&mut self.scanned));
+    }
+
+    // ------------------------------------------------------------------------
+    /// The scan read every file: the catalog keeps exactly the index's.
+    pub fn scan_done(&mut self) {
+        self.keep_scanned();
+        let locals = self
+            .index
+            .all()
+            .iter()
+            .filter(|entry| !entry.is_unsaved())
+            .filter_map(|entry| catalog_key(&entry.local))
+            .collect();
+        self.catalog.keep_only(locals);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The way to the catalog, for the scan's worker.
+    pub fn catalog(&self) -> &CatalogThread {
+        &self.catalog
+    }
+
+    // ------------------------------------------------------------------------
+    /// Keep the catalogs in `dir` from the next open on.
+    #[cfg(test)]
+    pub fn set_catalog_dir(&mut self, dir: PathBuf) {
+        self.catalog_dir = dir;
     }
 
     // ------------------------------------------------------------------------
@@ -148,21 +228,84 @@ impl Vault {
         markdown: &str,
         overwrite: bool,
     ) -> Result<SaveOutcome> {
-        self.index.save_content(id, markdown.to_string(), overwrite)
+        let outcome = self
+            .index
+            .save_content(id, markdown.to_string(), overwrite)?;
+        if outcome == SaveOutcome::Saved {
+            self.keep_written([id]);
+        }
+        Ok(outcome)
     }
 
     // ------------------------------------------------------------------------
     /// Read `id`'s file again (`Index::reload`): the id it has now, `None`
     /// if it is gone.
     pub fn reload(&mut self, id: &Id) -> Result<Option<Id>> {
-        self.index.reload(id)
+        let local = self.local_of(id);
+        let now = self.index.reload(id)?;
+        self.keep_read_again(local, now);
+        Ok(now)
     }
 
     // ------------------------------------------------------------------------
     /// Take in a change made outside the app to `id`'s file, unless it
     /// replaced the app's own edits (`Index::refresh`).
     pub fn refresh(&mut self, id: &Id) -> Result<Refresh> {
-        self.index.refresh(id)
+        let local = self.local_of(id);
+        let refresh = self.index.refresh(id)?;
+        if let Refresh::TakenIn(now) = refresh {
+            self.keep_read_again(local, now);
+        }
+        Ok(refresh)
+    }
+
+    // ------------------------------------------------------------------------
+    /// The vault-relative path of `id`'s file, as the catalog keeps it.
+    fn local_of(&self, id: &Id) -> Option<String> {
+        let entry = self.index.entry(id).filter(|entry| !entry.is_unsaved())?;
+        catalog_key(&entry.local)
+    }
+
+    // ------------------------------------------------------------------------
+    /// The rows of `ids` hold their entries as the index does now: the text
+    /// the app writes, without a stamp, so their files are read again at
+    /// the next open.
+    fn keep_written<'a>(&self, ids: impl IntoIterator<Item = &'a Id>) {
+        let rows = ids
+            .into_iter()
+            .filter_map(|id| {
+                let local = self.local_of(id)?;
+                let text = self.index.entry(id)?.file_text();
+                Some(FileRow {
+                    local,
+                    text,
+                    read: None,
+                })
+            })
+            .collect();
+        self.catalog.put(rows);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The file at `local` was read again and has the entity `now`, or is
+    /// gone.
+    fn keep_read_again(&self, local: Option<String>, now: Option<Id>) {
+        match now {
+            Some(now) => self.keep_written([&now]),
+            None => self.catalog.forget(local.into_iter().collect()),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// What a vault edit wrote, in the catalog.
+    fn keep_edited(&self, changes: &Changes) {
+        self.keep_written(changes.created.iter().chain(&changes.saved));
+        let trashed = changes
+            .trashed_files
+            .iter()
+            .filter_map(|local| catalog_key(local))
+            .collect();
+        self.catalog.forget(trashed);
     }
 
     // ------------------------------------------------------------------------
@@ -192,6 +335,17 @@ impl Vault {
             SaveOutcome::Saved | SaveOutcome::Unchanged => Ok(()),
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+/// A vault-relative path as the catalog keeps it: its parts joined by `/`,
+/// whichever separator it was written with; `None` if it isn't Unicode.
+fn catalog_key(local: &Path) -> Option<String> {
+    let parts: Option<Vec<&str>> = local
+        .components()
+        .map(|part| part.as_os_str().to_str())
+        .collect();
+    parts.map(|parts| parts.join("/"))
 }
 
 // ----------------------------------------------------------------------------
@@ -266,11 +420,17 @@ impl App {
     // ------------------------------------------------------------------------
     /// `ui` is the window's task queue: the shell runs what is queued on it
     /// (`Shell::run_tasks`). Every message to the page goes to `outbox`.
-    pub fn new(ui: Arc<UiQueue>, outbox: Outbox, config: ConfigStore) -> Self {
+    /// `catalog_dir` holds the vaults' catalogs (`vault.md#catalog`).
+    pub fn new(
+        ui: Arc<UiQueue>,
+        outbox: Outbox,
+        config: ConfigStore,
+        catalog_dir: PathBuf,
+    ) -> Self {
         Self {
             outbox,
             config,
-            vault: Vault::default(),
+            vault: Vault::new(catalog_dir),
             ui,
             google: GoogleAccounts::default(),
             hides_google: !av_google::auth::has_client(),
@@ -612,6 +772,7 @@ impl App {
     pub fn edit<R>(&mut self, f: impl FnOnce(&mut Index, &mut Changes) -> Result<R>) -> Result<R> {
         let mut changes = Changes::default();
         let result = f(&mut self.vault.index, &mut changes);
+        self.vault.keep_edited(&changes);
         self.post_changes(&changes);
         calendar::changed(self, changes.created.iter().chain(&changes.saved));
         result
