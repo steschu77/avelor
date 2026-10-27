@@ -7,6 +7,7 @@ use crate::envelope::{Bare, Roles};
 use crate::schema::layout;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
+use std::time::{Duration, SystemTime};
 
 fn fixture_vault() -> (PathBuf, Id, Id, Id, Id, Id, Id) {
     let vault_id = Id::generate();
@@ -127,7 +128,7 @@ fn an_indexed_entry_the_index_already_has_is_skipped() {
     index.add(Entry::unsaved(Document::load(text, FileFormat::Markdown)));
 
     let mut added = Vec::new();
-    index_vault(&root, |event| {
+    index_vault(&root, &mut HashMap::new(), |event| {
         added.extend(index.apply(event));
         IndexControl::Continue
     });
@@ -148,7 +149,7 @@ fn an_indexed_entry_the_index_already_has_is_skipped() {
 fn indexing_ends_where_it_is_told_to_stop() {
     let (root, ..) = fixture_vault();
     let mut events = 0;
-    index_vault(&root, |event| {
+    index_vault(&root, &mut HashMap::new(), |event| {
         events += 1;
         match event {
             IndexEvent::Entry { .. } => IndexControl::Stop,
@@ -156,6 +157,182 @@ fn indexing_ends_where_it_is_told_to_stop() {
         }
     });
     assert_eq!(events, 2, "the start and the first file");
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_whose_name_isnt_unicode_fails_to_load() {
+    use std::os::unix::ffi::OsStrExt;
+    let (root, ..) = fixture_vault();
+    let name = std::ffi::OsStr::from_bytes(b"Notes/K\xf6ln.md");
+    fs::write(root.join(name), "Text").unwrap();
+    let mut failed = Vec::new();
+    index_vault(&root, &mut HashMap::new(), |event| {
+        if let IndexEvent::Failed { path, error } = event {
+            failed.push((path, error));
+        }
+        IndexControl::Continue
+    });
+    assert_eq!(
+        failed,
+        [(root.join(name), "its name isn't valid Unicode".to_string())]
+    );
+
+    fs::remove_dir_all(&root).ok();
+}
+
+/// An indexing of `root` given `known`: its entries, each with what it read.
+fn index_known(
+    root: &Path,
+    known: &mut HashMap<PathBuf, FileText>,
+) -> Vec<(Entry, Option<FileText>)> {
+    let mut entries = Vec::new();
+    index_vault(root, known, |event| {
+        if let IndexEvent::Entry { entry, read, .. } = event {
+            entries.push((entry, read));
+        }
+        IndexControl::Continue
+    });
+    entries
+}
+
+/// What an entry shows, without its id: a file without one gets a new
+/// one per indexing.
+fn shown(
+    entry: &Entry,
+) -> (
+    PathBuf,
+    String,
+    String,
+    String,
+    LineEnding,
+    Option<FileStamp>,
+) {
+    let doc = &entry.doc;
+    let (title, content) = (doc.title().to_string(), doc.content().to_string());
+    (
+        entry.local.clone(),
+        title,
+        content,
+        entry.bom.clone(),
+        entry.crlf,
+        doc.stamp(),
+    )
+}
+
+#[test]
+fn a_known_text_with_the_files_stamp_is_loaded_instead_of_the_file() {
+    let (root, _, doc_id, ..) = fixture_vault();
+    let local = Path::new("Notes").join("plan.md");
+    let stamp = FileStamp::read(&root.join(&local)).unwrap().unwrap();
+    let text = format!("---\nid: {doc_id}\ntitle: Kept\n---\nKept body\n");
+    let mut known = HashMap::from([(local.clone(), FileText { stamp, text })]);
+
+    let entries = index_known(&root, &mut known);
+    let (plan, read) = entries.iter().find(|(e, _)| e.local == local).unwrap();
+    assert_eq!(plan.doc.title(), "Kept");
+    assert_eq!(plan.doc.content(), "Kept body\n");
+    assert_eq!(plan.doc.stamp(), Some(stamp));
+    assert!(read.is_none());
+    assert!(known.is_empty());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn indexing_given_its_own_reads_loads_the_same_without_reading() {
+    let (root, ..) = fixture_vault();
+    let id = Id::generate();
+    let text = format!("\u{feff}---\r\nid: {id}\r\ntitle: Windows\r\n---\r\nLine\r\n");
+    fs::write(root.join("Notes/crlf.md"), text).unwrap();
+
+    let first = index_known(&root, &mut HashMap::new());
+    let mut known: HashMap<PathBuf, FileText> = first
+        .iter()
+        .map(|(entry, read)| (entry.local.clone(), read.clone().unwrap()))
+        .collect();
+    let second = index_known(&root, &mut known);
+
+    // The stamps from the directory listing are those of the open files.
+    assert!(second.iter().all(|(_, read)| read.is_none()));
+    assert!(known.is_empty());
+    let shown_by = |entries: &[(Entry, Option<FileText>)]| {
+        entries.iter().map(|(e, _)| shown(e)).collect::<Vec<_>>()
+    };
+    assert_eq!(shown_by(&second), shown_by(&first));
+    let crlf = second.iter().find(|(e, _)| e.doc.title() == "Windows");
+    let (crlf, _) = crlf.unwrap();
+    assert_eq!(
+        (crlf.bom.as_str(), crlf.crlf),
+        ("\u{feff}", LineEnding::CRLF)
+    );
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_changed_stamp_has_the_file_read_again() {
+    let (root, ..) = fixture_vault();
+    let local = Path::new("Notes").join("plan.md");
+    let stamp = FileStamp::read(&root.join(&local)).unwrap().unwrap();
+    let older = FileStamp::new(stamp.modified() - Duration::from_secs(1), stamp.size());
+    let kept = FileText {
+        stamp: older,
+        text: "---\ntitle: Kept\n---\n".to_string(),
+    };
+    let mut known = HashMap::from([(local.clone(), kept)]);
+
+    let entries = index_known(&root, &mut known);
+    let (plan, read) = entries.iter().find(|(e, _)| e.local == local).unwrap();
+    assert_eq!(plan.doc.title(), "Plan");
+    assert_eq!(read.as_ref().unwrap().stamp, stamp);
+    assert!(known.is_empty());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn after_indexing_the_gone_and_unreadable_files_are_left_known() {
+    let (root, ..) = fixture_vault();
+    fs::write(root.join("Notes/latin1.md"), b"caf\xe9\n").unwrap();
+    let any = FileText {
+        stamp: FileStamp::new(SystemTime::UNIX_EPOCH, 1),
+        text: String::new(),
+    };
+    let paths = ["gone.md", "latin1.md", "plan.md"].map(|n| Path::new("Notes").join(n));
+    let mut known: HashMap<PathBuf, FileText> =
+        paths.iter().map(|p| (p.clone(), any.clone())).collect();
+
+    let mut done = false;
+    index_vault(&root, &mut known, |event| {
+        done |= matches!(event, IndexEvent::Done);
+        IndexControl::Continue
+    });
+    assert!(done);
+    let mut left: Vec<PathBuf> = known.into_keys().collect();
+    left.sort();
+    assert_eq!(left, paths[..2]);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_stopped_indexing_leaves_what_it_didnt_reach_known() {
+    let (root, ..) = fixture_vault();
+    let first = index_known(&root, &mut HashMap::new());
+    let mut known: HashMap<PathBuf, FileText> = first
+        .iter()
+        .map(|(entry, read)| (entry.local.clone(), read.clone().unwrap()))
+        .collect();
+
+    index_vault(&root, &mut known, |event| match event {
+        IndexEvent::Entry { .. } => IndexControl::Stop,
+        _ => IndexControl::Continue,
+    });
+    assert_eq!(known.len(), first.len() - 1);
+    assert!(!known.contains_key(&first[0].0.local));
 
     fs::remove_dir_all(&root).ok();
 }

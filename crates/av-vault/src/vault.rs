@@ -4,8 +4,9 @@
 //! YAML frontmatter and standalone YAML records, each with an `id` and
 //! any number of role blocks.
 //! Membership (project → documents, kind → entities) is always computed
-//! here, never stored on disk. This structure is rebuilt by a full scan
-//! (fast at personal-vault scale).
+//! here, never stored on disk. This structure is built by an indexing, which
+//! takes a file unchanged since its text was kept from that text instead
+//! of reading it (the app's catalog, vault.md#catalog).
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -33,6 +34,15 @@ mod trash;
 pub use create::NewEntity;
 pub use indexing::{IndexControl, IndexEvent, index_vault};
 pub use trash::Trashed;
+
+// ----------------------------------------------------------------------------
+/// A file's text as read, its BOM and line endings kept, with the stamp the
+/// file had when it was read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileText {
+    pub stamp: FileStamp,
+    pub text: String,
+}
 
 // ----------------------------------------------------------------------------
 /// What a write did. A conflict is an expected outcome, not an error: the
@@ -108,6 +118,12 @@ impl Entry {
         }
     }
 
+    /// The text the app writes to the entry's file: its document, with the
+    /// file's BOM and line endings.
+    pub fn file_text(&self) -> String {
+        renormalize(&self.bom, self.crlf, self.doc.save())
+    }
+
     /// Whether this entry has no file yet.
     pub fn is_unsaved(&self) -> bool {
         self.path.as_os_str().is_empty()
@@ -154,6 +170,8 @@ pub struct Changes {
     pub saved: Vec<Id>,
     /// Entities whose file was moved to `.trash` and which left the index.
     pub trashed: Vec<Id>,
+    /// The vault-relative paths their files had.
+    pub trashed_files: Vec<PathBuf>,
     /// Entities of `saved` whose body the write changed, so a view showing
     /// the old body can load the new one.
     pub content: Vec<Id>,
@@ -419,8 +437,7 @@ impl Index {
         if !overwrite && entry.changed_on_disk()? {
             return Ok(SaveOutcome::Conflict(*id));
         }
-        let text = renormalize(&entry.bom, entry.crlf, entry.doc.save());
-        write_atomic(&entry.path, text.as_bytes())?;
+        write_atomic(&entry.path, entry.file_text().as_bytes())?;
         // Without a stamp the next save is a conflict: the safe side.
         let stamp = FileStamp::read(&entry.path).ok().flatten();
 
@@ -833,21 +850,38 @@ fn remote_values<'a>(
 }
 
 // ----------------------------------------------------------------------------
-fn load(path: PathBuf, local: PathBuf, readonly: bool, doc_type: FileFormat) -> Result<Entry> {
-    let mut file = fs::File::open(&path)?;
+fn load(path: PathBuf, local: PathBuf, readonly: bool, format: FileFormat) -> Result<Entry> {
+    let file = read_file(&path)?;
+    Ok(parse_file(path, local, readonly, format, file))
+}
+
+// ----------------------------------------------------------------------------
+fn read_file(path: &Path) -> Result<FileText> {
+    let mut file = fs::File::open(path)?;
     // Stamped before reading: a change in between shows up as a conflict
     // on the next save, never as an overwrite.
-    let stamp = Some(FileStamp::of(&file.metadata()?));
-    let mut t = String::new();
-    file.read_to_string(&mut t)?;
-    let (bom, crlf, text) = normalize(t);
+    let stamp = FileStamp::of(&file.metadata()?);
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    Ok(FileText { stamp, text })
+}
 
-    let doc = Document::load(text, doc_type).stamped(stamp);
+// ----------------------------------------------------------------------------
+/// The entry of the file at `path` holding `file`'s text.
+fn parse_file(
+    path: PathBuf,
+    local: PathBuf,
+    readonly: bool,
+    format: FileFormat,
+    file: FileText,
+) -> Entry {
+    let (bom, crlf, text) = normalize(file.text);
+    let doc = Document::load(text, format).stamped(Some(file.stamp));
     if let Some(e) = doc.error() {
         log::error!("{path:?}: {e}");
     }
 
-    Ok(Entry {
+    Entry {
         path,
         local,
         readonly,
@@ -855,32 +889,47 @@ fn load(path: PathBuf, local: PathBuf, readonly: bool, doc_type: FileFormat) -> 
         crlf,
         written: false,
         doc,
-    })
+    }
 }
 
 // ----------------------------------------------------------------------------
-fn visit(
-    root: &Path,
-    local: &Path,
-    file: &DirEntry,
-    cb: &mut impl FnMut(PathBuf, PathBuf, bool, FileFormat),
-) {
+/// A file the walk found, `local` relative to the walk's root.
+struct Found {
+    path: PathBuf,
+    local: PathBuf,
+    readonly: bool,
+    format: FileFormat,
+    /// As the directory listing has it: on Windows it can lag behind a
+    /// file another process holds open (saving.md#limits).
+    stamp: Option<FileStamp>,
+}
+
+// ----------------------------------------------------------------------------
+fn visit(root: &Path, local: &Path, file: &DirEntry, cb: &mut impl FnMut(Found)) {
     let path = root.join(local);
-    let Some(doc_type) = FileFormat::of_path(&path) else {
+    let Some(format) = FileFormat::of_path(&path) else {
         return;
     };
 
-    let metadata = file.metadata();
+    // On Windows from the directory listing, without opening the file.
+    let metadata = file.metadata().ok();
     let readonly = metadata
-        .map(|m| m.permissions().readonly())
-        .unwrap_or(false);
+        .as_ref()
+        .is_some_and(|m| m.permissions().readonly());
+    let stamp = metadata.as_ref().map(FileStamp::of);
 
-    cb(path, local.to_path_buf(), readonly, doc_type);
+    cb(Found {
+        path,
+        local: local.to_path_buf(),
+        readonly,
+        format,
+        stamp,
+    });
 }
 
 // ----------------------------------------------------------------------------
 /// Recursive walk, skipping dot-directories (`.assistant`, `.obsidian`, …).
-fn walk(root: &Path, folders: &Path, cb: &mut impl FnMut(PathBuf, PathBuf, bool, FileFormat)) {
+fn walk(root: &Path, folders: &Path, cb: &mut impl FnMut(Found)) {
     let path = root.join(folders);
     let Ok(entries) = fs::read_dir(&path) else {
         return;

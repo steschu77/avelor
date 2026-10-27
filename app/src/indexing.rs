@@ -1,20 +1,24 @@
 //! The indexing (`vault.md#opening`): av-vault's `indexing`
-//! walks and reads the vault's files on a worker and sends what it read in
-//! batches; the UI thread puts each batch into the index and tells the page
-//! (`vault`, `entity`, `vault_error`, the indexing's `job`). A new indexing
-//! replaces the one running.
+//! walks and reads the vault's files on a worker, the unchanged ones from
+//! the vault's catalog (`vault.md#catalog`), and sends what it read in
+//! batches; the UI thread puts each batch into the index, which hands the
+//! reads to the catalog, and tells the page (`vault`, `entity`,
+//! `vault_error`, the indexing's `job`). A new indexing replaces the one running.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
+use av_store::catalog::{CachedFile, Catalog};
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
-use av_vault::vault::{self, IndexControl, IndexEvent};
+use av_vault::vault::{self, FileText, IndexControl, IndexEvent};
 use serde::Serialize;
 
 use crate::app::{App, Progress, Task};
 use crate::calendar;
+use crate::catalog::CatalogThread;
 use crate::email;
 use crate::jobs::JobKind;
 use crate::texts::Text;
@@ -24,6 +28,10 @@ const BATCH_SIZE: usize = 100;
 /// ... and goes once this long has passed since the one before, so a slow
 /// disk shows its files as they come.
 const BATCH_TIME: Duration = Duration::from_millis(50);
+
+/// an indexing event, with the time a read was read at: the catalog decides by
+/// it whether the file had settled (`av_store::catalog::SETTLED`).
+type Indexed = (IndexEvent, Option<SystemTime>);
 
 // ----------------------------------------------------------------------------
 /// The indexing running, if any (`App::run_indexing`).
@@ -82,8 +90,9 @@ impl App {
     /// worker is aborted, and what it queued is dropped.
     pub fn run_indexing(&mut self, root: PathBuf) {
         let id = Id::generate();
+        let catalog = self.vault.catalog().clone();
         let task = self.run_with_progress(
-            move |progress, cancel| read_files(&root, &progress, cancel),
+            move |progress, cancel| read_files(&root, &catalog, &progress, cancel),
             move |app, batch| app.on_index_batch(id, batch),
             move |app, ()| app.end_indexing(id),
         );
@@ -105,21 +114,23 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// A batch the indexing `id` read: each event applied in turn.
-    fn on_index_batch(&mut self, id: Id, batch: Vec<IndexEvent>) {
+    /// A batch the indexing `id` read: each event applied in turn, then its
+    /// reads kept in the catalog.
+    fn on_index_batch(&mut self, id: Id, batch: Vec<Indexed>) {
         if !self.indexing.is_running(id) {
             return;
         }
-        for event in batch {
-            self.on_index_event(event);
+        for (event, read_at) in batch {
+            self.on_index_event(event, read_at);
         }
+        self.vault.keep_indexed();
     }
 
     // ------------------------------------------------------------------------
-    /// Apply one indexing event to the vault's index and tell the page: the
-    /// events `vault` (the start and the end), `entity`, `vault_error` and
-    /// the indexing's `job`.
-    fn on_index_event(&mut self, event: IndexEvent) {
+    /// Apply one indexing event to the vault's index, with the time of its read,
+    /// and tell the page: the events `vault` (the start and the end),
+    /// `entity`, `vault_error` and the indexing's `job`.
+    fn on_index_event(&mut self, event: IndexEvent, read_at: Option<SystemTime>) {
         let Some(run) = &mut self.indexing.running else {
             return;
         };
@@ -170,7 +181,7 @@ impl App {
                 }
             }
         }
-        let added = self.vault.apply_indexed(event);
+        let added = self.vault.apply_indexed(event, read_at);
         if let Some(entry) = added.and_then(|id| self.vault.index().entry(&id)) {
             self.post_entity(entry);
         }
@@ -180,13 +191,15 @@ impl App {
     }
 
     // ------------------------------------------------------------------------
-    /// The indexing `id` read every file: the vault knows its emails and events
-    /// now, so the auto-syncs may run.
+    /// The indexing `id` read every file: the catalog keeps the index's files
+    /// only, and the vault knows its emails and events now, so the auto-syncs
+    /// may run.
     fn end_indexing(&mut self, id: Id) {
         if !self.indexing.is_running(id) {
             return;
         }
         self.indexing.running = None;
+        self.vault.indexing_done();
         let now = DateTime::now();
         email::auto_sync(self, now);
         calendar::auto_sync(self, now);
@@ -195,14 +208,48 @@ impl App {
 
 // ----------------------------------------------------------------------------
 /// The worker's part: av-vault's `indexing` of `root`, its events sent in
-/// batches, until the indexing is done or `cancel` is set.
-fn read_files(root: &Path, progress: &Progress<Vec<IndexEvent>>, cancel: &Cancel) {
+/// batches, until the indexing is done or `cancel` is set. The vault's catalog
+/// gives the texts of the files whose stamps are its rows'; every other file
+/// is read, and goes with the time of its read.
+fn read_files(
+    root: &Path,
+    catalog: &CatalogThread,
+    progress: &Progress<Vec<Indexed>>,
+    cancel: &Cancel,
+) {
+    let mut known = match catalog
+        .ask(|catalog| catalog.map(Catalog::cached))
+        .flatten()
+    {
+        Some(Ok(files)) => files.into_iter().map(known_text).collect(),
+        Some(Err(err)) => {
+            log::warn!(
+                "{}: the catalog's rows can't be read: {err}",
+                root.display()
+            );
+            HashMap::new()
+        }
+        None => HashMap::new(),
+    };
+
     let mut batch = Vec::new();
     let mut sent = Instant::now();
-    vault::index_vault(root, |event| {
+    let (mut total, mut unchanged) = (0, 0);
+    vault::index_vault(root, &mut known, |event| {
+        let mut read_at = None;
+        match &event {
+            IndexEvent::Start { total: files, .. } => total = *files,
+            IndexEvent::Entry { read: None, .. } => unchanged += 1,
+            IndexEvent::Entry { read: Some(_), .. } => read_at = Some(SystemTime::now()),
+            IndexEvent::Failed { .. } => {}
+            IndexEvent::Done => log::info!(
+                "{}: {unchanged} of {total} files from the catalog",
+                root.display()
+            ),
+        }
         // The start shows the vault at once; the end goes with the last files.
         let flush = matches!(event, IndexEvent::Start { .. } | IndexEvent::Done);
-        batch.push(event);
+        batch.push((event, read_at));
         if flush || batch.len() >= BATCH_SIZE || sent.elapsed() >= BATCH_TIME {
             progress.send(std::mem::take(&mut batch));
             sent = Instant::now();
@@ -213,6 +260,17 @@ fn read_files(root: &Path, progress: &Progress<Vec<IndexEvent>>, cancel: &Cancel
             IndexControl::Continue
         }
     });
+}
+
+// ----------------------------------------------------------------------------
+fn known_text(file: CachedFile) -> (PathBuf, FileText) {
+    (
+        PathBuf::from(file.local),
+        FileText {
+            stamp: file.stamp,
+            text: file.text,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -325,5 +383,157 @@ mod tests {
         assert_eq!(entity_ids(&sent), sorted(&ids));
         assert_eq!(h.app.vault.index().all().len(), ids.len());
         assert!(!h.app.indexing());
+    }
+
+    // ------------------------------------------------------------------------
+    /// Write the note `id` titled `title` at `path`, modified at `time`.
+    fn write_note(path: &Path, id: Id, title: &str, time: SystemTime) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let text = format!("---\nid: {id}\ntitle: {title}\ndocument: {{}}\n---\nBody\n");
+        fs::write(path, text).unwrap();
+        let file = fs::File::options().write(true).open(path).unwrap();
+        file.set_modified(time).unwrap();
+    }
+
+    // ------------------------------------------------------------------------
+    /// Open `root` as a switch does, and wait for its indexing.
+    fn open(h: &mut Harness, root: &Path) {
+        crate::api::switch_to(&mut h.app, root.to_path_buf());
+        h.wait_indexed();
+        h.take();
+    }
+
+    // ------------------------------------------------------------------------
+    /// The catalog's paths of `names` in `Notes`.
+    fn notes(names: &[&str]) -> Vec<String> {
+        names.iter().map(|name| format!("Notes/{name}")).collect()
+    }
+
+    // ------------------------------------------------------------------------
+    fn title(h: &Harness, id: &Id) -> String {
+        h.app.vault.index().get(id).unwrap().title().to_string()
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_unchanged_file_comes_from_the_catalog() {
+        let mut h = Harness::new("indexing-catalog");
+        let root = h.vault();
+        let (id, path) = (Id::generate(), root.join("Notes/n.md"));
+        // Settled long ago, so its row keeps the stamp.
+        let then = SystemTime::now() - Duration::from_secs(3600);
+        write_note(&path, id, "Old", then);
+        open(&mut h, &root);
+        assert_eq!(title(&h, &id), "Old");
+
+        // The same size and time: the stamp can't tell, the row's text shows.
+        write_note(&path, id, "New", then);
+        open(&mut h, &root);
+        assert_eq!(title(&h, &id), "Old");
+
+        write_note(&path, id, "Newer", then);
+        open(&mut h, &root);
+        assert_eq!(title(&h, &id), "Newer");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_file_read_before_it_settled_is_read_again() {
+        let mut h = Harness::new("indexing-unsettled");
+        let root = h.vault();
+        let (id, path) = (Id::generate(), root.join("Notes/n.md"));
+        let now = SystemTime::now();
+        write_note(&path, id, "Old", now);
+        open(&mut h, &root);
+        assert_eq!(h.app.vault.catalog().locals(), notes(&["n.md"]));
+        assert!(h.app.vault.catalog().cached().is_empty());
+
+        write_note(&path, id, "New", now);
+        open(&mut h, &root);
+        assert_eq!(title(&h, &id), "New");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_file_the_app_wrote_is_read_again() {
+        let mut h = Harness::new("indexing-written");
+        let root = h.vault();
+        let (id, path) = (Id::generate(), root.join("Notes/n.md"));
+        let then = SystemTime::now() - Duration::from_secs(3600);
+        write_note(&path, id, "Old", then);
+        open(&mut h, &root);
+        assert_eq!(h.app.vault.catalog().cached(), notes(&["n.md"]));
+
+        let args = serde_json::json!({ "id": id.to_string(), "title": "Mid" });
+        let sent = h.call("set_title", args);
+        assert!(
+            sent.iter().any(|m| m["re"] == 1 && m.get("ok").is_some()),
+            "{sent:?}"
+        );
+        assert_eq!(h.app.vault.catalog().locals(), notes(&["n.md"]));
+        assert!(h.app.vault.catalog().cached().is_empty(), "no stamp");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn after_indexing_the_catalog_holds_the_files_of_the_index() {
+        let mut h = Harness::new("indexing-mirror");
+        let root = h.vault();
+        let ids = write_notes(&root, "Note", 3);
+        open(&mut h, &root);
+        let all = notes(&["n0.md", "n1.md", "n2.md"]);
+        assert_eq!(h.app.vault.catalog().locals(), all);
+
+        // A file gone, and one with another's id, which the index leaves out.
+        fs::remove_file(root.join("Notes/n2.md")).unwrap();
+        let twin = format!("---\nid: {}\ntitle: Twin\n---\n", ids[0]);
+        fs::write(root.join("Notes/twin.md"), twin).unwrap();
+        open(&mut h, &root);
+        assert_eq!(h.app.vault.catalog().locals(), notes(&["n0.md", "n1.md"]));
+
+        let sent = h.call(
+            "delete_entity",
+            serde_json::json!({ "id": ids[1].to_string() }),
+        );
+        assert!(
+            sent.iter().any(|m| m["re"] == 1 && m.get("ok").is_some()),
+            "{sent:?}"
+        );
+        assert_eq!(h.app.vault.catalog().locals(), notes(&["n0.md"]));
+        let sent = h.call(
+            "restore_entity",
+            serde_json::json!({ "path": "Notes/n1.md" }),
+        );
+        assert!(
+            sent.iter().any(|m| m["re"] == 1 && m.get("ok").is_some()),
+            "{sent:?}"
+        );
+        assert_eq!(h.app.vault.catalog().locals(), notes(&["n0.md", "n1.md"]));
+        // The restore undone puts the file back in the trash; redone, out.
+        h.call("undo", serde_json::json!({}));
+        assert_eq!(h.app.vault.catalog().locals(), notes(&["n0.md"]));
+        h.call("redo", serde_json::json!({}));
+        assert_eq!(h.app.vault.catalog().locals(), notes(&["n0.md", "n1.md"]));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn without_its_folder_every_file_is_read() {
+        let mut h = Harness::new("indexing-no-catalog");
+        fs::write(h.dir().join("file"), "x").unwrap();
+        h.app
+            .vault
+            .set_catalog_dir(h.dir().join("file").join("catalog"));
+        let root = h.vault();
+        let (id, path) = (Id::generate(), root.join("Notes/n.md"));
+        let then = SystemTime::now() - Duration::from_secs(3600);
+        write_note(&path, id, "Old", then);
+        open(&mut h, &root);
+        assert_eq!(title(&h, &id), "Old");
+
+        write_note(&path, id, "New", then);
+        open(&mut h, &root);
+        assert_eq!(title(&h, &id), "New");
+        assert!(h.app.vault.catalog().locals().is_empty());
     }
 }
