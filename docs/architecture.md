@@ -247,7 +247,8 @@ them or "· spend limit reached" after them (`job_summary`). A job that has
 a model take its items one after the other keeps them in an `AiQueue`
 (`ai/queue.rs`). A vault switch stops the jobs bound to the vault and the
 assistant's replies, and opens the new vault once they have ended
-(`switch_vault_when_stopped`). A new long operation becomes a job through
+(`switch_vault_when_stopped`); Rebuild index opens the same vault this
+way. A new long operation becomes a job through
 this helper, not a slot with callbacks of its own.
 
 ### The clock <a id="the-clock"></a>
@@ -401,8 +402,8 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `protocol.rs` | the protocol: envelope, `Command`, router, `Req`; the dispatch tests |
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
-| `jobs.rs` | the jobs helper: start, update, stop and end a job (the `job` event), `run_job`, `cancel_job`, the vault switch that waits for the old vault's jobs; a job's summary (`count_summary`, `job_summary`); its tests |
-| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch and reveal, `set_prefs`, `open_url` |
+| `jobs.rs` | the jobs helper: start, update, stop and end a job (the `job` event), `run_job`, `cancel_job`, the vault switch that waits for the old vault's jobs, and Rebuild index's reopen (`rebuild_when_stopped`); a job's summary (`count_summary`, `job_summary`); its tests |
+| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch, reveal and `rebuild_index`, `set_prefs`, `open_url` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `set_editing`; `DocumentState`, the documents in edit mode and the app's version of each one in conflict; the conflict copy shared with calendar sync (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
@@ -537,7 +538,7 @@ nothing imports `app.js`.
 | `features/jobs.js` | job cards from the `job` event, with Stop |
 | `features/header.js`, `features/sidebar.js` | the lens header: the project's name, the active labels and their "+" menu, the project's details and description, `leaveEditModes`; the vault panel: projects, No project and sources with their counts, the filter, the vault menu |
 | `features/new.js`, `features/linked.js` | New: the menu of types, the New page, the Task tab, `create_entity`; the Linked tab: links to, linked from, a search to link to |
-| `features/workspace/vault.js` | the Vault page; `switchVault`, `revealVault` |
+| `features/workspace/vault.js` | the Vault page; `switchVault`, `revealVault`, Rebuild index |
 | `features/assistant/tree.js`, `features/assistant/assistant.js` | conversation tree helpers; the assistant |
 | `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the vault area's and the panel's layout, the page items, the sidebar's sections, the panel's close and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, the dirty dots, `ready` |

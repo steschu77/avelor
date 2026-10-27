@@ -955,6 +955,8 @@
   "vault.none_text": "No vault is open. A vault is a folder: every markdown and YAML file in it is one entity.",
   "vault.open_dots": "Open a vault…",
   "vault.pick": "Select Vault",
+  "vault.rebuild": "Rebuild index",
+  "vault.rebuild_title": "Read every file of the vault again",
   "vault.show_failed": "Could not show the vault's folder.",
   "vault.unreadable_files": "Files that couldn't be read",
   "vault_op.accounts": "Account Setup",
