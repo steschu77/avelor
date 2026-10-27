@@ -40,7 +40,7 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
         .flags(gio::ApplicationFlags::NON_UNIQUE)
         .register_session(true)
         .build();
-    let shell = Rc::new(Shell::new(config));
+    let shell = Rc::new(Shell::new(config, paths.catalog_dir()));
     app.connect_activate(move |app| {
         let webview = webview::create(&data_dir, &cache_dir, &shell);
         let window = window::create(app, &webview, &shell);

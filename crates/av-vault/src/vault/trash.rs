@@ -5,7 +5,7 @@ use std::fs;
 use std::path::Component;
 use std::path::{Path, PathBuf};
 
-use super::{Changes, Index, SaveOutcome, load, walk};
+use super::{Changes, Found, Index, SaveOutcome, load, walk};
 use crate::document::{Document, FileFormat};
 use crate::envelope::DocumentType;
 use crate::schema::layout;
@@ -14,7 +14,6 @@ use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::fs::write_atomic;
 use av_utils::id::Id;
-use av_utils::text::renormalize;
 
 // ----------------------------------------------------------------------------
 /// A file in the trash ([`Index::trashed`], vault.md#trash): where it
@@ -128,7 +127,9 @@ impl Index {
             fs::create_dir_all(parent)?;
         }
         fs::rename(&entry.path, &target)?;
-        self.remove(id);
+        if let Some(entry) = self.remove(id) {
+            changes.trashed_files.push(entry.local);
+        }
         changes.trashed.push(*id);
         Ok(())
     }
@@ -139,11 +140,16 @@ impl Index {
         let mut files: Vec<Trashed> = self
             .trash_files()
             .into_iter()
-            .map(|(path, local, readonly, format)| Trashed {
-                doc: load(path, local.clone(), readonly, format)
-                    .map(|entry| entry.doc)
-                    .map_err(|err| err.to_string()),
-                local,
+            .map(|found| Trashed {
+                doc: load(
+                    found.path,
+                    found.local.clone(),
+                    found.readonly,
+                    found.format,
+                )
+                .map(|entry| entry.doc)
+                .map_err(|err| err.to_string()),
+                local: found.local,
             })
             .collect();
         files.sort_by(|a, b| b.date().cmp(&a.date()).then_with(|| a.local.cmp(&b.local)));
@@ -207,8 +213,7 @@ impl Index {
         if !entry.doc.is_dirty() {
             return Ok(SaveOutcome::Unchanged);
         }
-        let text = renormalize(&entry.bom, entry.crlf, entry.doc.save());
-        write_atomic(&entry.path, text.as_bytes())?;
+        write_atomic(&entry.path, entry.file_text().as_bytes())?;
         Ok(SaveOutcome::Saved)
     }
 
@@ -233,16 +238,15 @@ impl Index {
     /// files were deleted, and stops at the first that can't be.
     pub fn empty_trash(&self) -> Result<usize> {
         let files = self.trash_files();
-        for (_, local, _, _) in &files {
-            self.delete_trashed(local)?;
+        for found in &files {
+            self.delete_trashed(&found.local)?;
         }
         Ok(files.len())
     }
 
     /// The markdown and YAML files under `<root>/.trash`, as the indexing's walk
-    /// finds them: `(path, local, readonly, format)`, `local` relative to
-    /// the trash. None without a vault.
-    fn trash_files(&self) -> Vec<(PathBuf, PathBuf, bool, FileFormat)> {
+    /// finds them, `local` relative to the trash. None without a vault.
+    fn trash_files(&self) -> Vec<Found> {
         let mut files = Vec::new();
         if self.open_root().is_err() {
             return files;
@@ -250,7 +254,7 @@ impl Index {
         walk(
             &self.root.join(layout::TRASH),
             Path::new(""),
-            &mut |path, local, readonly, format| files.push((path, local, readonly, format)),
+            &mut |found| files.push(found),
         );
         files
     }

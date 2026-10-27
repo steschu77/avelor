@@ -40,6 +40,12 @@ impl Paths {
     pub fn log_dir(&self) -> PathBuf {
         glib::user_state_dir().join(APP_DIR).join("log")
     }
+
+    // ------------------------------------------------------------------------
+    /// `$XDG_CACHE_HOME/avelor/catalog`: the vaults' catalogs.
+    pub fn catalog_dir(&self) -> PathBuf {
+        glib::user_cache_dir().join(APP_DIR).join("catalog")
+    }
 }
 
 // ----------------------------------------------------------------------------

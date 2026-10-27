@@ -119,6 +119,7 @@ dependencies = [
  "av-bundle",
  "av-google",
  "av-llm",
+ "av-store",
  "av-texts",
  "av-utils",
  "av-vault",
