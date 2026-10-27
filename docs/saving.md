@@ -176,8 +176,8 @@ is the point to act on what was edited. The calendar sync uses it
 edit mode, and a calendar's auto-sync waits while one of its events is in
 edit mode, so a change from Google never lands in an open editor. The host
 forgets the list when a vault opens, and the page loading opens one.
-Before a vault switch every editor leaves edit mode, saving
-(`leaveEditModes`, as closing the app does). When the new vault opens, the
+Before a vault switch or Rebuild index every editor leaves edit mode,
+saving (`leaveEditModes`, as closing the app does). When the new vault opens, the
 page forgets its unsaved state, so nothing of the old vault is saved into
 the new one (`vault.md#opening`).
 
@@ -267,12 +267,13 @@ the status bar).
 
 - A change that keeps both the size and the modified time (FAT's 2-second
   resolution, tools that restore the time) isn't found, and with the
-  catalog not at the next start either, until the file changes again.
+  catalog not at the next start either, until the file changes again or
+  Rebuild index reads every file (`vault.md#catalog`).
 - On Windows the indexing takes a file's stamp from the directory listing,
   which can lag behind a file another program holds open, or behind an SMB
   client's cache: a change that leaves the listing's stamp as the catalog
   has it shows the row's text, until the first save or file check finds
-  the change.
+  the change, or Rebuild index.
 - A file changed outside the app is found before a write, on load and when
   the window becomes active — not while the app stays in front, and not
   for files no editor shows.
@@ -314,8 +315,9 @@ Ctrl+Y or Ctrl+Shift+Z does it again (`redo`), each an edit through
 keys for their own undo (`features/undo.js`). The status bar says what
 was done ("Undone: Renamed The Money Pit"), or that it wasn't: a step
 whose files changed since is dropped. The steps are the open vault's, in
-memory, at most 100: opening a vault forgets them, and a new step drops
-the ones to redo.
+memory, at most 100: opening a vault, or Rebuild index
+(`vault.md#catalog`), forgets them, and a new step drops the ones to
+redo.
 
 A request may name a group (`step`, `api.md#rules`): an edit of the last
 step's group joins it, each file going from what it held before the

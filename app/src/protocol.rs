@@ -65,6 +65,7 @@ enum Command {
     /// The vault's own settings (`vault_settings`).
     SetVaultSettings(vault_settings::SettingsChange),
     RevealVault,
+    RebuildIndex,
     /// The window's zoom or fullscreen (`api::window`).
     Window(Step),
     /// Open a web, email or phone link in its default app.
@@ -331,6 +332,7 @@ impl Command {
             "set_theme" => Command::SetTheme(from_value(args)?),
             "set_vault_settings" => Command::SetVaultSettings(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
+            "rebuild_index" => Command::RebuildIndex,
             "window" => Command::Window(from_value(args)?),
             "open_url" => Command::OpenUrl(from_value(args)?),
             "cancel_job" => Command::CancelJob(from_value(args)?),
@@ -426,6 +428,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetTheme(a) => settings::set_theme(app, req, a),
         Command::SetVaultSettings(a) => vault_settings::set_vault_settings(app, req, a),
         Command::RevealVault => api::reveal_vault(app, req),
+        Command::RebuildIndex => api::rebuild_index(app, req),
         Command::Window(a) => api::window(app, req, a.step),
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::CancelJob(a) => jobs::cancel_job(app, req, a.id),

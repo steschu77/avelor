@@ -199,6 +199,16 @@ mod tests {
     }
 
     #[test]
+    fn rebuilding_the_index_forgets_the_steps() {
+        let (mut h, ids) = notes("undo-rebuild", 1);
+        h.call("set_title", json!({ "id": ids[0], "title": "Renamed" }));
+        h.call("rebuild_index", json!({}));
+        h.wait_indexed();
+        let sent = h.call("undo", json!({}));
+        assert_eq!(notice(&sent).1, "Nothing to undo");
+    }
+
+    #[test]
     fn a_new_edit_drops_the_steps_to_redo() {
         let (mut h, ids) = notes("undo-new-edit", 2);
         h.call("set_title", json!({ "id": ids[0], "title": "A" }));

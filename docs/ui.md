@@ -320,8 +320,8 @@ checked calendar its sync.
 - **What is typed** is looked for in the names and in the other words one is
   found by: every word, in any order, case and accents aside (`fit`,
   `core/match.js`). The words are marked, and a row found by another word
-  says which ("Explorer", Show the vault in its folder). What has a name is
-  collected as the dialog opens (`collect`), each name folded once.
+  says which ("rescan", Rebuild index). What has a name is collected as the
+  dialog opens (`collect`), each name folded once.
 - **What is found** stands in blocks, the one with the best fit first, and
   of two alike in this order; within a block the best fit first
   (`foundBlocks`):
