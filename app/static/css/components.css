@@ -166,6 +166,24 @@
   box-shadow: inset 0 0 0 1px var(--c-line);
 }
 
+/* The words of the vault panel's filter (ui/marks.js): marked in the
+   lenses' rows, and highlighted over a card's text, which stays the
+   file's (features/panel/find.js). */
+mark {
+  padding: 0 1px;
+  margin: 0 -1px;
+  background: var(--c-hit);
+  color: inherit;
+}
+
+::highlight(words) {
+  background-color: var(--c-hit);
+}
+
+::highlight(word-current) {
+  background-color: var(--c-hit-current);
+}
+
 /* Pills: --tag fills with the accent, --action can be clicked. */
 .chip {
   display: inline-flex;

@@ -267,6 +267,8 @@ setInterval(() => {
 function onDocSaved(doc_id, seq, source, html) {
   endConflict(doc_id); // an Overwrite went through
   const current = seq === (editSeq.get(doc_id) ?? 0);
+  // A body that changed has other words to search (features/words.js).
+  if (baseline.get(doc_id) !== source) store.setState({ saved_rev: store.getState().saved_rev + 1 });
   // `source` is what the file now holds, stale reply or not. Only a loaded
   // document has a DOM to compare against it.
   baseline.set(doc_id, source);

@@ -1,6 +1,6 @@
-/* The sidebar (features/sidebar.js): the vault panel's sections and items,
-   the expanded vault area (ui/page.js), and the jobs panel
-   (features/jobs.js). */
+/* The sidebar (features/sidebar.js): the words box (features/words.js),
+   the vault panel's sections and items, the expanded vault area
+   (ui/page.js), and the jobs panel (features/jobs.js). */
 
 .sidebar {
   grid-area: sidebar;
@@ -65,6 +65,73 @@
 /* the Workspace page's title strip stays chrome over the page's paper */
 .sidebar__area .pane-head {
   background: var(--c-shade);
+}
+
+/* the words box: an input, marked like the project picked while it
+   filters; its x while it does, its key while it doesn't */
+.search {
+  margin: 4px var(--p-gutter);
+  padding: 0 10px;
+  height: var(--h-nav-row);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-label);
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: text;
+}
+
+.search>.icon {
+  width: 12px;
+  height: 12px;
+  color: var(--c-ink-mute);
+}
+
+.search:focus-within {
+  border-color: var(--c-ink);
+}
+
+.search.is-on {
+  border-color: var(--c-ink);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+.search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font: 400 var(--fs-small)/1 var(--f-chrome);
+  color: var(--c-ink);
+}
+
+.search__input::placeholder {
+  color: var(--c-label);
+}
+
+.search.is-on kbd,
+.search:not(.is-on) .search__clear {
+  display: none;
+}
+
+.search__clear {
+  display: flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--c-ink-mute);
+  cursor: pointer;
+}
+
+.search__clear>.icon {
+  width: 10px;
+  height: 10px;
 }
 
 .nav-section {
