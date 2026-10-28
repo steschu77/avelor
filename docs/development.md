@@ -1,6 +1,6 @@
 # Avelor — Development and testing
 
-> How to check a change, find a problem, measure the executable. The rules the code
+> How to check a change, release a build, find a problem, measure the executable. The rules the code
 > follows are `architecture.md#principles` and `architecture.md#conventions`.
 
 ## Checks <a id="checks"></a>
@@ -34,6 +34,21 @@
   (`requests_of_every_provider`); a change to the request builder or to
   `ProviderSpec` keeps it, or changes it on purpose.
 - The user tests new flows by hand against `data/forged`.
+
+## CI and releases
+
+CI (`.github/workflows/ci.yml`) builds on Windows and Linux and runs fmt,
+clippy and the tests on Linux. The OAuth client comes from the
+repository's secrets `AVELOR_GOOGLE_CLIENT_ID` and
+`AVELOR_GOOGLE_CLIENT_SECRET`; without them (a pull request from a fork
+gets none) the build, clippy and the tests hide Google. Each build keeps
+its result as an artifact: on Windows `avelor-<version>-windows-x64.exe`,
+packed with UPX (a pinned release, checked against its SHA-256); on Linux
+`avelor-<version>-linux-x86_64.tar.gz` with the exe, the icons and the
+desktop file the README installs. A pushed tag `v<version>`, the version
+in `app/Cargo.toml`, makes a draft release with both once every job has
+passed; a build without the OAuth client makes none. The draft is
+published by hand.
 
 ## The bundled page <a id="the-bundled-page"></a>
 

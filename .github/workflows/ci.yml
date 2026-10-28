@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -32,6 +36,39 @@ jobs:
       - name: Release Build
         run: cargo build --release ${{ env.HIDE_GOOGLE }}
 
+      - name: Version
+        shell: bash
+        run: echo "VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' app/Cargo.toml)" >> "$GITHUB_ENV"
+
+      - name: Pack with UPX
+        if: runner.os == 'Windows'
+        env:
+          # Not `UPX`: upx reads its default options from that variable.
+          UPX_VERSION: 5.2.1
+          UPX_SHA256: eabc6792a347d45e945be7748423e7868fd01b0d2bcaa2f4b1031fd71ff69bda
+        run: |
+          Invoke-WebRequest "https://github.com/upx/upx/releases/download/v$env:UPX_VERSION/upx-$env:UPX_VERSION-win64.zip" -OutFile upx.zip
+          if ((Get-FileHash upx.zip -Algorithm SHA256).Hash -ne $env:UPX_SHA256) { throw "upx.zip doesn't match its SHA-256" }
+          Expand-Archive upx.zip -DestinationPath .
+          New-Item -ItemType Directory -Force dist | Out-Null
+          & "upx-$env:UPX_VERSION-win64/upx.exe" --best --lzma -o "dist/avelor-$env:VERSION-windows-x64.exe" target/release/avelor.exe
+
+      - name: Package for Linux
+        if: runner.os == 'Linux'
+        run: |
+          dir="package/avelor-$VERSION"
+          mkdir -p "$dir" dist
+          cp target/release/avelor app/res/io.github.steschu77.Avelor.desktop "$dir/"
+          cp -r app/res/icons "$dir/"
+          tar -czf "dist/avelor-$VERSION-linux-x86_64.tar.gz" -C package "avelor-$VERSION"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: avelor-${{ runner.os }}
+          path: dist/
+          if-no-files-found: error
+
   check:
     name: Check (Linux only)
     runs-on: ubuntu-latest
@@ -47,7 +84,7 @@ jobs:
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         uses: ./.github/actions/linux-deps
-        
+
       - name: Format
         run: cargo fmt --all --check
 
@@ -69,3 +106,33 @@ jobs:
 
       - name: Run tests
         run: cargo test --verbose ${{ env.HIDE_GOOGLE }}
+
+  release:
+    name: Release (a tag v*)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, check, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' app/Cargo.toml)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::The tag $GITHUB_REF_NAME isn't app/Cargo.toml's version, v$version."
+            exit 1
+          fi
+          if [ -n "$HIDE_GOOGLE" ]; then
+            echo "::error::A release needs the OAuth client: the secrets AVELOR_GOOGLE_CLIENT_ID and AVELOR_GOOGLE_CLIENT_SECRET."
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --title "Avelor $version" --generate-notes
