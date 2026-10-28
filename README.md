@@ -58,6 +58,11 @@ change its files; `git restore data/forged` undoes them):
 cargo run -- data/forged
 ```
 
+The video [Gone in 60 Documents](https://youtu.be/mGvF7rzJQkk) introduces
+Avelor through Alex's story, the one behind the sample vault:
+
+[![Gone in 60 Documents](docs/images/gone.jpg)](https://youtu.be/mGvF7rzJQkk)
+
 Signing in to Google needs the app's OAuth client (a Desktop client of a
 Google Cloud project) in the build's environment: `AVELOR_GOOGLE_CLIENT_ID` and
 `AVELOR_GOOGLE_CLIENT_SECRET`. A build without them fails; one without Google
