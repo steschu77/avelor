@@ -5,6 +5,8 @@ Avelor is a privacy-first desktop application for organizing the paperwork of ev
 
 Avelor targets both Windows and Linux.
 
+![Avelor's Dashboard, Documents, and a document with its conversation](docs/images/screenshots.webp)
+
 ## Why Avelor?
 
 This project started with a personal need: getting my own paperwork organized.
@@ -69,6 +71,11 @@ change its files; `git restore data/forged` undoes them):
 ```sh
 cargo run -- data/forged
 ```
+
+The video [Gone in 60 Documents](https://youtu.be/mGvF7rzJQkk) introduces
+Avelor through Alex's story, the one behind the sample vault:
+
+[![Gone in 60 Documents](docs/images/gone.webp)](https://youtu.be/mGvF7rzJQkk)
 
 Signing in to Google needs the app's OAuth client (a Desktop client of a
 Google Cloud project) in the build's environment, `AVELOR_GOOGLE_CLIENT_ID`
