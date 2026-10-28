@@ -524,7 +524,7 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
 // ----------------------------------------------------------------------------
 /// The manifest's version (`res/avelor.exe.manifest`, `assemblyIdentity`),
 /// which the resource compiler takes as it is: the workspace's with `.0`,
-/// or the build fails.
+/// or the build fails (development.md, CI and releases).
 fn check_manifest(root: &Path) {
     let path = root.join("res/avelor.exe.manifest");
     let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
@@ -542,7 +542,7 @@ fn check_manifest(root: &Path) {
     assert!(
         version == want,
         "res/avelor.exe.manifest: assemblyIdentity's version is {version}, not {want}, the \
-         workspace's version"
+         workspace's version (development.md, CI and releases)"
     );
 }
 
