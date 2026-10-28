@@ -688,14 +688,15 @@ or a reference to one that isn't there, fails the build), checks the catalogs ag
 and the host use and writes each language's texts for both
 (`localization.md#check`), and embeds the
 manifest, the icon and the version (a VERSIONINFO from the workspace's
-version), on Windows; a manifest whose version isn't the workspace's fails
-the build. On Linux the desktop entry and the icon are files (`app/res`),
-installed as `README.md` says. A page source with a non-ASCII character
-fails the build, named by its line and column. A new module is in the page
-once a module there imports it. The markdown selftest gets a bundle of its
-own beside it (`markdown.md#testing`). The host fills the preferences into
-the page (`page::html`) and loads it with `NavigateToString`, on Linux
-with `load_html`.
+version), on Windows; a manifest whose version isn't the workspace's
+fails the build (`development.md`, CI and releases). On Linux the desktop entry and the icon are
+files (`app/res`), installed as `README.md` says. A page
+source with a non-ASCII character fails the build, named by its line and
+column. A new module
+is in the page once a module there imports it. The markdown selftest gets
+a bundle of its own beside it (`markdown.md#testing`). The host fills the
+preferences into the page (`page::html`) and loads it with
+`NavigateToString`, on Linux with `load_html`.
 
 The release profile is built for size: `opt-level = "z"`, LTO, one codegen
 unit, `strip`, `panic = "abort"` (`Cargo.toml`); the panic hook

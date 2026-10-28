@@ -111,7 +111,7 @@ catalog, on:
 - a count's forms for a text the host shows itself;
 - a `t` or `parts` whose key isn't written out.
 
-## A new language
+## A new language <a id="new-language"></a>
 
 A language comes as a pull request with its catalog:
 
