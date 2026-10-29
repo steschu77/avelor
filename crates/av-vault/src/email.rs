@@ -8,18 +8,20 @@
 //!   isn't an attachment is body; several of one kind are joined in order
 //!   (Apple Mail splits HTML around inline images, list servers append a
 //!   plain footer part). [`ParsedEmail::to_markdown`] prefers the HTML.
-//!   Other parts are only ever listed (filename + content type), never
-//!   extracted; images referenced from the HTML (`Content-ID`) are marked
-//!   inline so they can be left out of that list.
+//!   Other parts are attachments, with their bytes decoded; images
+//!   referenced from the HTML (`Content-ID`) are marked inline so they can
+//!   be told from the files the sender attached.
 //! - RFC 2231 continuation parameters (`boundary*0=`) are not supported;
 //!   real-world boundaries/filenames are short enough that this rarely
 //!   matters. A single-segment `filename*=charset''value` is.
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use crate::md_writer::{self, MdWriter};
 use av_utils::base64::from_base64;
 use av_utils::charsets::{from_iso8859_15, from_utf8, from_windows1252};
+use av_utils::mime::extension_for;
 use av_utils::text::normalize;
 
 // ----------------------------------------------------------------------------
@@ -39,12 +41,16 @@ pub struct ParsedEmail {
 /// A part that isn't body text.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attachment {
+    /// As the part names it, with an extension from its type if it has
+    /// none; `attachment` for a part without a name.
     pub filename: String,
     /// Lowercase `type/subtype`.
     pub content_type: String,
     /// An image the HTML references by `Content-ID` (a logo, a signature),
     /// rather than a file the sender attached.
     pub inline: bool,
+    /// The part's content, its transfer encoding undone.
+    pub bytes: Vec<u8>,
 }
 
 // ----------------------------------------------------------------------------
@@ -213,11 +219,12 @@ fn walk(part: &Part, sel: &mut Selection) {
                 }
                 None => {
                     let has_id = get_header(&part.headers, "content-id").is_some();
+                    let name = part_filename(&part.headers).unwrap_or_else(|| "attachment".into());
                     sel.attachments.push(Attachment {
-                        filename: part_filename(&part.headers)
-                            .unwrap_or_else(|| "attachment".into()),
+                        filename: with_extension(name, &main_type),
                         inline: has_id && main_type.starts_with("image/"),
                         content_type: main_type,
+                        bytes: transfer_decode(&part.headers, raw),
                     });
                 }
             }
@@ -409,6 +416,17 @@ fn part_filename(headers: &[(String, String)]) -> Option<String> {
 }
 
 // ----------------------------------------------------------------------------
+/// `name` with the extension of `content_type` if it has none and the type
+/// has one.
+fn with_extension(name: String, content_type: &str) -> String {
+    let has_extension = Path::new(&name).extension().is_some();
+    match extension_for(content_type) {
+        Some(ext) if !has_extension => format!("{name}.{ext}"),
+        _ => name,
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// An RFC 2231 extended value, `charset'language'percent-encoded`.
 fn decode_rfc2231(value: &str) -> Option<String> {
     let mut fields = value.splitn(3, '\'');
@@ -590,11 +608,12 @@ mod tests {
     use super::*;
     use av_utils::base64::to_base64;
 
-    fn attachment(filename: &str, content_type: &str) -> Attachment {
+    fn attachment(filename: &str, content_type: &str, bytes: &[u8]) -> Attachment {
         Attachment {
             filename: filename.to_string(),
             content_type: content_type.to_string(),
             inline: false,
+            bytes: bytes.to_vec(),
         }
     }
 
@@ -677,7 +696,7 @@ mod tests {
         assert_eq!(mail.plain, Some(String::from("See attached.")));
         assert_eq!(
             mail.attachments,
-            vec![attachment("report.pdf", "application/pdf")]
+            vec![attachment("report.pdf", "application/pdf", b"%PDF-1.4\n")]
         );
     }
 
@@ -691,7 +710,11 @@ mod tests {
         assert!(mail.plain.is_none());
         assert_eq!(
             mail.attachments,
-            vec![attachment("attachment", "multipart/mixed")]
+            vec![attachment(
+                "attachment",
+                "multipart/mixed",
+                b"whatever body\n"
+            )]
         );
     }
 
@@ -726,8 +749,8 @@ mod tests {
         assert_eq!(
             mail.attachments,
             vec![
-                attachment("page.html", "text/html"),
-                attachment("notes.txt", "text/plain")
+                attachment("page.html", "text/html", b"<p>Attached page</p>"),
+                attachment("notes.txt", "text/plain", b"notes")
             ]
         );
     }
@@ -775,6 +798,33 @@ mod tests {
             .map(|a| a.filename.as_str())
             .collect();
         assert_eq!(names, ["Rechnung M\u{e4}rz.pdf", "\u{dc}bergabe.pdf"]);
+    }
+
+    #[test]
+    fn a_name_without_an_extension_takes_its_types() {
+        let src = concat!(
+            "Content-Type: multipart/mixed; boundary=\"M\"\r\n\r\n",
+            "--M\r\n",
+            "Content-Type: application/pdf; name=\"Rechnung\"\r\n",
+            "Content-Transfer-Encoding: base64\r\n\r\n",
+            "JVBERi0=\r\n",
+            "--M\r\n",
+            "Content-Type: message/rfc822\r\n\r\n",
+            "Subject: Forwarded\r\n\r\nHi\r\n",
+            "--M\r\n",
+            "Content-Type: application/x-unknown; name=\"data\"\r\n\r\n",
+            "x\r\n",
+            "--M--\r\n",
+        );
+        let mail = parse(src.as_bytes());
+        let names: Vec<&str> = mail
+            .attachments
+            .iter()
+            .map(|a| a.filename.as_str())
+            .collect();
+        assert_eq!(names, ["Rechnung.pdf", "attachment.eml", "data"]);
+        assert_eq!(mail.attachments[0].bytes, b"%PDF-");
+        assert_eq!(mail.attachments[1].bytes, b"Subject: Forwarded\n\nHi");
     }
 
     #[test]

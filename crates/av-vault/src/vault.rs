@@ -1318,21 +1318,36 @@ impl Index {
     }
 
     // ------------------------------------------------------------------------
-    /// The first entity whose `remote:` source block has the property
-    /// `key: value` (e.g. `message-id`), from `account` if one is given.
-    pub fn find_remote(&self, account: Option<&Id>, key: &str, value: &str) -> Option<Id> {
+    /// The first entity of the type `kind` whose `remote:` source block has
+    /// the property `key: value` (e.g. `message-id`), from `account` if one
+    /// is given. The type tells a mail from its attachments, which name its
+    /// message too.
+    pub fn find_remote(
+        &self,
+        kind: DocumentType,
+        account: Option<&Id>,
+        key: &str,
+        value: &str,
+    ) -> Option<Id> {
         self.documents
             .iter()
+            .filter(|e| e.doc.kind() == kind)
             .find(|e| remote_values(&e.doc, account, key).any(|v| v == value))
             .map(|e| e.doc.id())
     }
 
     // ------------------------------------------------------------------------
-    /// Every value of the `remote:` property `key` in the vault, from
-    /// `account` if one is given.
-    pub fn remote_values(&self, account: Option<&Id>, key: &str) -> HashSet<String> {
+    /// Every value of the `remote:` property `key` on the entities of the
+    /// type `kind`, from `account` if one is given.
+    pub fn remote_values(
+        &self,
+        kind: DocumentType,
+        account: Option<&Id>,
+        key: &str,
+    ) -> HashSet<String> {
         self.documents
             .iter()
+            .filter(|e| e.doc.kind() == kind)
             .flat_map(|e| remote_values(&e.doc, account, key))
             .map(str::to_string)
             .collect()
@@ -3220,6 +3235,22 @@ mod tests {
         remote.set("message-id", "<a@x>");
         remote.set("gmail-id", "g1");
         let remote = Source::Remote(remote);
+        // An attachment names its mail's message, and comes first here.
+        let roles = Roles {
+            document: Some(Default::default()),
+            ..Default::default()
+        };
+        let mut changes = Changes::default();
+        let attachment = Document::create(
+            roles,
+            remote.clone(),
+            "a.pdf".into(),
+            Vec::new(),
+            FileFormat::Markdown,
+        );
+        let attachment = index
+            .create(attachment, Path::new("Attachments"), &mut changes)
+            .unwrap();
         let roles = Roles {
             email: Some(Email::default()),
             ..Default::default()
@@ -3233,7 +3264,6 @@ mod tests {
         );
         doc.set_date(DateTime::from_unix_millis(1_790_503_530_000));
         doc.set_content("Body\n".into());
-        let mut changes = Changes::default();
         let id = index.create(doc, Path::new("Mail"), &mut changes).unwrap();
         assert!(index.entry(&id).unwrap().local.starts_with("Mail"));
         assert!(
@@ -3242,18 +3272,30 @@ mod tests {
                 .contains("date: 2026-09-27T10:05:30Z")
         );
 
+        let mail = DocumentType::Email;
         assert_eq!(
-            index.find_remote(Some(&account), "gmail-id", "g1"),
+            index.find_remote(mail, Some(&account), "gmail-id", "g1"),
             Some(id)
         );
-        assert_eq!(index.find_remote(Some(&other), "gmail-id", "g1"), None);
-        assert_eq!(index.find_remote(None, "message-id", "<a@x>"), Some(id));
-        assert_eq!(index.find_remote(None, "message-id", "<b@x>"), None);
         assert_eq!(
-            index.remote_values(Some(&account), "gmail-id"),
+            index.find_remote(DocumentType::Document, None, "gmail-id", "g1"),
+            Some(attachment)
+        );
+        let find = |account, key, value| index.find_remote(mail, account, key, value);
+        assert_eq!(find(Some(&other), "gmail-id", "g1"), None);
+        assert_eq!(find(None, "message-id", "<a@x>"), Some(id));
+        assert_eq!(find(None, "message-id", "<b@x>"), None);
+        assert_eq!(
+            index.remote_values(mail, Some(&account), "gmail-id"),
             HashSet::from(["g1".to_string()])
         );
-        assert!(index.remote_values(Some(&other), "gmail-id").is_empty());
+        assert!(
+            index
+                .remote_values(mail, Some(&other), "gmail-id")
+                .is_empty()
+        );
+        let contacts = index.remote_values(DocumentType::Contact, None, "gmail-id");
+        assert!(contacts.is_empty());
 
         let mut changes = Changes::default();
         let set = index.set_content(&id, "New body\n".into(), &mut changes);

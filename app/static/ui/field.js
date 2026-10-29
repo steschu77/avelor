@@ -140,3 +140,38 @@ export function renderEditField(owner, field, opts) {
   else if (state?.error) note = accEl('span', 'error-note', state.error);
   return [wrap, note];
 }
+
+// ----------------------------------------------------------------------------
+// File name patterns (`*.pdf`) of `owner`: a chip per pattern (click to
+// remove it), then an input that adds what is typed on Enter (several
+// separated by commas). `onChange(patterns)` gets the list as changed;
+// `rerender` (the page's scheduler) runs for an Enter that adds nothing. A
+// watch's file types, and the attachments a mail filter saves.
+export function renderPatternField(owner, patterns, onChange, rerender) {
+  const chips = patterns.map(pattern => {
+    const chip = accEl('button', 'chip chip--action chip--mono', `${pattern} \u00d7`);
+    chip.type = 'button';
+    chip.title = `Remove ${pattern}`;
+    chip.addEventListener('click', () => onChange(patterns.filter(p => p !== pattern)));
+    return chip;
+  });
+
+  const key = fieldEditKey(owner, 'pattern');
+  const input = accEl('input', 'form-input mono mono--small');
+  input.type = 'text';
+  input.placeholder = patterns.length ? 'add\u2026' : 'add a pattern, like *.pdf';
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  input.dataset.focusKey = key;
+  input.value = fieldEdits.get(key)?.value ?? '';
+  input.addEventListener('input', () => fieldEdits.set(key, { value: input.value }));
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const added = input.value.split(/[,;]/).map(p => p.trim()).filter(p => p && !patterns.includes(p));
+    fieldEdits.delete(key);
+    if (added.length) onChange([...patterns, ...new Set(added)]);
+    else rerender();
+  });
+  return [...chips, input];
+}

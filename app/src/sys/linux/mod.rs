@@ -21,7 +21,7 @@ pub use dialogs::{Owner, open_path, pick_folder};
 pub use images::{ImageThread, preview};
 pub use paths::Paths;
 pub use paths::paths;
-pub use paths::{collapse_env, expand_env};
+pub use paths::{collapse_env, expand_env, mark_downloaded};
 pub use webview::BRIDGE_JS;
 pub use window::UiSignal;
 

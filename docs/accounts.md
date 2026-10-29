@@ -89,11 +89,14 @@ Every account file has:
     * `analysis`: Fetch mail's analysis of new mail (`mail.md#analysis`):
       `level` (`off`, `lite`, `medium`) and the `model` it runs with,
       `{account, model}`, kept while the level is off; absent: off
+    * `attachments`: what Fetch mail saves of the files new mail brings
+      (`mail.md#attachments`): `enabled`; `patterns`, the file types, as a
+      watch's; `max-size`, in MB (absent: 10); kept while off; absent: off
     * `auto-sync`: the account's mail auto-sync (`mail.md#mail-auto-sync`),
       absent until it is first switched on: `enabled`; `filter`, its own
       filter, apart from the one above and without dates; `since`, from when
       mail is fetched: when it was switched on, then the start of the last
-      complete run; `analysis`, its own, as above
+      complete run; `analysis` and `attachments`, its own, as above
 
 
 ```yaml
@@ -123,12 +126,20 @@ google:
       model:
         account: 0193a7c1-4b0e-7c1a-9d2f-3a51c8e05be0
         model: gpt-5-mini
+    attachments:
+      enabled: true
+      patterns: ['*.pdf', '*.jpg', '*.jpeg', '*.png']
+      max-size: 10
     auto-sync:
       enabled: true
       filter:
         labels: [Rechnungen]
         from: [stadtwerke-springfield.example]
       since: 2026-09-27T08:00:00Z
+      attachments:
+        enabled: true
+        patterns: ['*.pdf']
+        max-size: 25
 last-sync: 2026-09-27T10:30:00Z
 ```
 

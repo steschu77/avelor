@@ -99,6 +99,10 @@ pub fn collapse_env(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+// ----------------------------------------------------------------------------
+/// Nothing: Linux has no mark of the web for a downloaded file.
+pub fn mark_downloaded(_path: &Path) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

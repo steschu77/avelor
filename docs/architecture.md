@@ -378,7 +378,7 @@ knows neither: `app` turns the scan's texts into its rows.
 | `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net, Close to `App` (`architecture.md#platforms`) |
 | `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences and the platform's `BRIDGE_JS` |
 | `sys/mod.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
-| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile, the catalogs); folder picker, message boxes, ShellExecute |
+| `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile, the catalogs), the mark of the web; folder picker, message boxes, ShellExecute |
 | `sys/win32/mod.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; the clock's timer (`WM_TIMER` → `App::on_clock`); `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
 | `sys/win32/images.rs` | image previews with WIC (`preview`): decoded, upright by the EXIF orientation, scaled to fit, JPEG; COM on a worker (`ComThread`) |
 | `sys/win32/webview.rs` | WebView2 environment/controller, message handler, `NavigateToString`; App's outbox (`PostWebMessageAsString`) |
@@ -406,7 +406,7 @@ knows neither: `app` turns the scan's texts into its rows.
 | `ai_context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file, within a budget; its tests |
 | `chat.rs` | the assistant: `chat_open`, `chat_send`, `chat_stop`, `chat_select`, the events `conversation` and `ai_delta`; streamed replies, the request from the shown path and the linked item; `create`, a new AI conversation (also the mail analysis's chat); dispatch tests against a fake Ollama |
 | `ai_accounts.rs`, `ai.rs` | AI account files, key and spend file, the `AiAccounts` sub-state with `choose` and `check_limit` (a feature's model pick, `ModelChoice`, checked; the spend limit); the AI commands (connect, models, settings) and `account_used` |
-| `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `fetch_action`, `email_entity`); the auto-sync (`auto_sync`, `sync_query`); a fetch's new mails handed to the analysis; their tests |
+| `mail.rs` | Fetch mail: `mail_labels`, `mail_search`, `mail_headers`, `mail_fetch`, `set_mail_sync`; `MailState`; the fetch job as plan → run → apply with its pure pieces (`plan_fetch`, `Downloaded::parse`, `attachment_wanted`, `fetch_action`, `email_entity`, `attachment_entity`); the attachments saved in the apply; the auto-sync (`auto_sync`, `sync_query`); a fetch's new mails handed to the analysis; their tests |
 | `enrich.rs` | the mail analysis (`mail.md#analysis`): the vault's `context`, the request per level, its parser and its writes (pure: `request_for`, `parse`, `apply_lite`, `medium_messages`), the analysis job one mail at a time (`analyse`, `EnrichState`); its tests against a fake Ollama |
 | `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests |
 | `watches.rs`, `folders.rs` | watch files in `.avelor/watches/`, the `Watches` sub-state, globbing, listing; the watch commands, the events `watches` / `watch` / `watch_removed`, their dispatch tests |
@@ -424,6 +424,7 @@ knows neither: `app` turns the scan's texts into its rows.
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux/mod.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
 | Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
 | Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `gtk::UriLauncher` and `FileLauncher` (they use the XDG desktop portal where there is one) |
+| Saved attachments | the mark of the web: zone 3 in the file's `Zone.Identifier` stream (`mark_downloaded`), for SmartScreen and Office's Protected View | `sys/*/paths.rs` | none: Linux has no such mark |
 | Image previews, EXIF, HEIC | WIC | `sys/*/images.rs` | gdk-pixbuf (`apply_embedded_orientation`); WebP and HEIC where their loaders are installed |
 | HTTP | WinHTTP; cancelling closes the handles | `av-http/src/win32.rs`, `linux.rs` | libsoup 3 (`soup3`): it comes with WebKitGTK as WinHTTP comes with Windows; a session per worker thread and timeout, since a libsoup session stays on the thread that made it; cancelled through a `gio::Cancellable` |
 | SQLite | `winsqlite3.dll` in System32, linked by `raw-dylib` (no import library); FTS5's trigram tokenizer needs 3.34 or later | `av-store/sqlite.rs` | libsqlite3, which WebKitGTK brings; `libsqlite3-dev` to link |
@@ -448,7 +449,8 @@ the only `cfg(target_os)` in `app/src`:
   (`IFileOpenDialog`; `gtk::FileDialog` in a nested `glib::MainLoop`), so
   `App::on_ui` keeps its meaning.
 - `open_url`, `open_path`, `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
-  is up, else stderr), `preview`, the watch folder expansion, and `BRIDGE_JS`.
+  is up, else stderr), `preview`, the watch folder expansion,
+  `mark_downloaded`, and `BRIDGE_JS`.
 
 **The shared shell.** `shell.rs` holds what the main window decides:
 
