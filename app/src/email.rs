@@ -19,7 +19,8 @@
 //!
 //! A fetch whose filter saves attachments (email.md#attachments) keeps the
 //! wanted parts on the worker, and writes each as a document with its
-//! original in `Attachments/`, `linked-to` its email.
+//! original in `Attachments/`, `linked-to` its email. Read on, it hands them
+//! to `attachments::read` when it ends, which starts the analysis after.
 
 use av_utils::id::Id;
 

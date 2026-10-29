@@ -529,18 +529,26 @@ function aiErrorText(e, account) {
 
 // What picked `model` of the AI account `account`: the names the Accounts
 // page shows in its "Used by" column. A watch is named once, with its steps
-// that run with the model (the reading step as OCR); a Google account's
-// email analysis while it is on (the auto-sync's only while it runs).
+// that run with the model (the reading step as OCR); so is a Google
+// account's email filter, Fetch email's or the auto-sync's (only while it
+// runs), with its steps while they are on: the analysis, and the
+// attachments' reading.
 function aiUsersOf(account, model) {
   const is = choice => choice?.account === account && choice?.model === model;
-  const analyses = analysis => !!analysis && analysis.level !== 'off' && is(analysis.model);
+  const steps = filter => [
+    !!filter?.analysis && filter.analysis.level !== 'off' && is(filter.analysis.model) && t('accounts.step.analysis'),
+    !!filter?.attachments?.enabled && !!filter.attachments.read
+      && is(filter.attachments.models?.[WATCH_READ_STEP]) && t('accounts.step.reading'),
+  ].filter(Boolean);
   const users = [];
   if (is(vaultSettings().chat_model)) users.push(t('types.conversations'));
   for (const google of accounts.values()) {
     const fetchEmail = google.fetch_email;
-    if (analyses(fetchEmail?.analysis)) users.push(t('accounts.used_fetch', { email: google.email }));
+    const fetching = steps(fetchEmail);
+    if (fetching.length) users.push(t('accounts.used_fetch', { email: google.email, steps: fetching.join(', ') }));
     const sync = fetchEmail?.auto_sync;
-    if (sync?.enabled && analyses(sync.analysis)) users.push(t('accounts.used_sync', { email: google.email }));
+    const syncing = sync?.enabled ? steps(sync) : [];
+    if (syncing.length) users.push(t('accounts.used_sync', { email: google.email, steps: syncing.join(', ') }));
   }
   for (const watch of watches.values()) {
     const models = watch.models ?? {};

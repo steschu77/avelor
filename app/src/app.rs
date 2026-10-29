@@ -10,6 +10,7 @@ use std::time::SystemTime;
 
 use crate::ai::accounts::AiAccounts;
 use crate::analysis::AnalysisState;
+use crate::attachments::AttachmentState;
 use crate::calendar;
 use crate::calendar::CalendarState;
 use crate::catalog::{CatalogState, CatalogThread};
@@ -415,6 +416,9 @@ pub struct App {
 
     /// The email analyses running (`analysis`), each a job.
     pub analysis: AnalysisState,
+
+    /// The reads of emails' attachments running (`attachments`), each a job.
+    pub attachments: AttachmentState,
 }
 
 impl App {
@@ -449,6 +453,7 @@ impl App {
             scans: ScanState::default(),
             chat: ChatState::default(),
             analysis: AnalysisState::default(),
+            attachments: AttachmentState::default(),
         }
     }
 

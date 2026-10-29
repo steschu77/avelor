@@ -120,6 +120,8 @@
   "accounts.status.not_running": "no está en marcha",
   "accounts.status.reconnect": "hay que reconectar",
   "accounts.status.running": "en marcha",
+  "accounts.step.analysis": "análisis",
+  "accounts.step.reading": "lectura",
   "accounts.stop_offering": "Dejar de ofrecer este modelo",
   "accounts.stop_sync": "Detener la sincronización automática",
   "accounts.sync_every": "Sincronizar este calendario cada 15 minutos",
@@ -130,8 +132,8 @@
   "accounts.unknown": "Desconocido",
   "accounts.unknown_account": "Cuenta desconocida",
   "accounts.used_by": "Usado por",
-  "accounts.used_fetch": "Recoger correo · {email}",
-  "accounts.used_sync": "Sincronización automática · {email}",
+  "accounts.used_fetch": "Recoger correo · {email} · {steps}",
+  "accounts.used_sync": "Sincronización automática · {email} · {steps}",
   "accounts.where_answers": "donde responde {name}",
   "accounts.works": {
     "one": "Funciona · {n} modelo",
@@ -361,6 +363,7 @@
     "other": "{n} detenidos"
   },
   "count.unchanged": "{n} sin cambios",
+  "count.unread": "{n} sin leer",
   "count.updated": {
     "one": "{n} actualizado",
     "other": "{n} actualizados"
@@ -504,7 +507,9 @@
   "email.press_update": "Pulsa Actualizar para leer las coincidencias.",
   "email.previous_page": "Página anterior",
   "email.reading": "leyendo…",
+  "email.reading_blocked": "La lectura de adjuntos está activada: elige un modelo que funcione para ella o desactívala.",
   "email.reading_matches": "Leyendo coincidencias…",
+  "email.reads_with": "Lee cada archivo guardado en su documento: las imágenes y los PDF con {picker} (con Ollama, los PDF se quedan sin leer), los archivos de texto tal cual.",
   "email.replace_again": {
     "one": "Haz clic de nuevo para sustituir {n} cuerpo",
     "other": "Haz clic de nuevo para sustituir {n} cuerpos"
@@ -560,6 +565,7 @@
   "feature.conversations": "las conversaciones",
   "feature.email_analysis": "el análisis de correo",
   "feature.ocr": "el OCR",
+  "feature.reading_attachments": "leer los adjuntos",
   "field.add": "añadir…",
   "field.add_pattern": "añadir un patrón, como *.pdf",
   "field.cancel": "Cancelar",

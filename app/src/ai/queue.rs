@@ -80,6 +80,18 @@ impl<T> AiQueue<T> {
     }
 
     // ------------------------------------------------------------------------
+    pub fn front(&self) -> Option<&T> {
+        self.waiting.front()
+    }
+
+    // ------------------------------------------------------------------------
+    /// The next item, done without the model (an attachment with text
+    /// already): it counts as done.
+    pub fn skip(&mut self) -> Option<T> {
+        self.waiting.pop_front()
+    }
+
+    // ------------------------------------------------------------------------
     /// Whether the account may take another item now: the items so far are
     /// counted (`ai::account_used`). At its spend limit the queue is stopped
     /// by it, and the refusal's words come back.
@@ -182,6 +194,30 @@ mod tests {
     // ------------------------------------------------------------------------
     fn queue(items: &[&'static str]) -> AiQueue<&'static str> {
         AiQueue::new(None, items.iter().copied().collect())
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn done_counts_what_is_neither_waiting_the_models_nor_left() {
+        let mut q = queue(&["a", "b", "c", "d"]);
+        assert_eq!((q.done(), q.total()), (0, 4));
+        assert_eq!(q.skip(), Some("a"));
+        assert_eq!(q.start(), Some(&"b"));
+        assert!(q.is_busy());
+        assert_eq!(q.done(), 1, "the model's isn't done");
+        let b = q.end().unwrap();
+        q.again(b);
+        assert_eq!(q.done(), 1, "asked again");
+        assert_eq!(q.front(), Some(&"b"));
+        q.start();
+        q.end();
+        assert_eq!(q.done(), 2);
+        q.extend(["e"]);
+        assert_eq!((q.done(), q.total()), (2, 5));
+        q.start();
+        assert_eq!(q.stop(), ["c", "d", "e"], "the model's first");
+        assert_eq!((q.done(), q.left()), (2, 3));
+        assert!(q.is_empty() && !q.is_busy());
     }
 
     // ------------------------------------------------------------------------

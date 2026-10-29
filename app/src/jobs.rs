@@ -14,6 +14,7 @@ use serde::Serialize;
 
 use crate::analysis;
 use crate::app::App;
+use crate::attachments;
 use crate::email;
 use crate::protocol::Req;
 use crate::scans;
@@ -28,6 +29,7 @@ pub enum JobKind {
     CalendarSync,
     ScanRead,
     EmailAnalysis,
+    AttachmentRead,
 }
 
 impl JobKind {
@@ -41,8 +43,8 @@ impl JobKind {
     // ------------------------------------------------------------------------
     /// Whether it belongs to the open vault, so a vault switch stops it
     /// first: it writes into the vault (email fetch, calendar sync, email
-    /// analysis), or reads for one of its watches with one of its AI
-    /// accounts (scan read).
+    /// analysis, attachment read), or reads for one of its watches with one
+    /// of its AI accounts (scan read).
     fn vault_bound(self) -> bool {
         matches!(
             self,
@@ -50,6 +52,7 @@ impl JobKind {
                 | JobKind::CalendarSync
                 | JobKind::ScanRead
                 | JobKind::EmailAnalysis
+                | JobKind::AttachmentRead
         )
     }
 
@@ -62,6 +65,7 @@ impl JobKind {
             JobKind::CalendarSync => "Calendar sync",
             JobKind::ScanRead => "Scan read",
             JobKind::EmailAnalysis => "Email analysis",
+            JobKind::AttachmentRead => "Attachment read",
         }
     }
 }
@@ -318,8 +322,9 @@ pub fn cancel_job(app: &mut App, req: Req, id: Id) {
 
 // ----------------------------------------------------------------------------
 /// Stop the job `id`: its requests are cancelled, and the job ends -- at once
-/// (email fetch, scan read, email analysis), or once it has kept what it did
-/// (calendar sync, whose continuation runs with what the sync returned).
+/// (email fetch, scan read, email analysis, attachment read), or once it has
+/// kept what it did (calendar sync, whose continuation runs with what the
+/// sync returned).
 pub fn stop(app: &mut App, id: Id) {
     let Some(kind) = app.jobs.running.get(&id).map(|job| job.kind) else {
         return;
@@ -330,6 +335,7 @@ pub fn stop(app: &mut App, id: Id) {
         JobKind::EmailFetch => email::stop(app),
         JobKind::ScanRead => scans::stop_read(app),
         JobKind::EmailAnalysis => analysis::stop(app, id),
+        JobKind::AttachmentRead => attachments::stop(app, id),
         JobKind::CalendarSync | JobKind::Indexing => {}
     }
 }

@@ -29,8 +29,9 @@ the expanded vault area, filled with the account's last filter
   that. The fetch is a job (`ui.md#jobs-panel`); the page closes, and
   Fetch email reads its matches again when the job ends. Esc closes the
   page.
-- **Attachments** (section 2): Off or On, the file types and the size
-  they are saved up to; on, the fetch saves the emails' attached files
+- **Attachments** (section 2): Off or On, the file types, the size they
+  are saved up to, and whether they are read, with the model that reads
+  them; on, the fetch saves the emails' attached files
   (`email.md#attachments`).
 - **Analysis** (section 3): Off, Lite or Medium, with the model it runs
   with; the new emails are analysed after the fetch (`email.md#analysis`).
@@ -49,9 +50,9 @@ switched on, then since its last complete run.
 - A run that finds nothing new leaves no trace; one that does is a
   "Syncing email · <email>" job, and the account's `last-sync` moves on.
 - Emails already in the vault are skipped, never replaced.
-- Its own attachments, set under its filter, are saved with the new emails
-  (`email.md#attachments`); its own analysis, under them, takes the new
-  emails after a run (`email.md#analysis`).
+- Its own attachments, set under its filter, are saved and read with the
+  new emails (`email.md#attachments`); its own analysis, under them, takes
+  the new emails after a run (`email.md#analysis`).
 - A failed run is shown once in the status bar, not again until a run
   succeeds.
 - The Email source's sync button stays shown, pressed, while auto-sync is
@@ -88,6 +89,27 @@ types listed (`*.pdf *.jpg *.jpeg *.png` at first; patterns as a watch's,
 - **The job's summary** counts them, "12 new · 5 attachments"; a file that
   couldn't be written counts as "1 attachment failed" and is logged, and
   the fetch still counts as complete, since the email is in the vault.
+- **Read**: with Read on (`read`, and the model in `models.read`, picked
+  as every feature picks its model, `accounts.md#model-choice`), the
+  saved files' text becomes their documents' bodies, so the search finds
+  a bill's words. When the fetch ends (not when it was stopped), "Reading
+  attachments · <email>" reads them one after another (`attachments.rs`,
+  through `reader.rs`): an image (JPEG, PNG, GIF or WebP) or a PDF by the
+  model, transcribed into Markdown, a PDF by every provider but Ollama; a
+  text file as it is: Markdown, plain text and CSV line by line, HTML and
+  an attached email converted. A file of another type, or a PDF on Ollama,
+  stays unread; one that fails keeps its document without text. A body is
+  written only while it is still empty. The spend limit is checked before
+  each file the model reads. The summary: "3 read · 1 failed · 1 unread"; one
+  notice names the first failure. Stop ends it, and so does a vault
+  switch; the analysis starts when it ends, unless it was stopped.
+- **Explicit picks**: with Read on, Fetch waits for a pick that works,
+  and the host refuses `email_fetch` before anything is fetched, as for the
+  analysis. An auto-sync's pick is checked when a run saved files; refused,
+  a notice says why, and the files stay unread.
+- **Read later**: a fetch with Replace also reads the replaced email's
+  attachments still without text: those saved while reading was off, or
+  whose reading failed.
 - **On the card**: the email's card lists its attachments; a double-click
   or Open opens a file in its app (`panel.md#cards`, `open_file`).
 
@@ -111,9 +133,11 @@ feature picks its model (`accounts.md#model-choice`).
   anything is fetched. An auto-sync's pick is checked when a run has new
   email; refused, a notice says why, and the emails stay fetched without it.
 - **The job**: when a fetch ends (not when it was stopped), the emails it
-  created go to "Analysing email · <email>", one email after another; Stop
-  ends it, and so does a vault switch. The spend limit is checked before
-  each email; once it is reached, the rest is left and a notice says so.
+  created go to "Analysing email · <email>", after the attachments' reading
+  if the filter reads them (`email.md#attachments`), one email after
+  another; Stop ends it, and so does a vault switch. The spend limit is
+  checked before each email; once it is reached, the rest is left and a
+  notice says so.
   The summary counts the conversations Medium wrote: "18 analysed · 4 conversations · 1
   failed".
 - **Lite**: one request per email (`analysis::request::request_for`). It lists the
@@ -185,9 +209,10 @@ feature picks its model (`accounts.md#model-choice`).
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| G3 | Fetch email | Email source sync button → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; the attachments' types and size; the analysis's level and model; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `entity` per attachment, `account`; the job's end reads the matches again | emails in `Email/`, their attachments in `Attachments/`; filter remembered |
-| G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_email_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email and attachment, `account` | emails in `Email/` on their own |
+| G3 | Fetch email | Email source sync button → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; the attachments' types, size and reading, with its model; the analysis's level and model; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `entity` per attachment, `account`; the job's end reads the matches again; then G7, G5 | emails in `Email/`, their attachments in `Attachments/`; filter remembered |
+| G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_email_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email and attachment, `account`; then G7, G5 | emails in `Email/` on their own |
 | G6 | Open an attachment | the card's Attachments block: Open, or a double-click on a row; an attachment's card: its File row's Open → `openOriginal` (`features/selection.js`) | `open_file {id}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | the file in its app |
+| G7 | Read attachments | a fetch or an auto-sync run with Read on ends with saved files, or a Replace's without text | `attachments::read` → `AiAccounts::choose` (refused: a `notice`) → job "Reading attachments"; per document `step_for`, for an image or a PDF `check_limit` and `reader::ask` on a worker, for a text file `reader::text_of`; `set_content` through the vault edit → `entity`, `content`, `job`, `account`; at the end one `notice` for the failures, then G5 | the files' text in their documents |
 | G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit, Medium's conversation through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their kind kept; `email.subject` kept; Medium: a chat linked to the email |
 
 ## Design <a id="design"></a>
@@ -209,6 +234,7 @@ sequenceDiagram
     end
     S->>S: google::finish_sync (last-sync, last-fetch)
     S-->>P: account, job (done)
+    S->>S: attachments::read, then analysis::analyse
 ```
 
 The fetch is plan → run → apply (`architecture.md#conventions`):
@@ -235,6 +261,15 @@ answer and writes it through the vault edit, Medium's conversation through
 `chat::create`, which also starts the assistant's conversations. Each analysis is
 its own job in `AnalysisState`, so a fetch's and an auto-sync's can run
 side by side.
+
+The attachments' reading (`attachments.rs`) is plan → run → apply too: the
+plan, per document, tells what it takes from its body, its original's
+name and the model's provider (`step_for`, pure, tested); the run reads
+the file on a worker and has the model read an image or a PDF
+(`reader::ask`, streamed, the pieces unused); the apply writes the text
+through the vault edit. `reader.rs` is shared with Import scans
+(`import.md#import-scans`). Each read is its own job in
+`AttachmentState`; its end starts the analysis it was handed.
 
 `KnownEmails` (`email.rs`) tells which emails are in the vault: by `gmail-id`
 from the same account, or by Message-ID from any source, on emails only. The preview's

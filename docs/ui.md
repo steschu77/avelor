@@ -298,7 +298,7 @@ jobs panel, not in the status bar.
 ## Jobs panel <a id="jobs-panel"></a>
 
 A card per job from the `job` event (`features/jobs.js`, `renderJob`): its label,
-its progress, a Stop button while it is `stoppable` (an email fetch, a calendar sync, the reading of scans; an indexing can't be stopped), and its summary when it ends. A card is removed 1.5 s after its job is done, 8 s
+its progress, a Stop button while it is `stoppable` (an email fetch, a calendar sync, the reading of scans or attachments, an email analysis; an indexing can't be stopped), and its summary when it ends. A card is removed 1.5 s after its job is done, 8 s
 when it has a summary. How jobs run on the host: `architecture.md#jobs`.
 
 ## Keys and actions <a id="keys-and-actions"></a>
