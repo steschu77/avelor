@@ -1057,6 +1057,36 @@ fn original_vault(title: &str) -> (PathBuf, Index, Document) {
 }
 
 #[test]
+fn a_mails_attachments_are_the_documents_linked_to_it_with_an_original() {
+    let (root, mut index, email) = original_vault("Abschlag");
+    let mut changes = Changes::default();
+    let folder = Path::new("Attachments");
+    let email = index
+        .create(email, Path::new("Email"), &mut changes)
+        .unwrap();
+    let document = |title: &str| original_vault(title).2;
+    let mut bill = document("Rechnung");
+    bill.set_link(Some(email));
+    let bill = index
+        .create_with_original(bill, folder, "Rechnung.pdf", b"%PDF", &mut changes)
+        .unwrap();
+    let mut note = document("Notiz");
+    note.set_link(Some(email));
+    index
+        .create(note, Path::new("Notes"), &mut changes)
+        .unwrap();
+    let other = document("Anderes");
+    index
+        .create_with_original(other, folder, "Anderes.pdf", b"%PDF", &mut changes)
+        .unwrap();
+
+    let found: Vec<Id> = index.attachments_of(email).map(|e| e.doc.id()).collect();
+    assert_eq!(found, [bill], "not the note, not another email's");
+    assert_eq!(index.attachments_of(bill).count(), 0);
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_document_is_written_with_its_original_and_trashed_with_it() {
     let (root, mut index, doc) = original_vault("Rechnung Oktober");
     let mut changes = Changes::default();

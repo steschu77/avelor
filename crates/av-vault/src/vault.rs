@@ -521,6 +521,15 @@ impl Index {
         sort_by_date(&mut members);
         members
     }
+
+    // ------------------------------------------------------------------------
+    /// The entities linked to `id` that stand for a file
+    /// (`document.original`): an email's attachments, in the index's order.
+    pub fn attachments_of(&self, id: Id) -> impl Iterator<Item = &Entry> {
+        self.documents
+            .iter()
+            .filter(move |e| e.doc.linked_to() == Some(id) && e.doc.original().is_some())
+    }
 }
 
 // ----------------------------------------------------------------------------
