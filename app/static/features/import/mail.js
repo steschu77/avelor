@@ -785,7 +785,8 @@ function renderMailAnalysis(analysis, onChange) {
     ' for its kind, a clean title, and labels and projects from this vault',
     analysis.level === 'medium'
       ? '; and, for a mail that asks for it, a quick reply, points to check and questions, as a chat linked to the mail.'
-      : '.');
+      : '.',
+    ' The text of its attachments read goes along, and each gets a clean title, its own date, a genre, labels and projects.');
   const ai = aiModelOf(analysis.model);
   if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
     body.append(notice('hint', ...aiMissingHint(ai, 'the mail analysis')));
