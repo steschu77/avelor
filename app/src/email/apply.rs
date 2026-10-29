@@ -163,9 +163,7 @@ fn save_attachments(app: &mut App, to: &AttachedTo, parts: Vec<email::Attachment
 /// The name and size of each original of the documents linked to `email`.
 fn saved_originals(index: &Index, email: Id) -> HashSet<(String, u64)> {
     index
-        .all()
-        .iter()
-        .filter(|entry| entry.doc.linked_to() == Some(email))
+        .attachments_of(email)
         .filter_map(|entry| {
             let original = entry.doc.original()?;
             Some((original.name.clone()?, original.size?))
@@ -177,9 +175,7 @@ fn saved_originals(index: &Index, email: Id) -> HashSet<(String, u64)> {
 /// The documents linked to `email` that have an original and no text yet.
 fn unread_originals(index: &Index, email: Id) -> Vec<Id> {
     index
-        .all()
-        .iter()
-        .filter(|entry| entry.doc.linked_to() == Some(email) && entry.doc.original().is_some())
+        .attachments_of(email)
         .filter(|entry| entry.doc.content().trim().is_empty())
         .map(|entry| entry.doc.id())
         .collect()

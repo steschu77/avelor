@@ -137,9 +137,7 @@ impl EmailText {
 /// `ATTACHMENTS_SENT`.
 pub(super) fn attachment_texts(index: &Index, email: Id) -> Vec<(String, String)> {
     index
-        .all()
-        .iter()
-        .filter(|entry| entry.doc.linked_to() == Some(email))
+        .attachments_of(email)
         .filter_map(|entry| {
             let original = entry.doc.original()?;
             let text = entry.doc.content().trim();
