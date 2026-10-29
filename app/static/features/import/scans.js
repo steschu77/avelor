@@ -17,7 +17,7 @@ import { accEl, oncePerFrame } from '../../core/dom.js';
 import { rpcCall } from '../../core/rpc.js';
 import { rpcOn } from '../../core/rpc.js';
 import { TIME_FORMAT, pageDate, parseDate } from '../../core/format.js';
-import { plural } from '../../core/format.js';
+import { fileSize, plural } from '../../core/format.js';
 import { registerAction } from '../../core/actions.js';
 import { store } from '../../model/state.js';
 import { watches } from '../../model/entities.js';
@@ -547,7 +547,7 @@ function renderScanFile(f, ai, current) {
     status.addEventListener('click', () => scanRead([f.file]));
   }
   row.append(name, accEl('span', 'meta', pageDate(f.taken, true)),
-    accEl('span', 'meta', scanSize(f.size)), status);
+    accEl('span', 'meta', fileSize(f.size)), status);
   return f.error ? [row, accEl('div', 'error-note', f.error)] : [row];
 }
 
@@ -759,14 +759,6 @@ function scanPageButton(icon, title, disabled, onClick) {
   button.disabled = disabled;
   button.addEventListener('click', onClick);
   return button;
-}
-
-
-// "812 KB", "2.4 MB".
-function scanSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 // Re-render while shown when the op, the watch (its folder, patterns,

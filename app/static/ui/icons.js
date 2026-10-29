@@ -49,6 +49,19 @@ export function getDocIcon(kind, genre) {
 export const IMPORT_ICON = '#i-arrow-import';
 
 // ----------------------------------------------------------------------------
+const IMAGE_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'bmp', 'tif', 'tiff'];
+
+// The icon of a file by its name's extension: a PDF's, an image's, else a
+// paper clip (a document's original, vault.md#document).
+export function fileIcon(name) {
+  const dot = name.lastIndexOf('.');
+  const ext = dot < 0 ? '' : name.slice(dot + 1).toLowerCase();
+  if (ext === 'pdf') return '#i-document-pdf';
+  if (IMAGE_TYPES.includes(ext)) return '#i-image';
+  return '#i-attach';
+}
+
+// ----------------------------------------------------------------------------
 // An `<svg class="icon">` showing the symbol `href` (`#i-<name>`): the
 // markup's icons are written as such, a script's are made here, since an
 // element made with `accEl` is no SVG element.

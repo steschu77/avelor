@@ -272,6 +272,26 @@
   gap: 6px;
 }
 
+/* a card's attachments (features/panel/panel.js): a row per file, its
+   type's icon, the title that selects its document, which truncates, the
+   size and Open */
+.msg__attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.msg__attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.msg__attachment>.chip__name {
+  min-width: 0;
+}
+
 /* Unsaved-changes indicator, shown next to a row's title and next to the
  * open document's title while it (or its last edit) hasn't been saved yet. */
 .dirty-dot {

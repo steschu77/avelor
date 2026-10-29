@@ -1,7 +1,7 @@
 //! The app's own commands (`api.md#the-page-side`): `ready`, switching,
-//! revealing and rebuilding the vault, opening a link, and the page's
-//! preferences; and opening a vault with its accounts, watches and settings
-//! (`open_vault`).
+//! revealing and rebuilding the vault, opening a link or a document's
+//! original, and the page's preferences; and opening a vault with its
+//! accounts, watches and settings (`open_vault`).
 
 use std::path::{Path, PathBuf};
 
@@ -16,6 +16,7 @@ use crate::protocol::Req;
 use crate::sys;
 use crate::vault_settings;
 use av_utils::error::Error;
+use av_utils::id::Id;
 use serde_json::json;
 
 // ----------------------------------------------------------------------------
@@ -152,6 +153,82 @@ pub fn open_url(app: &mut App, req: Req, url: String) {
 }
 
 // ----------------------------------------------------------------------------
+/// `open_file {id}`: open the document `id`'s original (`vault.md#document`)
+/// in its default app once the handler has returned, as `open_url`. Never a
+/// file that runs code ([`runs_code`]): an attachment could be a program.
+/// Answers `null`; `not_found` without an original, or with its file gone.
+pub fn open_file(app: &mut App, req: Req, id: Id) {
+    let index = app.vault.index();
+    let Some(path) = index.original_path(&id).filter(|p| p.is_file()) else {
+        return req.err(Error::NotFound);
+    };
+    let original = index.get(&id).and_then(|doc| doc.original());
+    let name = match original.and_then(|o| o.name.clone()) {
+        Some(name) => name,
+        None => path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into(),
+    };
+    if runs_code(&path) {
+        let arg = format!("a file that runs code: {name}");
+        let message = format!("{name} isn't opened from the app: it could run a program.");
+        return req.fail(Error::InvalidArgument { arg }, message);
+    }
+    app.on_ui(
+        {
+            let path = path.clone();
+            move |_| sys::open_path(&path)
+        },
+        move |_, opened| match opened {
+            Ok(()) => req.ok(()),
+            Err(e) => {
+                log::warn!("Could not open {}: {e}", path.display());
+                req.fail(e, format!("Could not open {name}."));
+            }
+        },
+    );
+}
+
+// ----------------------------------------------------------------------------
+/// Whether the file at `path` is of a type that runs code when it is opened:
+/// a program, a script, a shortcut or an installer, on Windows or Linux.
+fn runs_code(path: &Path) -> bool {
+    const RUNS: &[&str] = &[
+        "appref-ms",
+        "application",
+        "bat",
+        "chm",
+        "cmd",
+        "com",
+        "cpl",
+        "desktop",
+        "exe",
+        "hta",
+        "jar",
+        "js",
+        "jse",
+        "lnk",
+        "msc",
+        "msi",
+        "msp",
+        "pif",
+        "ps1",
+        "psm1",
+        "reg",
+        "scr",
+        "sh",
+        "vbe",
+        "vbs",
+        "wsf",
+        "wsh",
+    ];
+    let ext = path.extension().unwrap_or_default().to_string_lossy();
+    RUNS.contains(&ext.to_ascii_lowercase().as_str())
+}
+
+// ----------------------------------------------------------------------------
 /// Whether `url` is a link `open_url` hands to the shell: `http`, `https`,
 /// `mailto` or `tel`, the absolute links the editor allows
 /// (`editor.md#links`).
@@ -183,7 +260,6 @@ mod tests {
     use crate::config::load_config;
     use crate::testing::Harness;
     use crate::testing::parse;
-    use av_utils::id::Id;
     use serde_json::Value;
     use std::fs;
 
@@ -261,6 +337,40 @@ mod tests {
         let sent = h.call("reveal_vault", json!({}));
         let err = json!({ "code": "invalid_path", "message": "No vault is open." });
         assert_eq!(sent, [json!({ "re": 1, "err": err })]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn only_an_original_that_runs_no_code_is_opened() {
+        let (setup, note, gone) = (Id::generate(), Id::generate(), Id::generate());
+        let document =
+            |id: Id, original: &str| format!("---\nid: {id}\ndocument:{original}\n---\n");
+        let files = [
+            (
+                "A/setup.md",
+                document(
+                    setup,
+                    "\n  original:\n    file: setup.EXE\n    name: Rechnung.exe",
+                ),
+            ),
+            ("A/setup.EXE", "MZ".to_string()),
+            ("A/note.md", document(note, " {}")),
+            (
+                "A/gone.md",
+                document(gone, "\n  original:\n    file: gone.pdf"),
+            ),
+        ];
+        let mut h = Harness::with_vault("open-file", &files);
+        let sent = h.call("open_file", json!({ "id": setup }));
+        let message = "Rechnung.exe isn't opened from the app: it could run a program.";
+        assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+        assert_eq!(sent[0]["err"]["message"], message);
+        for id in [note, gone, Id::generate()] {
+            let sent = h.call("open_file", json!({ "id": id }));
+            assert_eq!(sent[0]["err"]["code"], "not_found", "{id}");
+        }
+        assert!(runs_code(Path::new("a/b.Ps1")) && !runs_code(Path::new("bill.pdf")));
+        assert!(!runs_code(Path::new("README")));
     }
 
     // ------------------------------------------------------------------------

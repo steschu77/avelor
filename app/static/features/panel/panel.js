@@ -19,7 +19,7 @@ import { placeChildren } from '../../core/dom.js';
 import { DATE_FORMAT } from '../../core/format.js';
 import { parseDate } from '../../core/format.js';
 import { DAY_LONG_MONTH_YEAR, WEEKDAY_LONG, dayStart, relativeDay } from '../../core/format.js';
-import { plural } from '../../core/format.js';
+import { fileSize, plural } from '../../core/format.js';
 import { createEditor } from '../../editor/editor.js';
 import { store } from '../../model/state.js';
 import { entities, knownThreads, threadMembers, threads } from '../../model/entities.js';
@@ -36,7 +36,7 @@ import {
 } from '../../model/structure.js';
 import { createThreadLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { selectionWithout } from '../../model/structure.js';
-import { getDocIcon, iconEl } from '../../ui/icons.js';
+import { fileIcon, getDocIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
@@ -47,7 +47,7 @@ import { editTextInPlace } from '../../ui/field.js';
 import {
   MEMBER_DRAG, attachDropZone, endDragPreview, startDragPreview,
 } from '../../ui/dropzone.js';
-import { openLink, panelMode, selectDocument } from '../selection.js';
+import { openLink, openOriginal, panelMode, selectDocument } from '../selection.js';
 import { selectById } from '../selection.js';
 import { documentsIfCalendar, setDayListed } from '../selection.js';
 import { openLinkedTab } from '../context.js';
@@ -292,8 +292,10 @@ export function linkChip(id, { incoming = false, label = null, onRemove = null }
 
 // Fill `row` with the links of the card `doc_id`, as `linkChip`s: the one
 // it links to, then those linking to it -- but the chats about it, which
-// the Conversation tab lists. An x where the entity holding the link can
-// be written; none on a transaction item. The row is hidden while empty.
+// the Conversation tab lists, and its attachments, which have a block of
+// their own (`renderCardAttachments`). An x where the entity holding the
+// link can be written; none on a transaction item. The row is hidden while
+// empty.
 function renderCardLinks(doc_id, row) {
   const { to, from, items } = linksOf(doc_id);
   const writable = id => (entities.get(id) ?? threads.get(id))?.writable;
@@ -302,7 +304,8 @@ function renderCardLinks(doc_id, row) {
     chips.push(linkChip(to, { onRemove: writable(doc_id) ? () => setLinkLocal(doc_id, null) : null }));
   }
   for (const id of from) {
-    if (isAiConversation(entities.get(id))) continue;
+    const doc = entities.get(id);
+    if (isAiConversation(doc) || doc?.document?.original) continue;
     chips.push(linkChip(id, { incoming: true, onRemove: writable(id) ? () => setLinkLocal(id, null) : null }));
   }
   for (const item of items) {
@@ -312,16 +315,50 @@ function renderCardLinks(doc_id, row) {
   row.hidden = !chips.length;
 }
 
-// The cards' heads, event details, links and threads lines follow every
-// entity change -- a task made for the card, a title changed, an event
-// synced, a thread restored -- without rebuilding the cards (and their
-// editors); subscribed below.
+// Fill `block` with the attachments of the card `doc_id`: the documents
+// linked to it that stand for a file (`document.original`, vault.md#document;
+// a mail's attachments), a row each with its type's icon, its title, which
+// selects it, its size, and Open; a double-click on the row opens it too
+// (`openOriginal`). The block is hidden while there are none.
+function renderCardAttachments(doc_id, block) {
+  const rows = [];
+  for (const id of linksOf(doc_id).from) {
+    const doc = entities.get(id);
+    const original = doc?.document?.original;
+    if (!original) continue;
+    const name = original.name ?? original.file ?? '';
+    const row = accEl('div', 'msg__attachment');
+    row.title = `${name} \u00b7 double-click to open`;
+    const title = accEl('button', 'chip__name row-title', doc.title || name);
+    title.type = 'button';
+    title.addEventListener('click', () => selectById(id));
+    const open = accEl('button', 'icon-btn icon-btn--quiet');
+    open.type = 'button';
+    open.title = 'Open in its app';
+    open.append(iconEl('#i-open'));
+    open.addEventListener('click', () => openOriginal(id));
+    const size = accEl('span', 'meta', original.size != null ? fileSize(original.size) : '');
+    row.append(iconEl(fileIcon(name)), title, size, open);
+    row.addEventListener('dblclick', e => {
+      if (!e.target.closest('button')) openOriginal(id);
+    });
+    rows.push(row);
+  }
+  block.replaceChildren(...rows);
+  block.hidden = !rows.length;
+}
+
+// The cards' heads, event details, links, attachments and threads lines
+// follow every entity change -- a task made for the card, a title changed,
+// an event synced, a thread restored, an attachment saved -- without
+// rebuilding the cards (and their editors); subscribed below.
 const refreshCardChips = oncePerFrame(() => {
   renderThreadProjects();
   for (const controller of msgControllers.values()) {
     renderCardHead(controller);
     renderCardDetails(controller.detailsEl, entities.get(controller.doc_id), controller.occurrence);
     renderCardLinks(controller.doc_id, controller.linksEl);
+    renderCardAttachments(controller.doc_id, controller.attachmentsEl);
     renderCardThreads(controller.doc_id, controller.threadsEl);
     renderCardChat(controller);
   }
@@ -683,7 +720,8 @@ function renderDocument(doc) {
 }
 
 // ----------------------------------------------------------------------------
-// One card: header, event details, chips, toolbars, and its own editor.
+// One card: header, event details, chips, attachments, toolbars, and its
+// own editor.
 // `thread`: a member of the thread shown -- its head drags it out of the
 // thread, and remove-from-thread applies; `selectable`: a click selects its
 // entity, which only makes sense with other cards on screen (a thread, a
@@ -756,6 +794,10 @@ function createMessageController(msg, { selectable = false, thread = false, occu
   renderCardLinks(doc_id, linksEl);
   card.appendChild(linksEl);
 
+  const attachmentsEl = accEl('div', 'pane-section msg__attachments');
+  renderCardAttachments(doc_id, attachmentsEl);
+  card.appendChild(attachmentsEl);
+
   const previewToolbar = createDocPreviewToolbar();
   card.appendChild(previewToolbar);
 
@@ -813,7 +855,7 @@ function createMessageController(msg, { selectable = false, thread = false, occu
 
   const controller = {
     doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
-    dateEl, detailsEl, linksEl, threadsEl, chatBtn, occurrence, unsubscribeContent,
+    dateEl, detailsEl, linksEl, attachmentsEl, threadsEl, chatBtn, occurrence, unsubscribeContent,
   };
   msgControllers.set(doc_id, controller);
   renderCardHead(controller);
@@ -886,8 +928,8 @@ store.subscribe([
   state => state.selected_thread, state => state.threads_rev,
 ], (_values, state) => renderPanel(state));
 
-// The cards' heads, event details, links and threads lines show the
-// entities and threads as they are now.
+// The cards' heads, event details, links, attachments and threads lines
+// show the entities and threads as they are now.
 store.subscribe(state => state.entities_rev, refreshCardChips);
 
 // A project was added or renamed: only its chips show its name, so they
