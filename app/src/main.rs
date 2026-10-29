@@ -23,6 +23,7 @@ mod jobs;
 mod mail;
 mod page;
 mod protocol;
+mod reader;
 mod scans;
 mod search;
 mod shell;
