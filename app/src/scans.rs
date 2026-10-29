@@ -18,7 +18,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use av_llm::{ChatRequest, ChatResponse, Client, FileData, Message, Part, Provider, StopReason};
+use av_llm::{ChatResponse, Client, FileData, Provider, StopReason};
 use av_utils::base64::to_base64;
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
@@ -38,6 +38,7 @@ use crate::app::Task;
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::protocol::Req;
+use crate::reader;
 use crate::sys;
 use crate::watches::READ_STEP;
 use crate::watches::{self, FolderFile};
@@ -45,13 +46,6 @@ use av_vault::markdown::plain_title;
 
 /// The longest proposed title, in characters.
 const TITLE_LEN: usize = 80;
-/// How many more words a page must have before its progress is sent again.
-const PROGRESS_WORDS: usize = 10;
-/// What the OCR model is told, and asked.
-const OCR_SYSTEM: &str = "You transcribe scanned pages. Write the text of the \
-page in the image as Markdown: keep its headings, paragraphs, lists and tables, \
-in reading order. Write only the page's text: no comments, no code fence.";
-const OCR_REQUEST: &str = "Transcribe this page.";
 /// The previews' size: twice the page's large preview (180 x 254), so they
 /// stay sharp on a high-DPI screen; thumbnails show them smaller.
 const PREVIEW_W: u32 = 360;
@@ -535,36 +529,21 @@ enum ReadError {
 }
 
 // ----------------------------------------------------------------------------
-/// Read the image `name` in `root` with `model`: the file as it was read,
-/// and the model's answer. `on_words` gets the words read so far as the
-/// answer streams in.
+/// Read the image `name` in `root` with `model` (`reader::ask`): the file
+/// as it was read, and the model's answer. `on_words` gets the words read
+/// so far as the answer streams in.
 fn ocr(
     client: &Client,
     cancel: &Cancel,
     model: &str,
     root: &Path,
     name: &str,
-    mut on_words: impl FnMut(usize),
+    on_words: impl FnMut(usize),
 ) -> Result<(FolderFile, ChatResponse), ReadError> {
     // The file's facts first: a change while it is read makes the text stale.
     let file = FolderFile::read(root, name).map_err(ReadError::File)?;
     let data = FileData::from_path(&file.path).map_err(ReadError::File)?;
-    let request = ChatRequest::new(model)
-        .system(OCR_SYSTEM)
-        .message(Message::user(OCR_REQUEST).with(Part::Inline(data)))
-        .context(ai::CONTEXT_TOKENS);
-    let mut text = String::new();
-    let mut sent = 0;
-    let response = client
-        .chat_stream(cancel, &request, |delta| {
-            text.push_str(delta);
-            let words = word_count(&text);
-            if words >= sent + PROGRESS_WORDS {
-                sent = words;
-                on_words(words);
-            }
-        })
-        .map_err(ReadError::Model)?;
+    let response = reader::ask(client, cancel, model, data, on_words).map_err(ReadError::Model)?;
     Ok((file, response))
 }
 
@@ -623,7 +602,7 @@ fn on_read(
 // ----------------------------------------------------------------------------
 /// The page a file read to, by the file's path; or why it has none.
 fn page_of(file: FolderFile, response: ChatResponse) -> Result<(PathBuf, Ocr), String> {
-    let text = clean_ocr(&response.text);
+    let text = reader::clean(&response.text);
     if text.is_empty() {
         return Err(match response.stop {
             StopReason::Refused => "The model declined to read the page.",
@@ -633,7 +612,7 @@ fn page_of(file: FolderFile, response: ChatResponse) -> Result<(PathBuf, Ocr), S
     }
     let ocr = Ocr {
         stamp: Stamp::of(&file),
-        words: word_count(&text),
+        words: reader::word_count(&text),
         title: title_of(&text),
         text,
     };
@@ -948,32 +927,6 @@ fn inside(root: &Path, path: &Path) -> bool {
 }
 
 // ----------------------------------------------------------------------------
-/// The model's answer as page text: trimmed, without a code fence around
-/// it (which some models add despite being told not to).
-fn clean_ocr(text: &str) -> String {
-    let text = text.trim();
-    let unfenced = text.strip_prefix("```").and_then(|rest| {
-        let (info, body) = rest.split_once('\n')?;
-        // Only an info string (`markdown`), not a fenced block that starts
-        // the page and ends before its end.
-        if info.contains('`') || info.trim().contains(' ') {
-            return None;
-        }
-        body.trim_end().strip_suffix("```")
-    });
-    unfenced.unwrap_or(text).trim().to_string()
-}
-
-// ----------------------------------------------------------------------------
-/// The words of `text`: the runs between whitespace that have a letter or a
-/// digit (markdown's `#`, `-` and `|` don't count).
-fn word_count(text: &str) -> usize {
-    text.split_whitespace()
-        .filter(|word| word.chars().any(char::is_alphanumeric))
-        .count()
-}
-
-// ----------------------------------------------------------------------------
 /// A title proposed for a page: its first heading, else its first line,
 /// as plain text (`plain_title`).
 fn title_of(text: &str) -> String {
@@ -1048,7 +1001,7 @@ mod tests {
         let file = FolderFile::read(folder, name).unwrap();
         let ocr = Ocr {
             stamp: Stamp::of(&file),
-            words: word_count(text),
+            words: reader::word_count(text),
             title: title_of(text),
             text: text.to_string(),
         };
@@ -1263,20 +1216,6 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn answers_lose_a_fence_around_them() {
-        assert_eq!(clean_ocr("  # Bill\n\nText\n "), "# Bill\n\nText");
-        assert_eq!(
-            clean_ocr("```markdown\n# Bill\n\nText\n```\n"),
-            "# Bill\n\nText"
-        );
-        assert_eq!(clean_ocr("```\nText\n```"), "Text");
-        let code = "```\nfn a()\n```\nAfter the code.";
-        assert_eq!(clean_ocr(code), code, "a fenced block at the start stays");
-        assert_eq!(clean_ocr(" \n"), "");
-    }
-
-    // ------------------------------------------------------------------------
-    #[test]
     fn titles_come_from_the_first_heading_or_line() {
         let letter = "Stadtwerke Springfield\nMain Street 1\n\n## Rechnung Nr. 4711\n\nText";
         assert_eq!(title_of(letter), "Rechnung Nr. 4711");
@@ -1285,13 +1224,6 @@ mod tests {
         let long = format!("# {}", "word ".repeat(30));
         assert!(title_of(&long).chars().count() <= TITLE_LEN + 1);
         assert_eq!(title_of(""), "");
-    }
-
-    // ------------------------------------------------------------------------
-    #[test]
-    fn words_are_runs_with_a_letter_or_digit() {
-        assert_eq!(word_count("# Bill\n\n- 3 x 4,50 EUR\n| a | b |"), 7);
-        assert_eq!(word_count(""), 0);
     }
 
     // ------------------------------------------------------------------------
