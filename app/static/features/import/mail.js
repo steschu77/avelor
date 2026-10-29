@@ -3,8 +3,9 @@
 // features/sidebar.js) and rendered into the expanded vault area while its op
 // is "mail". Also the account's auto-sync under the Mail row of its pane
 // (called by features/workspace/accounts.js), with the same filter form. Both
-// can turn on the analysis of new mail, with the model it runs with. On the
-// page, Esc closes it and Ctrl+Enter fetches (`registerVaultPage`).
+// can save the attachments of new mail (which file types, up to what size),
+// and turn on its analysis, with the model it runs with. On the page, Esc
+// closes it and Ctrl+Enter fetches (`registerVaultPage`).
 //
 // The filter form is built once per opening and never re-rendered on Fetch
 // mail, so its inputs keep focus while typing; only its chips and the matches
@@ -27,6 +28,7 @@ import {
   closeVaultArea, openVaultOp, registerVaultPage,
 } from '../../ui/page.js';
 import { notice } from '../../ui/page.js';
+import { renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
 import { iconEl } from '../../ui/icons.js';
 import {
@@ -73,6 +75,7 @@ export function openMailFetch(account_id) {
     },
     auto: saved?.auto_update ?? true,
     analysis: { ...MAIL_ANALYSIS_OFF, ...saved?.analysis },
+    attachments: { ...MAIL_ATTACHMENTS_OFF, ...saved?.attachments },
     searching: false, // while a `mail_search` / `mail_headers` is answered
     error: null,
     matches: null, // [{ id, in_vault }] of the last search
@@ -350,7 +353,10 @@ function mailFetch() {
   m.fetching = true;
   const ids = m.matches.filter(match => m.selected.has(match.id)).map(match => match.id);
   const filter = m.listFilter ? JSON.parse(m.listFilter) : mailHostFilter();
-  const args = { account: m.account, ids, replace, filter, auto_update: m.auto, analysis: m.analysis };
+  const args = {
+    account: m.account, ids, replace, filter, auto_update: m.auto, analysis: m.analysis,
+    attachments: m.attachments,
+  };
   // Once the fetch runs, the page closes; the job card shows it.
   rpcCall('mail_fetch', args).then(({ job }) => {
     mailFetchJobs.set(job, args.account);
@@ -387,14 +393,16 @@ function renderMailPage() {
   filter.append(renderMailFilterForm(mail.form));
   form.append(section, filter);
 
+  els.attachments = accEl('div');
   els.analysis = accEl('div');
-  form.append(els.analysis);
+  form.append(els.attachments, els.analysis);
 
   els.matches = accEl('div', 'mail__matches');
   grid.append(form, els.matches);
   page.append(grid);
   $('vault-area-body').replaceChildren(page);
 
+  renderMailAttachmentsSection();
   renderMailAnalysisSection();
   renderMailSubtitle();
   renderMailMatches();
@@ -603,6 +611,7 @@ export function renderMailSync(account, rerender) {
   box.append(head);
   if (on) {
     box.append(renderMailFilterForm(form));
+    box.append(renderMailSyncAttachments(form, { ...MAIL_ATTACHMENTS_OFF, ...sync.attachments }));
     box.append(renderMailSyncAnalysis(account.id, { ...MAIL_ANALYSIS_OFF, ...sync.analysis }));
   }
   if (form.error) box.append(accEl('div', 'error-note', form.error));
@@ -655,6 +664,71 @@ function mailSetSync(account, change) {
 }
 
 // ----------------------------------------------------------------------------
+// the attachments of new mail (mail.md#attachments), of Fetch mail and of an
+// account's auto-sync: whether they are saved, which ones, up to what size
+
+const MAIL_ATTACHMENTS_OFF = {
+  enabled: false, patterns: ['*.pdf', '*.jpg', '*.jpeg', '*.png'], 'max-size': 10,
+};
+const MAIL_ATTACHMENT_SIZES = [[5, '5 MB'], [10, '10 MB'], [25, '25 MB']];
+
+// `attachments` ({ enabled, patterns, 'max-size' }) as a seg, Off or On, and
+// a body: while on, the file types (`renderPatternField`, of `owner`) and
+// the size they are saved up to. `onChange` gets the attachments as
+// changed; `rerender` (the page's scheduler) runs for an edit that changes
+// nothing.
+function renderMailAttachments(owner, attachments, onChange, rerender) {
+  const seg = accSeg([[false, 'Off'], [true, 'On']], attachments.enabled,
+    enabled => onChange({ ...attachments, enabled }));
+  const body = accEl('div');
+  if (!attachments.enabled) {
+    body.append(accEl('div', 'page-text mail__text', 'Attached files are only named at the end of a new mail.'));
+    return { seg, body };
+  }
+  const types = accEl('div', 'form-field');
+  types.append(...renderPatternField(owner, attachments.patterns,
+    patterns => onChange({ ...attachments, patterns }), rerender));
+  const size = accEl('div', 'form-field');
+  size.append(accSeg(MAIL_ATTACHMENT_SIZES, attachments['max-size'],
+    max => onChange({ ...attachments, 'max-size': max })));
+  const grid = accEl('div', 'form-grid');
+  grid.append(accEl('span', 'label', 'File types'), types, accEl('span', 'label', 'Up to'), size);
+  body.append(grid, accEl('div', 'page-text mail__text',
+    'Saves each attached file that matches as a document in Attachments/, linked to its mail; images the mail shows in its text stay out.'));
+  return { seg, body };
+}
+
+// Fetch mail's second section, Attachments: built again on its changes, the
+// focus kept in its file types' input.
+function renderMailAttachmentsSection() {
+  const block = mail.els.attachments;
+  const active = document.activeElement;
+  const focusKey = block.contains(active) ? active.dataset.focusKey : undefined;
+  const { seg, body } = renderMailAttachments('mail-fetch', mail.attachments, attachments => {
+    mail.attachments = attachments;
+    renderMailAttachmentsSection();
+    scheduleRenderMailMatches();
+  }, renderMailAttachmentsSection);
+  const head = accEl('div', 'section-head', '2 \u00b7 Attachments');
+  head.append(seg);
+  block.replaceChildren(head, body);
+  if (focusKey) [...block.querySelectorAll('[data-focus-key]')].find(el => el.dataset.focusKey === focusKey)?.focus();
+}
+
+// The auto-sync's attachments, under its filter; saved at once.
+function renderMailSyncAttachments(form, attachments) {
+  const save = next => mailSetSync(form.account, { attachments: next });
+  const { seg, body } = renderMailAttachments(form.focusKey, attachments, save, () => form.rerender());
+  const grid = accEl('div', 'form-grid');
+  const field = accEl('div', 'form-field');
+  field.append(seg);
+  grid.append(accEl('span', 'label', 'Attachments'), field);
+  const box = accEl('div', 'mail__filter');
+  box.append(grid, body);
+  return box;
+}
+
+// ----------------------------------------------------------------------------
 // the analysis of new mail (mail.md#analysis), of Fetch mail and of an
 // account's auto-sync: a level, and the model it runs with
 
@@ -699,7 +773,7 @@ function renderMailAnalysisSection() {
     renderMailAnalysisSection();
     scheduleRenderMailMatches();
   });
-  const head = accEl('div', 'section-head', '2 \u00b7 Analysis');
+  const head = accEl('div', 'section-head', '3 \u00b7 Analysis');
   head.append(seg);
   mail.els.analysis.replaceChildren(head, body);
 }
@@ -847,7 +921,8 @@ function renderMailFooter() {
   const n = mail.selected.size;
   const replace = mailReplacing().map(m => m.id);
   const replacing = replace.length;
-  const label = mail.fetching ? 'Starting\u2026' : `Fetch ${n} \u00b7 plain text`;
+  const label = mail.fetching ? 'Starting\u2026'
+    : `Fetch ${n} \u00b7 plain text${mail.attachments.enabled ? ' and attachments' : ''}`;
   const fetch = accEl('button', 'btn btn--primary', label);
   fetch.type = 'button';
   fetch.title = 'Ctrl+Enter';

@@ -52,6 +52,8 @@ pub mod layout {
     pub const CONVERSATIONS: &str = "Conversations";
     /// Documents imported from a folder watch's scans.
     pub const SCANS: &str = "Scans";
+    /// A mail's attachments: a document per file, with the file beside it.
+    pub const ATTACHMENTS: &str = "Attachments";
     /// Deleted entities, kept at their vault-relative path; the scan skips
     /// it like every dot-folder.
     pub const TRASH: &str = ".trash";

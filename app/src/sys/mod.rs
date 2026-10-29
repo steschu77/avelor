@@ -16,6 +16,8 @@
 //! - `expand_env(text) -> PathBuf`, `collapse_env(path) -> String`: a
 //!   watch's folder as used and as stored: `%NAME%` and `%USERPROFILE%\…`
 //!   on Windows, a leading `~` and `$NAME` and `~/…` on Linux.
+//! - `mark_downloaded(path)`: a saved attachment marked as downloaded from
+//!   the internet (the mark of the web on Windows; nothing on Linux).
 //! - `preview(path, max_w, max_h) -> Result<Vec<u8>>`: an image as a JPEG
 //!   that fits the box, upright by its EXIF orientation (WIC on Windows,
 //!   gdk-pixbuf on Linux); a worker that makes previews holds an
@@ -38,7 +40,7 @@ pub use win32::{ImageThread, preview};
 #[cfg(target_os = "windows")]
 pub use win32::{Owner, open_path, pick_folder};
 #[cfg(target_os = "windows")]
-pub use win32::{collapse_env, expand_env};
+pub use win32::{collapse_env, expand_env, mark_downloaded};
 #[cfg(target_os = "windows")]
 pub use win32::{paths, show_error};
 
@@ -55,7 +57,7 @@ pub use linux::{ImageThread, preview};
 #[cfg(target_os = "linux")]
 pub use linux::{Owner, open_path, pick_folder};
 #[cfg(target_os = "linux")]
-pub use linux::{collapse_env, expand_env};
+pub use linux::{collapse_env, expand_env, mark_downloaded};
 #[cfg(target_os = "linux")]
 pub use linux::{paths, show_error};
 
