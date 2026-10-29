@@ -5,7 +5,10 @@ use std::fs;
 use std::path::Component;
 use std::path::{Path, PathBuf};
 
-use super::{Changes, Entry, FileState, FileStep, Found, InTrash, Index, SaveOutcome, load, walk};
+use super::{
+    Changes, Entry, FileState, FileStep, Found, InTrash, Index, SaveOutcome, load, original_file,
+    walk,
+};
 use crate::document::{Document, FileFormat};
 use crate::envelope::DocumentType;
 use crate::schema::layout;
@@ -104,9 +107,10 @@ impl Index {
     }
 
     /// Move `id`'s file to `<root>/.trash/<its vault-relative path>` and drop
-    /// it from the index. The indexing skips dot-folders, so it stays gone until
-    /// it is restored ([`Index::restore`]). An already trashed file of the
-    /// same name is kept: the new one gets a timestamp prefix.
+    /// it from the index; its original goes along, next to it. The indexing
+    /// skips dot-folders, so it stays gone until it is restored
+    /// ([`Index::restore`]). An already trashed file of the same name is
+    /// kept: the new ones get a timestamp prefix.
     pub fn trash(&mut self, id: &Id, changes: &mut Changes) -> Result<()> {
         let entry = self.entry(id).ok_or(Error::NotFound)?;
         let (local, state) = (entry.local.clone(), FileState::of(&entry.doc));
@@ -124,19 +128,28 @@ impl Index {
             return Err(Error::Unsaved);
         }
         let mut target = self.root.join(layout::TRASH).join(&entry.local);
-        if target.exists() {
+        let original = original_file(&entry.doc)
+            .map(|file| (entry.path.with_file_name(file), file.to_string()))
+            .filter(|(path, _)| path.is_file());
+        let mut prefix = String::new();
+        let taken = |file: &str| target.with_file_name(file).exists();
+        if target.exists() || original.as_ref().is_some_and(|(_, file)| taken(file)) {
             let name = entry
                 .local
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let stamp = DateTime::now().as_timestamp();
-            target.set_file_name(format!("{stamp}.{name}"));
+            prefix = format!("{}.", DateTime::now().as_timestamp());
+            target.set_file_name(format!("{prefix}{name}"));
         }
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::rename(&entry.path, &target)?;
+        let original = original.map(|(path, file)| {
+            let trashed = target.with_file_name(format!("{prefix}{file}"));
+            (path, trashed)
+        });
+        move_with_original(&entry.path, &target, original.as_ref())?;
         if let Some(entry) = self.remove(id) {
             changes.trashed_files.push(entry.local);
         }
@@ -155,6 +168,18 @@ impl Index {
         path.exists() && FileStamp::read(&path).ok().flatten() == trashed.stamp
     }
 
+    /// Whether the original of a step's file in the trash, if it has one
+    /// there, can go back next to `local`: nothing is in its place.
+    pub(super) fn original_free(&self, trashed: &InTrash, local: &Path) -> bool {
+        let from = self.root.join(&trashed.at);
+        let format = FileFormat::of_path(local).unwrap_or(FileFormat::Markdown);
+        let Ok(entry) = load(from.clone(), local.to_path_buf(), false, format) else {
+            return false;
+        };
+        trashed_original(&entry.doc, &from, &self.root.join(local))
+            .is_none_or(|(_, back)| !back.exists())
+    }
+
     /// Move a step's file, `id`'s, out of the trash to `local`,
     /// vault-relative, and into the index again, an undo or a redo of its
     /// move there.
@@ -170,8 +195,9 @@ impl Index {
         let format = FileFormat::of_path(local).unwrap_or(FileFormat::Markdown);
         let mut entry = load(from.clone(), local.to_path_buf(), readonly, format)?;
         entry.doc.known_as(*id);
+        let original = trashed_original(&entry.doc, &from, &self.root.join(local));
         changes.saved.push(entry.doc.id());
-        self.out_of(&from, entry)?;
+        self.out_of(&from, entry, original.as_ref())?;
         Ok(())
     }
 
@@ -199,10 +225,11 @@ impl Index {
 
     /// Move the trashed file `local` (relative to `.trash`, as
     /// [`Index::trashed`] lists it) back to where it was -- its name without
-    /// the prefix [`Index::trash`] adds on a clash -- and add it to the
-    /// index; returns its id. Refused with [`Error::FileExists`] when a file is
-    /// in that place, or an entity with the file's `id` is in the vault.
-    /// The trash folders this leaves empty are removed.
+    /// the prefix [`Index::trash`] adds on a clash -- with its original, and
+    /// add it to the index; returns its id. Refused with
+    /// [`Error::FileExists`] when a file is in its place or its original's,
+    /// or an entity with the file's `id` is in the vault. The trash folders
+    /// this leaves empty are removed.
     pub fn restore(&mut self, local: &Path, changes: &mut Changes) -> Result<Id> {
         let (from, format) = self.trashed_file(local)?;
         let target = untrashed(local);
@@ -221,26 +248,41 @@ impl Index {
                 path: other.local.clone(),
             });
         }
+        let original = trashed_original(&entry.doc, &from, &to);
+        if let Some((_, back)) = &original
+            && back.try_exists()?
+        {
+            let name = back.file_name().unwrap_or_default();
+            return Err(Error::FileExists {
+                path: target.with_file_name(name),
+            });
+        }
         let state = FileState::of(&entry.doc);
         let trashed = InTrash {
             at: from.strip_prefix(&self.root).unwrap_or(&from).to_path_buf(),
             stamp: entry.doc.stamp(),
         };
-        self.out_of(&from, entry)?;
+        self.out_of(&from, entry, original.as_ref())?;
         changes.wrote(FileStep::restored(id, target, trashed, state));
         changes.created = Some(id);
         Ok(id)
     }
 
-    /// Move the trashed file `from` back to its place, `entry`'s, and
-    /// `entry`, read where it was, into the index: the move keeps its stamp.
-    /// Folders it leaves empty in the trash go.
-    fn out_of(&mut self, from: &Path, mut entry: Entry) -> Result<()> {
+    /// Move the trashed file `from` back to its place, `entry`'s, with its
+    /// `original` (`trashed_original`), and `entry`, read where it was, into
+    /// the index: the move keeps its stamp. Folders it leaves empty in the
+    /// trash go.
+    fn out_of(
+        &mut self,
+        from: &Path,
+        mut entry: Entry,
+        original: Option<&(PathBuf, PathBuf)>,
+    ) -> Result<()> {
         let to = self.root.join(&entry.local);
         if let Some(parent) = to.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::rename(from, &to)?;
+        move_with_original(from, &to, original)?;
         prune_empty(&self.root.join(layout::TRASH), from.parent());
         entry.path = to;
         self.insert(entry);
@@ -273,18 +315,21 @@ impl Index {
         Ok(SaveOutcome::Saved)
     }
 
-    /// Delete the trashed file `local` for good, also a read-only one, and
-    /// the trash folders this leaves empty.
+    /// Delete the trashed file `local` for good, also a read-only one, with
+    /// its original, and the trash folders this leaves empty.
     pub fn delete_trashed(&self, local: &Path) -> Result<()> {
-        let (path, _) = self.trashed_file(local)?;
-        let mut permissions = fs::metadata(&path)?.permissions();
-        if permissions.readonly() {
-            // Only the trash's own file, about to be deleted.
-            #[allow(clippy::permissions_set_readonly_false)]
-            permissions.set_readonly(false);
-            fs::set_permissions(&path, permissions)?;
+        let (path, format) = self.trashed_file(local)?;
+        let original = load(path.clone(), local.to_path_buf(), false, format)
+            .ok()
+            .and_then(|entry| {
+                let file = original_file(&entry.doc)?;
+                Some(path.with_file_name(format!("{}{file}", trash_prefix(local))))
+            })
+            .filter(|original| original.is_file());
+        if let Some(original) = original {
+            remove_for_good(&original)?;
         }
-        fs::remove_file(&path)?;
+        remove_for_good(&path)?;
         prune_empty(&self.root.join(layout::TRASH), path.parent());
         Ok(())
     }
@@ -342,19 +387,74 @@ impl Index {
 }
 
 // ----------------------------------------------------------------------------
+/// Move the file `from` to `to` with its `original`, `(from, to)`: the
+/// original first, and back if the file can't follow, so a failure leaves
+/// both where they were.
+fn move_with_original(from: &Path, to: &Path, original: Option<&(PathBuf, PathBuf)>) -> Result<()> {
+    if let Some((original_from, original_to)) = original {
+        fs::rename(original_from, original_to)?;
+    }
+    if let Err(err) = fs::rename(from, to) {
+        if let Some((original_from, original_to)) = original {
+            fs::rename(original_to, original_from).ok();
+        }
+        return Err(err.into());
+    }
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
+/// The original `doc` names, in the trash next to its file `from` (with the
+/// same prefix, [`trash_prefix`]), and its place next to `to`; `None` if it
+/// has none there.
+fn trashed_original(doc: &Document, from: &Path, to: &Path) -> Option<(PathBuf, PathBuf)> {
+    let file = original_file(doc)?;
+    let trashed = from.with_file_name(format!("{}{file}", trash_prefix(from)));
+    trashed
+        .is_file()
+        .then(|| (trashed, to.with_file_name(file)))
+}
+
+// ----------------------------------------------------------------------------
+/// Delete the file at `path`, also a read-only one: only the trash's
+/// files, about to be deleted for good.
+fn remove_for_good(path: &Path) -> Result<()> {
+    let mut permissions = fs::metadata(path)?.permissions();
+    if permissions.readonly() {
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        fs::set_permissions(path, permissions)?;
+    }
+    fs::remove_file(path)?;
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
 /// Where the trashed file `local` goes back to: its vault-relative path,
-/// without the `YYYYMMDD_hhmmss.` prefix [`Index::trash`] adds on a clash.
-/// The names the app gives files start `YYYYMMDDThhmm`, never like that.
+/// without the prefix [`Index::trash`] adds on a clash ([`trash_prefix`]).
 pub(super) fn untrashed(local: &Path) -> PathBuf {
+    let prefix = trash_prefix(local);
+    if prefix.is_empty() {
+        return local.to_path_buf();
+    }
+    let name = local
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    local.with_file_name(&name[prefix.len()..])
+}
+
+/// The `YYYYMMDD_hhmmss.` prefix [`Index::trash`] gives the trashed file
+/// `local` on a clash, with its dot; empty without one. The names the app
+/// gives files start `YYYYMMDDThhmm`, never like that.
+pub(super) fn trash_prefix(local: &Path) -> &str {
     let name = local
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
     match name.split_once('.') {
-        Some((stamp, rest)) if is_trash_stamp(stamp) && !rest.is_empty() => {
-            local.with_file_name(rest)
-        }
-        _ => local.to_path_buf(),
+        Some((stamp, rest)) if is_trash_stamp(stamp) && !rest.is_empty() => &name[..=stamp.len()],
+        _ => "",
     }
 }
 

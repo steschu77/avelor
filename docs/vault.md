@@ -40,6 +40,8 @@ Each file in the vault is either a markdown file with YAML frontmatter or a
 pure YAML file (`*.md`, `*.yaml`). The YAML frontmatter holds the file's
 metadata. The BOM, the line endings and frontmatter keys the app doesn't
 know are kept as they are (`av_utils::text::renormalize`, `Envelope.extra`).
+The indexing reads no other file; a document can name one as its original
+(`vault.md#document`).
 
 Read-only files can't be edited (`Entry::is_editable` / `is_writable` /
 `is_deletable`). A file whose frontmatter doesn't parse loads as a body
@@ -89,19 +91,21 @@ be versioned with git, so any earlier state of a file can be recovered.
 ## Trash <a id="trash"></a>
 
 Deleting an entity moves its file, unchanged, to `.trash/` at its
-vault-relative path: `Documents/a.md` goes to `.trash/Documents/a.md`. If
-a file of that name is already there, the new one gets the prefix
+vault-relative path: `Documents/a.md` goes to `.trash/Documents/a.md`. A
+document's original goes along, next to it (`vault.md#document`). If a
+file of either name is already there, the new ones get the prefix
 `YYYYMMDD_hhmmss.`, the time of the delete. The indexing skips `.trash/` like
 every dot-folder. Ctrl+Z after a delete (`saving.md#undo`) brings the file
-back, with what the delete did elsewhere: the members of a deleted project
-join it again, a thread it dissolved is whole again.
+back with its original, and what the delete did elsewhere: the members of
+a deleted project join it again, a thread it dissolved is whole again.
 
 - **Workspace > Trash** (`features/workspace/trash.js`) lists what is there,
   newest first.
-- **Restore** moves a file back to where it was, without that prefix, and
-  selects it: the entity is in the vault again. It is refused when a file
-  is already in that place, or when an entity with the file's `id` is in
-  the vault.
+- **Restore** moves a file back to where it was, without that prefix,
+  with its original, and shows it where it lives under the page
+  (`ui.md#documents`): the entity is in the vault again. It
+  is refused when a file is already in its place or its original's, or
+  when an entity with the file's `id` is in the vault.
 - A restore brings back what the file holds, not what the delete did
   elsewhere: a thread the delete dissolved stays dissolved (its other
   member left it), and a project deleted since then is gone (its members
@@ -118,9 +122,9 @@ join it again, a thread it dissolved is whole again.
   the sync isn't deleted in Google (`calendar.md#two-way-sync`).
 - **Delete** in the trash and **Empty trash** remove files for good; both
   take two clicks. Empty removes the markdown and YAML files the trash
-  lists, and the folders this leaves empty; anything else put into
-  `.trash/` stays. Neither is a step, and a delete whose file is gone for
-  good can't be undone.
+  lists with their originals, and the folders this leaves empty; anything
+  else put into `.trash/` stays. Neither is a step, and a delete whose file
+  is gone for good can't be undone.
 
 ## Roles, Types and Sources
 
@@ -319,7 +323,8 @@ A document is a markdown file with the following additional optional
 fields:
 
 * `type`: string,
-* `author`: ContactRef.
+* `author`: ContactRef,
+* `original`: the file the document stands for.
 
 **Type** — *what does the user call it?* A free-text label such as
 "bill", "contract", "letter", or "statement". Purely a user-facing
@@ -328,6 +333,26 @@ any time, only available for entities with the `document` role. A mail
 gets the role for a type from the email analysis (`email.md#analysis`),
 beside its `email` block; its kind stays a mail's
 (`vault.md#kind-derivation`).
+
+**Original** — a file that isn't markdown, such as an email's attachment,
+next to the document's own file:
+
+* `file`: its name in the document's folder: the document's generated
+  name with the file's own extension (`vault.md#filenames`). Only a plain
+  name counts, and none the indexing would read as an entity,
+* `name`: the name the file came with,
+* `size`: its size in bytes when it was saved.
+
+```yaml
+document:
+  original:
+    file: 20261012T0930.rechnung-oktober.ab12.doc.pdf
+    name: Rechnung_Oktober.pdf
+    size: 182344
+```
+
+The original moves with its document: into the trash, back on a restore,
+and out for good with it (`vault.md#trash`).
 
 Emails can be imported directly from a Google account.
 
@@ -688,6 +713,11 @@ always exactly five dot-separated segments: `prefix.slug.id4.type-id.ext`.
 - **`type-id`** — three-letter code for the entity's derived type, one per
   well-known type, so glob filters (`*.evt.md`) are type-aware.
 - **`ext`** — `md` for markdown files, `yaml` for pure YAML files.
+
+A document's original takes the document's name with its own extension
+in place of `md` (`….ab12.doc.pdf`), so the two sort together. An
+extension the indexing reads gets `.txt` after it (`….doc.md.txt`), and one
+that isn't a short ASCII word becomes `bin`.
 
 Only the files the app creates get generated names, and the app renames no
 file later: a file keeps the slug of the title it was created with, and the

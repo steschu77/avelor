@@ -2,7 +2,7 @@
 //! over the frontmatter, `{YYYYMMDDThhmm}.{slug(title)}.{id4}.{type-id}.{ext}`.
 //! Identity never depends on it -- that is the frontmatter `id`.
 
-use crate::document::Document;
+use crate::document::{Document, FileFormat};
 use av_utils::datetime::DateTime;
 
 // ----------------------------------------------------------------------------
@@ -22,6 +22,26 @@ pub fn generated_name(doc: &Document) -> String {
         slug(doc.title()),
         doc.kind().type_id()
     )
+}
+
+// ----------------------------------------------------------------------------
+/// The name of `doc`'s original (vault.md#document): its generated name
+/// with the original's extension `ext` in place of its own, so the two sort
+/// together. An extension the index reads gets `.txt` after it, so the file
+/// is never taken for an entity; one that isn't a short ASCII word is `bin`.
+pub fn original_name(doc: &Document, ext: &str) -> String {
+    let name = generated_name(doc);
+    let stem = name
+        .rsplit_once('.')
+        .map_or(name.as_str(), |(stem, _)| stem);
+    let ext = ext.to_ascii_lowercase();
+    match ext.as_str() {
+        _ if FileFormat::of_extension(&ext).is_some() => format!("{stem}.{ext}.txt"),
+        _ if ext.is_empty() || ext.len() > 8 || !ext.bytes().all(|b| b.is_ascii_alphanumeric()) => {
+            format!("{stem}.bin")
+        }
+        _ => format!("{stem}.{ext}"),
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -123,7 +143,6 @@ fn fn_date(d: &DateTime) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::FileFormat;
 
     #[test]
     fn slugs_fold_collapse_and_truncate() {
@@ -168,5 +187,18 @@ mod tests {
         let text = "---\nid: 01a06d07-2b70-708c-9c71-7ddfaa46c0f5\ntask: {}\ntitle: Renew\ndate: 2026-08-27\n---\n";
         let doc = Document::load(text.into(), FileFormat::Markdown);
         assert_eq!(generated_name(&doc), "20260827T0000.renew.c0f5.tsk.md");
+    }
+
+    #[test]
+    fn an_original_is_named_after_its_document() {
+        let text = "---\nid: 01a06d07-2b70-708c-9c71-7ddfaa46c0f5\ndocument: {}\ntitle: Rechnung\ndate: 2026-10-12T09:30:00Z\n---\n";
+        let doc = Document::load(text.into(), FileFormat::Markdown);
+        let name = |ext| original_name(&doc, ext);
+        assert_eq!(name("PDF"), "20261012T0930.rechnung.c0f5.doc.pdf");
+        assert_eq!(name("md"), "20261012T0930.rechnung.c0f5.doc.md.txt");
+        assert_eq!(name("yml"), "20261012T0930.rechnung.c0f5.doc.yml.txt");
+        assert_eq!(name(""), "20261012T0930.rechnung.c0f5.doc.bin");
+        assert_eq!(name("p f"), "20261012T0930.rechnung.c0f5.doc.bin");
+        assert_eq!(name("toolongext"), "20261012T0930.rechnung.c0f5.doc.bin");
     }
 }

@@ -13,6 +13,7 @@ use std::collections::HashSet;
 use std::fs::{self, DirEntry};
 use std::io::ErrorKind;
 use std::io::Read;
+use std::path::Component;
 use std::path::{Path, PathBuf};
 
 use crate::document::{Document, FileFormat};
@@ -615,7 +616,8 @@ impl Index {
             }
             Place::Trash(Some(trashed)) => Ok(self.in_trash(trashed)
                 && self.entry(&file.id).is_none()
-                && !self.root.join(&file.local).exists()),
+                && !self.root.join(&file.local).exists()
+                && self.original_free(trashed, &file.local)),
             Place::Trash(None) => Ok(false),
         }
     }
@@ -890,6 +892,20 @@ fn parse_file(
         written: false,
         doc,
     }
+}
+
+// ----------------------------------------------------------------------------
+/// The file name of `doc`'s original (`document.original.file`), if it is
+/// a plain name and not an entity's: anything else could point out of the
+/// document's folder, or at another entity's file.
+fn original_file(doc: &Document) -> Option<&str> {
+    let file = doc.original()?.file.as_deref()?;
+    let mut parts = Path::new(file).components();
+    let plain = matches!(
+        (parts.next(), parts.next()),
+        (Some(Component::Normal(_)), None)
+    );
+    (plain && FileFormat::of_path(Path::new(file)).is_none()).then_some(file)
 }
 
 // ----------------------------------------------------------------------------
