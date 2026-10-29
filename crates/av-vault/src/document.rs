@@ -9,6 +9,7 @@ use crate::envelope::Conversation;
 use crate::envelope::Email;
 use crate::envelope::Event;
 use crate::envelope::Message;
+use crate::envelope::Original;
 use crate::envelope::Remote;
 use crate::envelope::Task;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
@@ -270,6 +271,12 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// The file the document stands for (`document.original`).
+    pub fn original(&self) -> Option<&Original> {
+        self.roles().document.as_ref()?.original.as_ref()
+    }
+
+    // ------------------------------------------------------------------------
     /// The body: markdown, empty for a YAML file -- or a broken file's whole
     /// text.
     pub fn content(&self) -> &str {
@@ -453,6 +460,14 @@ impl Document {
     /// role.
     pub fn set_email(&mut self, email: Option<Email>) {
         self.envelope_mut().roles.email = email;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Name the file the document stands for; the entity gets the
+    /// `document` role if it has none.
+    pub fn set_original(&mut self, original: Original) {
+        let roles = &mut self.envelope_mut().roles;
+        roles.document.get_or_insert_with(Default::default).original = Some(original);
     }
 
     // ------------------------------------------------------------------------
