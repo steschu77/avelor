@@ -33,7 +33,7 @@ av-bundle = { path = "../crates/av-bundle" }
 pulldown-cmark = { workspace = true }
 
 [build-dependencies]
-embed-resource = "3.0"
+embed-resource = "3.0.12"
 oxc = { workspace = true, features = ["minifier", "codegen"] }
 av-bundle = { path = "../crates/av-bundle" }
 av-texts = { path = "../crates/av-texts" }
