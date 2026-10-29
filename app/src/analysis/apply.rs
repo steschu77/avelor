@@ -29,6 +29,37 @@ pub fn apply_lite(doc: &mut Document, lite: &Lite) {
         doc.set_title(title.clone());
     }
     add_doc_type(doc, lite);
+    add_labels_and_projects(doc, lite);
+}
+
+// ----------------------------------------------------------------------------
+/// `lite`'s type given to `doc`, unless it has one.
+fn add_doc_type(doc: &mut Document, lite: &Lite) {
+    let role = doc.roles().document.as_ref();
+    let has_type = role.is_some_and(|role| role.doc_type.is_some());
+    if let Some(doc_type) = lite.doc_type.as_deref().filter(|_| !has_type) {
+        doc.set_doc_type(Some(DocType::parse(doc_type)));
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Write `lite` into the attachment's document `doc`: a new title and date;
+/// its type, unless it has one; the labels and projects as for an email.
+pub fn apply_document(doc: &mut Document, lite: &Lite) {
+    if let Some(title) = &lite.title {
+        doc.set_title(title.clone());
+    }
+    if let Some(date) = lite.date {
+        doc.set_date(date);
+    }
+    add_doc_type(doc, lite);
+    add_labels_and_projects(doc, lite);
+}
+
+// ----------------------------------------------------------------------------
+/// `lite`'s labels added to `doc`'s own (in any case once), its projects
+/// joined.
+fn add_labels_and_projects(doc: &mut Document, lite: &Lite) {
     let mut labels = doc.labels().to_vec();
     let before = labels.len();
     for label in &lite.labels {
@@ -41,16 +72,6 @@ pub fn apply_lite(doc: &mut Document, lite: &Lite) {
     }
     for project in &lite.projects {
         doc.join_project(*project);
-    }
-}
-
-// ----------------------------------------------------------------------------
-/// `lite`'s type given to `doc`, unless it has one.
-fn add_doc_type(doc: &mut Document, lite: &Lite) {
-    let role = doc.roles().document.as_ref();
-    let has_type = role.is_some_and(|role| role.doc_type.is_some());
-    if let Some(doc_type) = lite.doc_type.as_deref().filter(|_| !has_type) {
-        doc.set_doc_type(Some(DocType::parse(doc_type)));
     }
 }
 

@@ -2,7 +2,7 @@
 
 use av_llm::{ChatRequest, Message};
 
-use super::context::{Context, EmailText};
+use super::context::{Context, DocText, EmailText};
 use crate::ai;
 use crate::google::accounts::AnalysisLevel;
 
@@ -35,26 +35,53 @@ Write the points and the questions in the email's language too.";
 
 const LISTS_ONLY: &str = "\nUse only labels and projects from the lists, spelled as given.";
 
+/// What an attachment is asked for, at either level.
+pub(super) const DOCUMENT_SHAPE: &str = "{\"title\": \"...\", \"date\": \"YYYY-MM-DD\", \"type\": \"...\", \
+\"labels\": [\"...\"], \"projects\": [\"...\"]}";
+
+const DOCUMENT_RULES: &str = "
+- title: a clean title for the document, in its language, at most 80 characters: what it is \
+and who it is from, without file names or reference numbers.
+- date: the date the document itself carries (a letter's, a bill's), as YYYY-MM-DD; null if it \
+has none.
+- type: the one type from the list of types that fits the document; null if none fits.
+- labels: up to 3 labels from the list of labels that clearly fit the document; none if unsure.
+- projects: up to 2 projects from the list of projects the document clearly belongs to; none \
+if unsure.
+Use only types, labels and projects from the lists, spelled as given.";
+
+// ----------------------------------------------------------------------------
+/// `names` as the request lists them: a line each, or "(none)".
+fn listed(names: Vec<&str>) -> String {
+    match names.is_empty() {
+        true => "(none)\n".to_string(),
+        false => names.iter().map(|n| format!("- {n}\n")).collect(),
+    }
+}
+
 // ----------------------------------------------------------------------------
 /// The request of the analysis at `level` for `email` to `model`: the
-/// instructions, then the lists of `ctx` and the email.
+/// instructions, then the lists of `ctx`, the email, and the text of its
+/// attachments read.
 pub fn request_for(
     level: AnalysisLevel,
     model: &str,
     ctx: &Context,
     email: &EmailText,
 ) -> ChatRequest {
-    let list = |names: Vec<&str>| match names.is_empty() {
-        true => "(none)\n".to_string(),
-        false => names.iter().map(|n| format!("- {n}\n")).collect(),
-    };
-    let labels = list(ctx.labels.iter().map(String::as_str).collect());
-    let projects = list(ctx.projects.iter().map(|(_, t)| t.as_str()).collect());
+    let labels = listed(ctx.labels.iter().map(String::as_str).collect());
+    let projects = listed(ctx.projects.iter().map(|(_, t)| t.as_str()).collect());
     let date = email.date.map(|d| d.as_iso8601()).unwrap_or_default();
-    let text = format!(
+    let mut text = format!(
         "Labels:\n{labels}\nProjects:\n{projects}\nThe email:\nSubject: {}\nFrom: {}\nTo: {}\nDate: {date}\n\n{}",
         email.subject, email.from, email.to, email.body
     );
+    if !email.attachments.is_empty() {
+        text.push_str("\n\nIts attached files, as read:");
+        for (name, read) in &email.attachments {
+            text.push_str(&format!("\n\n--- {name} ---\n{read}"));
+        }
+    }
     let medium = level == AnalysisLevel::Medium;
     let task = match medium {
         true => "You sort incoming email and prepare it for its recipient.",
@@ -77,8 +104,37 @@ pub fn request_for(
 }
 
 // ----------------------------------------------------------------------------
+/// The request of the analysis for the attachment `doc` to `model`, as
+/// Lite at either level: the instructions, then the lists of `ctx` and the
+/// document.
+pub fn document_request(model: &str, ctx: &Context, doc: &DocText) -> ChatRequest {
+    let types = listed(ctx.types.iter().map(String::as_str).collect());
+    let labels = listed(ctx.labels.iter().map(String::as_str).collect());
+    let projects = listed(ctx.projects.iter().map(|(_, t)| t.as_str()).collect());
+    let email = match &doc.email {
+        Some((subject, from)) if !from.is_empty() => {
+            format!("Attached to the email: {subject} (from {from})\n")
+        }
+        Some((subject, _)) => format!("Attached to the email: {subject}\n"),
+        None => String::new(),
+    };
+    let text = format!(
+        "Types:\n{types}\nLabels:\n{labels}\nProjects:\n{projects}\nThe document:\nFile: {}\n{email}\n{}",
+        doc.name, doc.body
+    );
+    let system = format!(
+        "You sort documents. Answer with one JSON object and nothing else: {DOCUMENT_SHAPE}.{DOCUMENT_RULES}"
+    );
+    ChatRequest::new(model)
+        .system(system)
+        .message(Message::user(text))
+        .think(false)
+        .context(ai::CONTEXT_TOKENS)
+}
+
+// ----------------------------------------------------------------------------
 /// The JSON object the analysis at `level` asks for.
-fn shape(level: AnalysisLevel) -> &'static str {
+pub(super) fn shape(level: AnalysisLevel) -> &'static str {
     match level {
         AnalysisLevel::Medium => MEDIUM_SHAPE,
         _ => LITE_SHAPE,
@@ -87,16 +143,15 @@ fn shape(level: AnalysisLevel) -> &'static str {
 
 // ----------------------------------------------------------------------------
 /// `request` asked again after `answer`, which wasn't the JSON object: the
-/// answer and a reminder of the object `level` asks for follow it. An empty
-/// answer is just asked again (providers refuse an empty turn).
-pub fn again(request: ChatRequest, answer: &str, level: AnalysisLevel) -> ChatRequest {
+/// answer and a reminder of the object `shape` follow it. An empty answer
+/// is just asked again (providers refuse an empty turn).
+pub fn again(request: ChatRequest, answer: &str, shape: &str) -> ChatRequest {
     if answer.trim().is_empty() {
         return request;
     }
     let reminder = format!(
-        "That wasn't the JSON object asked for. Answer again with only the JSON object {}, \
-nothing before or after it.",
-        shape(level)
+        "That wasn't the JSON object asked for. Answer again with only the JSON object {shape}, \
+nothing before or after it."
     );
     request
         .message(Message::assistant(answer))

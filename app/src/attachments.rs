@@ -2,7 +2,8 @@
 //! files its filter saved are read into their documents' bodies through
 //! `reader` -- an image or a PDF by the filter's read model, a text file as
 //! it is -- one after the other as a job, "Reading attachments · <email>".
-//! The emails' analysis, if the filter asks for one, starts when it ends.
+//! The analysis, if the filter asks for one, starts when it ends, with the
+//! attachments it read.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -50,6 +51,8 @@ struct Read {
     model: String,
     queue: AiQueue<Id>,
     counts: Counts,
+    /// The documents whose text it wrote.
+    written: Vec<Id>,
     /// The emails to analyse afterwards, and how.
     then: Option<(Vec<Id>, Analysis)>,
 }
@@ -125,8 +128,8 @@ fn step_for(doc: Option<&Document>, path: Option<PathBuf>, provider: Provider) -
 // ----------------------------------------------------------------------------
 /// Read the attachment documents `ids` of `email`'s account with the model
 /// `pick` as a job ("Reading attachments · <email>"), then analyse the emails
-/// `then` asks for. A refused pick is a notice, and the analysis starts at
-/// once; so it does if there is nothing to read.
+/// `then` asks for, and the attachments read. A refused pick is a notice,
+/// and the analysis starts at once; so it does if there is nothing to read.
 pub fn read(
     app: &mut App,
     email: &str,
@@ -140,7 +143,7 @@ pub fn read(
         Err(refusal) => {
             let notice = Text::new("job.notice").arg("job", label);
             app.notice(notice.arg("text", refusal.text));
-            return analyse(app, email, then);
+            return analyse(app, email, then, Vec::new());
         }
     };
     let queue: VecDeque<Id> = ids
@@ -148,7 +151,7 @@ pub fn read(
         .filter(|id| app.vault.index().entry(id).is_some())
         .collect();
     if queue.is_empty() {
-        return analyse(app, email, then);
+        return analyse(app, email, then, Vec::new());
     }
     let total = queue.len();
     let job = app.start_job(JobKind::AttachmentRead, label, total);
@@ -164,6 +167,7 @@ pub fn read(
         address: resolved.address,
         model: resolved.model,
         counts: Counts::default(),
+        written: Vec::new(),
         then,
     };
     app.attachments.reads.insert(job, read);
@@ -171,10 +175,11 @@ pub fn read(
 }
 
 // ----------------------------------------------------------------------------
-/// The emails `then` asks for, analysed (`analysis::analyse`).
-fn analyse(app: &mut App, email: &str, then: Option<(Vec<Id>, Analysis)>) {
+/// The emails `then` asks for analysed, with the attachments `read`
+/// (`analysis::analyse`).
+fn analyse(app: &mut App, email: &str, then: Option<(Vec<Id>, Analysis)>, read: Vec<Id>) {
     if let Some((emails, analysis)) = then {
-        analysis::analyse(app, email, emails, &analysis);
+        analysis::analyse(app, email, emails, read, &analysis);
     }
 }
 
@@ -288,6 +293,9 @@ fn on_read(app: &mut App, job: Id, id: Id, kind: Kind, result: Result<Got, ReadE
     let Some(read) = app.attachments.reads.get_mut(&job) else {
         return;
     };
+    if written == Ok(true) {
+        read.written.push(id);
+    }
     let counts = &mut read.counts;
     match written {
         Ok(true) => counts.read += 1,
@@ -377,7 +385,7 @@ fn finish(app: &mut App, job: Id) {
         app.notice(notice);
     }
     if !stopped {
-        analyse(app, &read.email, read.then);
+        analyse(app, &read.email, read.then, read.written);
     }
 }
 
@@ -532,10 +540,11 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn a_read_writes_the_text_into_empty_bodies_then_analyses_the_emails() {
+    fn a_read_writes_the_text_into_empty_bodies_then_analyses_the_mails_and_them() {
         let analysis = r#"{"type": "notification", "title": "Abschlag Oktober"}"#;
+        let document = r#"{"title": "Stadtwerke Rechnung", "date": "2020-03-01", "type": "Bill"}"#;
         let address = FakeOllama::new(&["m"])
-            .answering_in_turn(&["# Rechnung\n\n42,00 EUR", analysis])
+            .answering_in_turn(&["# Rechnung\n\n42,00 EUR", analysis, document])
             .start();
         let mut h = with_attachments("attachments-read", &address);
         let then = Analysis {
@@ -562,10 +571,22 @@ mod tests {
             notes.contains(&"2 read · 2 unread".to_string()),
             "{notes:?}"
         );
-        assert!(notes.contains(&"1 analysed".to_string()), "{notes:?}");
+        assert!(
+            notes.contains(&"3 analysed".to_string()),
+            "the email, then the two attachments read: {notes:?}"
+        );
         assert!(of(&sent, "notice").is_empty(), "{sent:?}");
 
         assert_eq!(body(&h, "scan.jpg.md"), "# Rechnung\n\n42,00 EUR\n");
+        let scan = fs::read_to_string(h.vault().join("Attachments/scan.jpg.md")).unwrap();
+        assert!(scan.contains("title: Stadtwerke Rechnung"), "{scan}");
+        assert!(scan.contains("date: 2020-03-01T12:00:00Z"), "{scan}");
+        assert!(scan.contains("type: bill"), "{scan}");
+        let typed = fs::read_to_string(h.vault().join("Attachments/typed.jpg.md")).unwrap();
+        assert!(
+            typed.contains("title: Typed.jpg"),
+            "not read, not analysed: {typed}"
+        );
         assert_eq!(body(&h, "notes.txt.md"), "Gr\u{fc}\u{df}e\n");
         assert_eq!(body(&h, "bill.pdf.md"), "", "Ollama takes no PDF");
         assert_eq!(body(&h, "photos.zip.md"), "");

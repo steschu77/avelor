@@ -1,13 +1,15 @@
 //! The model's answers read: Lite's and Medium's, an email's and a document's.
 
+use av_utils::datetime::DateTime;
 use av_utils::id::Id;
 use serde_json::Value;
 
-use super::context::Context;
+use super::context::{Context, DocText};
 use super::same;
 use crate::google::accounts::AnalysisLevel;
 use crate::texts::Text;
 
+const DAY_SECONDS: i64 = 86_400;
 /// The most labels and projects one email gets.
 const LABELS_PER_EMAIL: usize = 3;
 const PROJECTS_PER_EMAIL: usize = 2;
@@ -23,17 +25,20 @@ const REPLY_CHARS: usize = 4000;
 pub const EMAIL_TYPES: [&str; 2] = ["newsletter", "notification"];
 
 // ----------------------------------------------------------------------------
-/// What Lite found for an email, in the vault's terms.
+/// What Lite found for an email or an attachment, in the vault's terms.
 #[derive(Debug, Default, PartialEq)]
 pub struct Lite {
     /// `None`: the title stays.
     pub title: Option<String>,
-    /// One of `EMAIL_TYPES`.
-    pub doc_type: Option<String>,
     /// Labels in use, as the vault spells them.
     pub labels: Vec<String>,
     /// Active projects.
     pub projects: Vec<Id>,
+    /// An email's: one of `EMAIL_TYPES`; an attachment's: one of
+    /// `Context::types`.
+    pub doc_type: Option<String>,
+    /// An attachment's own date.
+    pub date: Option<DateTime>,
 }
 
 // ----------------------------------------------------------------------------
@@ -62,23 +67,87 @@ pub fn parse(
     ctx: &Context,
     title: &str,
 ) -> std::result::Result<(Lite, Option<Medium>), Text> {
-    let refused = || Text::new("analysis.not_json");
-    let (Some(start), Some(end)) = (answer.find('{'), answer.rfind('}')) else {
-        return Err(refused());
-    };
-    let object: Value = match answer.get(start..=end).map(serde_json::from_str) {
-        Some(Ok(object @ Value::Object(_))) => object,
-        _ => return Err(refused()),
-    };
-
-    let new_title = object["title"]
-        .as_str()
-        .map(|t| cut(t, TITLE_CHARS))
-        .filter(|t| !t.is_empty() && t != title.trim());
+    let object = object_in(answer)?;
     let doc_type = object["type"]
         .as_str()
         .and_then(|doc_type| EMAIL_TYPES.into_iter().find(|known| same(known, doc_type)))
         .map(str::to_string);
+    let lite = Lite {
+        doc_type,
+        ..shared_part(&object, ctx, title)
+    };
+    let medium = match level {
+        AnalysisLevel::Medium => medium_of(&object, lite.doc_type.as_deref()),
+        _ => None,
+    };
+    Ok((lite, medium))
+}
+
+// ----------------------------------------------------------------------------
+/// Read the `answer` of the analysis for the attachment `doc` against `ctx`
+/// as `parse` reads an email's: its type from the list only, in any case;
+/// its date as `YYYY-MM-DD`, that day at 12:00 UTC, the same day in every
+/// time zone, dropped before 1900 or after the day after the document's
+/// date (its email's; now without one).
+pub fn parse_document(
+    answer: &str,
+    ctx: &Context,
+    doc: &DocText,
+) -> std::result::Result<Lite, Text> {
+    let object = object_in(answer)?;
+    let doc_type = object["type"]
+        .as_str()
+        .and_then(|doc_type| ctx.types.iter().find(|known| same(known, doc_type)))
+        .cloned();
+    let day = |date: DateTime| date.as_unix().div_euclid(DAY_SECONDS);
+    let latest = day(doc.date.unwrap_or_else(DateTime::now)) + 1;
+    let date = object["date"]
+        .as_str()
+        .and_then(day_of)
+        .filter(|date| day(*date) <= latest);
+    Ok(Lite {
+        doc_type,
+        date,
+        ..shared_part(&object, ctx, &doc.title)
+    })
+}
+
+// ----------------------------------------------------------------------------
+/// The day `text` names as `YYYY-MM-DD` (anything after it ignored), at
+/// 12:00 UTC; `None` if it names none, or one before 1900.
+fn day_of(text: &str) -> Option<DateTime> {
+    let mut parts = text.trim().get(..10)?.split('-');
+    let mut next = || parts.next()?.parse::<i32>().ok();
+    let (year, month, day) = (next()?, next()?, next()?);
+    if year < 1900 {
+        return None;
+    }
+    DateTime::from_ymd_hms(year, month, day, 12, 0, 0).ok()
+}
+
+// ----------------------------------------------------------------------------
+/// The JSON object in `answer`, code fences and text around it ignored; an
+/// answer without one is refused, in words.
+fn object_in(answer: &str) -> std::result::Result<Value, Text> {
+    let refused = || Text::new("analysis.not_json");
+    let (Some(start), Some(end)) = (answer.find('{'), answer.rfind('}')) else {
+        return Err(refused());
+    };
+    match answer.get(start..=end).map(serde_json::from_str) {
+        Some(Ok(object @ Value::Object(_))) => Ok(object),
+        _ => Err(refused()),
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// What an email's answer `object` and an attachment's share: a title trimmed
+/// and cut, dropped if empty or `title`; the labels and projects from the
+/// lists of `ctx` only, matched in any case, each once, the first few kept.
+fn shared_part(object: &Value, ctx: &Context, title: &str) -> Lite {
+    let new_title = object["title"]
+        .as_str()
+        .map(|t| cut(t, TITLE_CHARS))
+        .filter(|t| !t.is_empty() && t != title.trim());
 
     let mut labels: Vec<String> = Vec::new();
     for name in names(&object["labels"]) {
@@ -98,17 +167,12 @@ pub fn parse(
     }
     projects.truncate(PROJECTS_PER_EMAIL);
 
-    let lite = Lite {
+    Lite {
         title: new_title,
-        doc_type,
         labels,
         projects,
-    };
-    let medium = match level {
-        AnalysisLevel::Medium => medium_of(&object, lite.doc_type.as_deref()),
-        _ => None,
-    };
-    Ok((lite, medium))
+        ..Lite::default()
+    }
 }
 
 // ----------------------------------------------------------------------------

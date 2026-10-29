@@ -2,17 +2,17 @@
 
 use std::collections::VecDeque;
 
-use av_llm::{ChatResponse, StopReason};
+use av_llm::{ChatRequest, ChatResponse, StopReason};
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_vault::vault::SaveOutcome;
 
-use super::answer::{Lite, Medium, parse};
-use super::apply::{apply_lite, medium_messages};
-use super::context::{Context, EmailText, context};
+use super::answer::{Lite, Medium, parse, parse_document};
+use super::apply::{apply_document, apply_lite, medium_messages};
+use super::context::{Context, DocText, EmailText, attachment_texts, context};
 use super::email_analysis;
-use super::request::{again, request_for};
+use super::request::{DOCUMENT_SHAPE, again, document_request, request_for, shape};
 use crate::ai;
 use crate::ai::accounts::Resolved;
 use crate::ai::queue::AiQueue;
@@ -41,15 +41,75 @@ pub(super) struct Run {
     pub(super) context: Context,
     queue: AiQueue<Ask>,
     counts: Counts,
+    /// How many of how many failed, of what it analyses, for the failures'
+    /// notice (`AiQueue::failures`).
+    failed: Text,
 }
 
 // ----------------------------------------------------------------------------
-/// An email to ask about: the how-manyth time, and the answer of the time
-/// before, which wasn't the JSON object.
+/// An email or an attachment to ask about: the how-manyth time, and the
+/// answer of the time before, which wasn't the JSON object.
 struct Ask {
-    pub(super) email: EmailText,
+    item: Item,
     attempt: u32,
     unread: Option<String>,
+}
+
+// ----------------------------------------------------------------------------
+/// What an analysis asks about.
+enum Item {
+    Email(EmailText),
+    /// An attachment, asked about as Lite at either level.
+    Document(DocText),
+}
+
+impl Item {
+    // ------------------------------------------------------------------------
+    pub(super) fn id(&self) -> Id {
+        match self {
+            Item::Email(email) => email.id,
+            Item::Document(doc) => doc.id,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Its title when the analysis was planned.
+    pub(super) fn title(&self) -> &str {
+        match self {
+            Item::Email(email) => &email.title,
+            Item::Document(doc) => &doc.title,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The JSON object asked for at `level`.
+    fn shape(&self, level: AnalysisLevel) -> &'static str {
+        match self {
+            Item::Email(_) => shape(level),
+            Item::Document(_) => DOCUMENT_SHAPE,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    fn request(&self, level: AnalysisLevel, model: &str, ctx: &Context) -> ChatRequest {
+        match self {
+            Item::Email(email) => request_for(level, model, ctx, email),
+            Item::Document(doc) => document_request(model, ctx, doc),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    pub(super) fn parse(
+        &self,
+        answer: &str,
+        level: AnalysisLevel,
+        ctx: &Context,
+    ) -> std::result::Result<(Lite, Option<Medium>), Text> {
+        match self {
+            Item::Email(email) => parse(answer, level, ctx, &email.title),
+            Item::Document(doc) => parse_document(answer, ctx, doc).map(|lite| (lite, None)),
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -80,10 +140,22 @@ impl Counts {
 }
 
 // ----------------------------------------------------------------------------
-/// Analyse the emails `ids` of `email`'s account as `analysis` says (its
-/// level and model) as a job ("Analysing email · <email>"). A refused pick is
-/// a notice; emails no longer in the vault are left out.
-pub fn analyse(app: &mut App, email: &str, ids: Vec<Id>, analysis: &Analysis) {
+/// Analyse the emails `emails` of `email`'s account, each with its
+/// attachments' text, then the attachments read `documents`, as `analysis`
+/// says (its level and model; an attachment as Lite) as a job ("Analysing
+/// email · <email>"). Nothing to analyse starts nothing; a refused pick is a
+/// notice; what is no longer in the vault, and an attachment without text,
+/// is left out.
+pub fn analyse(
+    app: &mut App,
+    email: &str,
+    emails: Vec<Id>,
+    documents: Vec<Id>,
+    analysis: &Analysis,
+) {
+    if emails.is_empty() && documents.is_empty() {
+        return;
+    }
     let choice = analysis.model.as_ref();
     let resolved = match app.ai.choose(choice, email_analysis(), DateTime::now()) {
         Ok(resolved) => resolved,
@@ -95,11 +167,21 @@ pub fn analyse(app: &mut App, email: &str, ids: Vec<Id>, analysis: &Analysis) {
             return app.notice(notice.arg("text", refusal.text));
         }
     };
-    let queue: VecDeque<Ask> = ids
+    let index = app.vault.index();
+    let emails = emails.iter().filter_map(|id| index.entry(id)).map(|entry| {
+        let mut email = EmailText::of(&entry.doc);
+        email.attachments = attachment_texts(index, email.id);
+        Item::Email(email)
+    });
+    let documents = documents
         .iter()
-        .filter_map(|id| app.vault.index().entry(id))
-        .map(|entry| Ask {
-            email: EmailText::of(&entry.doc),
+        .filter_map(|id| index.entry(id))
+        .filter(|entry| !entry.doc.content().trim().is_empty())
+        .map(|entry| Item::Document(DocText::of(index, &entry.doc)));
+    let queue: VecDeque<Ask> = emails
+        .chain(documents)
+        .map(|item| Ask {
+            item,
             attempt: 1,
             unread: None,
         })
@@ -108,10 +190,20 @@ pub fn analyse(app: &mut App, email: &str, ids: Vec<Id>, analysis: &Analysis) {
         return;
     }
     let total = queue.len();
+    let attachments = queue
+        .iter()
+        .filter(|ask| matches!(ask.item, Item::Document(_)))
+        .count();
+    let failed = match (total - attachments, attachments) {
+        (_, 0) => Text::new("ai.failed.emails"),
+        (0, _) => Text::new("ai.failed.documents"),
+        _ => Text::new("ai.failed.emails_documents"),
+    };
     let label = Text::new("analysis.label.email").arg("email", email);
     let job = app.start_job(JobKind::EmailAnalysis, label, total);
     log::info!(
-        "Email analysis {job}: {total} emails of {email} with {}, {:?}",
+        "Email analysis {job}: {} emails and {attachments} attachments of {email} with {}, {:?}",
+        total - attachments,
         resolved.model,
         analysis.level
     );
@@ -122,6 +214,7 @@ pub fn analyse(app: &mut App, email: &str, ids: Vec<Id>, analysis: &Analysis) {
         level: analysis.level,
         context: context(app.vault.index()),
         counts: Counts::default(),
+        failed,
     };
     app.analysis.runs.insert(job, run);
     pump(app, job);
@@ -145,9 +238,9 @@ fn pump(app: &mut App, job: Id) {
     let Some(ask) = run.queue.start() else {
         return;
     };
-    let mut request = request_for(run.level, &run.ai.model, &run.context, &ask.email);
+    let mut request = ask.item.request(run.level, &run.ai.model, &run.context);
     if let Some(answer) = &ask.unread {
-        request = again(request, answer, run.level);
+        request = again(request, answer, ask.item.shape(run.level));
     }
     let client = run.ai.client.clone();
     app.run_job(
@@ -160,8 +253,8 @@ fn pump(app: &mut App, job: Id) {
 }
 
 // ----------------------------------------------------------------------------
-/// The model answered for the email being analysed: write what it found, or
-/// count the failure; then the next email. An answer that isn't the JSON
+/// The model answered for the email or attachment being analysed: write what
+/// it found, or count the failure; then the next. An answer that isn't the JSON
 /// object is asked again, up to `LITE_ATTEMPTS` times in all, unless it was
 /// cut off. Every answer is logged whole with the model's reasoning (debug;
 /// info when it can't be read). Ignored if the run is gone (stopped).
@@ -172,11 +265,11 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
     let Some(ask) = run.queue.end() else {
         return;
     };
-    let (id, attempt) = (ask.email.id, ask.attempt);
+    let (id, attempt) = (ask.item.id(), ask.attempt);
     let account = run.ai.account;
     let found = match result {
         Ok(response) => {
-            let found = parse(&response.text, run.level, &run.context, &ask.email.title);
+            let found = ask.item.parse(&response.text, run.level, &run.context);
             let (text, stop, thinking) = (&response.text, &response.stop, &response.thinking);
             match &found {
                 Ok(_) => log::debug!(
@@ -189,7 +282,7 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
             let cut = response.stop == StopReason::MaxTokens;
             if found.is_err() && !cut && attempt < LITE_ATTEMPTS {
                 run.queue.again(Ask {
-                    email: ask.email,
+                    item: ask.item,
                     attempt: attempt + 1,
                     unread: Some(response.text),
                 });
@@ -204,9 +297,9 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
         }
         Err(e) => Err(ai::chat_error(run.ai.provider, &run.ai.address, &e)),
     };
-    let email = ask.email;
+    let item = ask.item;
     let by = (run.ai.model.clone(), account);
-    let written = found.and_then(|(lite, medium)| write(app, &email, lite, medium, by));
+    let written = found.and_then(|(lite, medium)| write(app, &item, lite, medium, by));
 
     let Some(run) = app.analysis.runs.get_mut(&job) else {
         return;
@@ -222,8 +315,8 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
             counts.conversations += usize::from(chat);
         }
         Err(error) => {
-            log::info!("Email analysis {job}: {} failed: {error}", email.id);
-            run.queue.fail(&email.title, error);
+            log::info!("Email analysis {job}: {id} failed: {error}");
+            run.queue.fail(item.title(), error);
         }
     }
     let (done, total) = (run.queue.done(), run.queue.total());
@@ -242,14 +335,15 @@ struct Written {
 }
 
 // ----------------------------------------------------------------------------
-/// Write `lite` into `email`, then `medium` as a conversation linked to it, by the
-/// model and account `by`, titled "Email analysis · <the email's title>". A
-/// title the user changed since the plan stays, and so does a type it has
-/// (`apply_lite`); an email gone meanwhile gets nothing. A failed write is
+/// Write `lite` into the email or attachment `item`, then an email's `medium`
+/// as a chat linked to it, by the model and account `by`, titled "Email
+/// analysis · <the email's title>". A title or an attachment's date the user
+/// changed since the plan stays, and so does a type it has (`apply_lite`,
+/// `apply_document`); what is gone meanwhile gets nothing. A failed write is
 /// logged.
 fn write(
     app: &mut App,
-    email: &EmailText,
+    item: &Item,
     mut lite: Lite,
     medium: Option<Medium>,
     by: (String, Id),
@@ -258,18 +352,28 @@ fn write(
         email: false,
         chat: false,
     };
-    let Some(entry) = app.vault.index().entry(&email.id) else {
+    let id = item.id();
+    let Some(entry) = app.vault.index().entry(&id) else {
         return Ok(gone);
     };
-    if entry.doc.title() != email.title {
+    if entry.doc.title() != item.title() {
         lite.title = None;
     }
-    let id = email.id;
+    if let Item::Document(doc) = item
+        && entry.doc.date() != doc.date
+    {
+        lite.date = None;
+    }
     let failed = |e: Error| {
         log::warn!("Email analysis: {id} could not be written: {e}");
         Text::new("item.write_failed")
     };
-    let outcome = app.edit(|index, changes| index.edit(&id, changes, |doc| apply_lite(doc, &lite)));
+    let outcome = app.edit(|index, changes| {
+        index.edit(&id, changes, |doc| match item {
+            Item::Email(_) => apply_lite(doc, &lite),
+            Item::Document(_) => apply_document(doc, &lite),
+        })
+    });
     let changed = match outcome {
         Ok(SaveOutcome::Saved) => true,
         Ok(SaveOutcome::Unchanged) => false,
@@ -342,7 +446,7 @@ fn finish(app: &mut App, job: Id) {
     ai::account_used(app, run.ai.account);
     if let Some(notice) = run.queue.failures(
         Text::new("analysis.notices.email").arg("email", run.email.as_str()),
-        Text::new("ai.failed.emails"),
+        run.failed.clone(),
     ) {
         app.notice(notice);
     }

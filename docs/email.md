@@ -102,7 +102,8 @@ types listed (`*.pdf *.jpg *.jpeg *.png` at first; patterns as a watch's,
   written only while it is still empty. The spend limit is checked before
   each file the model reads. The summary: "3 read · 1 failed · 1 unread"; one
   notice names the first failure. Stop ends it, and so does a vault
-  switch; the analysis starts when it ends, unless it was stopped.
+  switch; the analysis starts when it ends, unless it was stopped, and
+  takes the attachments read too (`email.md#analysis`).
 - **Explicit picks**: with Read on, Fetch waits for a pick that works,
   and the host refuses `email_fetch` before anything is fetched, as for the
   analysis. An auto-sync's pick is checked when a run saved files; refused,
@@ -135,16 +136,18 @@ feature picks its model (`accounts.md#model-choice`).
 - **The job**: when a fetch ends (not when it was stopped), the emails it
   created go to "Analysing email · <email>", after the attachments' reading
   if the filter reads them (`email.md#attachments`), one email after
-  another; Stop ends it, and so does a vault switch. The spend limit is
-  checked before each email; once it is reached, the rest is left and a
-  notice says so.
+  another, then the attachments read; Stop ends it, and so does a vault
+  switch. The spend limit is checked before each email and attachment; once
+  it is reached, the rest is left and a notice says so.
   The summary counts the conversations Medium wrote: "18 analysed · 4 conversations · 1
   failed".
 - **Lite**: one request per email (`analysis::request::request_for`). It lists the
   labels in use (the 100 used most) and the active projects (the first
   50), then the email: its subject as it came (`email.subject` once the
-  title differs), sender, recipients, date, and the body cut at 8,000
-  characters. It asks for one JSON object `{type, title, labels,
+  title differs), sender, recipients, date, the body cut at 8,000
+  characters, and the text of its attachments read (the first three, each
+  cut at 2,000 characters), so an email that only says its bill is attached
+  is sorted by the bill. It asks for one JSON object `{type, title, labels,
   projects}`: the email's type if it is a newsletter (news, offers or
   marketing sent to many) or a notification (sent automatically: receipts,
   shipping, alerts, reminders), none if unsure and none for any other; a
@@ -187,6 +190,21 @@ feature picks its model (`accounts.md#model-choice`).
   labels added to the email's own, the projects joined. A title the user
   changed meanwhile stays. A wrong label or
   project is removed on the card like any other.
+- **Attachments**: each attachment read gets a request of its own after
+  the emails (`analysis::request::document_request`), Lite at either level: the types
+  it may get (av-vault's well-known ones, then those the vault's
+  documents use, never `note`), the labels and projects, then the file's
+  name, the email it came with and its text cut at 8,000 characters. It
+  asks for `{title, date, type, labels, projects}`: a clean title saying
+  what it is and who it is from; the date the document carries; a type
+  from the list. The parser (`analysis::answer::parse_document`) takes the type
+  from the list only, and the date as `YYYY-MM-DD`, written as that day at
+  12:00 UTC (the same day in every time zone), dropped before 1900 or
+  after the day after the email. Written at once
+  (`analysis::apply::apply_document`): the title and date, unless the user changed
+  them meanwhile; the type, unless the document has one; labels and
+  projects as for an email. An attachment gets no conversation: Medium's points to
+  check are the email's, whose request has its text.
 - **Medium's conversation** (`analysis::apply::medium_messages`, written by `chat::create`
   after the email): an AI conversation in `Conversations/`, `linked-to` the
   email, titled "Email analysis · <the email's title>". Its first message
@@ -214,7 +232,7 @@ feature picks its model (`accounts.md#model-choice`).
 | G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_email_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email and attachment, `account`; then G7, G5 | emails in `Email/` on their own |
 | G6 | Open an attachment | the card's Attachments block: Open, or a double-click on a row; an attachment's card: its File row's Open → `openOriginal` (`features/selection.js`) | `open_file {id}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | the file in its app |
 | G7 | Read attachments | a fetch or an auto-sync run with Read on ends with saved files, or a Replace's without text | `attachments::read` → `AiAccounts::choose` (refused: a `notice`) → job "Reading attachments"; per document `step_for`, for an image or a PDF `check_limit` and `reader::ask` on a worker, for a text file `reader::text_of`; `set_content` through the vault edit → `entity`, `content`, `job`, `account`; at the end one `notice` for the failures, then G5 | the files' text in their documents |
-| G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit, Medium's conversation through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their type kept; `email.subject` kept; Medium: a chat linked to the email |
+| G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails or attachments read | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email, then per attachment, `check_limit`, `chat_stream` on a worker, `parse` / `parse_document`, `apply_lite` / `apply_document` through the vault edit, Medium's conversation through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their type kept; `email.subject` kept; Medium: a chat linked to the email |
 
 ## Design <a id="design"></a>
 
@@ -255,8 +273,8 @@ The fetch is plan → run → apply (`architecture.md#conventions`):
   file and the document, one vault edit each.
 
 The analysis (`analysis.rs`) is plan → run → apply as well: the plan picks
-the model and gathers the vault's context and each email's text on the UI
-thread; the run is one request at a time under the job's `Cancel`
+the model and gathers the vault's context, each email's text with its
+attachments', and each attachment's on the UI thread; the run is one request at a time under the job's `Cancel`
 (streamed like the assistant's, the pieces unused); the apply reads the
 answer and writes it through the vault edit, Medium's conversation through
 `chat::create`, which also starts the assistant's conversations. Each analysis is

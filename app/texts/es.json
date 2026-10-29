@@ -148,9 +148,17 @@
   "ai.choose_provider": "Elige un proveedor de IA.",
   "ai.enter_key": "Introduce la clave de la API.",
   "ai.failed": "{name} ha fallado: {error}",
+  "ai.failed.documents": {
+    "one": "Sin analizar: {failed} de {n} adjunto",
+    "other": "Sin analizar: {failed} de {n} adjuntos"
+  },
   "ai.failed.emails": {
     "one": "Sin analizar: {failed} de {n} correo",
     "other": "Sin analizar: {failed} de {n} correos"
+  },
+  "ai.failed.emails_documents": {
+    "one": "Sin analizar: {failed} de {n} correo o adjunto",
+    "other": "Sin analizar: {failed} de {n} correos y adjuntos"
   },
   "ai.failed.files": {
     "one": "Sin leer: {failed} de {n} archivo",
@@ -456,8 +464,8 @@
   "email.all_must_match": "deben cumplirse todas las condiciones",
   "email.all_of": "todas",
   "email.analysis_blocked": "El análisis está activado: elige un modelo que funcione para él o desactívalo.",
-  "email.analysis_lite": "Envía cada correo nuevo a {picker} para su tipo, un título limpio, y etiquetas y proyectos de esta bóveda.",
-  "email.analysis_medium": "Envía cada correo nuevo a {picker} para su tipo, un título limpio, y etiquetas y proyectos de esta bóveda; y, para un correo que lo pide, una respuesta rápida, puntos que revisar y preguntas, como una conversación enlazada con el correo.",
+  "email.analysis_lite": "Envía cada correo nuevo a {picker} para su tipo, un título limpio, y etiquetas y proyectos de esta bóveda. El texto leído de sus adjuntos va con él, y cada uno recibe un título limpio, su propia fecha, un tipo, etiquetas y proyectos.",
+  "email.analysis_medium": "Envía cada correo nuevo a {picker} para su tipo, un título limpio, y etiquetas y proyectos de esta bóveda; y, para un correo que lo pide, una respuesta rápida, puntos que revisar y preguntas, como una conversación enlazada con el correo. El texto leído de sus adjuntos va con él, y cada uno recibe un título limpio, su propia fecha, un tipo, etiquetas y proyectos.",
   "email.analysis_off": "Los correos nuevos conservan su asunto como título; no se envía nada a una IA.",
   "email.any_of": "cualquiera de",
   "email.as_it_came": "Tal como llegó el correo; solo lectura",
