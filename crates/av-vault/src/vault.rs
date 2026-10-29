@@ -23,6 +23,7 @@ use crate::change::Change;
 use crate::document::{Document, FileFormat};
 use crate::envelope::Conversation;
 use crate::envelope::DocumentType;
+use crate::envelope::Original;
 use crate::envelope::Thread;
 use crate::envelope::{Empty, Project, Roles, Source};
 use crate::filename;
@@ -613,7 +614,7 @@ impl Index {
         }
         let local = folder.join(filename::generated_name(&doc));
         let path = self.root.join(&local);
-        write_new(&path, &doc.save())?;
+        write_new(&path, doc.save().as_bytes())?;
         let stamp = FileStamp::read(&path).ok().flatten();
 
         let id = doc.id();
@@ -631,6 +632,50 @@ impl Index {
 
         changes.created = Some(id);
         Ok(id)
+    }
+
+    /// Write the new document `doc` with its original (vault.md#document):
+    /// `bytes`, the file that came as `name`. The file is written first,
+    /// named after the document ([`filename::original_name`]), then the
+    /// document as [`Index::create`] writes it; if that fails, the file is
+    /// removed again.
+    pub fn create_with_original(
+        &mut self,
+        mut doc: Document,
+        folder: &Path,
+        name: &str,
+        bytes: &[u8],
+        changes: &mut Changes,
+    ) -> Result<Id> {
+        if self.root.as_os_str().is_empty() {
+            // no vault is open
+            return Err(Error::InvalidPath {
+                path: PathBuf::new(),
+            });
+        }
+        let mut original = Original {
+            file: None,
+            name: Some(name.to_string()),
+            size: Some(bytes.len() as u64),
+        };
+        // Named once the role is set: the role decides the type in the name.
+        doc.set_original(original.clone());
+        let ext = Path::new(name).extension().and_then(|e| e.to_str());
+        let file = filename::original_name(&doc, ext.unwrap_or_default());
+        let path = self.root.join(folder).join(&file);
+        write_new(&path, bytes)?;
+        original.file = Some(file);
+        doc.set_original(original);
+        self.create(doc, folder, changes).inspect_err(|_| {
+            fs::remove_file(&path).ok();
+        })
+    }
+
+    /// Where `id`'s original is: its file next to the entity's
+    /// ([`original_file`]); `None` without one.
+    pub fn original_path(&self, id: &Id) -> Option<PathBuf> {
+        let entry = self.entry(id)?;
+        Some(entry.path.with_file_name(original_file(&entry.doc)?))
     }
 
     pub fn join_thread(
@@ -943,9 +988,10 @@ impl Index {
     }
 
     /// Move `id`'s file to `<root>/.trash/<its vault-relative path>` and drop
-    /// it from the index. The scan skips dot-folders, so it stays gone until
-    /// it is restored ([`Index::restore`]). An already trashed file of the
-    /// same name is kept: the new one gets a timestamp prefix.
+    /// it from the index; its original goes along, next to it. The scan
+    /// skips dot-folders, so it stays gone until it is restored
+    /// ([`Index::restore`]). An already trashed file of the same name is
+    /// kept: the new ones get a timestamp prefix.
     pub fn trash(&mut self, id: &Id, changes: &mut Changes) -> Result<()> {
         let Some(entry) = self.entry(id) else {
             return Err(Error::NotFound);
@@ -954,19 +1000,28 @@ impl Index {
             return Err(Error::Unsaved);
         }
         let mut target = self.root.join(layout::TRASH).join(&entry.local);
-        if target.exists() {
+        let original = original_file(&entry.doc)
+            .map(|file| (entry.path.with_file_name(file), file.to_string()))
+            .filter(|(path, _)| path.is_file());
+        let mut prefix = String::new();
+        let taken = |file: &str| target.with_file_name(file).exists();
+        if target.exists() || original.as_ref().is_some_and(|(_, file)| taken(file)) {
             let name = entry
                 .local
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let stamp = DateTime::now().as_timestamp();
-            target.set_file_name(format!("{stamp}.{name}"));
+            prefix = format!("{}.", DateTime::now().as_timestamp());
+            target.set_file_name(format!("{prefix}{name}"));
         }
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::rename(&entry.path, &target)?;
+        let original = original.map(|(path, file)| {
+            let trashed = target.with_file_name(format!("{prefix}{file}"));
+            (path, trashed)
+        });
+        move_with_original(&entry.path, &target, original.as_ref())?;
         if let Some(entry) = self.remove(id) {
             changes.trashed_files.push(entry.local);
         }
@@ -998,10 +1053,11 @@ impl Index {
 
     /// Move the trashed file `local` (relative to `.trash`, as
     /// [`Index::trashed`] lists it) back to where it was -- its name without
-    /// the prefix [`Index::trash`] adds on a clash -- and add it to the
-    /// index; returns its id. Refused with [`Error::FileExists`] when a file is
-    /// in that place, or an entity with the file's `id` is in the vault.
-    /// The trash folders this leaves empty are removed.
+    /// the prefix [`Index::trash`] adds on a clash -- with its original, and
+    /// add it to the index; returns its id. Refused with
+    /// [`Error::FileExists`] when a file is in its place or its original's,
+    /// or an entity with the file's `id` is in the vault. The trash folders
+    /// this leaves empty are removed.
     pub fn restore(&mut self, local: &Path, changes: &mut Changes) -> Result<Id> {
         let (from, format) = self.trashed_file(local)?;
         let target = untrashed(local);
@@ -1020,10 +1076,24 @@ impl Index {
                 path: other.local.clone(),
             });
         }
+        let original = original_file(&entry.doc)
+            .map(|file| {
+                let trashed = from.with_file_name(format!("{}{file}", trash_prefix(local)));
+                (trashed, to.with_file_name(file))
+            })
+            .filter(|(trashed, _)| trashed.is_file());
+        if let Some((_, back)) = &original
+            && back.try_exists()?
+        {
+            let name = back.file_name().unwrap_or_default();
+            return Err(Error::FileExists {
+                path: target.with_file_name(name),
+            });
+        }
         if let Some(parent) = to.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::rename(&from, &to)?;
+        move_with_original(&from, &to, original.as_ref())?;
         prune_empty(&self.root.join(layout::TRASH), from.parent());
         entry.path = to;
         self.insert(entry);
@@ -1057,18 +1127,21 @@ impl Index {
         Ok(SaveOutcome::Saved)
     }
 
-    /// Delete the trashed file `local` for good, also a read-only one, and
-    /// the trash folders this leaves empty.
+    /// Delete the trashed file `local` for good, also a read-only one, with
+    /// its original, and the trash folders this leaves empty.
     pub fn delete_trashed(&self, local: &Path) -> Result<()> {
-        let (path, _) = self.trashed_file(local)?;
-        let mut permissions = fs::metadata(&path)?.permissions();
-        if permissions.readonly() {
-            // Only the trash's own file, about to be deleted.
-            #[allow(clippy::permissions_set_readonly_false)]
-            permissions.set_readonly(false);
-            fs::set_permissions(&path, permissions)?;
+        let (path, format) = self.trashed_file(local)?;
+        let original = load(path.clone(), local.to_path_buf(), false, format)
+            .ok()
+            .and_then(|entry| {
+                let file = original_file(&entry.doc)?;
+                Some(path.with_file_name(format!("{}{file}", trash_prefix(local))))
+            })
+            .filter(|original| original.is_file());
+        if let Some(original) = original {
+            remove_for_good(&original)?;
         }
-        fs::remove_file(&path)?;
+        remove_for_good(&path)?;
         prune_empty(&self.root.join(layout::TRASH), path.parent());
         Ok(())
     }
@@ -1427,10 +1500,10 @@ fn clean_labels(tags: Vec<String>) -> Vec<String> {
 }
 
 // ----------------------------------------------------------------------------
-/// Write `text` to a new file at `path`, creating its folder; fails rather
+/// Write `bytes` to a new file at `path`, creating its folder; fails rather
 /// than replace a file that already exists. A failure is
 /// `Error::FileWrite` with `path`.
-fn write_new(path: &Path, text: &str) -> Result<()> {
+fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     let written = (|| {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -1439,7 +1512,7 @@ fn write_new(path: &Path, text: &str) -> Result<()> {
             .write(true)
             .create_new(true)
             .open(path)?;
-        file.write_all(text.as_bytes())
+        file.write_all(bytes)
     })();
     written.map_err(|err| Error::FileWrite {
         path: path.to_path_buf(),
@@ -1491,19 +1564,76 @@ fn parse_file(
 }
 
 // ----------------------------------------------------------------------------
+/// The file name of `doc`'s original (`document.original.file`), if it is
+/// a plain name and not an entity's: anything else could point out of the
+/// document's folder, or at another entity's file.
+fn original_file(doc: &Document) -> Option<&str> {
+    let file = doc.original()?.file.as_deref()?;
+    let mut parts = Path::new(file).components();
+    let plain = matches!(
+        (parts.next(), parts.next()),
+        (Some(Component::Normal(_)), None)
+    );
+    (plain && file_format(Path::new(file)).is_none()).then_some(file)
+}
+
+// ----------------------------------------------------------------------------
+/// Move the file `from` to `to` with its `original`, `(from, to)`: the
+/// original first, and back if the file can't follow, so a failure leaves
+/// both where they were.
+fn move_with_original(from: &Path, to: &Path, original: Option<&(PathBuf, PathBuf)>) -> Result<()> {
+    if let Some((original_from, original_to)) = original {
+        fs::rename(original_from, original_to)?;
+    }
+    if let Err(err) = fs::rename(from, to) {
+        if let Some((original_from, original_to)) = original {
+            fs::rename(original_to, original_from).ok();
+        }
+        return Err(err.into());
+    }
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
+/// Delete the file at `path`, also a read-only one: only the trash's
+/// files, about to be deleted for good.
+fn remove_for_good(path: &Path) -> Result<()> {
+    let mut permissions = fs::metadata(path)?.permissions();
+    if permissions.readonly() {
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        fs::set_permissions(path, permissions)?;
+    }
+    fs::remove_file(path)?;
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
 /// Where the trashed file `local` goes back to: its vault-relative path,
-/// without the `YYYYMMDD_hhmmss.` prefix [`Index::trash`] adds on a clash.
-/// The names the app gives files start `YYYYMMDDThhmm`, never like that.
+/// without the prefix [`Index::trash`] adds on a clash ([`trash_prefix`]).
 fn untrashed(local: &Path) -> PathBuf {
+    let prefix = trash_prefix(local);
+    if prefix.is_empty() {
+        return local.to_path_buf();
+    }
+    let name = local
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    local.with_file_name(&name[prefix.len()..])
+}
+
+/// The `YYYYMMDD_hhmmss.` prefix [`Index::trash`] gives the trashed file
+/// `local` on a clash, with its dot; empty without one. The names the app
+/// gives files start `YYYYMMDDThhmm`, never like that.
+fn trash_prefix(local: &Path) -> &str {
     let name = local
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
     match name.split_once('.') {
-        Some((stamp, rest)) if is_trash_stamp(stamp) && !rest.is_empty() => {
-            local.with_file_name(rest)
-        }
-        _ => local.to_path_buf(),
+        Some((stamp, rest)) if is_trash_stamp(stamp) && !rest.is_empty() => &name[..=stamp.len()],
+        _ => "",
     }
 }
 
@@ -2636,6 +2766,152 @@ mod tests {
         assert!(other.exists(), "what isn't listed stays");
         let err = index.delete_trashed(Path::new("Notes/n1.md"));
         assert!(matches!(err, Err(Error::FileNotFound { .. })));
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// An empty vault at a new temporary root, and a document `title` to
+    /// write into it.
+    fn original_vault(title: &str) -> (PathBuf, Index, Document) {
+        let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
+        let mut index = Index::default();
+        index.begin(&root);
+        let roles = Roles {
+            document: Some(Default::default()),
+            ..Default::default()
+        };
+        let source = Source::Created(Empty {});
+        let doc = Document::create(
+            roles,
+            source,
+            title.into(),
+            Vec::new(),
+            FileFormat::Markdown,
+        );
+        (root, index, doc)
+    }
+
+    #[test]
+    fn a_document_is_written_with_its_original_and_trashed_with_it() {
+        let (root, mut index, doc) = original_vault("Rechnung Oktober");
+        let mut changes = Changes::default();
+        let folder = Path::new("Attachments");
+        let pdf = b"%PDF-1.7\r\n%\xe2\xe3\xcf\xd3\r\n";
+        let id = index
+            .create_with_original(doc, folder, "Rechnung_Oktober.PDF", pdf, &mut changes)
+            .unwrap();
+        assert_eq!(changes.created, Some(id));
+
+        let entry = index.entry(&id).unwrap();
+        let path = index.original_path(&id).unwrap();
+        let file = path.file_name().unwrap().to_string_lossy().to_string();
+        let doc_name = entry.local.file_name().unwrap().to_string_lossy();
+        assert_eq!(file, doc_name.replace(".doc.md", ".doc.pdf"));
+        assert_eq!(fs::read(&path).unwrap(), pdf, "byte for byte");
+        let text = fs::read_to_string(&entry.path).unwrap();
+        let block = format!(
+            "document:\n  original:\n    file: {file}\n    name: Rechnung_Oktober.PDF\n    size: {}\n",
+            pdf.len()
+        );
+        assert!(text.contains(&block), "{text}");
+        let rescanned = Index::scan(&root);
+        assert_eq!(rescanned.documents.len(), 1, "the original is no entity");
+        assert_eq!(rescanned.original_path(&id), Some(path.clone()));
+
+        // A file of the original's name in the trash: both get the prefix.
+        let stray = root.join(layout::TRASH).join(folder).join(&file);
+        fs::create_dir_all(stray.parent().unwrap()).unwrap();
+        fs::write(&stray, "stray\n").unwrap();
+        let deleted = index.delete(&id, &mut changes);
+        assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+        assert!(!path.exists() && index.original_path(&id).is_none());
+        let trashed = index.trashed();
+        assert_eq!(trashed.len(), 1, "only the document is listed");
+        let local = trashed[0].local.clone();
+        let prefix = trash_prefix(&local).to_string();
+        assert!(!prefix.is_empty(), "{}", local.display());
+        let trashed_pdf = stray.with_file_name(format!("{prefix}{file}"));
+        assert_eq!(fs::read(&trashed_pdf).unwrap(), pdf);
+        assert_eq!(fs::read_to_string(&stray).unwrap(), "stray\n");
+
+        // Restored without the prefix, the original with it.
+        let restored = index.restore(&local, &mut changes).unwrap();
+        assert_eq!(restored, id);
+        assert_eq!(index.original_path(&id), Some(path.clone()));
+        assert_eq!(fs::read(&path).unwrap(), pdf);
+        assert!(!trashed_pdf.exists());
+
+        // Deleted for good with its original; the stray file stays.
+        let deleted = index.delete(&id, &mut changes);
+        assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+        let local = index.trashed()[0].local.clone();
+        index.delete_trashed(&local).unwrap();
+        let left: Vec<_> = fs::read_dir(stray.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(left, [stray.file_name().unwrap()]);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_restore_is_refused_when_its_originals_place_is_taken() {
+        let (root, mut index, doc) = original_vault("Photo");
+        let mut changes = Changes::default();
+        let folder = Path::new("Attachments");
+        let id = index
+            .create_with_original(doc, folder, "photo.jpg", b"jpeg", &mut changes)
+            .unwrap();
+        let path = index.original_path(&id).unwrap();
+        let deleted = index.delete(&id, &mut changes);
+        assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+
+        fs::write(&path, "another file\n").unwrap();
+        let local = index.trashed()[0].local.clone();
+        let err = index.restore(&local, &mut changes);
+        let name = Path::new(path.file_name().unwrap());
+        assert!(matches!(err, Err(Error::FileExists { path }) if path == folder.join(name)));
+        assert!(index.entry(&id).is_none());
+        let trashed = root.join(layout::TRASH).join(folder);
+        assert!(trashed.join(local.file_name().unwrap()).exists() && trashed.join(name).exists());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn an_original_is_only_a_plain_name_and_never_an_entity() {
+        let (root, mut index, doc) = original_vault("Notes");
+        let mut changes = Changes::default();
+        let id = index
+            .create_with_original(doc, Path::new("A"), "notes.md", b"# Notes\n", &mut changes)
+            .unwrap();
+        let path = index.original_path(&id).unwrap();
+        assert!(
+            path.to_string_lossy().ends_with(".doc.md.txt"),
+            "{}",
+            path.display()
+        );
+        assert_eq!(
+            Index::scan(&root).documents.len(),
+            1,
+            "not read as an entity"
+        );
+
+        let other = index.entry(&id).unwrap().local.clone();
+        let other = other.file_name().unwrap().to_string_lossy().to_string();
+        fs::write(root.join("A/x.pdf"), "x").unwrap();
+        for file in ["../x.pdf", "B/x.pdf", "/x.pdf", "", &other] {
+            let text = format!(
+                "---\nid: {}\ndocument:\n  original:\n    file: '{file}'\n---\n",
+                Id::generate()
+            );
+            let doc = Document::load(text, FileFormat::Markdown);
+            assert_eq!(original_file(&doc), None, "{file}");
+        }
+        let text = "---\ndocument:\n  original:\n    file: x.pdf\n---\n";
+        let doc = Document::load(text.into(), FileFormat::Markdown);
+        assert_eq!(original_file(&doc), Some("x.pdf"));
 
         fs::remove_dir_all(&root).ok();
     }

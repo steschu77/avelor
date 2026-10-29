@@ -127,6 +127,24 @@ pub struct Document {
     pub genre: Option<Genre>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author: Option<ContactRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original: Option<Original>,
+}
+
+// ----------------------------------------------------------------------------
+/// The file a document stands for, such as a mail's attachment
+/// (vault.md#document): next to the document's own file, and moved with it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Original {
+    /// Its name in the document's folder; a plain name, never a path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// The name it came with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Its size in bytes when it was saved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
 }
 
 // ----------------------------------------------------------------------------
