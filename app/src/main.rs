@@ -19,6 +19,7 @@ mod indexing;
 mod jobs;
 mod page;
 mod protocol;
+mod reader;
 mod scans;
 mod search;
 mod settings;
