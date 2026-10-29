@@ -102,7 +102,8 @@ types listed (`*.pdf *.jpg *.jpeg *.png` at first; patterns as a watch's,
   written only while it is still empty. The spend limit is checked before
   each file the model reads. The note: "3 read · 1 failed · 1 unread"; one
   notice names the first failure. Stop ends it, and so does a vault
-  switch; the analysis starts when it ends, unless it was stopped.
+  switch; the analysis starts when it ends, unless it was stopped, and
+  takes the attachments read too (`mail.md#analysis`).
 - **Explicit picks**: with Read on, Fetch waits for a pick that works,
   and the host refuses `mail_fetch` before anything is fetched, as for the
   analysis. An auto-sync's pick is checked when a run saved files; refused,
@@ -135,16 +136,18 @@ feature picks its model (`accounts.md#model-choice`).
 - **The job**: when a fetch ends (not when it was stopped), the mails it
   created go to "Analysing mail · <email>", after the attachments' reading
   if the filter reads them (`mail.md#attachments`), one mail after
-  another; Stop ends it, and so does a vault switch. The spend limit is
-  checked before each mail; once it is reached, the rest is left and a
-  notice says so.
+  another, then the attachments read; Stop ends it, and so does a vault
+  switch. The spend limit is checked before each mail and attachment; once
+  it is reached, the rest is left and a notice says so.
   The note counts the chats Medium wrote: "18 analysed · 4 chats · 1
   failed".
 - **Lite**: one request per mail (`enrich::request_for`). It lists the
   labels in use (the 100 used most) and the active projects (the first
   50), then the mail: its subject as it came (`email.subject` once the
-  title differs), sender, recipients, date, and the body cut at 8,000
-  characters. It asks for one JSON object `{kind, title, labels,
+  title differs), sender, recipients, date, the body cut at 8,000
+  characters, and the text of its attachments read (the first three, each
+  cut at 2,000 characters), so a mail that only says its bill is attached
+  is sorted by the bill. It asks for one JSON object `{kind, title, labels,
   projects}`: what the mail is — a request (it asks its recipient to do,
   answer, pay or decide something), a reply (to a mail of the
   recipient's), a notification (sent automatically: receipts, shipping,
@@ -186,6 +189,21 @@ feature picks its model (`accounts.md#model-choice`).
   `panel.md#cards`); the labels added to the mail's own, the projects
   joined. A title the user changed meanwhile stays. A wrong label or
   project is removed on the card like any other.
+- **Attachments**: each attachment read gets a request of its own after
+  the mails (`enrich::document_request`), Lite at either level: the genres
+  it may get (av-vault's well-known ones, then those the vault's
+  documents use, never `note`), the labels and projects, then the file's
+  name, the mail it came with and its text cut at 8,000 characters. It
+  asks for `{title, date, genre, labels, projects}`: a clean title saying
+  what it is and who it is from; the date the document carries; a genre
+  from the list. The parser (`enrich::parse_document`) takes the genre
+  from the list only, and the date as `YYYY-MM-DD`, written as that day at
+  12:00 UTC (the same day in every time zone), dropped before 1900 or
+  after the day after the mail. Written at once
+  (`enrich::apply_document`): the title and date, unless the user changed
+  them meanwhile; the genre, unless the document has one; labels and
+  projects as for a mail. An attachment gets no chat: Medium's points to
+  check are the mail's, whose request has its text.
 - **Medium's chat** (`enrich::medium_messages`, written by `chat::create`
   after the mail): an AI conversation in `Conversations/`, `linked-to` the
   mail, titled "Mail analysis · <the mail's title>". Its first message
@@ -213,7 +231,7 @@ feature picks its model (`accounts.md#model-choice`).
 | G4 | Auto-sync mail | Mail row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_mail_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new mail a "Syncing mail" job, `entity` per mail and attachment, `account`; then G7, G5 | mails in `Mail/` on their own |
 | G6 | Open an attachment | the card's Attachments block: Open, or a double-click on a row; an attachment's card: its File row's Open → `openOriginal` (`features/selection.js`) | `open_file {id}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | the file in its app |
 | G7 | Read attachments | a fetch or an auto-sync run with Read on ends with saved files, or a Replace's without text | `attachments::read` → `AiAccounts::choose` (refused: a `notice`) → job "Reading attachments"; per document `step_for`, for an image or a PDF `check_limit` and `reader::ask` on a worker, for a text file `reader::text_of`; `set_content` through the vault edit → `entity`, `content`, `job`, `account`; at the end one `notice` for the failures, then G5 | the files' text in their documents |
-| G5 | Analyse new mail | a fetch or an auto-sync run with its analysis on ends with new mails | `enrich::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing mail"; per mail `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit, Medium's chat through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | mails retitled, labelled, in projects, their kind kept; `email.subject` kept; Medium: a chat linked to the mail |
+| G5 | Analyse new mail | a fetch or an auto-sync run with its analysis on ends with new mails or attachments read | `enrich::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing mail"; per mail, then per attachment, `check_limit`, `chat_stream` on a worker, `parse` / `parse_document`, `apply_lite` / `apply_document` through the vault edit, Medium's chat through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | mails retitled, labelled, in projects, their kind kept; `email.subject` kept; Medium: a chat linked to the mail |
 
 ## Design <a id="design"></a>
 
@@ -254,8 +272,8 @@ The fetch is plan → run → apply (`architecture.md#conventions`):
   file and the document, one vault edit each.
 
 The analysis (`enrich.rs`) is plan → run → apply as well: the plan picks
-the model and gathers the vault's context and each mail's text on the UI
-thread; the run is one request at a time under the job's `Cancel`
+the model and gathers the vault's context, each mail's text with its
+attachments', and each attachment's on the UI thread; the run is one request at a time under the job's `Cancel`
 (streamed like the assistant's, the pieces unused); the apply reads the
 answer and writes it through the vault edit, Medium's chat through
 `chat::create`, which also starts the assistant's chats. Each analysis is

@@ -15,7 +15,7 @@
 //! first, then -- only if there is new mail -- a fetch job like the page's.
 //!
 //! A fetch whose filter turns the analysis on (mail.md#analysis) hands its new
-//! mails to `enrich::analyse` when it ends.
+//! mails to `enrich::analyse` when it ends, with the attachments it read.
 //!
 //! A fetch whose filter saves attachments (mail.md#attachments) keeps the
 //! wanted parts on the worker, and writes each as a document with its
@@ -1063,9 +1063,7 @@ fn finish(app: &mut App) {
         ..
     } = fetch.counts;
     let analysis = fetch.analysis.filter(|a| a.is_on() && !stopped);
-    let then = analysis
-        .filter(|_| !created.is_empty())
-        .map(|analysis| (created, analysis));
+    let then = analysis.map(|analysis| (created, analysis));
     let reading = fetch.attachments.filter(|a| a.read && !stopped);
     let to_read: Vec<Id> = saved.created.into_iter().chain(saved.unread).collect();
     match reading {
@@ -1074,7 +1072,7 @@ fn finish(app: &mut App) {
         }
         _ => {
             if let Some((mails, analysis)) = then {
-                enrich::analyse(app, &email, mails, &analysis);
+                enrich::analyse(app, &email, mails, Vec::new(), &analysis);
             }
         }
     }

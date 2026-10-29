@@ -1,7 +1,9 @@
 //! Enriching entities with an AI (mail.md#analysis): the mail analysis -- Lite
 //! gives each new mail its kind, a clean title, labels in use and active
 //! projects; Medium also points to check, a quick reply and questions, as a
-//! chat linked to the mail.
+//! chat linked to the mail. The attachments read go along with their mail,
+//! and are analysed after the mails as Lite does a mail: a clean title,
+//! their own date, a genre, labels and projects.
 //!
 //! An analysis goes plan → run → apply (architecture.md#conventions), one mail
 //! after another, as a job: the plan picks the model (`AiAccounts::choose`),
@@ -19,6 +21,7 @@ use av_utils::id::Id;
 use av_vault::document::Document;
 use av_vault::envelope::ConversationMessage;
 use av_vault::envelope::DocumentType;
+use av_vault::shared::Genre;
 use av_vault::vault::SaveOutcome;
 use serde_json::Value;
 
@@ -36,6 +39,14 @@ use av_vault::vault::Index;
 pub const MAIL_ANALYSIS: &str = "the mail analysis";
 /// The most of a mail's body that is sent, in characters.
 const BODY_CHARS: usize = 8000;
+/// The most of an attachment's text that goes with its mail, in characters,
+/// and the most attachments that do.
+const ATTACHMENT_CHARS: usize = 2000;
+const ATTACHMENTS_SENT: usize = 3;
+/// The genre never offered: a note is the user's own (it puts a document
+/// under Notes).
+const NOTE: &str = "note";
+const DAY_SECONDS: i64 = 86_400;
 /// The most labels and projects the request lists.
 const LABELS_LISTED: usize = 100;
 const PROJECTS_LISTED: usize = 50;
@@ -92,28 +103,51 @@ Write the points and the questions in the mail's language too.";
 
 const LISTS_ONLY: &str = "\nUse only labels and projects from the lists, spelled as given.";
 
+/// What an attachment is asked for, at either level.
+const DOCUMENT_SHAPE: &str = "{\"title\": \"...\", \"date\": \"YYYY-MM-DD\", \"genre\": \"...\", \
+\"labels\": [\"...\"], \"projects\": [\"...\"]}";
+
+const DOCUMENT_RULES: &str = "
+- title: a clean title for the document, in its language, at most 80 characters: what it is \
+and who it is from, without file names or reference numbers.
+- date: the date the document itself carries (a letter's, a bill's), as YYYY-MM-DD; null if it \
+has none.
+- genre: the one genre from the list of genres that fits the document; null if none fits.
+- labels: up to 3 labels from the list of labels that clearly fit the document; none if unsure.
+- projects: up to 2 projects from the list of projects the document clearly belongs to; none \
+if unsure.
+Use only genres, labels and projects from the lists, spelled as given.";
+
 // ----------------------------------------------------------------------------
-/// What the vault offers an analysis to pick from: the labels in use and
-/// the active projects.
+/// What the vault offers an analysis to pick from: the labels in use, the
+/// active projects, and the genres for a document.
 #[derive(Debug, Default)]
 pub struct Context {
     /// As the vault spells them, the most used first.
     pub labels: Vec<String>,
     /// Id and title, in the vault's order.
     pub projects: Vec<(Id, String)>,
+    /// The well-known genres, then those the vault's documents use, each
+    /// as first seen; never `NOTE`.
+    pub genres: Vec<String>,
 }
 
 // ----------------------------------------------------------------------------
 /// The context of the vault `index`: its labels by how many entities carry them (a
 /// label in other case counts as the same, spelled as first seen), and its
 /// projects that aren't archived; each list capped (the labels used most,
-/// the first projects).
+/// the first projects); the genres a document may get.
 pub fn context(index: &Index) -> Context {
     let mut labels: Vec<(String, usize)> = Vec::new();
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut projects = Vec::new();
+    let mut genres: Vec<String> = Genre::well_known().map(str::to_string).collect();
     for entry in index.all() {
         let doc = &entry.doc;
+        let role = doc.roles().document.as_ref();
+        if let Some(genre) = role.and_then(|role| role.genre.as_ref()) {
+            genres.push(genre.as_str().to_string());
+        }
         for tag in doc.tags() {
             let key = tag.to_lowercase();
             match seen.get(&key) {
@@ -131,9 +165,16 @@ pub fn context(index: &Index) -> Context {
     labels.sort_unstable_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     labels.truncate(LABELS_LISTED);
     projects.truncate(PROJECTS_LISTED);
+    let mut offered: Vec<String> = Vec::new();
+    for genre in genres {
+        if !same(&genre, NOTE) && !offered.iter().any(|g| same(g, &genre)) {
+            offered.push(genre);
+        }
+    }
     Context {
         labels: labels.into_iter().map(|(label, _)| label).collect(),
         projects,
+        genres: offered,
     }
 }
 
@@ -153,17 +194,16 @@ pub struct MailText {
     pub date: Option<DateTime>,
     /// Cut at `BODY_CHARS`.
     pub body: String,
+    /// Its attachments' names and read text (`attachment_texts`).
+    pub attachments: Vec<(String, String)>,
 }
 
 impl MailText {
     // ------------------------------------------------------------------------
+    /// `doc` as a mail, without its attachments.
     pub fn of(doc: &Document) -> Self {
         let email = doc.roles().email.as_ref();
-        let content = doc.content();
-        let mut body: String = content.chars().take(BODY_CHARS).collect();
-        if body.len() < content.len() {
-            body.push_str("\n[\u{2026}]");
-        }
+        let body = cut_text(doc.content(), BODY_CHARS);
         let subject = email.and_then(|e| e.subject.as_deref());
         Self {
             id: doc.id(),
@@ -175,30 +215,117 @@ impl MailText {
                 .unwrap_or_default(),
             date: doc.date(),
             body,
+            attachments: Vec::new(),
         }
     }
 }
 
 // ----------------------------------------------------------------------------
+/// `text` cut at `most` characters, marked where it was cut.
+fn cut_text(text: &str, most: usize) -> String {
+    let mut cut: String = text.chars().take(most).collect();
+    if cut.len() < text.len() {
+        cut.push_str("\n[\u{2026}]");
+    }
+    cut
+}
+
+// ----------------------------------------------------------------------------
+/// What goes with the mail `mail` of its attachments: the documents linked
+/// to it that have an original and text, each with the name its file came
+/// with and its text cut at `ATTACHMENT_CHARS`; the first
+/// `ATTACHMENTS_SENT`.
+fn attachment_texts(index: &Index, mail: Id) -> Vec<(String, String)> {
+    index
+        .all()
+        .iter()
+        .filter(|entry| entry.doc.linked_to() == Some(mail))
+        .filter_map(|entry| {
+            let original = entry.doc.original()?;
+            let text = entry.doc.content().trim();
+            let name = original.name.clone();
+            let name = name.unwrap_or_else(|| entry.doc.title().to_string());
+            (!text.is_empty()).then(|| (name, cut_text(text, ATTACHMENT_CHARS)))
+        })
+        .take(ATTACHMENTS_SENT)
+        .collect()
+}
+
+// ----------------------------------------------------------------------------
+/// An attachment as the analysis sends it: its read text, and the mail it
+/// came with.
+#[derive(Debug, Clone)]
+pub struct DocText {
+    pub id: Id,
+    /// Its title when the analysis was planned: its file's name, for one
+    /// just saved.
+    pub title: String,
+    /// The name its file came with.
+    pub name: String,
+    /// Its date when the analysis was planned: its mail's, for one just
+    /// saved.
+    pub date: Option<DateTime>,
+    /// The subject and sender of the mail it is linked to.
+    pub mail: Option<(String, String)>,
+    /// Cut at `BODY_CHARS`.
+    pub body: String,
+}
+
+impl DocText {
+    // ------------------------------------------------------------------------
+    /// `doc`, an attachment, with the mail of `index` it is linked to.
+    pub fn of(index: &Index, doc: &Document) -> Self {
+        let mail = doc.linked_to().and_then(|id| index.get(&id));
+        let mail = mail
+            .filter(|mail| mail.roles().email.is_some())
+            .map(|mail| {
+                let mail = MailText::of(mail);
+                (mail.subject, mail.from)
+            });
+        let name = doc.original().and_then(|original| original.name.clone());
+        Self {
+            id: doc.id(),
+            title: doc.title().to_string(),
+            name: name.unwrap_or_else(|| doc.title().to_string()),
+            date: doc.date(),
+            mail,
+            body: cut_text(doc.content(), BODY_CHARS),
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// `names` as the request lists them: a line each, or "(none)".
+fn listed(names: Vec<&str>) -> String {
+    match names.is_empty() {
+        true => "(none)\n".to_string(),
+        false => names.iter().map(|n| format!("- {n}\n")).collect(),
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// The request of the analysis at `level` for `mail` to `model`: the
-/// instructions, then the lists of `ctx` and the mail.
+/// instructions, then the lists of `ctx`, the mail, and the text of its
+/// attachments read.
 pub fn request_for(
     level: AnalysisLevel,
     model: &str,
     ctx: &Context,
     mail: &MailText,
 ) -> ChatRequest {
-    let list = |names: Vec<&str>| match names.is_empty() {
-        true => "(none)\n".to_string(),
-        false => names.iter().map(|n| format!("- {n}\n")).collect(),
-    };
-    let labels = list(ctx.labels.iter().map(String::as_str).collect());
-    let projects = list(ctx.projects.iter().map(|(_, t)| t.as_str()).collect());
+    let labels = listed(ctx.labels.iter().map(String::as_str).collect());
+    let projects = listed(ctx.projects.iter().map(|(_, t)| t.as_str()).collect());
     let date = mail.date.map(|d| d.as_iso8601()).unwrap_or_default();
-    let text = format!(
+    let mut text = format!(
         "Labels:\n{labels}\nProjects:\n{projects}\nThe mail:\nSubject: {}\nFrom: {}\nTo: {}\nDate: {date}\n\n{}",
         mail.subject, mail.from, mail.to, mail.body
     );
+    if !mail.attachments.is_empty() {
+        text.push_str("\n\nIts attached files, as read:");
+        for (name, read) in &mail.attachments {
+            text.push_str(&format!("\n\n--- {name} ---\n{read}"));
+        }
+    }
     let medium = level == AnalysisLevel::Medium;
     let task = match medium {
         true => "You sort incoming mail and prepare it for its recipient.",
@@ -221,6 +348,35 @@ pub fn request_for(
 }
 
 // ----------------------------------------------------------------------------
+/// The request of the analysis for the attachment `doc` to `model`, as
+/// Lite at either level: the instructions, then the lists of `ctx` and the
+/// document.
+pub fn document_request(model: &str, ctx: &Context, doc: &DocText) -> ChatRequest {
+    let genres = listed(ctx.genres.iter().map(String::as_str).collect());
+    let labels = listed(ctx.labels.iter().map(String::as_str).collect());
+    let projects = listed(ctx.projects.iter().map(|(_, t)| t.as_str()).collect());
+    let mail = match &doc.mail {
+        Some((subject, from)) if !from.is_empty() => {
+            format!("Attached to the mail: {subject} (from {from})\n")
+        }
+        Some((subject, _)) => format!("Attached to the mail: {subject}\n"),
+        None => String::new(),
+    };
+    let text = format!(
+        "Genres:\n{genres}\nLabels:\n{labels}\nProjects:\n{projects}\nThe document:\nFile: {}\n{mail}\n{}",
+        doc.name, doc.body
+    );
+    let system = format!(
+        "You sort documents. Answer with one JSON object and nothing else: {DOCUMENT_SHAPE}.{DOCUMENT_RULES}"
+    );
+    ChatRequest::new(model)
+        .system(system)
+        .message(Message::user(text))
+        .think(false)
+        .context(ai::CONTEXT_TOKENS)
+}
+
+// ----------------------------------------------------------------------------
 /// The JSON object the analysis at `level` asks for.
 fn shape(level: AnalysisLevel) -> &'static str {
     match level {
@@ -231,16 +387,15 @@ fn shape(level: AnalysisLevel) -> &'static str {
 
 // ----------------------------------------------------------------------------
 /// `request` asked again after `answer`, which wasn't the JSON object: the
-/// answer and a reminder of the object `level` asks for follow it. An empty
-/// answer is just asked again (providers refuse an empty turn).
-pub fn again(request: ChatRequest, answer: &str, level: AnalysisLevel) -> ChatRequest {
+/// answer and a reminder of the object `shape` follow it. An empty answer
+/// is just asked again (providers refuse an empty turn).
+pub fn again(request: ChatRequest, answer: &str, shape: &str) -> ChatRequest {
     if answer.trim().is_empty() {
         return request;
     }
     let reminder = format!(
-        "That wasn't the JSON object asked for. Answer again with only the JSON object {}, \
-nothing before or after it.",
-        shape(level)
+        "That wasn't the JSON object asked for. Answer again with only the JSON object {shape}, \
+nothing before or after it."
     );
     request
         .message(Message::assistant(answer))
@@ -248,17 +403,21 @@ nothing before or after it.",
 }
 
 // ----------------------------------------------------------------------------
-/// What Lite found for a mail, in the vault's terms.
+/// What Lite found for a mail or an attachment, in the vault's terms.
 #[derive(Debug, Default, PartialEq)]
 pub struct Lite {
     /// `None`: the title stays.
     pub title: Option<String>,
-    /// One of `KINDS`.
+    /// A mail's: one of `KINDS`.
     pub kind: Option<String>,
     /// Labels in use, as the vault spells them.
     pub labels: Vec<String>,
     /// Active projects.
     pub projects: Vec<Id>,
+    /// An attachment's: one of `Context::genres`.
+    pub genre: Option<String>,
+    /// An attachment's own date.
+    pub date: Option<DateTime>,
 }
 
 // ----------------------------------------------------------------------------
@@ -287,23 +446,87 @@ pub fn parse(
     ctx: &Context,
     title: &str,
 ) -> std::result::Result<(Lite, Option<Medium>), String> {
-    let refused = || "The answer wasn't the JSON object asked for.".to_string();
-    let (Some(start), Some(end)) = (answer.find('{'), answer.rfind('}')) else {
-        return Err(refused());
-    };
-    let object: Value = match answer.get(start..=end).map(serde_json::from_str) {
-        Some(Ok(object @ Value::Object(_))) => object,
-        _ => return Err(refused()),
-    };
-
-    let new_title = object["title"]
-        .as_str()
-        .map(|t| cut(t, TITLE_CHARS))
-        .filter(|t| !t.is_empty() && t != title.trim());
+    let object = object_in(answer)?;
     let kind = object["kind"]
         .as_str()
         .and_then(|kind| KINDS.into_iter().find(|known| same(known, kind)))
         .map(str::to_string);
+    let lite = Lite {
+        kind,
+        ..shared_part(&object, ctx, title)
+    };
+    let medium = match level {
+        AnalysisLevel::Medium => medium_of(&object, lite.kind.as_deref()),
+        _ => None,
+    };
+    Ok((lite, medium))
+}
+
+// ----------------------------------------------------------------------------
+/// Read the `answer` of the analysis for the attachment `doc` against `ctx`
+/// as `parse` reads a mail's: its genre from the list only, in any case;
+/// its date as `YYYY-MM-DD`, that day at 12:00 UTC, the same day in every
+/// time zone, dropped before 1900 or after the day after the document's
+/// date (its mail's; now without one).
+pub fn parse_document(
+    answer: &str,
+    ctx: &Context,
+    doc: &DocText,
+) -> std::result::Result<Lite, String> {
+    let object = object_in(answer)?;
+    let genre = object["genre"]
+        .as_str()
+        .and_then(|genre| ctx.genres.iter().find(|known| same(known, genre)))
+        .cloned();
+    let day = |date: DateTime| date.as_unix().div_euclid(DAY_SECONDS);
+    let latest = day(doc.date.unwrap_or_else(DateTime::now)) + 1;
+    let date = object["date"]
+        .as_str()
+        .and_then(day_of)
+        .filter(|date| day(*date) <= latest);
+    Ok(Lite {
+        genre,
+        date,
+        ..shared_part(&object, ctx, &doc.title)
+    })
+}
+
+// ----------------------------------------------------------------------------
+/// The day `text` names as `YYYY-MM-DD` (anything after it ignored), at
+/// 12:00 UTC; `None` if it names none, or one before 1900.
+fn day_of(text: &str) -> Option<DateTime> {
+    let mut parts = text.trim().get(..10)?.split('-');
+    let mut next = || parts.next()?.parse::<i32>().ok();
+    let (year, month, day) = (next()?, next()?, next()?);
+    if year < 1900 {
+        return None;
+    }
+    DateTime::from_ymd_hms(year, month, day, 12, 0, 0).ok()
+}
+
+// ----------------------------------------------------------------------------
+/// The JSON object in `answer`, code fences and text around it ignored; an
+/// answer without one is refused, in words.
+fn object_in(answer: &str) -> std::result::Result<Value, String> {
+    let refused = || "The answer wasn't the JSON object asked for.".to_string();
+    let (Some(start), Some(end)) = (answer.find('{'), answer.rfind('}')) else {
+        return Err(refused());
+    };
+    match answer.get(start..=end).map(serde_json::from_str) {
+        Some(Ok(object @ Value::Object(_))) => Ok(object),
+        _ => Err(refused()),
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// What a mail's answer `object` and an attachment's share: a title trimmed
+/// and cut, dropped if empty or `title`; the labels and projects from the
+/// lists of `ctx` only, matched in any case, each once, the first few kept.
+fn shared_part(object: &Value, ctx: &Context, title: &str) -> Lite {
+    let new_title = object["title"]
+        .as_str()
+        .map(|t| cut(t, TITLE_CHARS))
+        .filter(|t| !t.is_empty() && t != title.trim());
 
     let mut labels: Vec<String> = Vec::new();
     for name in names(&object["labels"]) {
@@ -323,17 +546,12 @@ pub fn parse(
     }
     projects.truncate(PROJECTS_PER_MAIL);
 
-    let lite = Lite {
+    Lite {
         title: new_title,
-        kind,
         labels,
         projects,
-    };
-    let medium = match level {
-        AnalysisLevel::Medium => medium_of(&object, lite.kind.as_deref()),
-        _ => None,
-    };
-    Ok((lite, medium))
+        ..Lite::default()
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -401,6 +619,31 @@ pub fn apply_lite(doc: &mut Document, lite: &Lite) {
     if let Some(title) = &lite.title {
         doc.set_title(title.clone());
     }
+    add_labels_and_projects(doc, lite);
+}
+
+// ----------------------------------------------------------------------------
+/// Write `lite` into the attachment's document `doc`: a new title and date;
+/// its genre, unless it has one; the labels and projects as for a mail.
+pub fn apply_document(doc: &mut Document, lite: &Lite) {
+    if let Some(title) = &lite.title {
+        doc.set_title(title.clone());
+    }
+    if let Some(date) = lite.date {
+        doc.set_date(date);
+    }
+    let role = doc.roles().document.as_ref();
+    let has_genre = role.is_some_and(|role| role.genre.is_some());
+    if let Some(genre) = lite.genre.as_deref().filter(|_| !has_genre) {
+        doc.set_genre(Some(Genre::parse(genre)));
+    }
+    add_labels_and_projects(doc, lite);
+}
+
+// ----------------------------------------------------------------------------
+/// `lite`'s labels added to `doc`'s own (in any case once), its projects
+/// joined.
+fn add_labels_and_projects(doc: &mut Document, lite: &Lite) {
     let mut tags = doc.tags().to_vec();
     let before = tags.len();
     for label in &lite.labels {
@@ -471,15 +714,74 @@ struct Run {
     current: Option<Ask>,
     total: usize,
     counts: Counts,
+    /// What it analyses, for the failures' notice: one, and more than one.
+    noun: (&'static str, &'static str),
 }
 
 // ----------------------------------------------------------------------------
-/// A mail to ask about: the how-manyth time, and the answer of the time
-/// before, which wasn't the JSON object.
+/// A mail or an attachment to ask about: the how-manyth time, and the
+/// answer of the time before, which wasn't the JSON object.
 struct Ask {
-    mail: MailText,
+    item: Item,
     attempt: u32,
     unread: Option<String>,
+}
+
+// ----------------------------------------------------------------------------
+/// What an analysis asks about.
+enum Item {
+    Mail(MailText),
+    /// An attachment, asked about as Lite at either level.
+    Document(DocText),
+}
+
+impl Item {
+    // ------------------------------------------------------------------------
+    fn id(&self) -> Id {
+        match self {
+            Item::Mail(mail) => mail.id,
+            Item::Document(doc) => doc.id,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Its title when the analysis was planned.
+    fn title(&self) -> &str {
+        match self {
+            Item::Mail(mail) => &mail.title,
+            Item::Document(doc) => &doc.title,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The JSON object asked for at `level`.
+    fn shape(&self, level: AnalysisLevel) -> &'static str {
+        match self {
+            Item::Mail(_) => shape(level),
+            Item::Document(_) => DOCUMENT_SHAPE,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    fn request(&self, level: AnalysisLevel, model: &str, ctx: &Context) -> ChatRequest {
+        match self {
+            Item::Mail(mail) => request_for(level, model, ctx, mail),
+            Item::Document(doc) => document_request(model, ctx, doc),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    fn parse(
+        &self,
+        answer: &str,
+        level: AnalysisLevel,
+        ctx: &Context,
+    ) -> std::result::Result<(Lite, Option<Medium>), String> {
+        match self {
+            Item::Mail(mail) => parse(answer, level, ctx, &mail.title),
+            Item::Document(doc) => parse_document(answer, ctx, doc).map(|lite| (lite, None)),
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -515,10 +817,22 @@ impl Counts {
 }
 
 // ----------------------------------------------------------------------------
-/// Analyse the mails `ids` of `email`'s account as `analysis` says (its
-/// level and model) as a job ("Analysing mail · <email>"). A refused pick is
-/// a notice; mails no longer in the vault are left out.
-pub fn analyse(app: &mut App, email: &str, ids: Vec<Id>, analysis: &Analysis) {
+/// Analyse the mails `mails` of `email`'s account, each with its
+/// attachments' text, then the attachments read `documents`, as `analysis`
+/// says (its level and model; an attachment as Lite) as a job ("Analysing
+/// mail · <email>"). Nothing to analyse starts nothing; a refused pick is a
+/// notice; what is no longer in the vault, and an attachment without text,
+/// is left out.
+pub fn analyse(
+    app: &mut App,
+    email: &str,
+    mails: Vec<Id>,
+    documents: Vec<Id>,
+    analysis: &Analysis,
+) {
+    if mails.is_empty() && documents.is_empty() {
+        return;
+    }
     let choice = analysis.model.as_ref();
     let resolved = match app.ai.choose(choice, MAIL_ANALYSIS, DateTime::now()) {
         Ok(resolved) => resolved,
@@ -526,11 +840,21 @@ pub fn analyse(app: &mut App, email: &str, ids: Vec<Id>, analysis: &Analysis) {
             return app.notice(&format!("Mail analysis · {email}: {}", refusal.message));
         }
     };
-    let queue: VecDeque<Ask> = ids
+    let index = app.vault.index();
+    let mails = mails.iter().filter_map(|id| index.entry(id)).map(|entry| {
+        let mut mail = MailText::of(&entry.doc);
+        mail.attachments = attachment_texts(index, mail.id);
+        Item::Mail(mail)
+    });
+    let documents = documents
         .iter()
-        .filter_map(|id| app.vault.index().entry(id))
-        .map(|entry| Ask {
-            mail: MailText::of(&entry.doc),
+        .filter_map(|id| index.entry(id))
+        .filter(|entry| !entry.doc.content().trim().is_empty())
+        .map(|entry| Item::Document(DocText::of(index, &entry.doc)));
+    let queue: VecDeque<Ask> = mails
+        .chain(documents)
+        .map(|item| Ask {
+            item,
             attempt: 1,
             unread: None,
         })
@@ -539,10 +863,20 @@ pub fn analyse(app: &mut App, email: &str, ids: Vec<Id>, analysis: &Analysis) {
         return;
     }
     let total = queue.len();
+    let attachments = queue
+        .iter()
+        .filter(|ask| matches!(ask.item, Item::Document(_)))
+        .count();
+    let noun = match (total - attachments, attachments) {
+        (_, 0) => ("mail", "mails"),
+        (0, _) => ("attachment", "attachments"),
+        _ => ("mail or attachment", "mails and attachments"),
+    };
     let label = format!("Analysing mail · {email}");
     let job = app.start_job(JobKind::MailAnalysis, label, total);
     log::info!(
-        "Mail analysis {job}: {total} mails of {email} with {}, {:?}",
+        "Mail analysis {job}: {} mails and {attachments} attachments of {email} with {}, {:?}",
+        total - attachments,
         resolved.model,
         analysis.level
     );
@@ -559,6 +893,7 @@ pub fn analyse(app: &mut App, email: &str, ids: Vec<Id>, analysis: &Analysis) {
         current: None,
         total,
         counts: Counts::default(),
+        noun,
     };
     app.enrich.runs.insert(job, run);
     pump(app, job);
@@ -587,9 +922,9 @@ fn pump(app: &mut App, job: Id) {
     let Some(ask) = run.queue.pop_front() else {
         return;
     };
-    let mut request = request_for(run.level, &run.model, &run.context, &ask.mail);
+    let mut request = ask.item.request(run.level, &run.model, &run.context);
     if let Some(answer) = &ask.unread {
-        request = again(request, answer, run.level);
+        request = again(request, answer, ask.item.shape(run.level));
     }
     let client = run.client.clone();
     run.current = Some(ask);
@@ -603,8 +938,8 @@ fn pump(app: &mut App, job: Id) {
 }
 
 // ----------------------------------------------------------------------------
-/// The model answered for the mail being analysed: write what it found, or
-/// count the failure; then the next mail. An answer that isn't the JSON
+/// The model answered for the mail or attachment being analysed: write what
+/// it found, or count the failure; then the next. An answer that isn't the JSON
 /// object is asked again, up to `LITE_ATTEMPTS` times in all, unless it was
 /// cut off. Every answer is logged whole with the model's reasoning (debug;
 /// info when it can't be read). Ignored if the run is gone (stopped).
@@ -615,11 +950,11 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
     let Some(ask) = run.current.take() else {
         return;
     };
-    let (id, attempt) = (ask.mail.id, ask.attempt);
+    let (id, attempt) = (ask.item.id(), ask.attempt);
     let account = run.account;
     let found = match result {
         Ok(response) => {
-            let found = parse(&response.text, run.level, &run.context, &ask.mail.title);
+            let found = ask.item.parse(&response.text, run.level, &run.context);
             let (text, stop, thinking) = (&response.text, &response.stop, &response.thinking);
             match &found {
                 Ok(_) => log::debug!(
@@ -632,7 +967,7 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
             let cut = response.stop == StopReason::MaxTokens;
             if found.is_err() && !cut && attempt < LITE_ATTEMPTS {
                 run.queue.push_front(Ask {
-                    mail: ask.mail,
+                    item: ask.item,
                     attempt: attempt + 1,
                     unread: Some(response.text),
                 });
@@ -647,9 +982,9 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
         }
         Err(e) => Err(ai::chat_error(run.provider, &run.address, &e)),
     };
-    let mail = ask.mail;
+    let item = ask.item;
     let by = (run.model.clone(), account);
-    let written = found.and_then(|(lite, medium)| write(app, &mail, lite, medium, by));
+    let written = found.and_then(|(lite, medium)| write(app, &item, lite, medium, by));
 
     let Some(run) = app.enrich.runs.get_mut(&job) else {
         return;
@@ -665,11 +1000,11 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
             counts.chats += usize::from(chat);
         }
         Err(error) => {
-            log::info!("Mail analysis {job}: {} failed: {error}", mail.id);
+            log::info!("Mail analysis {job}: {id} failed: {error}");
             counts.failed += 1;
             counts
                 .first_error
-                .get_or_insert_with(|| format!("\u{201c}{}\u{201d}: {error}", mail.title));
+                .get_or_insert_with(|| format!("\u{201c}{}\u{201d}: {error}", item.title()));
         }
     }
     let done = counts.analysed + counts.unchanged + counts.failed;
@@ -689,13 +1024,14 @@ struct Written {
 }
 
 // ----------------------------------------------------------------------------
-/// Write `lite` into `mail`, then `medium` as a chat linked to it, by the
-/// model and account `by`, titled "Mail analysis · <the mail's title>". A
-/// title the user changed since the plan stays; a mail gone meanwhile gets
-/// nothing. A failed write is logged.
+/// Write `lite` into the mail or attachment `item`, then a mail's `medium`
+/// as a chat linked to it, by the model and account `by`, titled "Mail
+/// analysis · <the mail's title>". A title or an attachment's date the user
+/// changed since the plan stays; what is gone meanwhile gets nothing. A
+/// failed write is logged.
 fn write(
     app: &mut App,
-    mail: &MailText,
+    item: &Item,
     mut lite: Lite,
     medium: Option<Medium>,
     by: (String, Id),
@@ -704,18 +1040,28 @@ fn write(
         mail: false,
         chat: false,
     };
-    let Some(entry) = app.vault.index().entry(&mail.id) else {
+    let id = item.id();
+    let Some(entry) = app.vault.index().entry(&id) else {
         return Ok(gone);
     };
-    if entry.doc.title() != mail.title {
+    if entry.doc.title() != item.title() {
         lite.title = None;
     }
-    let id = mail.id;
+    if let Item::Document(doc) = item
+        && entry.doc.date() != doc.date
+    {
+        lite.date = None;
+    }
     let failed = |e: Error| {
         log::warn!("Mail analysis: {id} could not be written: {e}");
         "could not be written.".to_string()
     };
-    let outcome = app.edit(|index, changes| index.edit(&id, changes, |doc| apply_lite(doc, &lite)));
+    let outcome = app.edit(|index, changes| {
+        index.edit(&id, changes, |doc| match item {
+            Item::Mail(_) => apply_lite(doc, &lite),
+            Item::Document(_) => apply_document(doc, &lite),
+        })
+    });
     let changed = match outcome {
         Ok(SaveOutcome::Saved) => true,
         Ok(SaveOutcome::Unchanged) => false,
@@ -797,9 +1143,9 @@ fn finish(app: &mut App, job: Id) {
     ai::account_used(app, run.account);
     if let Some(error) = &counts.first_error {
         let (failed, total) = (counts.failed, run.total);
-        let mails = if total == 1 { "mail" } else { "mails" };
+        let what = if total == 1 { run.noun.0 } else { run.noun.1 };
         app.notice(&format!(
-            "Mail analysis · {}: {failed} of {total} {mails} couldn't be analysed; {error}",
+            "Mail analysis · {}: {failed} of {total} {what} couldn't be analysed; {error}",
             run.email
         ));
     }
@@ -836,6 +1182,7 @@ mod tests {
                 (Id::parse(FLAT).unwrap(), "Wohnung Köln".into()),
                 (Id::parse(OLD).unwrap(), "Auto".into()),
             ],
+            genres: vec!["bill".into(), "letter".into(), "Steuerbescheid".into()],
         }
     }
 
@@ -863,6 +1210,14 @@ mod tests {
                 "Projects/o.md",
                 format!("---\nid: {OLD}\ntitle: Altes Auto\nproject: {{}}\narchived: true\n---\n"),
             ),
+            (
+                "Documents/s.md",
+                "---\ntitle: S\ndocument:\n  genre: Steuerbescheid\n---\n".to_string(),
+            ),
+            (
+                "Documents/b.md",
+                "---\ntitle: B\ndocument:\n  genre: BILL\n---\n".to_string(),
+            ),
         ];
         let h = Harness::with_vault("enrich-context", &files);
         let ctx = context(h.app.vault.index());
@@ -874,6 +1229,12 @@ mod tests {
         assert_eq!(
             ctx.projects,
             [(Id::parse(FLAT).unwrap(), "Wohnung".to_string())]
+        );
+        assert!(ctx.genres.starts_with(&["bill".to_string()]));
+        assert!(!ctx.genres.iter().any(|g| g == "note"), "never a note");
+        assert_eq!(
+            ctx.genres.last().map(String::as_str),
+            Some("Steuerbescheid")
         );
     }
 
@@ -888,10 +1249,11 @@ mod tests {
             to: "jan@example.com".into(),
             date: None,
             body: "Body".into(),
+            attachments: Vec::new(),
         };
         let request = request_for(AnalysisLevel::Lite, "m", &ctx(), &mail);
         assert_eq!(request.model, "m");
-        let asked = again(request.clone(), "Sorry.", AnalysisLevel::Lite);
+        let asked = again(request.clone(), "Sorry.", LITE_SHAPE);
         assert_eq!(asked.messages.len(), 3);
         assert_eq!(asked.messages[1].role, av_llm::Role::Assistant);
         let Some(av_llm::Part::Text(reminder)) = asked.messages[2].parts.first() else {
@@ -916,12 +1278,12 @@ mod tests {
                 && system.contains("- reply:")
                 && system.contains("- questions:")
         );
-        let asked = again(medium.clone(), "Sorry.", AnalysisLevel::Medium);
+        let asked = again(medium.clone(), "Sorry.", MEDIUM_SHAPE);
         let Some(av_llm::Part::Text(reminder)) = asked.messages[2].parts.first() else {
             panic!("{:?}", asked.messages);
         };
         assert!(reminder.contains(MEDIUM_SHAPE), "{reminder}");
-        let empty = again(request.clone(), "  ", AnalysisLevel::Lite);
+        let empty = again(request.clone(), "  ", LITE_SHAPE);
         assert_eq!(
             empty.messages.len(),
             1,
@@ -985,6 +1347,132 @@ mod tests {
     }
 
     // ------------------------------------------------------------------------
+    /// The attachment `Rechnung.pdf` of the mail "Abschlag", read to `body`,
+    /// dated `date`.
+    fn doc_text(body: &str, date: Option<DateTime>) -> DocText {
+        DocText {
+            id: Id::generate(),
+            title: "Rechnung".into(),
+            name: "Rechnung.pdf".into(),
+            date,
+            mail: Some(("Abschlag".into(), "info@stadtwerke.example".into())),
+            body: body.into(),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_attachment_is_asked_for_as_a_document() {
+        let request = document_request("m", &ctx(), &doc_text("Betrag 42 EUR", None));
+        let system = request.system.as_deref().unwrap();
+        assert!(system.starts_with("You sort documents.") && system.contains(DOCUMENT_SHAPE));
+        assert!(
+            system.contains("- genre:") && !system.contains("- kind:"),
+            "{system}"
+        );
+        assert_eq!(request.think, Some(false));
+        let Some(av_llm::Part::Text(text)) = request.messages[0].parts.first() else {
+            panic!("{:?}", request.messages);
+        };
+        assert!(
+            text.starts_with("Genres:\n- bill\n- letter\n- Steuerbescheid\n\nLabels:\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "The document:\nFile: Rechnung.pdf\nAttached to the mail: Abschlag (from info@stadtwerke.example)\n\nBetrag 42 EUR"
+            ),
+            "{text}"
+        );
+        let asked = again(request, "Sorry.", DOCUMENT_SHAPE);
+        let Some(av_llm::Part::Text(reminder)) = asked.messages[2].parts.first() else {
+            panic!("{:?}", asked.messages);
+        };
+        assert!(reminder.contains(DOCUMENT_SHAPE), "{reminder}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_attachments_answer_takes_a_listed_genre_and_its_own_date() {
+        let mail_date = DateTime::from_ymd_hms(2026, 10, 12, 9, 30, 0).unwrap();
+        let doc = doc_text("", Some(mail_date));
+        let read = |answer: &str| parse_document(answer, &ctx(), &doc).unwrap();
+        let lite = read(
+            r#"{"title": "Stadtwerke Abschlag Oktober", "date": "2026-10-01", "genre": "BILL", "labels": ["rechnungen"], "projects": ["Auto"]}"#,
+        );
+        assert_eq!(lite.title.as_deref(), Some("Stadtwerke Abschlag Oktober"));
+        assert_eq!(lite.genre.as_deref(), Some("bill"), "as the list spells it");
+        assert_eq!(
+            lite.date,
+            Some(DateTime::from_ymd_hms(2026, 10, 1, 12, 0, 0).unwrap()),
+            "that day at noon UTC"
+        );
+        assert_eq!(lite.labels, ["Rechnungen"]);
+        assert_eq!(lite.projects, [Id::parse(OLD).unwrap()]);
+        assert_eq!(lite.kind, None);
+
+        assert_eq!(
+            read(r#"{"genre": "Mahnung"}"#).genre,
+            None,
+            "only from the list"
+        );
+        assert_eq!(read(r#"{"genre": null, "date": null}"#), Lite::default());
+        let date = |date: &str| read(&format!(r#"{{"date": "{date}"}}"#)).date;
+        assert!(
+            date("2026-10-13T08:00:00Z").is_some(),
+            "a day after the mail"
+        );
+        assert_eq!(date("2026-10-14"), None, "later than the mail");
+        assert_eq!(date("1899-12-31"), None);
+        assert_eq!(date("2026-13-01"), None);
+        assert_eq!(date("1.10.2026"), None);
+        assert_eq!(
+            read(r#"{"title": "Rechnung"}"#).title,
+            None,
+            "its own title"
+        );
+        assert!(parse_document("Sorry.", &ctx(), &doc).is_err());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn applying_to_an_attachment_keeps_a_genre_it_has() {
+        let roles = Roles {
+            document: Some(Default::default()),
+            ..Default::default()
+        };
+        let mut doc = Document::create(
+            roles,
+            Source::Created(Default::default()),
+            "Rechnung".into(),
+            Vec::new(),
+            FileFormat::Markdown,
+        );
+        let date = DateTime::from_ymd_hms(2026, 10, 1, 12, 0, 0).unwrap();
+        let lite = Lite {
+            title: Some("Stadtwerke Abschlag".into()),
+            genre: Some("bill".into()),
+            date: Some(date),
+            labels: vec!["Rechnungen".into()],
+            ..Lite::default()
+        };
+        apply_document(&mut doc, &lite);
+        assert_eq!(
+            (doc.title(), doc.date()),
+            ("Stadtwerke Abschlag", Some(date))
+        );
+        let genre = |doc: &Document| doc.roles().document.clone().unwrap().genre;
+        assert_eq!(genre(&doc), Some(Genre::Bill));
+        assert_eq!(doc.tags(), ["Rechnungen"]);
+        let letter = Lite {
+            genre: Some("letter".into()),
+            ..Lite::default()
+        };
+        apply_document(&mut doc, &letter);
+        assert_eq!(genre(&doc), Some(Genre::Bill), "a genre it has stays");
+    }
+
+    // ------------------------------------------------------------------------
     #[test]
     fn the_answer_is_read_against_the_lists() {
         let answer = "Sure! ```json\n{\"title\": \"  Abschlag Oktober \", \"labels\": [\"rechnungen\", \"Unbekannt\", \"Rechnungen\", \"Umzug\", \"Steuer\", \"Bank\"], \"projects\": [\"wohnung köln\", \"Garten\", \"Auto\", \"Wohnung Köln\"]}\n``` Done.";
@@ -1011,6 +1499,7 @@ mod tests {
                 kind: Some("request".into()),
                 labels: vec!["Bank".into()],
                 projects: vec![],
+                ..Lite::default()
             },
             "the mail's own title is no change; one label as a string; the kind in any case"
         );
@@ -1121,6 +1610,7 @@ mod tests {
             kind: Some("request".into()),
             labels: vec!["Umzug".into(), "Rechnungen".into()],
             projects: vec![flat, Id::parse(OLD).unwrap()],
+            ..Lite::default()
         };
         apply_lite(&mut doc, &lite);
         assert_eq!(doc.title(), "Abschlag Oktober");
@@ -1202,7 +1692,13 @@ mod tests {
         let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
         let mut h = with_mails("enrich-run", &address, "");
         let ids = vec![Id::parse(MAIL_ID).unwrap()];
-        analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            ids,
+            Vec::new(),
+            &at(AnalysisLevel::Lite),
+        );
         let sent = until_done(&mut h);
 
         let jobs = of(&sent, "job");
@@ -1235,6 +1731,7 @@ mod tests {
             &mut h.app,
             "jan@example.com",
             vec![mail],
+            Vec::new(),
             &at(AnalysisLevel::Medium),
         );
         let sent = until_done(&mut h);
@@ -1282,6 +1779,86 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
+    fn a_mail_and_its_attachment_are_analysed_in_one_job() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let answers = [
+            r#"{"kind": "notification", "title": "Abschlag Oktober"}"#,
+            r#"{"title": "Stadtwerke Rechnung", "date": "2026-10-01", "genre": "bill"}"#,
+        ];
+        let address = FakeOllama::new(&["m"])
+            .answering_in_turn(&answers)
+            .recording(&requests)
+            .start();
+        let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+        let bill = Id::generate();
+        let attachment = format!(
+            "---\nid: {bill}\ntitle: Rechnung\ndate: 2026-10-12T09:30:00Z\nlinked-to: {MAIL_ID}\ndocument:\n  original:\n    file: r.pdf\n    name: Rechnung.pdf\n---\nBetrag: 42,00 EUR\n"
+        );
+        let files = [
+            (".avelor/accounts/ollama.yaml", account),
+            ("Mail/a.md", mail_file(MAIL_ID, "Abschlag", "")),
+            ("Attachments/r.md", attachment),
+        ];
+        let mut h = Harness::with_vault("enrich-attachment", &files);
+        let mail = vec![Id::parse(MAIL_ID).unwrap()];
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            mail,
+            vec![bill],
+            &at(AnalysisLevel::Medium),
+        );
+        let sent = until_done(&mut h);
+
+        let jobs = of(&sent, "job");
+        assert_eq!(jobs[0]["total"], 2);
+        assert_eq!(jobs.last().unwrap()["note"], "2 analysed");
+        assert!(of(&sent, "notice").is_empty(), "{sent:?}");
+        let requests = requests.lock().unwrap();
+        let user = |i: usize| {
+            requests[i]["messages"][1]["content"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+        assert!(
+            user(0).ends_with(
+                "Its attached files, as read:\n\n--- Rechnung.pdf ---\nBetrag: 42,00 EUR"
+            ),
+            "{}",
+            user(0)
+        );
+        assert!(user(1).contains("File: Rechnung.pdf\nAttached to the mail: Abschlag"));
+        let text = fs::read_to_string(h.vault().join("Attachments/r.md")).unwrap();
+        assert!(text.contains("title: Stadtwerke Rechnung"), "{text}");
+        assert!(text.contains("date: 2026-10-01T12:00:00Z"), "{text}");
+        assert!(text.contains("genre: bill"), "{text}");
+        assert!(
+            !h.vault().join("Conversations").exists(),
+            "Medium writes no chat for an attachment, nor for this mail"
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn nothing_to_analyse_starts_nothing() {
+        let mut h = with_mails("enrich-nothing", "http://127.0.0.1:9", "");
+        let unpicked = Analysis {
+            level: AnalysisLevel::Lite,
+            model: None,
+        };
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            Vec::new(),
+            Vec::new(),
+            &unpicked,
+        );
+        assert!(h.take().is_empty(), "not even the refused pick");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn a_newsletter_gets_no_chat() {
         let answer = r#"{"kind": "newsletter", "title": "Angebote", "check": ["Rabatt"], "reply": "Nein", "questions": ["Was?"]}"#;
         let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
@@ -1291,6 +1868,7 @@ mod tests {
             &mut h.app,
             "jan@example.com",
             ids,
+            Vec::new(),
             &at(AnalysisLevel::Medium),
         );
         let sent = until_done(&mut h);
@@ -1315,6 +1893,7 @@ mod tests {
             &mut h.app,
             "jan@example.com",
             vec![Id::parse(MAIL_ID).unwrap()],
+            Vec::new(),
             &at(AnalysisLevel::Lite),
         );
         let sent = until_done(&mut h);
@@ -1348,7 +1927,13 @@ mod tests {
             .start();
         let mut h = with_mails("enrich-cut", &address, "");
         let ids = vec![Id::parse(MAIL_ID).unwrap()];
-        analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            ids,
+            Vec::new(),
+            &at(AnalysisLevel::Lite),
+        );
         let sent = until_done(&mut h);
 
         assert_eq!(of(&sent, "job").last().unwrap()["note"], "1 failed");
@@ -1371,7 +1956,13 @@ mod tests {
         let mut h = with_mails("enrich-bad", &address, "");
         let before = fs::read_to_string(h.vault().join("Mail/a.md")).unwrap();
         let ids = vec![Id::parse(MAIL_ID).unwrap(), Id::parse(MAIL_2).unwrap()];
-        analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            ids,
+            Vec::new(),
+            &at(AnalysisLevel::Lite),
+        );
         let sent = until_done(&mut h);
 
         assert_eq!(of(&sent, "job").last().unwrap()["note"], "2 failed");
@@ -1405,7 +1996,13 @@ mod tests {
         let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
         let mut h = with_mails("enrich-limit", &address, "");
         let ids = vec![Id::parse(MAIL_ID).unwrap(), Id::parse(MAIL_2).unwrap()];
-        analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            ids,
+            Vec::new(),
+            &at(AnalysisLevel::Lite),
+        );
         // The first mail is on its way; then the limit is reached.
         let account = Id::parse(OLLAMA_ID).unwrap();
         h.app
@@ -1442,6 +2039,7 @@ mod tests {
             &mut h.app,
             "jan@example.com",
             vec![Id::parse(MAIL_ID).unwrap()],
+            Vec::new(),
             &unpicked,
         );
         let sent = parse_sent(&h.take());
@@ -1460,7 +2058,13 @@ mod tests {
         let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
         let mut h = with_mails("enrich-stop", &address, "");
         let ids = vec![Id::parse(MAIL_ID).unwrap(), Id::parse(MAIL_2).unwrap()];
-        analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+        analyse(
+            &mut h.app,
+            "jan@example.com",
+            ids,
+            Vec::new(),
+            &at(AnalysisLevel::Lite),
+        );
         let job = *h.app.enrich.runs.keys().next().unwrap();
         crate::jobs::stop(&mut h.app, job);
         let sent = parse_sent(&h.take());
