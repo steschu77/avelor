@@ -16,6 +16,10 @@
 //!
 //! A fetch whose filter turns the analysis on (email.md#analysis) hands its new
 //! emails to `analysis::analyse` when it ends.
+//!
+//! A fetch whose filter saves attachments (email.md#attachments) keeps the
+//! wanted parts on the worker, and writes each as a document with its
+//! original in `Attachments/`, `linked-to` its email.
 
 use av_utils::id::Id;
 

@@ -88,6 +88,19 @@ pub fn collapse_env(path: &Path) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// Mark the file at `path` as downloaded from the internet: the mark of the
+/// web, zone 3 in its `Zone.Identifier` stream, so SmartScreen and Office's
+/// Protected View treat it as such. A file system without streams (FAT, some
+/// network shares) keeps no mark.
+pub fn mark_downloaded(path: &Path) {
+    let mut stream = path.as_os_str().to_owned();
+    stream.push(":Zone.Identifier");
+    if let Err(e) = std::fs::write(&stream, "[ZoneTransfer]\r\nZoneId=3\r\n") {
+        log::info!("{}: no mark of the web: {e}", path.display());
+    }
+}
+
+// ----------------------------------------------------------------------------
 fn known_folder(id: &windows::core::GUID) -> Result<PathBuf> {
     unsafe {
         let path = SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None).map_err(Error::from)?;
@@ -115,5 +128,18 @@ mod tests {
         assert_eq!(collapse_env(&home.join("Scans")), r"%USERPROFILE%\Scans");
         assert_eq!(collapse_env(&home), "%USERPROFILE%");
         assert_eq!(collapse_env(Path::new(r"D:\Scans")), r"D:\Scans");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_downloaded_file_carries_the_mark_of_the_web() {
+        let dir = std::env::temp_dir().join(format!("avelor-motw-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("bill.pdf");
+        std::fs::write(&file, "%PDF-").unwrap();
+        mark_downloaded(&file);
+        let stream = std::fs::read_to_string(dir.join("bill.pdf:Zone.Identifier"));
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(stream.unwrap(), "[ZoneTransfer]\r\nZoneId=3\r\n");
     }
 }

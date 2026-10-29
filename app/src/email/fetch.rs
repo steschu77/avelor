@@ -9,16 +9,18 @@ use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
+use av_vault::envelope::DocumentType;
 use serde::Deserialize;
 use serde_json::json;
 
 use super::Origin;
-use super::apply::{Stored, apply_email};
+use super::apply::{Saved, Stored, apply_email};
 use super::entities::Downloaded;
 use crate::analysis;
 use crate::app::App;
 use crate::google;
 use crate::google::accounts::Analysis;
+use crate::google::accounts::AttachmentSettings;
 use crate::google::accounts::FetchEmail;
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
@@ -50,6 +52,8 @@ pub(super) struct EmailFetch {
     pub(super) started: DateTime,
     /// The analysis of the emails it creates, as the fetch's filter has it.
     pub(super) analysis: Option<Analysis>,
+    /// The attachments it saves, as the fetch's filter has them; none: off.
+    pub(super) attachments: Option<AttachmentSettings>,
 }
 
 // ----------------------------------------------------------------------------
@@ -63,6 +67,7 @@ pub(super) struct FetchPlan {
     pub(super) origin: Origin,
     pub(super) started: DateTime,
     pub(super) analysis: Option<Analysis>,
+    pub(super) attachments: Option<AttachmentSettings>,
 }
 
 // ----------------------------------------------------------------------------
@@ -74,17 +79,24 @@ pub(super) struct FetchCounts {
     pub(super) replaced: usize,
     pub(super) skipped: usize,
     pub(super) failed: usize,
+    pub(super) attachments: Saved,
 }
 
 impl FetchCounts {
     // ------------------------------------------------------------------------
-    /// "22 new · 3 replaced · 1 failed": the counts that aren't zero.
+    /// "22 new · 3 replaced · 1 failed · 5 attachments": the counts that
+    /// aren't zero.
     fn summary(&self) -> Vec<Text> {
         let counts = vec![
             (self.created.len(), Text::new("count.new")),
             (self.replaced, Text::new("count.replaced")),
             (self.skipped, Text::new("count.skipped")),
             (self.failed, Text::new("count.failed")),
+            (self.attachments.saved, Text::new("email.count.attachments")),
+            (
+                self.attachments.failed,
+                Text::new("email.count.attachments_failed"),
+            ),
         ];
         count_summary(counts, Text::new("job.nothing_to_fetch"))
     }
@@ -107,17 +119,21 @@ pub(crate) struct FetchRequest {
     /// emails are analysed after the fetch.
     #[serde(default)]
     pub(super) analysis: Option<Analysis>,
+    /// Remembered like the filter; enabled, the emails' attachments are saved.
+    #[serde(default)]
+    pub(super) attachments: Option<AttachmentSettings>,
 }
 
 // ----------------------------------------------------------------------------
-/// `email_fetch {account, ids, replace?, filter?, auto_update?, analysis?}`:
-/// fetch the emails into the vault as a job, answering `{job}` once it
-/// started. The job's events follow, an `entity` event per email written
-/// (with `content` for a replaced body), a `notice` per email that failed,
-/// and finally the account (`account`: its last fetch and sync). The filter,
-/// mode and analysis are remembered in the account first. With the analysis
-/// on, its pick is checked first (`AiAccounts::choose`): refused, nothing is
-/// fetched; else the new emails are analysed after the fetch.
+/// `email_fetch {account, ids, replace?, filter?, auto_update?, analysis?,
+/// attachments?}`: fetch the emails into the vault as a job, answering
+/// `{job}` once it started. The job's events follow, an `entity` event per
+/// email and attachment written (with `content` for a replaced body), a
+/// `notice` per email that failed, and finally the account (`account`: its
+/// last fetch and sync). The filter, mode, analysis and attachments are
+/// remembered in the account first. With the analysis on, its pick is
+/// checked first (`AiAccounts::choose`): refused, nothing is fetched; else
+/// the new emails are analysed after the fetch.
 pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
     if app.email.fetch.is_some() {
         let what = "a second email fetch".to_string();
@@ -137,15 +153,20 @@ pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
     {
         return req.fail(refusal.error, refusal.text);
     }
+    let attachments = request.attachments.clone().filter(|a| a.enabled);
     let remembered = Remembered {
         filter: request.filter,
         auto_update: request.auto_update,
         analysis: request.analysis,
+        attachments: request.attachments,
     };
     remember_settings(app, account, remembered);
 
     let replace: HashSet<String> = request.replace.into_iter().collect();
-    let known = app.vault.index().remote_values(Some(&account), GMAIL_ID);
+    let known = app
+        .vault
+        .index()
+        .remote_values(DocumentType::Email, Some(&account), GMAIL_ID);
     let (queue, skipped) = plan_fetch(request.ids, &replace, &known);
     let empty = queue.is_empty();
     let email = find_account_email(app, account);
@@ -158,6 +179,7 @@ pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
         origin: Origin::Manual,
         started: DateTime::now(),
         analysis,
+        attachments,
     };
     let label = Text::new("email.fetching").arg("email", email.as_str());
     let job_id = start_fetch(app, label, plan);
@@ -197,6 +219,7 @@ pub(super) fn start_fetch(app: &mut App, label: Text, plan: FetchPlan) -> Id {
         origin: plan.origin,
         started: plan.started,
         analysis: plan.analysis,
+        attachments: plan.attachments,
     });
     if skipped > 0 {
         app.update_job(job_id, skipped, total);
@@ -241,11 +264,13 @@ struct Remembered {
     pub(super) filter: EmailFilter,
     auto_update: bool,
     pub(super) analysis: Option<Analysis>,
+    pub(super) attachments: Option<AttachmentSettings>,
 }
 
 // ----------------------------------------------------------------------------
-/// Store the page's filter, mode and analysis in the account file (best
-/// effort: a failed save only costs the pre-filled form next time).
+/// Store the page's filter, mode, analysis and attachments in the account
+/// file (best effort: a failed save only costs the pre-filled form next
+/// time).
 fn remember_settings(app: &mut App, account: Id, remembered: Remembered) {
     let remembered = app.google.update(account, |account| {
         let email = account
@@ -256,6 +281,7 @@ fn remember_settings(app: &mut App, account: Id, remembered: Remembered) {
         email.filter = remembered.filter;
         email.auto_update = remembered.auto_update;
         email.analysis = remembered.analysis;
+        email.attachments = remembered.attachments;
         true
     });
     if let Err(e) = remembered {
@@ -278,12 +304,14 @@ pub(super) fn pump(app: &mut App) {
         starting.push(id);
     }
     let (job, client) = (fetch.job_id, Arc::clone(&fetch.client));
+    let attachments = fetch.attachments.clone();
     for id in starting {
         let client = Arc::clone(&client);
         let gmail_id = id.clone();
+        let attachments = attachments.clone();
         app.run_job(
             job,
-            move |cancel| download(&client, cancel, &gmail_id),
+            move |cancel| download(&client, cancel, &gmail_id, attachments.as_ref()),
             move |app, result| on_downloaded(app, job, id, result),
         );
     }
@@ -291,14 +319,19 @@ pub(super) fn pump(app: &mut App) {
 
 // ----------------------------------------------------------------------------
 /// The run step: download the email `id` and parse it, dated when Gmail got
-/// it (now, if Gmail doesn't say).
-fn download(client: &Client, cancel: &Cancel, id: &str) -> Result<Downloaded> {
+/// it (now, if Gmail doesn't say), with the attachments `keep` wants.
+fn download(
+    client: &Client,
+    cancel: &Cancel,
+    id: &str,
+    keep: Option<&AttachmentSettings>,
+) -> Result<Downloaded> {
     let raw = gmail::get_raw_message(client, cancel, id)?;
     let date = match raw.epoch_ms {
         0 => DateTime::now(),
         ms => DateTime::from_unix_millis(ms),
     };
-    Ok(Downloaded::parse(&raw.bytes, date))
+    Ok(Downloaded::parse(&raw.bytes, date, keep))
 }
 
 // ----------------------------------------------------------------------------
@@ -323,9 +356,15 @@ fn on_downloaded(app: &mut App, job: Id, gmail_id: String, result: Result<Downlo
     };
     let counts = &mut fetch.counts;
     match stored {
-        Ok(Stored::Created(id)) => counts.created.push(id),
-        Ok(Stored::Replaced) => counts.replaced += 1,
-        Ok(Stored::Skipped) => counts.skipped += 1,
+        Ok((stored, attachments)) => {
+            match stored {
+                Stored::Created(id) => counts.created.push(id),
+                Stored::Replaced => counts.replaced += 1,
+                Stored::Skipped => counts.skipped += 1,
+            }
+            counts.attachments.saved += attachments.saved;
+            counts.attachments.failed += attachments.failed;
+        }
         Err(_) => counts.failed += 1,
     }
     let (done, total) = (fetch.done, fetch.total);

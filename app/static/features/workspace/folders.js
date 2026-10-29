@@ -24,7 +24,7 @@ import {
   addTile, detailFooter, detailHead, detailPane, draftKind, itemCard, listDetailPage, listSection,
   notice, pageList, replaceVaultPage, sentDrafts, setPageFocus,
 } from '../../ui/page.js';
-import { fieldEditKey, fieldEdits, renderEditField } from '../../ui/field.js';
+import { fieldEditKey, fieldEdits, renderEditField, renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
 import {
   aiAnyOffered, aiMissingHint, aiModelOf, aiModelPicker,
@@ -347,44 +347,13 @@ function renderWatchFolderPart(id, settings) {
     accEl('span', 'note', settings.subfolders ? t('watch.subfolders_in') : t('watch.subfolders_out')),
     accSeg([[true, t('watch.include')], [false, t('watch.ignore')]], settings.subfolders,
       subfolders => watchSet(id, { subfolders })));
-  row(t('watch.file_types'), ...renderWatchPatterns(id, settings.patterns));
+  row(t('watch.file_types'), ...renderPatternField(id, settings.patterns,
+    patterns => watchSet(id, { patterns }), scheduleRenderFolders));
   row(t('watch.source'),
     accEl('span', 'note', settings.enabled ? t('watch.source_on') : t('watch.source_off')),
     accSeg([[true, t('watch.on')], [false, t('watch.off')]], settings.enabled, enabled => watchSet(id, { enabled })));
   part.append(accEl('div', 'section-head', t('watch.folder')), grid);
   return part;
-}
-
-// A chip per pattern (click to remove it), then an input that adds what is
-// typed on Enter (several separated by commas).
-function renderWatchPatterns(id, patterns) {
-  const chips = patterns.map(pattern => {
-    const chip = accEl('button', 'chip chip--action chip--mono', `${pattern} \u00d7`);
-    chip.type = 'button';
-    chip.title = `Remove ${pattern}`;
-    chip.addEventListener('click', () => watchSet(id, { patterns: patterns.filter(p => p !== pattern) }));
-    return chip;
-  });
-
-  const key = fieldEditKey(id, 'pattern');
-  const input = accEl('input', 'form-input mono mono--small');
-  input.type = 'text';
-  input.placeholder = patterns.length ? t('field.add') : t('field.add_pattern');
-  input.spellcheck = false;
-  input.autocomplete = 'off';
-  input.dataset.focusKey = key;
-  input.value = fieldEdits.get(key)?.value ?? '';
-  input.addEventListener('input', () => fieldEdits.set(key, { value: input.value }));
-  input.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const added = input.value.split(/[,;]/).map(p => p.trim()).filter(p => p && !patterns.includes(p));
-    fieldEdits.delete(key);
-    setPageFocus(key);
-    if (added.length) watchSet(id, { patterns: [...patterns, ...new Set(added)] });
-    else scheduleRenderFolders();
-  });
-  return [...chips, input];
 }
 
 // The import process: the type's read step, which always runs; a step

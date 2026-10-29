@@ -9,6 +9,7 @@ use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_vault::email;
+use av_vault::envelope::DocumentType;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -76,23 +77,29 @@ struct Matches<'a> {
 #[derive(Serialize)]
 struct LabelInfo<'a> {
     pub(super) id: &'a str,
-    name: &'a str,
+    pub(super) name: &'a str,
 }
 
 // ----------------------------------------------------------------------------
 /// The emails the vault already holds: by Gmail id from this account, by
 /// Message-ID from anywhere (another account, an imported `.eml`).
-struct KnownEmails {
+pub(super) struct KnownEmails {
     pub(super) gmail: HashSet<String>,
     pub(super) message: HashSet<String>,
 }
 
 impl KnownEmails {
     // ------------------------------------------------------------------------
-    fn of(app: &App, account: Id) -> Self {
+    pub(super) fn of(app: &App, account: Id) -> Self {
         Self {
-            gmail: app.vault.index().remote_values(Some(&account), GMAIL_ID),
-            message: app.vault.index().remote_values(None, MESSAGE_ID),
+            gmail: app
+                .vault
+                .index()
+                .remote_values(DocumentType::Email, Some(&account), GMAIL_ID),
+            message: app
+                .vault
+                .index()
+                .remote_values(DocumentType::Email, None, MESSAGE_ID),
         }
     }
 

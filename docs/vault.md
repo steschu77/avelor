@@ -625,7 +625,8 @@ Well-known properties (named in `av_vault::schema::remote`):
 * `message-id`: an email's RFC 5322 Message-ID (e.g. `"<abc@example.com>"`),
 * `gmail-id`: an email's id in the Gmail account (e.g. `"18c2f0e4a1b2c3d4"`),
   so the import recognizes emails it already fetched without reading their
-  headers,
+  headers. An email's attachments carry its `message-id` and `gmail-id` too;
+  the import looks among emails only,
 * `calendar-id`: on a calendar entity, the Google calendar it syncs with;
   its events belong to that source. On an event, the Google calendar it was
   last synced with,
@@ -769,6 +770,7 @@ Vault/
   Calendar/            # *.yaml calendar descriptors + subfolders of *.md events each
     Created Here/      # *.md events made with New, in no calendar
   Email/                # *.md emails fetched from an account
+  Attachments/         # an email's attached files, each beside its *.md document
   Scans/               # *.md documents imported from a folder watch's scans
   .trash/              # deleted entities, at their vault-relative path (§ Trash)
   …any user folders for notes, letters, tasks…
@@ -779,7 +781,8 @@ New in the app (`create_entity`, `Index::create_new`) writes a document into
 a contact into `Contacts/`, a list into `Lists/` and a record into
 `Records/`, each with its generated name (`vault.md#filenames`). A new
 thread goes beside its first member; calendar sync writes a calendar's
-events into `Calendar/<calendar>/`.
+events into `Calendar/<calendar>/`, and an email fetch its attachments into
+`Attachments/`, each document with its original (`email.md#attachments`).
 
 ## The forged vault
 

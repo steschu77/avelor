@@ -191,6 +191,9 @@ pub struct FetchEmail {
     /// Fetch email's analysis, remembered with the filter; absent: off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub analysis: Option<Analysis>,
+    /// Fetch email's attachments, remembered with the filter; absent: off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<AttachmentSettings>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
 }
@@ -203,6 +206,7 @@ impl Default for FetchEmail {
             last_fetch: None,
             auto_sync: None,
             analysis: None,
+            attachments: None,
             rest: BTreeMap::new(),
         }
     }
@@ -253,6 +257,27 @@ fn auto_update_default() -> bool {
 }
 
 // ----------------------------------------------------------------------------
+/// What a filter does with an email's attached files (email.md#attachments):
+/// whether they are saved, which ones (`patterns`, as a watch has them),
+/// and up to what size, in MB.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct AttachmentSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub patterns: Vec<String>,
+    #[serde(default = "max_size_default")]
+    pub max_size: u32,
+    #[serde(flatten)]
+    rest: BTreeMap<String, Value>,
+}
+
+fn max_size_default() -> u32 {
+    10
+}
+
+// ----------------------------------------------------------------------------
 /// The account's email auto-sync (`email::auto_sync`): every 15 minutes, the
 /// email that matches `filter` and arrived since `since` is fetched.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -268,6 +293,9 @@ pub struct AutoSync {
     /// The analysis of the email it fetches; absent: off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub analysis: Option<Analysis>,
+    /// The attachments of the email it fetches; absent: off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<AttachmentSettings>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
 }
@@ -281,6 +309,7 @@ impl AutoSync {
             filter: EmailFilter::default(),
             since,
             analysis: None,
+            attachments: None,
             rest: BTreeMap::new(),
         }
     }
@@ -377,6 +406,7 @@ pub struct FetchEmailMeta<'a> {
     pub last_fetch: Option<DateTime>,
     pub auto_sync: Option<&'a AutoSync>,
     pub analysis: Option<&'a Analysis>,
+    pub attachments: Option<&'a AttachmentSettings>,
 }
 
 impl Account {
@@ -461,6 +491,7 @@ impl Account {
                     last_fetch: email.last_fetch,
                     auto_sync: email.auto_sync.as_ref(),
                     analysis: email.analysis.as_ref(),
+                    attachments: email.attachments.as_ref(),
                 }),
         }
     }
@@ -822,7 +853,7 @@ last-sync: 2026-09-27T10:30:00Z
     // ------------------------------------------------------------------------
     #[test]
     fn email_settings_round_trip_in_the_account_file() {
-        let email = "  fetch-email:\n    filter:\n      labels: [Umzug]\n      since: week\n    last-fetch: 2026-09-22T12:10:00Z\n";
+        let email = "  fetch-email:\n    filter:\n      labels: [Umzug]\n      since: week\n    last-fetch: 2026-09-22T12:10:00Z\n    attachments:\n      enabled: true\n      patterns: ['*.pdf']\n      custom: kept\n";
         let yaml = GOOGLE.replacen("  custom: kept\n", &format!("  custom: kept\n{email}"), 1);
         let file: AccountFile = serde_yaml_ng::from_str(&yaml).unwrap();
         let email = file.google.fetch_email.as_ref().unwrap();
@@ -831,6 +862,14 @@ last-sync: 2026-09-27T10:30:00Z
         assert_eq!(
             email.last_fetch.map(|d| d.as_iso8601()).as_deref(),
             Some("2026-09-22T12:10:00Z")
+        );
+        let attachments = email.attachments.as_ref().unwrap();
+        assert!(attachments.enabled && attachments.patterns == ["*.pdf"]);
+        assert_eq!(attachments.max_size, 10, "10 MB unless set");
+        let text = serde_yaml_ng::to_string(&file).unwrap();
+        assert!(
+            text.contains("max-size: 10\n      custom: kept\n"),
+            "{text}"
         );
         let again: AccountFile =
             serde_yaml_ng::from_str(&serde_yaml_ng::to_string(&file).unwrap()).unwrap();
