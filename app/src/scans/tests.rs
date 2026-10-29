@@ -3,10 +3,9 @@ use av_vault::envelope::Source;
 use serde_json::json;
 
 use super::import::{ScanPage, scan_document};
-use super::read::{
-    PageEvent, PageStatus, ReadCounts, TITLE_LEN, clean_ocr, is_image, title_of, word_count,
-};
+use super::read::{PageEvent, PageStatus, ReadCounts, TITLE_LEN, is_image, title_of};
 use crate::ai;
+use crate::reader;
 use crate::testing::Harness;
 use crate::testing::{FakeOllama, parse, reply, shape, shown, words};
 use serde_json::Value;
@@ -64,7 +63,7 @@ fn read_page(h: &mut Harness, folder: &Path, name: &str, text: &str) {
     let file = FolderFile::read(folder, name).unwrap();
     let ocr = Ocr {
         stamp: Stamp::of(&file),
-        words: word_count(text),
+        words: reader::word_count(text),
         title: title_of(text),
         text: text.to_string(),
     };
@@ -285,20 +284,6 @@ fn requests_for_unknown_watches_accounts_and_files_are_refused() {
 
 // ------------------------------------------------------------------------
 #[test]
-fn answers_lose_a_fence_around_them() {
-    assert_eq!(clean_ocr("  # Bill\n\nText\n "), "# Bill\n\nText");
-    assert_eq!(
-        clean_ocr("```markdown\n# Bill\n\nText\n```\n"),
-        "# Bill\n\nText"
-    );
-    assert_eq!(clean_ocr("```\nText\n```"), "Text");
-    let code = "```\nfn a()\n```\nAfter the code.";
-    assert_eq!(clean_ocr(code), code, "a fenced block at the start stays");
-    assert_eq!(clean_ocr(" \n"), "");
-}
-
-// ------------------------------------------------------------------------
-#[test]
 fn titles_come_from_the_first_heading_or_line() {
     let letter = "Stadtwerke Springfield\nMain Street 1\n\n## Rechnung Nr. 4711\n\nText";
     assert_eq!(title_of(letter), "Rechnung Nr. 4711");
@@ -307,13 +292,6 @@ fn titles_come_from_the_first_heading_or_line() {
     let long = format!("# {}", "word ".repeat(30));
     assert!(title_of(&long).chars().count() <= TITLE_LEN + 1);
     assert_eq!(title_of(""), "");
-}
-
-// ------------------------------------------------------------------------
-#[test]
-fn words_are_runs_with_a_letter_or_digit() {
-    assert_eq!(word_count("# Bill\n\n- 3 x 4,50 EUR\n| a | b |"), 7);
-    assert_eq!(word_count(""), 0);
 }
 
 // ------------------------------------------------------------------------

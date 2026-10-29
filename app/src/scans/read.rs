@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use av_llm::{ChatRequest, ChatResponse, Client, FileData, Message, Part, Provider, StopReason};
+use av_llm::{ChatResponse, Client, FileData, Provider, StopReason};
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
@@ -19,6 +19,7 @@ use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::jobs::job_summary;
 use crate::protocol::Req;
+use crate::reader;
 use crate::texts::Text;
 use crate::watches::FolderFile;
 use crate::watches::READ_STEP;
@@ -26,13 +27,6 @@ use av_vault::markdown::plain_title;
 
 /// The longest proposed title, in characters.
 pub(super) const TITLE_LEN: usize = 80;
-/// How many more words a page must have before its progress is sent again.
-const PROGRESS_WORDS: usize = 10;
-/// What the OCR model is told, and asked.
-const OCR_SYSTEM: &str = "You transcribe scanned pages. Write the text of the \
-page in the image as Markdown: keep its headings, paragraphs, lists and tables, \
-in reading order. Write only the page's text: no comments, no code fence.";
-const OCR_REQUEST: &str = "Transcribe this page.";
 
 // ----------------------------------------------------------------------------
 /// A read in progress: files of one watch, read one after the other.
@@ -272,36 +266,21 @@ enum ReadError {
 }
 
 // ----------------------------------------------------------------------------
-/// Read the image `name` in `root` with `model`: the file as it was read,
-/// and the model's answer. `on_words` gets the words read so far as the
-/// answer streams in.
+/// Read the image `name` in `root` with `model` (`reader::ask`): the file
+/// as it was read, and the model's answer. `on_words` gets the words read
+/// so far as the answer streams in.
 fn ocr(
     client: &Client,
     cancel: &Cancel,
     model: &str,
     root: &Path,
     name: &str,
-    mut on_words: impl FnMut(usize),
+    on_words: impl FnMut(usize),
 ) -> Result<(FolderFile, ChatResponse), ReadError> {
     // The file's facts first: a change while it is read makes the text stale.
     let file = FolderFile::read(root, name).map_err(ReadError::File)?;
     let data = FileData::from_path(&file.path).map_err(ReadError::File)?;
-    let request = ChatRequest::new(model)
-        .system(OCR_SYSTEM)
-        .message(Message::user(OCR_REQUEST).with(Part::Inline(data)))
-        .context(ai::CONTEXT_TOKENS);
-    let mut text = String::new();
-    let mut sent = 0;
-    let response = client
-        .chat_stream(cancel, &request, |delta| {
-            text.push_str(delta);
-            let words = word_count(&text);
-            if words >= sent + PROGRESS_WORDS {
-                sent = words;
-                on_words(words);
-            }
-        })
-        .map_err(ReadError::Model)?;
+    let response = reader::ask(client, cancel, model, data, on_words).map_err(ReadError::Model)?;
     Ok((file, response))
 }
 
@@ -362,7 +341,7 @@ fn on_read(
 // ----------------------------------------------------------------------------
 /// The page a file read to, by the file's path; or why it has none.
 fn page_of(file: FolderFile, response: ChatResponse) -> Result<(PathBuf, Ocr), Text> {
-    let text = clean_ocr(&response.text);
+    let text = reader::clean(&response.text);
     if text.is_empty() {
         return Err(match response.stop {
             StopReason::Refused => Text::new("reader.refused"),
@@ -371,7 +350,7 @@ fn page_of(file: FolderFile, response: ChatResponse) -> Result<(PathBuf, Ocr), T
     }
     let ocr = Ocr {
         stamp: Stamp::of(&file),
-        words: word_count(&text),
+        words: reader::word_count(&text),
         title: title_of(&text),
         text,
     };
@@ -427,32 +406,6 @@ fn finish(app: &mut App) {
     if let Some(account) = read.queue.account() {
         ai::account_used(app, account);
     }
-}
-
-// ----------------------------------------------------------------------------
-/// The model's answer as page text: trimmed, without a code fence around
-/// it (which some models add despite being told not to).
-pub(super) fn clean_ocr(text: &str) -> String {
-    let text = text.trim();
-    let unfenced = text.strip_prefix("```").and_then(|rest| {
-        let (info, body) = rest.split_once('\n')?;
-        // Only an info string (`markdown`), not a fenced block that starts
-        // the page and ends before its end.
-        if info.contains('`') || info.trim().contains(' ') {
-            return None;
-        }
-        body.trim_end().strip_suffix("```")
-    });
-    unfenced.unwrap_or(text).trim().to_string()
-}
-
-// ----------------------------------------------------------------------------
-/// The words of `text`: the runs between whitespace that have a letter or a
-/// digit (markdown's `#`, `-` and `|` don't count).
-pub(super) fn word_count(text: &str) -> usize {
-    text.split_whitespace()
-        .filter(|word| word.chars().any(char::is_alphanumeric))
-        .count()
 }
 
 // ----------------------------------------------------------------------------
