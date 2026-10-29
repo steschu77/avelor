@@ -1,7 +1,8 @@
 //! What the AI is told about the item a conversation is about
 //! (assistant.md#context, the context builder): the linked document,
 //! or a thread's members, each as its file -- YAML frontmatter, then its
-//! text -- the way the model should see it, within a budget.
+//! text, a mail's followed by its attachments' -- the way the model should
+//! see it, within a budget.
 
 use std::borrow::Cow;
 
@@ -27,7 +28,8 @@ about something else.";
 // ----------------------------------------------------------------------------
 /// What the AI is told about the entity `id` a conversation is linked to:
 /// a thread's members, or the entity itself (a project its own
-/// description); `None` if it is gone.
+/// description), each body with its attachments' (`body_of`); `None` if
+/// it is gone.
 pub fn describe(index: &Index, id: Id) -> Option<String> {
     let doc = &index.entry(&id)?.doc;
     let titles = |doc: &Document| -> Vec<String> {
@@ -35,14 +37,51 @@ pub fn describe(index: &Index, id: Id) -> Option<String> {
         projects.map(|e| e.doc.title().to_string()).collect()
     };
     if doc.roles().thread.is_none() {
-        return Some(document_context(doc, &titles(doc), BUDGET));
+        let body = body_of(index, doc);
+        return Some(document_context(doc, &titles(doc), &body, BUDGET));
     }
     let members = index.thread_members(&id);
+    let bodies: Vec<Cow<str>> = members.iter().map(|e| body_of(index, &e.doc)).collect();
     let members: Vec<(String, &str)> = members
         .iter()
-        .map(|e| (frontmatter(&e.doc, &titles(&e.doc)), e.doc.content()))
+        .zip(&bodies)
+        .map(|(e, body)| (frontmatter(&e.doc, &titles(&e.doc)), body.as_ref()))
         .collect();
     Some(thread_context(doc.title(), &members, BUDGET))
+}
+
+// ----------------------------------------------------------------------------
+/// The body of `doc` as the model sees it: its text, then its attachments'
+/// (`Index::attachments_of`) that were read, each under a line naming its
+/// file and title (`with_attachments`).
+fn body_of<'a>(index: &Index, doc: &'a Document) -> Cow<'a, str> {
+    let attached: Vec<(String, &str, &str)> = index
+        .attachments_of(doc.id())
+        .filter_map(|e| {
+            let text = e.doc.content().trim();
+            let name = e.doc.original()?.name.clone();
+            let name = name.unwrap_or_else(|| e.doc.title().to_string());
+            (!text.is_empty()).then(|| (name, e.doc.title(), text))
+        })
+        .collect();
+    with_attachments(doc.content(), &attached)
+}
+
+// ----------------------------------------------------------------------------
+/// `text`, then each of `attached` -- its file's name, its title, its read
+/// text -- under a line naming them. Coming last, the attachments are what
+/// a budget cuts first.
+fn with_attachments<'a>(text: &'a str, attached: &[(String, &str, &str)]) -> Cow<'a, str> {
+    if attached.is_empty() {
+        return Cow::Borrowed(text);
+    }
+    let mut body = text.trim_end().to_string();
+    for (name, title, read) in attached {
+        body.push_str(&format!(
+            "\n\n[Attached file \u{201C}{name}\u{201D} (\u{201C}{title}\u{201D}), as read:]\n\n{read}"
+        ));
+    }
+    Cow::Owned(body)
 }
 
 // ----------------------------------------------------------------------------
@@ -92,10 +131,10 @@ fn cut(text: &str, budget: usize) -> Cow<'_, str> {
 }
 
 // ----------------------------------------------------------------------------
-/// The context of one entity, its body cut at `budget` characters.
-fn document_context(doc: &Document, projects: &[String], budget: usize) -> String {
+/// The context of one entity, its `body` cut at `budget` characters.
+fn document_context(doc: &Document, projects: &[String], body: &str, budget: usize) -> String {
     let kind = doc.kind();
-    let body = cut(doc.content().trim(), budget);
+    let body = cut(body.trim(), budget);
     format!(
         "The user is asking about this {kind} from their vault, given as its file {FILES}\n\n{}",
         file(&frontmatter(doc, projects), &body)
@@ -183,7 +222,8 @@ Please pay 40 EUR by Friday.
     // ------------------------------------------------------------------------
     #[test]
     fn a_document_is_given_as_its_file_without_what_only_the_app_reads() {
-        let text = document_context(&mail(), &["Flat".to_string()], BUDGET);
+        let mail = mail();
+        let text = document_context(&mail, &["Flat".to_string()], mail.content(), BUDGET);
         assert!(
             text.starts_with("The user is asking about this email from their vault"),
             "{text}"
@@ -215,13 +255,78 @@ Please pay 40 EUR by Friday.
     // ------------------------------------------------------------------------
     #[test]
     fn a_body_past_the_budget_is_cut() {
-        let text = document_context(&mail(), &[], 10);
+        let mail = mail();
+        let text = document_context(&mail, &[], mail.content(), 10);
         assert!(
             text.contains("Please pay\n\n[\u{2026} the rest is left out]"),
             "{text}"
         );
         assert_eq!(cut("äöü", 2), "äö\n\n[\u{2026} the rest is left out]");
         assert_eq!(cut("short", 5), "short");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_mails_attachments_follow_its_text_and_are_cut_first() {
+        let attached = [(
+            "Rechnung.pdf".to_string(),
+            "Rechnung",
+            "Betrag: 40 EUR, Rabatt 5 %",
+        )];
+        let body = with_attachments("Please pay 40 EUR by Friday.\n", &attached);
+        assert_eq!(
+            body,
+            "Please pay 40 EUR by Friday.\n\n[Attached file \u{201C}Rechnung.pdf\u{201D} (\u{201C}Rechnung\u{201D}), as read:]\n\nBetrag: 40 EUR, Rabatt 5 %"
+        );
+        assert!(matches!(
+            with_attachments("Text", &[]),
+            Cow::Borrowed("Text")
+        ));
+
+        let mail = mail();
+        let room = "Please pay 40 EUR by Friday.".chars().count() + 30;
+        let text = document_context(&mail, &[], &body, room);
+        assert!(
+            text.contains("Please pay 40 EUR by Friday.\n\n[Attached file"),
+            "{text}"
+        );
+        assert!(text.contains("[\u{2026} the rest is left out]"), "{text}");
+        assert!(!text.contains("Rabatt"), "the attachment is cut: {text}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_mail_is_described_with_its_attachments_read() {
+        let mail_id = "01a0e1cc-a24c-7490-82fe-e75669985b55";
+        let attachment = |file: &str, name: &str, body: &str| {
+            let id = Id::generate();
+            let text = format!(
+                "---\nid: {id}\ntitle: Rechnung\nlinked-to: {mail_id}\ndocument:\n  original:\n    file: {file}\n    name: {name}\n---\n{body}"
+            );
+            (format!("Attachments/{file}.md"), text)
+        };
+        let files = [
+            (
+                "Mail/a.md".to_string(),
+                format!(
+                    "---\nid: {mail_id}\ntitle: Abschlag\nemail:\n  from: a@x\n---\nSee the bill.\n"
+                ),
+            ),
+            attachment("r.pdf", "Rechnung.pdf", "Betrag: 40 EUR\n"),
+            attachment("s.jpg", "Scan.jpg", ""),
+        ];
+        let h = crate::testing::Harness::with_vault("context-attachments", &files);
+        let text = describe(h.app.vault.index(), Id::parse(mail_id).unwrap()).unwrap();
+        assert!(
+            text.contains(
+                "See the bill.\n\n[Attached file \u{201C}Rechnung.pdf\u{201D} (\u{201C}Rechnung\u{201D}), as read:]\n\nBetrag: 40 EUR\n"
+            ),
+            "{text}"
+        );
+        assert!(
+            !text.contains("Scan.jpg"),
+            "one without text is left out: {text}"
+        );
     }
 
     // ------------------------------------------------------------------------

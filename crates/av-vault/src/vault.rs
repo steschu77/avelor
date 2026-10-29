@@ -1389,6 +1389,15 @@ impl Index {
         sort_by_date(&mut members);
         members
     }
+
+    // ------------------------------------------------------------------------
+    /// The entities linked to `id` that stand for a file
+    /// (`document.original`): a mail's attachments, in the index's order.
+    pub fn attachments_of(&self, id: Id) -> impl Iterator<Item = &Entry> {
+        self.documents
+            .iter()
+            .filter(move |e| e.doc.linked_to() == Some(id) && e.doc.original().is_some())
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -2804,6 +2813,34 @@ mod tests {
             FileFormat::Markdown,
         );
         (root, index, doc)
+    }
+
+    #[test]
+    fn a_mails_attachments_are_the_documents_linked_to_it_with_an_original() {
+        let (root, mut index, mail) = original_vault("Abschlag");
+        let mut changes = Changes::default();
+        let folder = Path::new("Attachments");
+        let mail = index.create(mail, Path::new("Mail"), &mut changes).unwrap();
+        let document = |title: &str| original_vault(title).2;
+        let mut bill = document("Rechnung");
+        bill.set_link(Some(mail));
+        let bill = index
+            .create_with_original(bill, folder, "Rechnung.pdf", b"%PDF", &mut changes)
+            .unwrap();
+        let mut note = document("Notiz");
+        note.set_link(Some(mail));
+        index
+            .create(note, Path::new("Notes"), &mut changes)
+            .unwrap();
+        let other = document("Anderes");
+        index
+            .create_with_original(other, folder, "Anderes.pdf", b"%PDF", &mut changes)
+            .unwrap();
+
+        let found: Vec<Id> = index.attachments_of(mail).map(|e| e.doc.id()).collect();
+        assert_eq!(found, [bill], "not the note, not another mail's");
+        assert_eq!(index.attachments_of(bill).count(), 0);
+        fs::remove_dir_all(&root).ok();
     }
 
     #[test]

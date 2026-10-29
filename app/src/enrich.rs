@@ -237,9 +237,7 @@ fn cut_text(text: &str, most: usize) -> String {
 /// `ATTACHMENTS_SENT`.
 fn attachment_texts(index: &Index, mail: Id) -> Vec<(String, String)> {
     index
-        .all()
-        .iter()
-        .filter(|entry| entry.doc.linked_to() == Some(mail))
+        .attachments_of(mail)
         .filter_map(|entry| {
             let original = entry.doc.original()?;
             let text = entry.doc.content().trim();

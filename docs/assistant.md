@@ -79,17 +79,20 @@ now (`ai_context::describe` → `request_for`, `chat.rs`), in the system
 prompt, fresh for every request:
 
 - a document as its file: its frontmatter without ids and the source
-  block, then its text;
-- a thread as its members, oldest first.
+  block, then its text, followed by the text of its attachments read
+  (`Index::attachments_of`; a mail's, `mail.md#attachments`), each under
+  a line naming its file and title, an attachment not read left out;
+- a thread as its members, oldest first, each with its attachments the
+  same way.
 
 A conversation that starts with a reply (the mail analysis's chat) is sent
 after a fixed question of the user's, "Have a look at it." (`OPENING`):
-providers want a request to start with the user, and so the model sees
-its points and quick reply when the chat goes on. Past about 40,000
-characters the oldest messages' text is left out, and a document's text
-is cut. A chat started with nothing selected sends only
-what is typed; the hint of a new chat says which. The request also carries
-the conversation's shown path.
+providers want a request to start with the user, and so the model sees its
+points and quick reply when the chat goes on. Past about 40,000 characters
+the oldest messages' text is left out, and a document's text is cut, its
+attachments' first, as they come last. A chat started with nothing
+selected sends only what is typed; the hint of a new chat says which. The
+request also carries the conversation's shown path.
 
 The model is the one picked for chats, checked by the host
 (`accounts.md#model-choice`). A local Ollama model takes only as much of
