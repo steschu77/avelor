@@ -88,6 +88,8 @@ types listed (`*.pdf *.jpg *.jpeg *.png` at first; patterns as a watch's,
 - **The job's summary** counts them, "12 new · 5 attachments"; a file that
   couldn't be written counts as "1 attachment failed" and is logged, and
   the fetch still counts as complete, since the email is in the vault.
+- **On the card**: the email's card lists its attachments; a double-click
+  or Open opens a file in its app (`panel.md#cards`, `open_file`).
 
 ## New-email notices
 
@@ -186,6 +188,7 @@ feature picks its model (`accounts.md#model-choice`).
 |---|---|---|---|---|
 | G3 | Fetch email | Email source sync button → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; the attachments' types and size; the analysis's level and model; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `entity` per attachment, `account`; the job's end reads the matches again | emails in `Email/`, their attachments in `Attachments/`; filter remembered |
 | G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_email_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email and attachment, `account` | emails in `Email/` on their own |
+| G6 | Open an attachment | the card's Attachments block: Open, or a double-click on a row; an attachment's card: its File row's Open → `openOriginal` (`features/selection.js`) | `open_file {id}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | the file in its app |
 | G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit, Medium's conversation through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their type kept; `email.subject` kept; Medium: a chat linked to the email |
 
 ## Design <a id="design"></a>

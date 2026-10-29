@@ -273,6 +273,14 @@ fn requests_for_unknown_watches_accounts_and_files_are_refused() {
         json!({ "watch": WATCH_ID, "file": "gone.jpg" }),
     );
     assert_eq!(sent[0]["err"]["code"], "invalid_path");
+    fs::write(folder.join("setup.exe"), "MZ").unwrap();
+    let sent = h.call(
+        "scan_open",
+        json!({ "watch": WATCH_ID, "file": "setup.exe" }),
+    );
+    assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+    let message = "setup.exe isn't opened from the app: only PDFs and images are.";
+    assert_eq!(shown(&sent[0]["err"]["text"]), message);
 }
 
 // ------------------------------------------------------------------------

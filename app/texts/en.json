@@ -531,6 +531,7 @@
   "field.edit": "Edit",
   "field.remove_pattern": "Remove {pattern}",
   "field.save": "Save",
+  "file.open": "Open in its app",
   "find.also": "find",
   "find.count": "{at} of {n}",
   "find.next": "Next (F3)",
@@ -718,6 +719,7 @@
   "new.type": "Type",
   "open.file_failed": "Could not open {name}.",
   "open.named": "Open {name}",
+  "open.other_type": "{name} isn't opened from the app: only PDFs and images are.",
   "open.url_failed": "Could not open {url}.",
   "ordinal": {
     "one": "{n}st",
@@ -776,6 +778,7 @@
   "panel.close": "Close the details",
   "panel.close_panel": "Close the side panel",
   "panel.delete_armed": "Click again to delete",
+  "panel.double_click_open": "{name} · double-click to open",
   "panel.edit_message": "Edit message",
   "panel.expand": "Show at full width",
   "panel.filter_or_label": "Filter, or a new label",
@@ -901,6 +904,10 @@
   "scans.taken": "Taken",
   "scans.taken_at": "taken {date}",
   "scans.to_read": "{n} to read",
+  "scans.words": {
+    "one": "{n} word",
+    "other": "{n} words"
+  },
   "scans.write_failed": "Could not write the document.",
   "schedule.every_day": {
     "one": "Every day",
@@ -1000,6 +1007,9 @@
   "signin.other_account": "Signed in with another Google account than {email}.",
   "signin.other_account_this": "Signed in with another Google account than this one.",
   "signin.timed_out": "The sign-in timed out.",
+  "size.bytes": "{n} B",
+  "size.kb": "{n} KB",
+  "size.mb": "{n} MB",
   "start.failed": "An error occurred.\n\nCheck the log file for more information.",
   "status.dismiss": "Dismiss",
   "status.more": "+{n} more",

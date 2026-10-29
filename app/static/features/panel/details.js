@@ -6,7 +6,7 @@
 // grid show too.
 
 import { accEl } from '../../core/dom.js';
-import { DATE_FORMAT, MONTH, WEEKDAY, addDays, sameDay } from '../../core/format.js';
+import { DATE_FORMAT, MONTH, WEEKDAY, addDays, fileSize, sameDay } from '../../core/format.js';
 import { TIME_FORMAT, isoInstant, localDay, relativeDay } from '../../core/format.js';
 import { ordinal, t } from '../../core/text.js';
 import { entities } from '../../model/entities.js';
@@ -14,9 +14,9 @@ import { googleKept, googleType, isOverdue } from '../../model/calendar.js';
 import { byDay, icalDate, parseSchedule, ruleSupported } from '../../model/schedule.js';
 import { editEntityLocal } from '../../model/structure.js';
 import { onEditEnd } from '../../ui/field.js';
-import { iconEl } from '../../ui/icons.js';
+import { fileIcon, iconEl } from '../../ui/icons.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
-import { selectById } from '../selection.js';
+import { openOriginal, selectById } from '../selection.js';
 
 // ----------------------------------------------------------------------------
 // A task's tag: "Due", or "Overdue" and filled -- the only emphasis the grid
@@ -38,9 +38,10 @@ export function dueTag(text) {
 // `occurrence`'s times on a day card), a task's (`taskFields`, or `taskText`
 // while the host can't write it), an email's (`emailFields`), its date (any
 // entity's but an event's, whose start it is: `dateField`), and a document's
-// type. A task's fields, the date and a document's type are editable while
-// the host can write the entity (`taskFields`, `docTypeField`). Rows without a
-// value are left out; hidden for an entity with none of them.
+// type and the file it stands for (`originalField`). A task's fields, the
+// date and a document's type are editable while the host can write the entity
+// (`taskFields`, `docTypeField`). Rows without a value are left out; hidden for
+// an entity with none of them.
 //
 // Drawn again on every entity change: while one of its fields has the focus,
 // that waits until the block is left, so what is typed stays (as a title
@@ -63,6 +64,7 @@ export function renderCardDetails(row, doc, occurrence = null) {
     if (doc && !doc.event && !isNaN(doc.date)) add(t('props.date'), doc.writable ? dateField(doc) : DATE_FORMAT.format(doc.date));
     if (doc?.kind === 'document' && doc.writable) add(t('props.type'), docTypeField(doc));
     else if (doc?.kind === 'document' && doc.type) add(t('props.type'), doc.type);
+    if (doc?.document?.original) add(t('props.file'), ...originalField(doc));
     row.replaceChildren(...parts);
     row.hidden = !parts.length;
     if (focusKey) row.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true });
@@ -261,6 +263,23 @@ function docTypeField(doc) {
     });
     editField(input, value => editEntityLocal(doc.doc_id, { type: value.trim() || null }));
     return input;
+}
+
+// ----------------------------------------------------------------------------
+// The file a document stands for (vault.md#document; an email's attachment):
+// its type's icon, the name it came with and its size, and Open, which
+// opens it in its app (`openOriginal`).
+function originalField(doc) {
+    const original = doc.document.original;
+    const name = original.name ?? original.file ?? '';
+    const size = original.size != null ? ` \u00b7 ${fileSize(original.size)}` : '';
+    const open = accEl('button', 'icon-btn icon-btn--quiet');
+    open.type = 'button';
+    open.title = t('file.open');
+    open.dataset.focusKey = 'open-file';
+    open.append(iconEl('#i-open'));
+    open.addEventListener('click', () => openOriginal(doc.doc_id));
+    return [iconEl(fileIcon(name)), `${name}${size}`, open];
 }
 
 // ----------------------------------------------------------------------------

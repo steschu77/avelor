@@ -410,7 +410,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `undoes`, `FakeOllama` |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update, stop and end a job (the `job` event), `run_job`, `cancel_job`, the vault switch that waits for the old vault's jobs, and Rebuild index's reopen (`rebuild_when_stopped`); a job's summary (`count_summary`, `job_summary`); its tests |
-| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch, reveal and `rebuild_index`, `set_prefs`, `open_url` |
+| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch, reveal and `rebuild_index`, `set_prefs`, `open_url`, `open_file` and the types it opens (`may_open`) |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `set_editing`; `DocumentState`, the documents in edit mode and the app's version of each one in conflict; the conflict copy shared with calendar sync (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links, `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
@@ -523,7 +523,7 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`, `typing`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `addDays`, `sameDay`, `weekStartOf`, `monthStartOf`, `monthEndOf`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page (`TIME_FORMAT`, `MONTH_YEAR`, …, `shortDate`, `pageDate`), and counts with their noun (`plural`) |
+| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`, `typing`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `addDays`, `sameDay`, `weekStartOf`, `monthStartOf`, `monthEndOf`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page (`TIME_FORMAT`, `MONTH_YEAR`, …, `shortDate`, `pageDate`) |
 | `core/text.js` | the page's texts: `t`, a text of the run's catalog, `parts`, one with an element in it, `textOf`, one the host sent, and the run's `locale` (`localization.md`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js`, `core/match.js` | the action registry, the commands and the keys Go to lists (`listedActions`, `keyedActions`), the one global key handler and the keys' names (`shortcutKeys`, `shortcutText`); names found by words typed (`fit`) |

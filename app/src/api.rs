@@ -1,7 +1,7 @@
 //! The app's own commands (`api.md#the-page-side`): `ready`, switching,
-//! revealing and rebuilding the vault, opening a link, and the page's
-//! preferences; and opening a vault with its accounts, watches and settings
-//! (`open_vault`).
+//! revealing and rebuilding the vault, opening a link or a document's
+//! original, and the page's preferences; and opening a vault with its
+//! accounts, watches and settings (`open_vault`).
 
 use std::path::{Path, PathBuf};
 
@@ -18,6 +18,7 @@ use crate::texts::{self, Text};
 use crate::vault_settings;
 use crate::watches;
 use av_utils::error::Error;
+use av_utils::id::Id;
 use av_utils::url::is_link;
 use serde_json::json;
 
@@ -171,6 +172,55 @@ pub fn open_url(app: &mut App, req: Req, url: String) {
 }
 
 // ----------------------------------------------------------------------------
+/// `open_file {id}`: open the document `id`'s original (`vault.md#document`)
+/// in its default app once the handler has returned, as `open_url`. Only a
+/// PDF or an image ([`may_open`]): an attachment could be a program.
+/// Answers `null`; `not_found` without an original, or with its file gone.
+pub fn open_file(app: &mut App, req: Req, id: Id) {
+    let index = app.vault.index();
+    let Some(path) = index.original_path(&id).filter(|p| p.is_file()) else {
+        return req.err(Error::NotFound);
+    };
+    let original = index.get(&id).and_then(|doc| doc.original());
+    let name = match original.and_then(|o| o.name.clone()) {
+        Some(name) => name,
+        None => path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into(),
+    };
+    if !may_open(&path) {
+        let arg = format!("a type the app doesn't open: {name}");
+        let text = Text::new("open.other_type").arg("name", name.as_str());
+        return req.fail(Error::InvalidArgument { arg }, text);
+    }
+    app.on_ui(
+        {
+            let path = path.clone();
+            move |_| sys::open_path(&path)
+        },
+        move |_, opened| match opened {
+            Ok(()) => req.ok(()),
+            Err(e) => {
+                log::warn!("Could not open {}: {e}", path.display());
+                req.fail(e, Text::new("open.file_failed").arg("name", name.as_str()));
+            }
+        },
+    );
+}
+
+// ----------------------------------------------------------------------------
+/// Whether the app opens the file at `path` in its default app: only a PDF
+/// or an image, the types it takes in itself (the watches', the
+/// attachments'). Any other could be a program, a script or a shortcut.
+pub fn may_open(path: &Path) -> bool {
+    const OPENED: [&str; 5] = ["pdf", "png", "jpg", "jpeg", "webp"];
+    let ext = path.extension().unwrap_or_default().to_string_lossy();
+    OPENED.contains(&ext.to_ascii_lowercase().as_str())
+}
+
+// ----------------------------------------------------------------------------
 /// `set_prefs {prefs}`: store the page's preferences (strings) as given; the
 /// host never reads them, and fills them into the page it loads next
 /// (`page::html`). Answers `null`, or the failed save, whose error is logged.
@@ -188,7 +238,6 @@ mod tests {
     use crate::config::load_config;
     use crate::testing::parse;
     use crate::testing::{Harness, shown};
-    use av_utils::id::Id;
     use serde_json::Value;
     use std::fs;
 
@@ -311,6 +360,44 @@ mod tests {
         let sent = h.call("reveal_vault", json!({}));
         let err = json!({ "code": "invalid_path", "text": { "key": "vault.none_open" } });
         assert_eq!(sent, [json!({ "re": 1, "err": err })]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn only_an_original_that_is_a_pdf_or_an_image_is_opened() {
+        let (setup, note, gone) = (Id::generate(), Id::generate(), Id::generate());
+        let document =
+            |id: Id, original: &str| format!("---\nid: {id}\ndocument:{original}\n---\n");
+        let files = [
+            (
+                "A/setup.md",
+                document(
+                    setup,
+                    "\n  original:\n    file: setup.EXE\n    name: Rechnung.exe",
+                ),
+            ),
+            ("A/setup.EXE", "MZ".to_string()),
+            ("A/note.md", document(note, " {}")),
+            (
+                "A/gone.md",
+                document(gone, "\n  original:\n    file: gone.pdf"),
+            ),
+        ];
+        let mut h = Harness::with_vault("open-file", &files);
+        let sent = h.call("open_file", json!({ "id": setup }));
+        let message = "Rechnung.exe isn't opened from the app: only PDFs and images are.";
+        assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+        assert_eq!(shown(&sent[0]["err"]["text"]), message);
+        for id in [note, gone, Id::generate()] {
+            let sent = h.call("open_file", json!({ "id": id }));
+            assert_eq!(sent[0]["err"]["code"], "not_found", "{id}");
+        }
+        for opened in ["bill.pdf", "a/Scan.JPG", "photo.jpeg", "p.png", "p.webp"] {
+            assert!(may_open(Path::new(opened)), "{opened}");
+        }
+        for refused in ["setup.exe", "link.url", "a.docx", "t.csv", "README"] {
+            assert!(!may_open(Path::new(refused)), "{refused}");
+        }
     }
 
     // ------------------------------------------------------------------------

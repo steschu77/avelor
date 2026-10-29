@@ -19,7 +19,7 @@ import { titled } from '../../core/dom.js';
 import { rpcCall } from '../../core/rpc.js';
 import { rpcOn } from '../../core/rpc.js';
 import { TIME_FORMAT, compareText, pageDate, parseDate } from '../../core/format.js';
-import { plural } from '../../core/format.js';
+import { fileSize } from '../../core/format.js';
 import { registerAction, shortcutText } from '../../core/actions.js';
 import { parts, t, textOf } from '../../core/text.js';
 import { store } from '../../model/state.js';
@@ -548,7 +548,7 @@ function renderScanFile(f, ai, current) {
     status.addEventListener('click', () => scanRead([f.file]));
   }
   row.append(name, accEl('span', 'meta', pageDate(f.taken, true)),
-    accEl('span', 'meta', scanSize(f.size)), status);
+    accEl('span', 'meta', fileSize(f.size)), status);
   return f.error ? [row, accEl('div', 'error-note', f.error)] : [row];
 }
 
@@ -627,7 +627,7 @@ function renderScanDoc(doc, index) {
   });
   const first = scanFile(doc.pages[0]);
   titleBox.append(title, accEl('span', 'meta',
-    `${plural(doc.pages.length, 'page')} \u00b7 ${pageDate(first.taken)}`));
+    `${t('scans.pages', { n: doc.pages.length })} \u00b7 ${pageDate(first.taken)}`));
 
   const n = doc.pages.length;
   const busy = doc.pages.some(page => scanBusy(scanFile(page)));
@@ -675,7 +675,7 @@ function renderScanPage(doc, index, file, i) {
   row.addEventListener('dragend', scanDragEnd);
   scanDropTarget(row, dragged => scanMove(dragged, doc, file));
 
-  let status = plural(f.read.words, 'word');
+  let status = t('scans.words', { n: f.read.words });
   if (f.status === 'reading') status = t('scans.reading_words', { n: f.words });
   else if (f.status === 'queued') status = t('scans.queued');
   else if (f.status === 'failed') status = t('scans.failed_with', { status });
@@ -761,14 +761,6 @@ function scanPageButton(icon, title, disabled, onClick) {
   button.disabled = disabled;
   button.addEventListener('click', onClick);
   return button;
-}
-
-
-// "812 KB", "2.4 MB".
-function scanSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 // Re-render while shown when the op, the watch (its folder, patterns,
