@@ -123,10 +123,12 @@ The Import button of an images watch opens Import scans
 - **Read** sends a file to the model the watch picked for reading it
   (`models.read`, picked in the page's foot, "Read by", or in the
   watch's pane; `accounts.md#model-choice`),
-  with the instruction to transcribe the page into Markdown, one file after
-  the other, as a job in the jobs panel that can be stopped. The page shows
-  each file as queued, then the words read so far. A file that fails shows
-  why, and can be read again. Only JPEG, PNG, GIF and WebP images are read.
+  with the instruction to transcribe the page into Markdown (`reader.rs`,
+  which reads a mail's attachments too, `mail.md#attachments`), one file
+  after the other, as a job in the jobs panel that can be stopped. The
+  page shows each file as queued, then the words read so far. A file that
+  fails shows why, and can be read again. Only JPEG, PNG, GIF and WebP
+  images are read.
   What a file read to is kept while the app runs, as long as the file
   doesn't change; reading it again replaces it.
 - **Ready for import** groups the read pages into documents: with the

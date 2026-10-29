@@ -247,7 +247,9 @@ fn auto_update_default() -> bool {
 // ----------------------------------------------------------------------------
 /// What a filter does with a mail's attached files (mail.md#attachments):
 /// whether they are saved, which ones (`patterns`, as a watch has them),
-/// and up to what size, in MB.
+/// up to what size, in MB, and whether they are read, with the model the
+/// reading step picked (`models`, by step, as a watch has them), kept while
+/// reading is off.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct AttachmentSettings {
@@ -257,8 +259,20 @@ pub struct AttachmentSettings {
     pub patterns: Vec<String>,
     #[serde(default = "max_size_default")]
     pub max_size: u32,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub read: bool,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub models: BTreeMap<String, ModelChoice>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
+}
+
+impl AttachmentSettings {
+    // ------------------------------------------------------------------------
+    /// The model `step` picked, if it has one.
+    pub fn model(&self, step: &str) -> Option<&ModelChoice> {
+        self.models.get(step)
+    }
 }
 
 fn max_size_default() -> u32 {
@@ -836,7 +850,7 @@ last-sync: 2026-09-27T10:30:00Z
     // ------------------------------------------------------------------------
     #[test]
     fn mail_settings_round_trip_in_the_account_file() {
-        let mail = "  mail:\n    filter:\n      labels: [Umzug]\n      since: week\n    last-fetch: 2026-09-22T12:10:00Z\n    attachments:\n      enabled: true\n      patterns: ['*.pdf']\n      custom: kept\n";
+        let mail = "  mail:\n    filter:\n      labels: [Umzug]\n      since: week\n    last-fetch: 2026-09-22T12:10:00Z\n    attachments:\n      enabled: true\n      patterns: ['*.pdf']\n      read: true\n      models:\n        read:\n          account: 01a0e1cc-a24c-7490-82fe-e75669985b42\n          model: gemini-3.8-flash\n      custom: kept\n";
         let yaml = GOOGLE.replacen("  custom: kept\n", &format!("  custom: kept\n{mail}"), 1);
         let file: AccountFile = serde_yaml_ng::from_str(&yaml).unwrap();
         let mail = file.google.mail.as_ref().unwrap();
@@ -849,9 +863,15 @@ last-sync: 2026-09-27T10:30:00Z
         let attachments = mail.attachments.as_ref().unwrap();
         assert!(attachments.enabled && attachments.patterns == ["*.pdf"]);
         assert_eq!(attachments.max_size, 10, "10 MB unless set");
+        let read = attachments.model(crate::watches::READ_STEP).unwrap();
+        assert!(attachments.read && read.model == "gemini-3.8-flash");
         let text = serde_yaml_ng::to_string(&file).unwrap();
         assert!(
-            text.contains("max-size: 10\n      custom: kept\n"),
+            text.contains("max-size: 10\n      read: true\n      models:\n        read:\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("gemini-3.8-flash\n      custom: kept\n"),
             "{text}"
         );
         let again: AccountFile =

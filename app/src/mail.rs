@@ -19,7 +19,8 @@
 //!
 //! A fetch whose filter saves attachments (mail.md#attachments) keeps the
 //! wanted parts on the worker, and writes each as a document with its
-//! original in `Attachments/`, `linked-to` its mail.
+//! original in `Attachments/`, `linked-to` its mail. Read on, it hands them
+//! to `attachments::read` when it ends, which starts the analysis after.
 
 use std::collections::HashMap;
 use std::collections::{HashSet, VecDeque};
@@ -43,6 +44,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::App;
+use crate::attachments;
 use crate::enrich;
 use crate::google;
 use crate::google::{SYNC_EVERY, first_due, later};
@@ -54,7 +56,7 @@ use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::protocol::Req;
 use crate::sys;
-use crate::watches::glob_match;
+use crate::watches::{READ_STEP, glob_match};
 use av_vault::schema::layout;
 use av_vault::schema::remote::{GMAIL_ID, MESSAGE_ID};
 use av_vault::vault::Index;
@@ -158,7 +160,7 @@ impl FetchCounts {
             (self.replaced, "replaced", "replaced"),
             (self.skipped, "skipped", "skipped"),
             (self.failed, "failed", "failed"),
-            (self.attachments.saved, "attachment", "attachments"),
+            (self.attachments.created.len(), "attachment", "attachments"),
             (
                 self.attachments.failed,
                 "attachment failed",
@@ -430,9 +432,10 @@ fn fetch_headers(client: &Client, cancel: &Cancel, ids: &[String]) -> Result<Vec
 /// mail and attachment written (with `content` for a replaced body), a
 /// `notice` per mail that failed, and finally the account (`account`: its
 /// last fetch and sync). The filter, mode, analysis and attachments are
-/// remembered in the account first. With the analysis on, its pick is
-/// checked first (`AiAccounts::choose`): refused, nothing is fetched; else
-/// the new mails are analysed after the fetch.
+/// remembered in the account first. With the analysis on, or the
+/// attachments read, their picks are checked first (`AiAccounts::choose`):
+/// refused, nothing is fetched; else the attachments are read and the new
+/// mails analysed after the fetch.
 pub fn mail_fetch(app: &mut App, req: Req, request: FetchRequest) {
     if app.mail.fetch.is_some() {
         let what = "a second mail fetch".to_string();
@@ -457,6 +460,12 @@ pub fn mail_fetch(app: &mut App, req: Req, request: FetchRequest) {
         }
     }
     let attachments = request.attachments.clone().filter(|a| a.enabled);
+    if let Some(reading) = attachments.as_ref().filter(|a| a.read) {
+        let picked = reading.model(READ_STEP);
+        if let Err(refusal) = app.ai.choose(picked, attachments::READING, DateTime::now()) {
+            return req.fail(refusal.error, refusal.message);
+        }
+    }
     let remembered = Remembered {
         filter: request.filter,
         auto_update: request.auto_update,
@@ -730,7 +739,8 @@ fn on_downloaded(app: &mut App, job: Id, gmail_id: String, result: Result<Downlo
                 Stored::Replaced => counts.replaced += 1,
                 Stored::Skipped => counts.skipped += 1,
             }
-            counts.attachments.saved += attachments.saved;
+            counts.attachments.created.extend(attachments.created);
+            counts.attachments.unread.extend(attachments.unread);
             counts.attachments.failed += attachments.failed;
         }
         Err(_) => counts.failed += 1,
@@ -780,10 +790,13 @@ fn existing_mail(index: &Index, account: Id, gmail_id: &str, message_id: &str) -
 }
 
 // ----------------------------------------------------------------------------
-/// What saving a mail's attachments came to.
+/// What saving a mail's attachments came to: the documents written, those
+/// it had already whose text is still empty (to read), and the files that
+/// failed.
 #[derive(Debug, Default, PartialEq)]
 struct Saved {
-    saved: usize,
+    created: Vec<Id>,
+    unread: Vec<Id>,
     failed: usize,
 }
 
@@ -844,9 +857,13 @@ struct AttachedTo<'a> {
 /// linked to it whose original has the part's name and size -- as a
 /// document with its original in `Attachments/`, each in a vault edit of
 /// its own, the file marked as downloaded (`sys::mark_downloaded`). A part
-/// that fails is logged and counted; the others are still written.
+/// that fails is logged and counted; the others are still written. The
+/// documents `to.mail` has already without text are named too.
 fn save_attachments(app: &mut App, to: &AttachedTo, parts: Vec<email::Attachment>) -> Saved {
-    let mut saved = Saved::default();
+    let mut saved = Saved {
+        unread: unread_originals(app.vault.index(), to.mail),
+        ..Saved::default()
+    };
     if parts.is_empty() {
         return saved;
     }
@@ -862,7 +879,7 @@ fn save_attachments(app: &mut App, to: &AttachedTo, parts: Vec<email::Attachment
         });
         match written {
             Ok(id) => {
-                saved.saved += 1;
+                saved.created.push(id);
                 if let Some(path) = app.vault.index().original_path(&id) {
                     sys::mark_downloaded(&path);
                 }
@@ -888,6 +905,18 @@ fn saved_originals(index: &Index, mail: Id) -> HashSet<(String, u64)> {
             let original = entry.doc.original()?;
             Some((original.name.clone()?, original.size?))
         })
+        .collect()
+}
+
+// ----------------------------------------------------------------------------
+/// The documents linked to `mail` that have an original and no text yet.
+fn unread_originals(index: &Index, mail: Id) -> Vec<Id> {
+    index
+        .all()
+        .iter()
+        .filter(|entry| entry.doc.linked_to() == Some(mail) && entry.doc.original().is_some())
+        .filter(|entry| entry.doc.content().trim().is_empty())
+        .map(|entry| entry.doc.id())
         .collect()
 }
 
@@ -989,8 +1018,9 @@ pub fn stop(app: &mut App) {
 /// when it started (the page's "Since last time", or where the next
 /// auto-sync starts) only if it fetched all and nothing failed, so the next
 /// one still covers what it didn't write -- and end the job with its
-/// summary. Unless it was stopped, the analysis it asks for starts on the
-/// mails it created.
+/// summary. Unless it was stopped, the attachments it saved (and those of
+/// a replaced mail without text) are read if its filter says so, then the
+/// analysis it asks for starts on the mails it created.
 fn finish(app: &mut App) {
     let Some(fetch) = app.mail.fetch.take() else {
         return;
@@ -1027,10 +1057,26 @@ fn finish(app: &mut App) {
     if let Some((message, entity)) = new_mail_notice(&counts.created, title_of, &email) {
         app.inform(&message, entity);
     }
+    let FetchCounts {
+        created,
+        attachments: saved,
+        ..
+    } = fetch.counts;
     let analysis = fetch.analysis.filter(|a| a.is_on() && !stopped);
-    if let Some(analysis) = analysis.filter(|_| !fetch.counts.created.is_empty()) {
-        let created = fetch.counts.created;
-        enrich::analyse(app, &email, created, &analysis);
+    let then = analysis
+        .filter(|_| !created.is_empty())
+        .map(|analysis| (created, analysis));
+    let reading = fetch.attachments.filter(|a| a.read && !stopped);
+    let to_read: Vec<Id> = saved.created.into_iter().chain(saved.unread).collect();
+    match reading {
+        Some(reading) if !to_read.is_empty() => {
+            attachments::read(app, &email, to_read, reading.model(READ_STEP), then);
+        }
+        _ => {
+            if let Some((mails, analysis)) = then {
+                enrich::analyse(app, &email, mails, &analysis);
+            }
+        }
     }
 }
 
@@ -1519,13 +1565,8 @@ UEsDBA==\r\n\
         let Stored::Created(mail) = stored else {
             panic!("{stored:?}");
         };
-        assert_eq!(
-            saved,
-            Saved {
-                saved: 1,
-                failed: 0
-            }
-        );
+        assert_eq!(saved.created.len(), 1);
+        assert_eq!((saved.unread.len(), saved.failed), (0, 0));
         let sent = parse(&h.take());
         assert_eq!(shape(&sent), ["entity", "entity"], "{sent:?}");
         let doc = &sent[1]["data"];
@@ -1542,19 +1583,28 @@ UEsDBA==\r\n\
         assert_eq!(fs::read(&path).unwrap(), b"%PDF-1.7\n");
         assert!(path.starts_with(h.vault().join("Attachments")));
 
-        // A replaced mail gets only what it doesn't have yet.
+        // A replaced mail gets only what it doesn't have yet, and names
+        // what it has without text, to be read.
         let (stored, saved) = apply_mail(&mut h.app, account, "g1", attached(), true).unwrap();
-        assert_eq!((stored, saved), (Stored::Replaced, Saved::default()));
+        let unread = Saved {
+            unread: vec![id],
+            ..Saved::default()
+        };
+        assert_eq!((stored, saved), (Stored::Replaced, unread));
         let both = Some(&keep(&["*.pdf", "*.zip"], 10));
         let mail = Downloaded::parse(RAW_ATTACHED.as_bytes(), date, both);
         let (_, saved) = apply_mail(&mut h.app, account, "g1", mail, true).unwrap();
         assert_eq!(
-            saved,
-            Saved {
-                saved: 1,
-                failed: 0
-            }
+            (saved.created.len(), saved.unread, saved.failed),
+            (1, vec![id], 0)
         );
+        let text = "Read.\n".to_string();
+        let written = h
+            .app
+            .edit(|index, changes| index.set_content(&id, text, changes));
+        assert!(written.is_ok());
+        let (_, saved) = apply_mail(&mut h.app, account, "g1", attached(), true).unwrap();
+        assert_eq!(saved.unread.len(), 1, "the zip's document only");
 
         // The attachments name the mail's message, but aren't taken for it.
         let index = h.app.vault.index();
@@ -1992,6 +2042,63 @@ UEsDBA==\r\n\
             account["data"]["mail"]["attachments"], attachments,
             "kept while off"
         );
+
+        // Read on, the pick is checked first.
+        let model = json!({ "account": Id::generate(), "model": "m" });
+        let attachments = json!({ "enabled": true, "read": true, "models": { "read": model } });
+        let args = json!({ "account": CONNECTED, "ids": [], "attachments": attachments });
+        let sent = h.call("mail_fetch", args);
+        assert_eq!(shape(&sent), ["reply"], "nothing fetched: {sent:?}");
+        assert_eq!(
+            sent[0]["err"]["message"],
+            "For reading attachments, the picked model\u{2019}s account is gone; pick another model."
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_finished_fetch_reads_its_attachments_before_the_analysis() {
+        let mut h = with_google("mail-read-after", MAIL, &[]);
+        let account = connected_id();
+        let lite = Analysis {
+            level: crate::google_accounts::AnalysisLevel::Lite,
+            model: None,
+        };
+        let reading = json!({ "enabled": true, "patterns": ["*.pdf"], "read": true });
+        let client = h.app.google.connected(account).unwrap();
+        let plan = FetchPlan {
+            account,
+            client,
+            queue: VecDeque::new(),
+            skipped: 0,
+            replace: HashSet::new(),
+            origin: Origin::Manual,
+            started: DateTime::now(),
+            analysis: Some(lite),
+            attachments: Some(serde_json::from_value(reading).unwrap()),
+        };
+        start_fetch(&mut h.app, "Fetching".into(), plan);
+        let fetch = h.app.mail.fetch.as_mut().unwrap();
+        fetch.counts.created.push(Id::generate());
+        fetch.counts.attachments.unread.push(Id::generate());
+        finish(&mut h.app);
+        let sent = parse(&h.take());
+        // No AI account in this vault: the reading says so, then the
+        // analysis.
+        let notices: Vec<&str> = sent
+            .iter()
+            .filter(|m| m["ev"] == "notice" && m["data"]["level"] == "error")
+            .filter_map(|m| m["data"]["message"].as_str())
+            .collect();
+        assert_eq!(notices.len(), 2, "{sent:?}");
+        assert!(
+            notices[0].starts_with("Reading attachments \u{b7} "),
+            "{notices:?}"
+        );
+        assert!(
+            notices[0].ends_with("For reading attachments, add an AI provider under Accounts.")
+        );
+        assert!(notices[1].contains("For the mail analysis, add an AI provider"));
     }
 
     // ------------------------------------------------------------------------

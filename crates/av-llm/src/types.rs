@@ -89,6 +89,8 @@ pub struct ProviderSpec {
     /// Whether it keeps uploaded files (`Client::upload`); else files go
     /// inline.
     pub uploads: bool,
+    /// Whether it reads a PDF sent inline; every provider reads images.
+    pub pdf: bool,
     /// How the key is sent, if the account has one.
     pub(crate) auth: Auth,
     /// Headers every request carries.
@@ -106,6 +108,7 @@ pub const PROVIDERS: [ProviderSpec; 5] = [
         default_url: "https://api.anthropic.com/v1",
         needs_key: true,
         uploads: true,
+        pdf: true,
         auth: Auth::Header("x-api-key"),
         headers: &[("anthropic-version", "2023-06-01")],
     },
@@ -117,6 +120,7 @@ pub const PROVIDERS: [ProviderSpec; 5] = [
         default_url: "https://api.openai.com/v1",
         needs_key: true,
         uploads: true,
+        pdf: true,
         auth: Auth::Bearer,
         headers: &[],
     },
@@ -128,6 +132,7 @@ pub const PROVIDERS: [ProviderSpec; 5] = [
         default_url: "https://api.mistral.ai/v1",
         needs_key: true,
         uploads: true,
+        pdf: true,
         auth: Auth::Bearer,
         headers: &[],
     },
@@ -139,6 +144,7 @@ pub const PROVIDERS: [ProviderSpec; 5] = [
         default_url: "https://generativelanguage.googleapis.com/v1beta",
         needs_key: true,
         uploads: true,
+        pdf: true,
         auth: Auth::Header("x-goog-api-key"),
         headers: &[],
     },
@@ -150,6 +156,7 @@ pub const PROVIDERS: [ProviderSpec; 5] = [
         default_url: "http://localhost:11434",
         needs_key: false,
         uploads: false,
+        pdf: false,
         auth: Auth::Bearer,
         headers: &[],
     },

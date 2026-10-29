@@ -8,6 +8,7 @@ mod ai_accounts;
 mod ai_context;
 mod api;
 mod app;
+mod attachments;
 mod calendar;
 mod catalog;
 mod chat;

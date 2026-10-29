@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::ai_accounts::AiAccounts;
+use crate::attachments::AttachmentState;
 use crate::calendar;
 use crate::calendar::CalendarState;
 use crate::catalog::{CatalogState, CatalogThread};
@@ -418,6 +419,9 @@ pub struct App {
 
     /// The mail analyses running (`enrich`), each a job.
     pub enrich: EnrichState,
+
+    /// The reads of mails' attachments running (`attachments`), each a job.
+    pub attachments: AttachmentState,
 }
 
 impl App {
@@ -452,6 +456,7 @@ impl App {
             scans: ScanState::default(),
             chat: ChatState::default(),
             enrich: EnrichState::default(),
+            attachments: AttachmentState::default(),
         }
     }
 

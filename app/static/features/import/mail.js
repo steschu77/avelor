@@ -34,6 +34,7 @@ import { iconEl } from '../../ui/icons.js';
 import {
   aiAnyOffered, aiMissingHint, aiModelOf, aiModelPicker,
 } from '../workspace/models.js';
+import { WATCH_READ_STEP } from '../workspace/folders.js';
 
 const MAIL_PAGE_SIZE = 50; // matches per page, as the host pages them
 const MAIL_DEBOUNCE_MS = 500;
@@ -114,13 +115,15 @@ store.subscribe([state => state.vault_op, state => state.vault_expanded], ([vaul
 });
 
 // The account changed (e.g. its last fetch after a fetch): refresh the
-// header line and the date presets that depend on it; and the analysis,
-// whose pick may have changed with the AI accounts.
+// header line and the date presets that depend on it; and the attachments'
+// reading and the analysis, whose picks may have changed with the AI
+// accounts.
 store.subscribe(state => state.accounts_rev, () => {
   if (!mail) return;
   if (!accounts.has(mail.account)) return closeMailPage();
   renderMailSubtitle();
   renderMailDate(mail.form);
+  renderMailAttachmentsSection();
   renderMailAnalysisSection();
   scheduleRenderMailMatches();
 });
@@ -334,12 +337,12 @@ function mailReplacing() {
 }
 
 // Whether Fetch can run: a list to fetch from, not about to be replaced by
-// a pending Auto-update search, and an analysis that is off or has a
-// working pick.
+// a pending Auto-update search, and the attachments' reading and the
+// analysis off or with a working pick.
 function mailCanFetch() {
   return mail.matches !== null && mail.selected.size > 0 && !mail.fetching
     && !mail.searching && !(mail.auto && mail.timer !== null)
-    && !mailAnalysisBlocked(mail.analysis);
+    && !mailReadingBlocked(mail.attachments) && !mailAnalysisBlocked(mail.analysis);
 }
 
 // Fetch the selection; replacing bodies takes a second click on Fetch
@@ -665,18 +668,20 @@ function mailSetSync(account, change) {
 
 // ----------------------------------------------------------------------------
 // the attachments of new mail (mail.md#attachments), of Fetch mail and of an
-// account's auto-sync: whether they are saved, which ones, up to what size
+// account's auto-sync: whether they are saved, which ones, up to what size,
+// and whether they are read, with which model
 
 const MAIL_ATTACHMENTS_OFF = {
   enabled: false, patterns: ['*.pdf', '*.jpg', '*.jpeg', '*.png'], 'max-size': 10,
+  read: false, models: {},
 };
 const MAIL_ATTACHMENT_SIZES = [[5, '5 MB'], [10, '10 MB'], [25, '25 MB']];
 
-// `attachments` ({ enabled, patterns, 'max-size' }) as a seg, Off or On, and
-// a body: while on, the file types (`renderPatternField`, of `owner`) and
-// the size they are saved up to. `onChange` gets the attachments as
-// changed; `rerender` (the page's scheduler) runs for an edit that changes
-// nothing.
+// `attachments` ({ enabled, patterns, 'max-size', read, models }) as a seg,
+// Off or On, and a body: while on, the file types (`renderPatternField`, of
+// `owner`), the size they are saved up to, and whether they are read
+// (`renderMailReading`). `onChange` gets the attachments as changed;
+// `rerender` (the page's scheduler) runs for an edit that changes nothing.
 function renderMailAttachments(owner, attachments, onChange, rerender) {
   const seg = accSeg([[false, 'Off'], [true, 'On']], attachments.enabled,
     enabled => onChange({ ...attachments, enabled }));
@@ -691,11 +696,40 @@ function renderMailAttachments(owner, attachments, onChange, rerender) {
   const size = accEl('div', 'form-field');
   size.append(accSeg(MAIL_ATTACHMENT_SIZES, attachments['max-size'],
     max => onChange({ ...attachments, 'max-size': max })));
+  const read = accEl('div', 'form-field');
+  read.append(accSeg([[false, 'Off'], [true, 'On']], !!attachments.read,
+    on => onChange({ ...attachments, read: on })));
   const grid = accEl('div', 'form-grid');
-  grid.append(accEl('span', 'label', 'File types'), types, accEl('span', 'label', 'Up to'), size);
+  grid.append(accEl('span', 'label', 'File types'), types, accEl('span', 'label', 'Up to'), size,
+    accEl('span', 'label', 'Read'), read);
   body.append(grid, accEl('div', 'page-text mail__text',
     'Saves each attached file that matches as a document in Attachments/, linked to its mail; images the mail shows in its text stay out.'));
+  if (attachments.read) body.append(renderMailReading(attachments, onChange));
   return { seg, body };
+}
+
+// While the attachments are read: the picker of the model that reads them,
+// and what keeps the pick from working (`aiMissingHint`, as the analysis
+// has it).
+function renderMailReading(attachments, onChange) {
+  const pick = attachments.models?.[WATCH_READ_STEP] ?? null;
+  const picker = aiModelPicker(pick,
+    model => onChange({ ...attachments, models: { ...attachments.models, [WATCH_READ_STEP]: model } }));
+  const body = accEl('div', 'page-text mail__text');
+  body.append('Reads each saved file into its document: images and PDFs with ', picker,
+    ' (on Ollama, PDFs stay unread), text files as they are.');
+  const ai = aiModelOf(pick);
+  if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
+    body.append(notice('hint', ...aiMissingHint(ai, 'reading attachments')));
+  }
+  return body;
+}
+
+// Whether `attachments` are saved and read, but the reading's pick wouldn't
+// work (the host refuses a fetch then).
+function mailReadingBlocked(attachments) {
+  return attachments.enabled && !!attachments.read
+    && !!aiModelOf(attachments.models?.[WATCH_READ_STEP] ?? null).problem;
 }
 
 // Fetch mail's second section, Attachments: built again on its changes, the
@@ -947,6 +981,10 @@ function renderMailFooter() {
   if (replacing) {
     footer.append(accEl('div', 'note mail__warning',
       `${replacing} selected ${replacing === 1 ? 'mail is' : 'mails are'} already in the vault: fetching replaces ${replacing === 1 ? 'its body' : 'their bodies'}, and edits to ${replacing === 1 ? 'it' : 'them'} are lost. Title, projects, labels and threads stay.`));
+  }
+  if (mailReadingBlocked(mail.attachments)) {
+    footer.append(accEl('div', 'note mail__warning',
+      'Reading attachments is on: pick a model that works for it, or turn it off.'));
   }
   if (mailAnalysisBlocked(mail.analysis)) {
     footer.append(accEl('div', 'note mail__warning',
