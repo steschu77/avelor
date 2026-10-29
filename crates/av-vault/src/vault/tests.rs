@@ -1,4 +1,4 @@
-use super::trash::untrashed;
+use super::trash::{trash_prefix, untrashed};
 use super::*;
 use crate::change::Change;
 use crate::envelope::Conversation;
@@ -1031,6 +1031,152 @@ fn trashed_files_are_deleted_one_by_one_or_all_at_once() {
     assert!(other.exists(), "what isn't listed stays");
     let err = index.delete_trashed(Path::new("Notes/n1.md"));
     assert!(matches!(err, Err(Error::FileNotFound { .. })));
+
+    fs::remove_dir_all(&root).ok();
+}
+
+/// An empty vault at a new temporary root, and a document `title` to
+/// write into it.
+fn original_vault(title: &str) -> (PathBuf, Index, Document) {
+    let root = std::env::temp_dir().join(format!("av-vault-test-{}", Id::generate()));
+    let mut index = Index::default();
+    index.begin(&root);
+    let roles = Roles {
+        document: Some(Default::default()),
+        ..Default::default()
+    };
+    let source = Source::Created(Empty {});
+    let doc = Document::create(
+        roles,
+        source,
+        title.into(),
+        Vec::new(),
+        FileFormat::Markdown,
+    );
+    (root, index, doc)
+}
+
+#[test]
+fn a_document_is_written_with_its_original_and_trashed_with_it() {
+    let (root, mut index, doc) = original_vault("Rechnung Oktober");
+    let mut changes = Changes::default();
+    let folder = Path::new("Attachments");
+    let pdf = b"%PDF-1.7\r\n%\xe2\xe3\xcf\xd3\r\n";
+    let id = index
+        .create_with_original(doc, folder, "Rechnung_Oktober.PDF", pdf, &mut changes)
+        .unwrap();
+    assert_eq!(changes.created, Some(id));
+
+    let entry = index.entry(&id).unwrap();
+    let path = index.original_path(&id).unwrap();
+    let file = path.file_name().unwrap().to_string_lossy().to_string();
+    let doc_name = entry.local.file_name().unwrap().to_string_lossy();
+    assert_eq!(file, doc_name.replace(".doc.md", ".doc.pdf"));
+    assert_eq!(fs::read(&path).unwrap(), pdf, "byte for byte");
+    let text = fs::read_to_string(&entry.path).unwrap();
+    let block = format!(
+        "document:\n  original:\n    file: {file}\n    name: Rechnung_Oktober.PDF\n    size: {}\n",
+        pdf.len()
+    );
+    assert!(text.contains(&block), "{text}");
+    let reindexed = Index::build(&root);
+    assert_eq!(reindexed.documents.len(), 1, "the original is no entity");
+    assert_eq!(reindexed.original_path(&id), Some(path.clone()));
+
+    // A file of the original's name in the trash: both get the prefix.
+    let stray = root.join(layout::TRASH).join(folder).join(&file);
+    fs::create_dir_all(stray.parent().unwrap()).unwrap();
+    fs::write(&stray, "stray\n").unwrap();
+    let deleted = index.delete(&id, &mut changes);
+    assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+    assert!(!path.exists() && index.original_path(&id).is_none());
+    let trashed = index.trashed();
+    assert_eq!(trashed.len(), 1, "only the document is listed");
+    let local = trashed[0].local.clone();
+    let prefix = trash_prefix(&local).to_string();
+    assert!(!prefix.is_empty(), "{}", local.display());
+    let trashed_pdf = stray.with_file_name(format!("{prefix}{file}"));
+    assert_eq!(fs::read(&trashed_pdf).unwrap(), pdf);
+    assert_eq!(fs::read_to_string(&stray).unwrap(), "stray\n");
+
+    // Restored without the prefix, the original with it.
+    let restored = index.restore(&local, &mut changes).unwrap();
+    assert_eq!(restored, id);
+    assert_eq!(index.original_path(&id), Some(path.clone()));
+    assert_eq!(fs::read(&path).unwrap(), pdf);
+    assert!(!trashed_pdf.exists());
+
+    // Deleted for good with its original; the stray file stays.
+    let deleted = index.delete(&id, &mut changes);
+    assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+    let local = index.trashed()[0].local.clone();
+    index.delete_trashed(&local).unwrap();
+    let left: Vec<_> = fs::read_dir(stray.parent().unwrap())
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(left, [stray.file_name().unwrap()]);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_restore_is_refused_when_its_originals_place_is_taken() {
+    let (root, mut index, doc) = original_vault("Photo");
+    let mut changes = Changes::default();
+    let folder = Path::new("Attachments");
+    let id = index
+        .create_with_original(doc, folder, "photo.jpg", b"jpeg", &mut changes)
+        .unwrap();
+    let path = index.original_path(&id).unwrap();
+    let deleted = index.delete(&id, &mut changes);
+    assert_eq!(deleted.unwrap(), SaveOutcome::Saved);
+
+    fs::write(&path, "another file\n").unwrap();
+    let local = index.trashed()[0].local.clone();
+    let err = index.restore(&local, &mut changes);
+    let name = Path::new(path.file_name().unwrap());
+    assert!(matches!(err, Err(Error::FileExists { path }) if path == folder.join(name)));
+    assert!(index.entry(&id).is_none());
+    let trashed = root.join(layout::TRASH).join(folder);
+    assert!(trashed.join(local.file_name().unwrap()).exists() && trashed.join(name).exists());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn an_original_is_only_a_plain_name_and_never_an_entity() {
+    let (root, mut index, doc) = original_vault("Notes");
+    let mut changes = Changes::default();
+    let id = index
+        .create_with_original(doc, Path::new("A"), "notes.md", b"# Notes\n", &mut changes)
+        .unwrap();
+    let path = index.original_path(&id).unwrap();
+    assert!(
+        path.to_string_lossy().ends_with(".doc.md.txt"),
+        "{}",
+        path.display()
+    );
+    assert_eq!(
+        Index::build(&root).documents.len(),
+        1,
+        "not read as an entity"
+    );
+
+    let other = index.entry(&id).unwrap().local.clone();
+    let other = other.file_name().unwrap().to_string_lossy().to_string();
+    fs::write(root.join("A/x.pdf"), "x").unwrap();
+    for file in ["../x.pdf", "B/x.pdf", "/x.pdf", "", &other] {
+        let text = format!(
+            "---\nid: {}\ndocument:\n  original:\n    file: '{file}'\n---\n",
+            Id::generate()
+        );
+        let doc = Document::load(text, FileFormat::Markdown);
+        assert_eq!(original_file(&doc), None, "{file}");
+    }
+    let text = "---\ndocument:\n  original:\n    file: x.pdf\n---\n";
+    let doc = Document::load(text.into(), FileFormat::Markdown);
+    assert_eq!(original_file(&doc), Some("x.pdf"));
 
     fs::remove_dir_all(&root).ok();
 }

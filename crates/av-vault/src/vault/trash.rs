@@ -5,7 +5,7 @@ use std::fs;
 use std::path::Component;
 use std::path::{Path, PathBuf};
 
-use super::{Changes, Found, Index, SaveOutcome, load, walk};
+use super::{Changes, Found, Index, SaveOutcome, load, original_file, walk};
 use crate::document::{Document, FileFormat};
 use crate::envelope::DocumentType;
 use crate::schema::layout;
@@ -103,9 +103,10 @@ impl Index {
     }
 
     /// Move `id`'s file to `<root>/.trash/<its vault-relative path>` and drop
-    /// it from the index. The indexing skips dot-folders, so it stays gone until
-    /// it is restored ([`Index::restore`]). An already trashed file of the
-    /// same name is kept: the new one gets a timestamp prefix.
+    /// it from the index; its original goes along, next to it. The indexing
+    /// skips dot-folders, so it stays gone until it is restored
+    /// ([`Index::restore`]). An already trashed file of the same name is
+    /// kept: the new ones get a timestamp prefix.
     pub fn trash(&mut self, id: &Id, changes: &mut Changes) -> Result<()> {
         let Some(entry) = self.entry(id) else {
             return Err(Error::NotFound);
@@ -114,19 +115,28 @@ impl Index {
             return Err(Error::Unsaved);
         }
         let mut target = self.root.join(layout::TRASH).join(&entry.local);
-        if target.exists() {
+        let original = original_file(&entry.doc)
+            .map(|file| (entry.path.with_file_name(file), file.to_string()))
+            .filter(|(path, _)| path.is_file());
+        let mut prefix = String::new();
+        let taken = |file: &str| target.with_file_name(file).exists();
+        if target.exists() || original.as_ref().is_some_and(|(_, file)| taken(file)) {
             let name = entry
                 .local
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let stamp = DateTime::now().as_timestamp();
-            target.set_file_name(format!("{stamp}.{name}"));
+            prefix = format!("{}.", DateTime::now().as_timestamp());
+            target.set_file_name(format!("{prefix}{name}"));
         }
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::rename(&entry.path, &target)?;
+        let original = original.map(|(path, file)| {
+            let trashed = target.with_file_name(format!("{prefix}{file}"));
+            (path, trashed)
+        });
+        move_with_original(&entry.path, &target, original.as_ref())?;
         if let Some(entry) = self.remove(id) {
             changes.trashed_files.push(entry.local);
         }
@@ -158,10 +168,11 @@ impl Index {
 
     /// Move the trashed file `local` (relative to `.trash`, as
     /// [`Index::trashed`] lists it) back to where it was -- its name without
-    /// the prefix [`Index::trash`] adds on a clash -- and add it to the
-    /// index; returns its id. Refused with [`Error::FileExists`] when a file is
-    /// in that place, or an entity with the file's `id` is in the vault.
-    /// The trash folders this leaves empty are removed.
+    /// the prefix [`Index::trash`] adds on a clash -- with its original, and
+    /// add it to the index; returns its id. Refused with
+    /// [`Error::FileExists`] when a file is in its place or its original's,
+    /// or an entity with the file's `id` is in the vault. The trash folders
+    /// this leaves empty are removed.
     pub fn restore(&mut self, local: &Path, changes: &mut Changes) -> Result<Id> {
         let (from, format) = self.trashed_file(local)?;
         let target = untrashed(local);
@@ -180,10 +191,24 @@ impl Index {
                 path: other.local.clone(),
             });
         }
+        let original = original_file(&entry.doc)
+            .map(|file| {
+                let trashed = from.with_file_name(format!("{}{file}", trash_prefix(local)));
+                (trashed, to.with_file_name(file))
+            })
+            .filter(|(trashed, _)| trashed.is_file());
+        if let Some((_, back)) = &original
+            && back.try_exists()?
+        {
+            let name = back.file_name().unwrap_or_default();
+            return Err(Error::FileExists {
+                path: target.with_file_name(name),
+            });
+        }
         if let Some(parent) = to.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::rename(&from, &to)?;
+        move_with_original(&from, &to, original.as_ref())?;
         prune_empty(&self.root.join(layout::TRASH), from.parent());
         entry.path = to;
         self.insert(entry);
@@ -217,18 +242,21 @@ impl Index {
         Ok(SaveOutcome::Saved)
     }
 
-    /// Delete the trashed file `local` for good, also a read-only one, and
-    /// the trash folders this leaves empty.
+    /// Delete the trashed file `local` for good, also a read-only one, with
+    /// its original, and the trash folders this leaves empty.
     pub fn delete_trashed(&self, local: &Path) -> Result<()> {
-        let (path, _) = self.trashed_file(local)?;
-        let mut permissions = fs::metadata(&path)?.permissions();
-        if permissions.readonly() {
-            // Only the trash's own file, about to be deleted.
-            #[allow(clippy::permissions_set_readonly_false)]
-            permissions.set_readonly(false);
-            fs::set_permissions(&path, permissions)?;
+        let (path, format) = self.trashed_file(local)?;
+        let original = load(path.clone(), local.to_path_buf(), false, format)
+            .ok()
+            .and_then(|entry| {
+                let file = original_file(&entry.doc)?;
+                Some(path.with_file_name(format!("{}{file}", trash_prefix(local))))
+            })
+            .filter(|original| original.is_file());
+        if let Some(original) = original {
+            remove_for_good(&original)?;
         }
-        fs::remove_file(&path)?;
+        remove_for_good(&path)?;
         prune_empty(&self.root.join(layout::TRASH), path.parent());
         Ok(())
     }
@@ -286,19 +314,62 @@ impl Index {
 }
 
 // ----------------------------------------------------------------------------
+/// Move the file `from` to `to` with its `original`, `(from, to)`: the
+/// original first, and back if the file can't follow, so a failure leaves
+/// both where they were.
+fn move_with_original(from: &Path, to: &Path, original: Option<&(PathBuf, PathBuf)>) -> Result<()> {
+    if let Some((original_from, original_to)) = original {
+        fs::rename(original_from, original_to)?;
+    }
+    if let Err(err) = fs::rename(from, to) {
+        if let Some((original_from, original_to)) = original {
+            fs::rename(original_to, original_from).ok();
+        }
+        return Err(err.into());
+    }
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
+/// Delete the file at `path`, also a read-only one: only the trash's
+/// files, about to be deleted for good.
+fn remove_for_good(path: &Path) -> Result<()> {
+    let mut permissions = fs::metadata(path)?.permissions();
+    if permissions.readonly() {
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        fs::set_permissions(path, permissions)?;
+    }
+    fs::remove_file(path)?;
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
 /// Where the trashed file `local` goes back to: its vault-relative path,
-/// without the `YYYYMMDD_hhmmss.` prefix [`Index::trash`] adds on a clash.
-/// The names the app gives files start `YYYYMMDDThhmm`, never like that.
+/// without the prefix [`Index::trash`] adds on a clash ([`trash_prefix`]).
 pub(super) fn untrashed(local: &Path) -> PathBuf {
+    let prefix = trash_prefix(local);
+    if prefix.is_empty() {
+        return local.to_path_buf();
+    }
+    let name = local
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    local.with_file_name(&name[prefix.len()..])
+}
+
+/// The `YYYYMMDD_hhmmss.` prefix [`Index::trash`] gives the trashed file
+/// `local` on a clash, with its dot; empty without one. The names the app
+/// gives files start `YYYYMMDDThhmm`, never like that.
+pub(super) fn trash_prefix(local: &Path) -> &str {
     let name = local
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
     match name.split_once('.') {
-        Some((stamp, rest)) if is_trash_stamp(stamp) && !rest.is_empty() => {
-            local.with_file_name(rest)
-        }
-        _ => local.to_path_buf(),
+        Some((stamp, rest)) if is_trash_stamp(stamp) && !rest.is_empty() => &name[..=stamp.len()],
+        _ => "",
     }
 }
 

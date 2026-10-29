@@ -3,11 +3,12 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use super::{Changes, Entry, Index, SaveOutcome};
+use super::{Changes, Entry, Index, SaveOutcome, original_file};
 use crate::document::{Document, FileFormat};
 use crate::envelope::DocumentType;
+use crate::envelope::Original;
 use crate::envelope::Thread;
 use crate::envelope::{Empty, Project, Roles, Source};
 use crate::filename;
@@ -178,7 +179,7 @@ impl Index {
         self.open_root()?;
         let local = folder.join(filename::generated_name(&doc));
         let path = self.root.join(&local);
-        write_new(&path, &doc.save())?;
+        write_new(&path, doc.save().as_bytes())?;
         let stamp = FileStamp::read(&path).ok().flatten();
 
         let id = doc.id();
@@ -197,13 +198,52 @@ impl Index {
         changes.created = Some(id);
         Ok(id)
     }
+
+    /// Write the new document `doc` with its original (vault.md#document):
+    /// `bytes`, the file that came as `name`. The file is written first,
+    /// named after the document ([`filename::original_name`]), then the
+    /// document as [`Index::create`] writes it; if that fails, the file is
+    /// removed again.
+    pub fn create_with_original(
+        &mut self,
+        mut doc: Document,
+        folder: &Path,
+        name: &str,
+        bytes: &[u8],
+        changes: &mut Changes,
+    ) -> Result<Id> {
+        self.open_root()?;
+        let mut original = Original {
+            file: None,
+            name: Some(name.to_string()),
+            size: Some(bytes.len() as u64),
+        };
+        // Named once the role is set: the role decides the type in the name.
+        doc.set_original(original.clone());
+        let ext = Path::new(name).extension().and_then(|e| e.to_str());
+        let file = filename::original_name(&doc, ext.unwrap_or_default());
+        let path = self.root.join(folder).join(&file);
+        write_new(&path, bytes)?;
+        original.file = Some(file);
+        doc.set_original(original);
+        self.create(doc, folder, changes).inspect_err(|_| {
+            fs::remove_file(&path).ok();
+        })
+    }
+
+    /// Where `id`'s original is: its file next to the entity's
+    /// ([`original_file`]); `None` without one.
+    pub fn original_path(&self, id: &Id) -> Option<PathBuf> {
+        let entry = self.entry(id)?;
+        Some(entry.path.with_file_name(original_file(&entry.doc)?))
+    }
 }
 
 // ----------------------------------------------------------------------------
-/// Write `text` to a new file at `path`, creating its folder; fails rather
+/// Write `bytes` to a new file at `path`, creating its folder; fails rather
 /// than replace a file that already exists. A failure is
 /// `Error::FileWrite` with `path`.
-fn write_new(path: &Path, text: &str) -> Result<()> {
+fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     let written = (|| {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -212,7 +252,7 @@ fn write_new(path: &Path, text: &str) -> Result<()> {
             .write(true)
             .create_new(true)
             .open(path)?;
-        file.write_all(text.as_bytes())
+        file.write_all(bytes)
     })();
     written.map_err(|err| Error::FileWrite {
         path: path.to_path_buf(),
