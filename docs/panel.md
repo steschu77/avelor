@@ -54,13 +54,20 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
   due date as seen from today (tagged when overdue), its assignee and when
   it was done (`task.done`), for a mail its sender, followed by its kind
   when the mail analysis found one ("Stadtwerke · Request",
-  `mail.md#analysis`), and for a document its genre (`renderCardDetails`,
+  `mail.md#analysis`), and for a document its genre and the file it stands
+  for, with Open (`vault.md#document`; `renderCardDetails`,
   `features/panel/details.js`). A task's fields and a document's genre are
   editable in place while the host can write the entity
   (`panel.md#field-edits`); the rest is read-only;
 - its project and label chips on one line, with the "+" menu that adds
   either (`panel.md#labels`, `panel.md#projects`), and its link chips
   (`panel.md#links`);
+- its attachments: the documents linked to it that stand for a file, a
+  mail's attachments (`renderCardAttachments`), a row each with the file
+  type's icon, the title, which selects the document, the size, and Open;
+  a double-click on the row opens the file too (`open_file`, refused for a
+  file that runs code). Refreshed on `entities_rev` with the links; hidden
+  without any;
 - an action toolbar (edit/link/chat/task/thread/delete, cloned from
   `#preview-toolbar-template`), an editing toolbar (cloned from
   `#editor-toolbar-template`), and its own `createEditor()` instance.
@@ -326,7 +333,8 @@ other side is derived.
 
 - A card lists its links as chips below its labels (`renderCardLinks`,
   `features/panel/panel.js`): the one it links to first, then those that link to
-  it, but the chats about the card, which the Conversation tab lists. A
+  it, but the chats about the card, which the Conversation tab lists, and
+  its attachments, which have their own block (`panel.md#cards`). A
   click selects the other entity, × removes the link (on an entity the app
   can't write, there is none). The chips are refreshed on `entities_rev`
   without rebuilding the card.

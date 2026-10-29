@@ -96,6 +96,15 @@ export function openLink(href) {
   });
 }
 
+// Open the file the document `id` stands for (its original,
+// vault.md#document: a mail's attachment) in its default app, through the
+// host (`open_file`).
+export function openOriginal(id) {
+  rpcCall('open_file', { id }).catch(e => {
+    if (e.code !== 'cancelled') showError(e.message);
+  });
+}
+
 // Select whatever `id` names: an entity in the panel, a thread in the
 // panel's thread view (the Documents lens's, from the calendar), a project
 // as the filter. A link's click (`openLink`, the link chips), a thread's row.
