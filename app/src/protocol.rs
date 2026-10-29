@@ -62,6 +62,8 @@ enum Command {
     Search(Query),
     /// Open a web, email or phone link in its default app.
     OpenUrl(Url),
+    /// Open a document's original in its default app.
+    OpenFile(Target),
     /// Stop the job `id` (`jobs::cancel_job`).
     CancelJob(Target),
     /// The page's answer to the event `close` (`close::close_ready`).
@@ -322,6 +324,7 @@ impl Command {
             "rebuild_index" => Command::RebuildIndex,
             "search" => Command::Search(from_value(args)?),
             "open_url" => Command::OpenUrl(from_value(args)?),
+            "open_file" => Command::OpenFile(from_value(args)?),
             "cancel_job" => Command::CancelJob(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
@@ -411,6 +414,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::RebuildIndex => api::rebuild_index(app, req),
         Command::Search(a) => search::search(app, req, a.text),
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
+        Command::OpenFile(a) => api::open_file(app, req, a.id),
         Command::CancelJob(a) => jobs::cancel_job(app, req, a.id),
         Command::CloseReady(a) => close::close_ready(app, req, a),
         Command::LoadDocContent(a) => documents::load_doc_content(app, req, a.id),

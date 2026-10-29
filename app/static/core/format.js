@@ -112,8 +112,9 @@ export function pageDate(iso, withTime) {
 }
 
 // ----------------------------------------------------------------------------
-// A count with its noun, "1 file", "3 files"; `many` for a plural that
-// isn't `one` + "s".
-export function plural(n, one, many = `${one}s`) {
-  return `${n} ${n === 1 ? one : many}`;
+// A file's size: "812 KB", "2.4 MB".
+export function fileSize(bytes) {
+  if (bytes < 1024) return t('size.bytes', { n: bytes });
+  if (bytes < 1024 * 1024) return t('size.kb', { n: Math.round(bytes / 1024) });
+  return t('size.mb', { n: Math.round(bytes / 1024 / 1024 * 10) / 10 });
 }

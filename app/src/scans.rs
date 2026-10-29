@@ -23,6 +23,7 @@ use av_utils::id::Id;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::api::may_open;
 use crate::app::App;
 use crate::app::Task;
 use crate::protocol::Req;
@@ -233,7 +234,9 @@ fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> 
 // ----------------------------------------------------------------------------
 /// `scan_open {watch, file}`: open the file in its default app (an image in
 /// the Photos app), once the handler has returned (`ShellExecuteW` may run
-/// a modal loop, as for `open_url`); only a file inside the watch's folder.
+/// a modal loop, as for `open_url`); only a file inside the watch's folder,
+/// and only a PDF or an image (`api::may_open`): the folder may be
+/// Downloads.
 pub fn scan_open(app: &mut App, req: Req, request: OpenRequest) {
     let root = match app.watches.get(request.watch) {
         Ok(watch) => watch.settings().root(),
@@ -244,6 +247,11 @@ pub fn scan_open(app: &mut App, req: Req, request: OpenRequest) {
     if !inside(&root, &path) {
         let text = Text::new("scans.outside").arg("name", name.as_str());
         return refuse(req, Error::InvalidPath { path }, text);
+    }
+    if !may_open(&path) {
+        let arg = format!("a type the app doesn't open: {name}");
+        let text = Text::new("open.other_type").arg("name", name.as_str());
+        return refuse(req, Error::InvalidArgument { arg }, text);
     }
     app.on_ui(
         move |_| sys::open_path(&path),
