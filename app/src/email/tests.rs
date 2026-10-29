@@ -302,13 +302,8 @@ fn applying_saves_each_attachment_once_beside_its_document() {
     let Stored::Created(email) = stored else {
         panic!("{stored:?}");
     };
-    assert_eq!(
-        saved,
-        Saved {
-            saved: 1,
-            failed: 0
-        }
-    );
+    assert_eq!(saved.created.len(), 1);
+    assert_eq!((saved.unread.len(), saved.failed), (0, 0));
     let sent = parse(&h.take());
     assert_eq!(shape(&sent), ["entity", "entity"], "{sent:?}");
     let doc = &sent[1]["data"];
@@ -325,19 +320,28 @@ fn applying_saves_each_attachment_once_beside_its_document() {
     assert_eq!(fs::read(&path).unwrap(), b"%PDF-1.7\n");
     assert!(path.starts_with(h.vault().join("Attachments")));
 
-    // A replaced email gets only what it doesn't have yet.
+    // A replaced email gets only what it doesn't have yet, and names
+    // what it has without text, to be read.
     let (stored, saved) = apply_email(&mut h.app, account, "g1", attached(), true).unwrap();
-    assert_eq!((stored, saved), (Stored::Replaced, Saved::default()));
+    let unread = Saved {
+        unread: vec![id],
+        ..Saved::default()
+    };
+    assert_eq!((stored, saved), (Stored::Replaced, unread));
     let both = Some(&keep(&["*.pdf", "*.zip"], 10));
     let email = Downloaded::parse(RAW_ATTACHED.as_bytes(), date, both);
     let (_, saved) = apply_email(&mut h.app, account, "g1", email, true).unwrap();
     assert_eq!(
-        saved,
-        Saved {
-            saved: 1,
-            failed: 0
-        }
+        (saved.created.len(), saved.unread, saved.failed),
+        (1, vec![id], 0)
     );
+    let text = "Read.\n".to_string();
+    let written = h
+        .app
+        .edit(|index, changes| index.set_content(&id, text, changes));
+    assert!(written.is_ok());
+    let (_, saved) = apply_email(&mut h.app, account, "g1", attached(), true).unwrap();
+    assert_eq!(saved.unread.len(), 1, "the zip's document only");
 
     // The attachments name the email's message, but aren't taken for it.
     let index = h.app.vault.index();
@@ -801,6 +805,61 @@ fn a_fetch_remembers_its_attachments() {
         account["data"]["fetch_email"]["attachments"], attachments,
         "kept while off"
     );
+
+    // Read on, the pick is checked first.
+    let model = json!({ "account": Id::generate(), "model": "m" });
+    let attachments = json!({ "enabled": true, "read": true, "models": { "read": model } });
+    let args = json!({ "account": CONNECTED, "ids": [], "attachments": attachments });
+    let sent = h.call("email_fetch", args);
+    assert_eq!(shape(&sent), ["reply"], "nothing fetched: {sent:?}");
+    assert_eq!(
+        shown(&sent[0]["err"]["text"]),
+        "For reading attachments, the picked model\u{2019}s account is gone; pick another model."
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_finished_fetch_reads_its_attachments_before_the_analysis() {
+    let mut h = with_google("email-read-after", EMAIL, &[]);
+    let account = connected_id();
+    let lite = Analysis {
+        level: crate::google::accounts::AnalysisLevel::Lite,
+        model: None,
+    };
+    let reading = json!({ "enabled": true, "patterns": ["*.pdf"], "read": true });
+    let client = h.app.google.connected(account).unwrap();
+    let plan = FetchPlan {
+        account,
+        client,
+        queue: VecDeque::new(),
+        skipped: 0,
+        replace: HashSet::new(),
+        origin: Origin::Manual,
+        started: DateTime::now(),
+        analysis: Some(lite),
+        attachments: Some(serde_json::from_value(reading).unwrap()),
+    };
+    start_fetch(&mut h.app, Text::new("email.fetching"), plan);
+    let fetch = h.app.email.fetch.as_mut().unwrap();
+    fetch.counts.created.push(Id::generate());
+    fetch.counts.attachments.unread.push(Id::generate());
+    finish(&mut h.app);
+    let sent = parse(&h.take());
+    // No AI account in this vault: the reading says so, then the
+    // analysis.
+    let notices: Vec<String> = sent
+        .iter()
+        .filter(|m| m["ev"] == "notice" && m["data"]["level"] == "error")
+        .map(|m| shown(&m["data"]["text"]))
+        .collect();
+    assert_eq!(notices.len(), 2, "{sent:?}");
+    assert!(
+        notices[0].starts_with("Reading attachments \u{b7} "),
+        "{notices:?}"
+    );
+    assert!(notices[0].ends_with("For reading attachments, add an AI provider under Accounts."));
+    assert!(notices[1].contains("For the email analysis, add an AI provider"));
 }
 
 // ------------------------------------------------------------------------

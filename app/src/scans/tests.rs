@@ -3,7 +3,7 @@ use av_vault::envelope::Source;
 use serde_json::json;
 
 use super::import::{ScanPage, scan_document};
-use super::read::{PageEvent, PageStatus, ReadCounts, TITLE_LEN, is_image, title_of};
+use super::read::{PageEvent, PageStatus, ReadCounts, TITLE_LEN, title_of};
 use crate::ai;
 use crate::reader;
 use crate::testing::Harness;
@@ -333,7 +333,6 @@ fn statuses_and_summaries_read_well() {
         "2 read · 1 stopped · spend limit reached"
     );
     assert_eq!(words(&ReadCounts::default().summary()), "nothing to read");
-    assert!(is_image("scan.JPG") && is_image("p1.webp") && !is_image("a.pdf"));
 }
 
 // ------------------------------------------------------------------------

@@ -43,6 +43,7 @@
   "email.analysis_blocked": "El análisis está activado: elija un modelo que funcione para él o desactívelo.",
   "email.intro": "Para contar las coincidencias solo se leen los encabezados. Los cuerpos se descargan y convierten cuando pulsa Recoger.",
   "email.press_update": "Pulse Actualizar para leer las coincidencias.",
+  "email.reading_blocked": "La lectura de adjuntos está activada: elija un modelo que funcione para ella o desactívela.",
   "email.replace_again": {
     "one": "Haga clic de nuevo para sustituir {n} cuerpo",
     "other": "Haga clic de nuevo para sustituir {n} cuerpos"

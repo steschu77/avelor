@@ -19,7 +19,7 @@ use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::jobs::job_summary;
 use crate::protocol::Req;
-use crate::reader;
+use crate::reader::{self, Kind};
 use crate::texts::Text;
 use crate::watches::FolderFile;
 use crate::watches::READ_STEP;
@@ -138,12 +138,6 @@ fn post_page(app: &App, watch: Id, file: &str, status: &PageStatus) {
 }
 
 // ----------------------------------------------------------------------------
-/// Whether `name` is a file the OCR models take: JPEG, PNG, GIF or WebP.
-pub(super) fn is_image(name: &str) -> bool {
-    av_utils::mime::type_for(Path::new(name)).starts_with("image/")
-}
-
-// ----------------------------------------------------------------------------
 /// `scan_read {watch, files, again?}`: read the files with the model the
 /// watch picked for OCR (`AiAccounts::choose`), as a job: a `scan_page` event per
 /// file as it is queued, read and done. Files read before (and unchanged)
@@ -179,7 +173,7 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         if app.scans.status(watch, &name).is_some() || queue.contains(&name) {
             continue;
         }
-        if !is_image(&name) {
+        if Kind::of(&name) != Some(Kind::Image) {
             let error = Text::new("scans.images_only");
             post_page(app, watch, &name, &PageStatus::Failed { error: &error });
             continue;
@@ -280,7 +274,8 @@ fn ocr(
     // The file's facts first: a change while it is read makes the text stale.
     let file = FolderFile::read(root, name).map_err(ReadError::File)?;
     let data = FileData::from_path(&file.path).map_err(ReadError::File)?;
-    let response = reader::ask(client, cancel, model, data, on_words).map_err(ReadError::Model)?;
+    let response = reader::ask(client, cancel, model, Kind::Image, data, on_words)
+        .map_err(ReadError::Model)?;
     Ok((file, response))
 }
 

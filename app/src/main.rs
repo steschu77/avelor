@@ -7,6 +7,7 @@ mod ai;
 mod analysis;
 mod api;
 mod app;
+mod attachments;
 mod calendar;
 mod catalog;
 mod chat;

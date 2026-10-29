@@ -18,6 +18,7 @@ use super::apply::{Saved, Stored, apply_email};
 use super::entities::Downloaded;
 use crate::analysis;
 use crate::app::App;
+use crate::attachments;
 use crate::google;
 use crate::google::accounts::Analysis;
 use crate::google::accounts::AttachmentSettings;
@@ -26,6 +27,7 @@ use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::protocol::Req;
 use crate::texts::Text;
+use crate::watches::READ_STEP;
 use av_vault::schema::remote::GMAIL_ID;
 
 /// Message downloads in flight per fetch.
@@ -92,7 +94,10 @@ impl FetchCounts {
             (self.replaced, Text::new("count.replaced")),
             (self.skipped, Text::new("count.skipped")),
             (self.failed, Text::new("count.failed")),
-            (self.attachments.saved, Text::new("email.count.attachments")),
+            (
+                self.attachments.created.len(),
+                Text::new("email.count.attachments"),
+            ),
             (
                 self.attachments.failed,
                 Text::new("email.count.attachments_failed"),
@@ -131,9 +136,10 @@ pub(crate) struct FetchRequest {
 /// email and attachment written (with `content` for a replaced body), a
 /// `notice` per email that failed, and finally the account (`account`: its
 /// last fetch and sync). The filter, mode, analysis and attachments are
-/// remembered in the account first. With the analysis on, its pick is
-/// checked first (`AiAccounts::choose`): refused, nothing is fetched; else
-/// the new emails are analysed after the fetch.
+/// remembered in the account first. With the analysis on, or the
+/// attachments read, their picks are checked first (`AiAccounts::choose`):
+/// refused, nothing is fetched; else the attachments are read and the new
+/// emails analysed after the fetch.
 pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
     if app.email.fetch.is_some() {
         let what = "a second email fetch".to_string();
@@ -154,6 +160,15 @@ pub fn email_fetch(app: &mut App, req: Req, request: FetchRequest) {
         return req.fail(refusal.error, refusal.text);
     }
     let attachments = request.attachments.clone().filter(|a| a.enabled);
+    if let Some(reading) = attachments.as_ref().filter(|a| a.read) {
+        let picked = reading.model(READ_STEP);
+        if let Err(refusal) = app
+            .ai
+            .choose(picked, attachments::reading(), DateTime::now())
+        {
+            return req.fail(refusal.error, refusal.text);
+        }
+    }
     let remembered = Remembered {
         filter: request.filter,
         auto_update: request.auto_update,
@@ -362,7 +377,8 @@ fn on_downloaded(app: &mut App, job: Id, gmail_id: String, result: Result<Downlo
                 Stored::Replaced => counts.replaced += 1,
                 Stored::Skipped => counts.skipped += 1,
             }
-            counts.attachments.saved += attachments.saved;
+            counts.attachments.created.extend(attachments.created);
+            counts.attachments.unread.extend(attachments.unread);
             counts.attachments.failed += attachments.failed;
         }
         Err(_) => counts.failed += 1,
@@ -393,8 +409,9 @@ pub fn stop(app: &mut App) {
 /// when it started (the page's "Since last time", or where the next
 /// auto-sync starts) only if it fetched all and nothing failed, so the next
 /// one still covers what it didn't write -- and end the job with its
-/// summary. Unless it was stopped, the analysis it asks for starts on the
-/// emails it created.
+/// summary. Unless it was stopped, the attachments it saved (and those of
+/// a replaced email without text) are read if its filter says so, then the
+/// analysis it asks for starts on the emails it created.
 pub(super) fn finish(app: &mut App) {
     let Some(fetch) = app.email.fetch.take() else {
         return;
@@ -432,10 +449,26 @@ pub(super) fn finish(app: &mut App) {
     if let Some((text, entity)) = new_email_notice(&counts.created, title_of, &email) {
         app.inform(text, entity);
     }
+    let FetchCounts {
+        created,
+        attachments: saved,
+        ..
+    } = fetch.counts;
     let analysis = fetch.analysis.filter(|a| a.is_on() && !stopped);
-    if let Some(analysis) = analysis.filter(|_| !fetch.counts.created.is_empty()) {
-        let created = fetch.counts.created;
-        analysis::analyse(app, &email, created, &analysis);
+    let then = analysis
+        .filter(|_| !created.is_empty())
+        .map(|analysis| (created, analysis));
+    let reading = fetch.attachments.filter(|a| a.read && !stopped);
+    let to_read: Vec<Id> = saved.created.into_iter().chain(saved.unread).collect();
+    match reading {
+        Some(reading) if !to_read.is_empty() => {
+            attachments::read(app, &email, to_read, reading.model(READ_STEP), then);
+        }
+        _ => {
+            if let Some((emails, analysis)) = then {
+                analysis::analyse(app, &email, emails, &analysis);
+            }
+        }
     }
 }
 

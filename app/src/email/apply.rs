@@ -67,10 +67,13 @@ pub(super) fn existing_email(
 }
 
 // ----------------------------------------------------------------------------
-/// What saving an email's attachments came to.
+/// What saving an email's attachments came to: the documents written, those
+/// it had already whose text is still empty (to read), and the files that
+/// failed.
 #[derive(Debug, Default, PartialEq)]
 pub(super) struct Saved {
-    pub(super) saved: usize,
+    pub(super) created: Vec<Id>,
+    pub(super) unread: Vec<Id>,
     pub(super) failed: usize,
 }
 
@@ -119,9 +122,13 @@ pub(super) fn apply_email(
 /// linked to it whose original has the part's name and size -- as a
 /// document with its original in `Attachments/`, each in a vault edit of
 /// its own, the file marked as downloaded (`sys::mark_downloaded`). A part
-/// that fails is logged and counted; the others are still written.
+/// that fails is logged and counted; the others are still written. The
+/// documents `to.email` has already without text are named too.
 fn save_attachments(app: &mut App, to: &AttachedTo, parts: Vec<email::Attachment>) -> Saved {
-    let mut saved = Saved::default();
+    let mut saved = Saved {
+        unread: unread_originals(app.vault.index(), to.email),
+        ..Saved::default()
+    };
     if parts.is_empty() {
         return saved;
     }
@@ -137,7 +144,7 @@ fn save_attachments(app: &mut App, to: &AttachedTo, parts: Vec<email::Attachment
         });
         match written {
             Ok(id) => {
-                saved.saved += 1;
+                saved.created.push(id);
                 if let Some(path) = app.vault.index().original_path(&id) {
                     sys::mark_downloaded(&path);
                 }
@@ -163,5 +170,17 @@ fn saved_originals(index: &Index, email: Id) -> HashSet<(String, u64)> {
             let original = entry.doc.original()?;
             Some((original.name.clone()?, original.size?))
         })
+        .collect()
+}
+
+// ----------------------------------------------------------------------------
+/// The documents linked to `email` that have an original and no text yet.
+fn unread_originals(index: &Index, email: Id) -> Vec<Id> {
+    index
+        .all()
+        .iter()
+        .filter(|entry| entry.doc.linked_to() == Some(email) && entry.doc.original().is_some())
+        .filter(|entry| entry.doc.content().trim().is_empty())
+        .map(|entry| entry.doc.id())
         .collect()
 }
