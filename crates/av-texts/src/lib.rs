@@ -197,7 +197,7 @@ impl<'a> Visit<'a> for KeyCalls {
         if let Expression::Identifier(callee) = &it.callee {
             if PAGE_CALLS.contains(&callee.name.as_str()) {
                 let key = match it.arguments.first() {
-                    Some(Argument::StringLiteral(key)) => Some(key.value.as_str()),
+                    Some(Argument::StringLiteral(key)) => key.value.as_str(),
                     _ => None,
                 };
                 match key {
