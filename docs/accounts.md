@@ -91,7 +91,9 @@ Every account file has:
       `{account, model}`, kept while the level is off; absent: off
     * `attachments`: what Fetch mail saves of the files new mail brings
       (`mail.md#attachments`): `enabled`; `patterns`, the file types, as a
-      watch's; `max-size`, in MB (absent: 10); kept while off; absent: off
+      watch's; `max-size`, in MB (absent: 10); `read`, whether they are
+      read (absent: not), with the model in `models`, by step as a watch's
+      (`read`, `{account, model}`); kept while off; absent: off
     * `auto-sync`: the account's mail auto-sync (`mail.md#mail-auto-sync`),
       absent until it is first switched on: `enabled`; `filter`, its own
       filter, apart from the one above and without dates; `since`, from when
@@ -130,6 +132,11 @@ google:
       enabled: true
       patterns: ['*.pdf', '*.jpg', '*.jpeg', '*.png']
       max-size: 10
+      read: true
+      models:
+        read:
+          account: 0193a7c1-4b0e-7c1a-9d2f-3a51c8e05be0
+          model: gpt-5-mini
     auto-sync:
       enabled: true
       filter:
@@ -224,7 +231,8 @@ accounts with a detail pane.
   then it stays an input. The pane lists the models with their price per
   million tokens: ticking one offers it in the features' pickers, and "Used
   by" names, read only, what picked it (`accounts.md#model-choice`): Chats,
-  or a watch with its steps that run with it ("Scanner · OCR"); an
+  a watch with its steps that run with it ("Scanner · OCR"), or a mail
+  filter with its ("Fetch mail · jan@gmail.com · analysis, reading"); an
   unticked model still names them, as they are refused until they pick
   another. A key provider's pane shows what its calls cost this month
   (`accounts.md#spend-file`); an Ollama account shows whether the server
@@ -247,6 +255,8 @@ the feature's own settings:
 | A watch's steps: reading its files (OCR) | the watch file's `models`, by step (`import.md#watch-files`; `set_watch`) | the step's row in the watch's pane; Import scans for reading |
 | Fetch mail's analysis | the Google account file's `mail.analysis` (`mail.md#analysis`; remembered by `mail_fetch`) | Fetch mail, section Analysis |
 | An auto-sync's analysis | the Google account file's `mail.auto-sync.analysis` (`set_mail_sync`) | the account's pane, under the auto-sync's filter |
+| Fetch mail's reading of attachments | the Google account file's `mail.attachments.models`, by step (`mail.md#attachments`; remembered by `mail_fetch`) | Fetch mail, section Attachments |
+| An auto-sync's reading of attachments | the Google account file's `mail.auto-sync.attachments.models` (`set_mail_sync`) | the account's pane, under the auto-sync's filter |
 
 The host reads the pick where it is kept and checks it,
 `AiAccounts::choose(choice, what, now)`: a `Resolved` (account, model,
@@ -262,9 +272,9 @@ a request; `aiModelOf(choice)` mirrors the check for its hints. Refused:
 - the model no longer offered (unticked): "gpt-5 is no longer offered;
   tick it under Accounts or pick another model.";
 - the spend limit reached: the assistant shows "has reached its spend
-  limit" and takes no input; Import scans stops before its next page and
-  the mail analysis before its next mail (each with a notice; `check_limit`
-  before each); a call already running finishes (`Error::SpendLimit`).
+  limit" and takes no input; Import scans stops before its next page, the
+  attachments' reading before its next file and the mail analysis before
+  its next mail (each with a notice; `check_limit` before each); a call already running finishes (`Error::SpendLimit`).
 
 No other model is ever tried in place of the pick: it could send a
 document to another provider. The picker (`aiModelPicker`, `aiShowModels`

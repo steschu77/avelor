@@ -13,6 +13,7 @@ use av_utils::id::Id;
 use serde::Serialize;
 
 use crate::app::App;
+use crate::attachments;
 use crate::enrich;
 use crate::mail;
 use crate::protocol::Req;
@@ -27,6 +28,7 @@ pub enum JobKind {
     CalendarSync,
     ScanRead,
     MailAnalysis,
+    AttachmentRead,
 }
 
 impl JobKind {
@@ -40,12 +42,16 @@ impl JobKind {
     // ------------------------------------------------------------------------
     /// Whether it belongs to the open vault, so a vault switch stops it
     /// first: it writes into the vault (mail fetch, calendar sync, mail
-    /// analysis), or reads for one of its watches with one of its AI
-    /// accounts (scan read).
+    /// analysis, attachment read), or reads for one of its watches with one
+    /// of its AI accounts (scan read).
     fn vault_bound(self) -> bool {
         matches!(
             self,
-            JobKind::MailFetch | JobKind::CalendarSync | JobKind::ScanRead | JobKind::MailAnalysis
+            JobKind::MailFetch
+                | JobKind::CalendarSync
+                | JobKind::ScanRead
+                | JobKind::MailAnalysis
+                | JobKind::AttachmentRead
         )
     }
 }
@@ -289,8 +295,9 @@ pub fn cancel_job(app: &mut App, req: Req, id: Id) {
 
 // ----------------------------------------------------------------------------
 /// Stop the job `id`: its requests are cancelled, and the job ends -- at once
-/// (mail fetch, scan read, mail analysis), or once it has kept what it did
-/// (calendar sync, whose continuation runs with what the sync returned).
+/// (mail fetch, scan read, mail analysis, attachment read), or once it has
+/// kept what it did (calendar sync, whose continuation runs with what the
+/// sync returned).
 pub fn stop(app: &mut App, id: Id) {
     let Some(kind) = app.jobs.running.get(&id).map(|job| job.kind) else {
         return;
@@ -301,6 +308,7 @@ pub fn stop(app: &mut App, id: Id) {
         JobKind::MailFetch => mail::stop(app),
         JobKind::ScanRead => scans::stop_read(app),
         JobKind::MailAnalysis => enrich::stop(app, id),
+        JobKind::AttachmentRead => attachments::stop(app, id),
         JobKind::CalendarSync | JobKind::VaultScan => {}
     }
 }
