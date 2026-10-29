@@ -2,12 +2,17 @@ use super::*;
 use av_utils::datetime::DateTime;
 use av_vault::document::Document;
 use av_vault::envelope::DocumentType;
+use av_vault::shared::Genre;
 use serde_json::Value;
 
-use super::answer::{CHECKS_PER_EMAIL, Lite, Medium, POINT_CHARS, TITLE_CHARS, parse};
-use super::apply::{apply_lite, medium_messages};
-use super::context::{BODY_CHARS, Context, EmailText, context};
-use super::request::{LITE_SHAPE, MEDIUM_SHAPE, again, request_for};
+use super::answer::{
+    CHECKS_PER_EMAIL, Lite, Medium, POINT_CHARS, TITLE_CHARS, parse, parse_document,
+};
+use super::apply::{apply_document, apply_lite, medium_messages};
+use super::context::{BODY_CHARS, Context, DocText, EmailText, context};
+use super::request::{
+    DOCUMENT_SHAPE, LITE_SHAPE, MEDIUM_SHAPE, again, document_request, request_for,
+};
 use crate::ai;
 use crate::ai::accounts::ModelChoice;
 use crate::google::accounts::{Analysis, AnalysisLevel};
@@ -39,6 +44,7 @@ fn ctx() -> Context {
             (Id::parse(FLAT).unwrap(), "Wohnung Köln".into()),
             (Id::parse(OLD).unwrap(), "Auto".into()),
         ],
+        genres: vec!["bill".into(), "letter".into(), "Steuerbescheid".into()],
     }
 }
 
@@ -69,6 +75,14 @@ fn the_context_holds_the_labels_in_use_and_the_active_projects() {
             "Projects/o.md",
             format!("---\nid: {OLD}\ntitle: Altes Auto\nproject: {{}}\narchived: true\n---\n"),
         ),
+        (
+            "Documents/s.md",
+            "---\ntitle: S\ndocument:\n  genre: Steuerbescheid\n---\n".to_string(),
+        ),
+        (
+            "Documents/b.md",
+            "---\ntitle: B\ndocument:\n  genre: BILL\n---\n".to_string(),
+        ),
     ];
     let h = Harness::with_vault("analysis-context", &files);
     let ctx = context(h.app.vault.index());
@@ -80,6 +94,12 @@ fn the_context_holds_the_labels_in_use_and_the_active_projects() {
     assert_eq!(
         ctx.projects,
         [(Id::parse(FLAT).unwrap(), "Wohnung".to_string())]
+    );
+    assert!(ctx.genres.starts_with(&["bill".to_string()]));
+    assert!(!ctx.genres.iter().any(|g| g == "note"), "never a note");
+    assert_eq!(
+        ctx.genres.last().map(String::as_str),
+        Some("Steuerbescheid")
     );
 }
 
@@ -94,10 +114,11 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
         to: "jan@example.com".into(),
         date: None,
         body: "Body".into(),
+        attachments: Vec::new(),
     };
     let request = request_for(AnalysisLevel::Lite, "m", &ctx(), &email);
     assert_eq!(request.model, "m");
-    let asked = again(request.clone(), "Sorry.", AnalysisLevel::Lite);
+    let asked = again(request.clone(), "Sorry.", LITE_SHAPE);
     assert_eq!(asked.messages.len(), 3);
     assert_eq!(asked.messages[1].role, av_llm::Role::Assistant);
     let Some(av_llm::Part::Text(reminder)) = asked.messages[2].parts.first() else {
@@ -122,12 +143,12 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
             && system.contains("- reply:")
             && system.contains("- questions:")
     );
-    let asked = again(medium.clone(), "Sorry.", AnalysisLevel::Medium);
+    let asked = again(medium.clone(), "Sorry.", MEDIUM_SHAPE);
     let Some(av_llm::Part::Text(reminder)) = asked.messages[2].parts.first() else {
         panic!("{:?}", asked.messages);
     };
     assert!(reminder.contains(MEDIUM_SHAPE), "{reminder}");
-    let empty = again(request.clone(), "  ", AnalysisLevel::Lite);
+    let empty = again(request.clone(), "  ", LITE_SHAPE);
     assert_eq!(
         empty.messages.len(),
         1,
@@ -191,6 +212,132 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
 }
 
 // ------------------------------------------------------------------------
+/// The attachment `Rechnung.pdf` of the email "Abschlag", read to `body`,
+/// dated `date`.
+fn doc_text(body: &str, date: Option<DateTime>) -> DocText {
+    DocText {
+        id: Id::generate(),
+        title: "Rechnung".into(),
+        name: "Rechnung.pdf".into(),
+        date,
+        email: Some(("Abschlag".into(), "info@stadtwerke.example".into())),
+        body: body.into(),
+    }
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn an_attachment_is_asked_for_as_a_document() {
+    let request = document_request("m", &ctx(), &doc_text("Betrag 42 EUR", None));
+    let system = request.system.as_deref().unwrap();
+    assert!(system.starts_with("You sort documents.") && system.contains(DOCUMENT_SHAPE));
+    assert!(
+        system.contains("- genre:") && !system.contains("- kind:"),
+        "{system}"
+    );
+    assert_eq!(request.think, Some(false));
+    let Some(av_llm::Part::Text(text)) = request.messages[0].parts.first() else {
+        panic!("{:?}", request.messages);
+    };
+    assert!(
+        text.starts_with("Genres:\n- bill\n- letter\n- Steuerbescheid\n\nLabels:\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "The document:\nFile: Rechnung.pdf\nAttached to the email: Abschlag (from info@stadtwerke.example)\n\nBetrag 42 EUR"
+        ),
+        "{text}"
+    );
+    let asked = again(request, "Sorry.", DOCUMENT_SHAPE);
+    let Some(av_llm::Part::Text(reminder)) = asked.messages[2].parts.first() else {
+        panic!("{:?}", asked.messages);
+    };
+    assert!(reminder.contains(DOCUMENT_SHAPE), "{reminder}");
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn an_attachments_answer_takes_a_listed_genre_and_its_own_date() {
+    let email_date = DateTime::from_ymd_hms(2026, 10, 12, 9, 30, 0).unwrap();
+    let doc = doc_text("", Some(email_date));
+    let read = |answer: &str| parse_document(answer, &ctx(), &doc).unwrap();
+    let lite = read(
+        r#"{"title": "Stadtwerke Abschlag Oktober", "date": "2026-10-01", "genre": "BILL", "labels": ["rechnungen"], "projects": ["Auto"]}"#,
+    );
+    assert_eq!(lite.title.as_deref(), Some("Stadtwerke Abschlag Oktober"));
+    assert_eq!(lite.genre.as_deref(), Some("bill"), "as the list spells it");
+    assert_eq!(
+        lite.date,
+        Some(DateTime::from_ymd_hms(2026, 10, 1, 12, 0, 0).unwrap()),
+        "that day at noon UTC"
+    );
+    assert_eq!(lite.labels, ["Rechnungen"]);
+    assert_eq!(lite.projects, [Id::parse(OLD).unwrap()]);
+    assert_eq!(lite.kind, None);
+
+    assert_eq!(
+        read(r#"{"genre": "Mahnung"}"#).genre,
+        None,
+        "only from the list"
+    );
+    assert_eq!(read(r#"{"genre": null, "date": null}"#), Lite::default());
+    let date = |date: &str| read(&format!(r#"{{"date": "{date}"}}"#)).date;
+    assert!(
+        date("2026-10-13T08:00:00Z").is_some(),
+        "a day after the email"
+    );
+    assert_eq!(date("2026-10-14"), None, "later than the email");
+    assert_eq!(date("1899-12-31"), None);
+    assert_eq!(date("2026-13-01"), None);
+    assert_eq!(date("1.10.2026"), None);
+    assert_eq!(
+        read(r#"{"title": "Rechnung"}"#).title,
+        None,
+        "its own title"
+    );
+    assert!(parse_document("Sorry.", &ctx(), &doc).is_err());
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn applying_to_an_attachment_keeps_a_genre_it_has() {
+    let roles = Roles {
+        document: Some(Default::default()),
+        ..Default::default()
+    };
+    let mut doc = Document::create(
+        roles,
+        Source::Created(Default::default()),
+        "Rechnung".into(),
+        Vec::new(),
+        FileFormat::Markdown,
+    );
+    let date = DateTime::from_ymd_hms(2026, 10, 1, 12, 0, 0).unwrap();
+    let lite = Lite {
+        title: Some("Stadtwerke Abschlag".into()),
+        genre: Some("bill".into()),
+        date: Some(date),
+        labels: vec!["Rechnungen".into()],
+        ..Lite::default()
+    };
+    apply_document(&mut doc, &lite);
+    assert_eq!(
+        (doc.title(), doc.date()),
+        ("Stadtwerke Abschlag", Some(date))
+    );
+    let genre = |doc: &Document| doc.roles().document.clone().unwrap().genre;
+    assert_eq!(genre(&doc), Some(Genre::Bill));
+    assert_eq!(doc.labels(), ["Rechnungen"]);
+    let letter = Lite {
+        genre: Some("letter".into()),
+        ..Lite::default()
+    };
+    apply_document(&mut doc, &letter);
+    assert_eq!(genre(&doc), Some(Genre::Bill), "a genre it has stays");
+}
+
+// ------------------------------------------------------------------------
 #[test]
 fn the_answer_is_read_against_the_lists() {
     let answer = "Sure! ```json\n{\"title\": \"  Abschlag Oktober \", \"labels\": [\"rechnungen\", \"Unbekannt\", \"Rechnungen\", \"Umzug\", \"Steuer\", \"Bank\"], \"projects\": [\"wohnung köln\", \"Garten\", \"Auto\", \"Wohnung Köln\"]}\n``` Done.";
@@ -217,6 +364,7 @@ fn the_answer_is_read_against_the_lists() {
             kind: Some("request".into()),
             labels: vec!["Bank".into()],
             projects: vec![],
+            ..Lite::default()
         },
         "the email's own title is no change; one label as a string; the kind in any case"
     );
@@ -332,6 +480,7 @@ fn applying_keeps_the_subject_and_adds_to_what_the_email_has() {
         kind: Some("request".into()),
         labels: vec!["Umzug".into(), "Rechnungen".into()],
         projects: vec![flat, Id::parse(OLD).unwrap()],
+        ..Lite::default()
     };
     apply_lite(&mut doc, &lite);
     assert_eq!(doc.title(), "Abschlag Oktober");
@@ -416,7 +565,13 @@ fn an_analysis_writes_the_title_labels_and_projects() {
     let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
     let mut h = with_emails("analysis-run", &address, "");
     let ids = vec![Id::parse(EMAIL_ID).unwrap()];
-    analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        ids,
+        Vec::new(),
+        &at(AnalysisLevel::Lite),
+    );
     let sent = until_done(&mut h);
 
     let jobs = of(&sent, "job");
@@ -452,6 +607,7 @@ fn medium_writes_a_chat_linked_to_the_email() {
         &mut h.app,
         "jan@example.com",
         vec![email],
+        Vec::new(),
         &at(AnalysisLevel::Medium),
     );
     let sent = until_done(&mut h);
@@ -499,6 +655,85 @@ fn medium_writes_a_chat_linked_to_the_email() {
 
 // ------------------------------------------------------------------------
 #[test]
+fn a_email_and_its_attachment_are_analysed_in_one_job() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let answers = [
+        r#"{"kind": "notification", "title": "Abschlag Oktober"}"#,
+        r#"{"title": "Stadtwerke Rechnung", "date": "2026-10-01", "genre": "bill"}"#,
+    ];
+    let address = FakeOllama::new(&["m"])
+        .answering_in_turn(&answers)
+        .recording(&requests)
+        .start();
+    let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+    let bill = Id::generate();
+    let attachment = format!(
+        "---\nid: {bill}\ntitle: Rechnung\ndate: 2026-10-12T09:30:00Z\nlinked-to: {EMAIL_ID}\ndocument:\n  original:\n    file: r.pdf\n    name: Rechnung.pdf\n---\nBetrag: 42,00 EUR\n"
+    );
+    let files = [
+        (".avelor/accounts/ollama.yaml", account),
+        ("Email/a.md", email_file(EMAIL_ID, "Abschlag", "")),
+        ("Attachments/r.md", attachment),
+    ];
+    let mut h = Harness::with_vault("analysis-attachment", &files);
+    let email = vec![Id::parse(EMAIL_ID).unwrap()];
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        email,
+        vec![bill],
+        &at(AnalysisLevel::Medium),
+    );
+    let sent = until_done(&mut h);
+
+    let jobs = of(&sent, "job");
+    assert_eq!(jobs[0]["total"], 2);
+    assert_eq!(shown(&jobs.last().unwrap()["summary"]), "2 analysed");
+    assert!(of(&sent, "notice").is_empty(), "{sent:?}");
+    let requests = requests.lock().unwrap();
+    let user = |i: usize| {
+        requests[i]["messages"][1]["content"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    assert!(
+        user(0)
+            .ends_with("Its attached files, as read:\n\n--- Rechnung.pdf ---\nBetrag: 42,00 EUR"),
+        "{}",
+        user(0)
+    );
+    assert!(user(1).contains("File: Rechnung.pdf\nAttached to the email: Abschlag"));
+    let text = fs::read_to_string(h.vault().join("Attachments/r.md")).unwrap();
+    assert!(text.contains("title: Stadtwerke Rechnung"), "{text}");
+    assert!(text.contains("date: 2026-10-01T12:00:00Z"), "{text}");
+    assert!(text.contains("genre: bill"), "{text}");
+    assert!(
+        !h.vault().join("Conversations").exists(),
+        "Medium writes no conversation for an attachment, nor for this email"
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn nothing_to_analyse_starts_nothing() {
+    let mut h = with_emails("analysis-nothing", "http://127.0.0.1:9", "");
+    let unpicked = Analysis {
+        level: AnalysisLevel::Lite,
+        model: None,
+    };
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        Vec::new(),
+        Vec::new(),
+        &unpicked,
+    );
+    assert!(h.take().is_empty(), "not even the refused pick");
+}
+
+// ------------------------------------------------------------------------
+#[test]
 fn a_newsletter_gets_no_chat() {
     let answer = r#"{"kind": "newsletter", "title": "Angebote", "check": ["Rabatt"], "reply": "Nein", "questions": ["Was?"]}"#;
     let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
@@ -508,6 +743,7 @@ fn a_newsletter_gets_no_chat() {
         &mut h.app,
         "jan@example.com",
         ids,
+        Vec::new(),
         &at(AnalysisLevel::Medium),
     );
     let sent = until_done(&mut h);
@@ -535,6 +771,7 @@ fn an_unreadable_answer_is_asked_again() {
         &mut h.app,
         "jan@example.com",
         vec![Id::parse(EMAIL_ID).unwrap()],
+        Vec::new(),
         &at(AnalysisLevel::Lite),
     );
     let sent = until_done(&mut h);
@@ -571,7 +808,13 @@ fn a_cut_off_answer_is_not_asked_again() {
         .start();
     let mut h = with_emails("analysis-cut", &address, "");
     let ids = vec![Id::parse(EMAIL_ID).unwrap()];
-    analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        ids,
+        Vec::new(),
+        &at(AnalysisLevel::Lite),
+    );
     let sent = until_done(&mut h);
 
     assert_eq!(
@@ -598,7 +841,13 @@ fn unreadable_answers_leave_the_mails_and_are_told_once() {
     let mut h = with_emails("analysis-bad", &address, "");
     let before = fs::read_to_string(h.vault().join("Email/a.md")).unwrap();
     let ids = vec![Id::parse(EMAIL_ID).unwrap(), Id::parse(EMAIL_2).unwrap()];
-    analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        ids,
+        Vec::new(),
+        &at(AnalysisLevel::Lite),
+    );
     let sent = until_done(&mut h);
 
     assert_eq!(
@@ -635,7 +884,13 @@ fn the_spend_limit_stops_it_between_emails() {
     let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
     let mut h = with_emails("analysis-limit", &address, "");
     let ids = vec![Id::parse(EMAIL_ID).unwrap(), Id::parse(EMAIL_2).unwrap()];
-    analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        ids,
+        Vec::new(),
+        &at(AnalysisLevel::Lite),
+    );
     // The first email is on its way; then the limit is reached.
     let account = Id::parse(OLLAMA_ID).unwrap();
     h.app
@@ -671,6 +926,7 @@ fn a_refused_pick_is_told_and_starts_nothing() {
         &mut h.app,
         "jan@example.com",
         vec![Id::parse(EMAIL_ID).unwrap()],
+        Vec::new(),
         &unpicked,
     );
     let sent = parse_sent(&h.take());
@@ -690,7 +946,13 @@ fn stop_ends_it_and_a_late_answer_is_dropped() {
     let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
     let mut h = with_emails("analysis-stop", &address, "");
     let ids = vec![Id::parse(EMAIL_ID).unwrap(), Id::parse(EMAIL_2).unwrap()];
-    analyse(&mut h.app, "jan@example.com", ids, &at(AnalysisLevel::Lite));
+    analyse(
+        &mut h.app,
+        "jan@example.com",
+        ids,
+        Vec::new(),
+        &at(AnalysisLevel::Lite),
+    );
     let job = *h.app.analysis.runs.keys().next().unwrap();
     crate::jobs::stop(&mut h.app, job);
     let sent = parse_sent(&h.take());

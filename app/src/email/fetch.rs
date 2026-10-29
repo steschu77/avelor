@@ -455,9 +455,7 @@ pub(super) fn finish(app: &mut App) {
         ..
     } = fetch.counts;
     let analysis = fetch.analysis.filter(|a| a.is_on() && !stopped);
-    let then = analysis
-        .filter(|_| !created.is_empty())
-        .map(|analysis| (created, analysis));
+    let then = analysis.map(|analysis| (created, analysis));
     let reading = fetch.attachments.filter(|a| a.read && !stopped);
     let to_read: Vec<Id> = saved.created.into_iter().chain(saved.unread).collect();
     match reading {
@@ -466,7 +464,7 @@ pub(super) fn finish(app: &mut App) {
         }
         _ => {
             if let Some((emails, analysis)) = then {
-                analysis::analyse(app, &email, emails, &analysis);
+                analysis::analyse(app, &email, emails, Vec::new(), &analysis);
             }
         }
     }

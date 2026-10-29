@@ -5,6 +5,7 @@ use av_utils::datetime::DateTime;
 use av_utils::id::Id;
 use av_vault::document::Document;
 use av_vault::envelope::ConversationMessage;
+use av_vault::shared::Genre;
 
 use super::answer::{Lite, Medium};
 use super::same;
@@ -29,6 +30,31 @@ pub fn apply_lite(doc: &mut Document, lite: &Lite) {
     if let Some(title) = &lite.title {
         doc.set_title(title.clone());
     }
+    add_labels_and_projects(doc, lite);
+}
+
+// ----------------------------------------------------------------------------
+/// Write `lite` into the attachment's document `doc`: a new title and date;
+/// its genre, unless it has one; the labels and projects as for an email.
+pub fn apply_document(doc: &mut Document, lite: &Lite) {
+    if let Some(title) = &lite.title {
+        doc.set_title(title.clone());
+    }
+    if let Some(date) = lite.date {
+        doc.set_date(date);
+    }
+    let role = doc.roles().document.as_ref();
+    let has_genre = role.is_some_and(|role| role.genre.is_some());
+    if let Some(genre) = lite.genre.as_deref().filter(|_| !has_genre) {
+        doc.set_genre(Some(Genre::parse(genre)));
+    }
+    add_labels_and_projects(doc, lite);
+}
+
+// ----------------------------------------------------------------------------
+/// `lite`'s labels added to `doc`'s own (in any case once), its projects
+/// joined.
+fn add_labels_and_projects(doc: &mut Document, lite: &Lite) {
     let mut labels = doc.labels().to_vec();
     let before = labels.len();
     for label in &lite.labels {

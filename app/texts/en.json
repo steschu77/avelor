@@ -146,9 +146,17 @@
   "ai.choose_provider": "Choose an AI provider.",
   "ai.enter_key": "Enter the API key.",
   "ai.failed": "{name} failed: {error}",
+  "ai.failed.documents": {
+    "one": "{failed} of {n} attachment couldn't be analysed",
+    "other": "{failed} of {n} attachments couldn't be analysed"
+  },
   "ai.failed.emails": {
     "one": "{failed} of {n} email couldn't be analysed",
     "other": "{failed} of {n} emails couldn't be analysed"
+  },
+  "ai.failed.emails_documents": {
+    "one": "{failed} of {n} email or attachment couldn't be analysed",
+    "other": "{failed} of {n} emails and attachments couldn't be analysed"
   },
   "ai.failed.files": {
     "one": "{failed} of {n} file couldn't be read",
@@ -400,8 +408,8 @@
   "email.all_must_match": "all conditions must match",
   "email.all_of": "all of",
   "email.analysis_blocked": "The analysis is on: pick a model that works for it, or turn it off.",
-  "email.analysis_lite": "Sends each new email to {picker} for its kind, a clean title, and labels and projects from this vault.",
-  "email.analysis_medium": "Sends each new email to {picker} for its kind, a clean title, and labels and projects from this vault; and, for an email that asks for it, a quick reply, points to check and questions, as a conversation linked to the email.",
+  "email.analysis_lite": "Sends each new email to {picker} for its kind, a clean title, and labels and projects from this vault. The text of its attachments read goes along, and each gets a clean title, its own date, a genre, labels and projects.",
+  "email.analysis_medium": "Sends each new email to {picker} for its kind, a clean title, and labels and projects from this vault; and, for an email that asks for it, a quick reply, points to check and questions, as a conversation linked to the email. The text of its attachments read goes along, and each gets a clean title, its own date, a genre, labels and projects.",
   "email.analysis_off": "New emails keep their subject as title; nothing is sent to an AI.",
   "email.any_of": "any of",
   "email.attachments": "Attachments",

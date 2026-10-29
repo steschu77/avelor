@@ -199,6 +199,11 @@ impl Genre {
                 .unwrap_or_default(),
         }
     }
+
+    /// The well-known genres' labels, as written to disk.
+    pub fn well_known() -> impl Iterator<Item = &'static str> {
+        WELL_KNOWN_GENRES.iter().map(|(name, _)| *name)
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -254,6 +259,16 @@ mod tests {
         let g: Genre = serde_yaml_ng::from_str("Tax Return").unwrap();
         assert_eq!(g, Genre::Other("Tax Return".to_string()));
         assert_eq!(serde_yaml_ng::to_string(&g).unwrap().trim(), "Tax Return");
+    }
+
+    #[test]
+    fn the_well_known_genres_parse_as_themselves() {
+        let names: Vec<&str> = Genre::well_known().collect();
+        assert_eq!(names.len(), 18);
+        assert!(names.contains(&"bill") && names.contains(&"note"));
+        for name in names {
+            assert_eq!(Genre::parse(name).as_str(), name);
+        }
     }
 
     #[test]

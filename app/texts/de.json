@@ -146,9 +146,17 @@
   "ai.choose_provider": "Wähle einen KI-Anbieter.",
   "ai.enter_key": "Gib den API-Schlüssel ein.",
   "ai.failed": "{name} ist fehlgeschlagen: {error}",
+  "ai.failed.documents": {
+    "one": "Nicht analysiert: {failed} von {n} Anhang",
+    "other": "Nicht analysiert: {failed} von {n} Anhängen"
+  },
   "ai.failed.emails": {
     "one": "Nicht analysiert: {failed} von {n} E-Mail",
     "other": "Nicht analysiert: {failed} von {n} E-Mails"
+  },
+  "ai.failed.emails_documents": {
+    "one": "Nicht analysiert: {failed} von {n} E-Mail oder Anhang",
+    "other": "Nicht analysiert: {failed} von {n} E-Mails und Anhängen"
   },
   "ai.failed.files": {
     "one": "Nicht gelesen: {failed} von {n} Datei",
@@ -400,8 +408,8 @@
   "email.all_must_match": "alle Bedingungen müssen passen",
   "email.all_of": "alle davon",
   "email.analysis_blocked": "Die Analyse ist an: Wähle ein Modell, das dafür funktioniert, oder schalte sie aus.",
-  "email.analysis_lite": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor.",
-  "email.analysis_medium": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor; und für eine E-Mail, die danach fragt, eine kurze Antwort, Prüfpunkte und Fragen als mit der E-Mail verknüpfte Unterhaltung.",
+  "email.analysis_lite": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor. Der gelesene Text ihrer Anhänge geht mit, und jeder bekommt einen sauberen Titel, sein eigenes Datum, eine Gattung, Labels und Projekte.",
+  "email.analysis_medium": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor; und für eine E-Mail, die danach fragt, eine kurze Antwort, Prüfpunkte und Fragen als mit der E-Mail verknüpfte Unterhaltung. Der gelesene Text ihrer Anhänge geht mit, und jeder bekommt einen sauberen Titel, sein eigenes Datum, eine Gattung, Labels und Projekte.",
   "email.analysis_off": "Neue E-Mails behalten ihren Betreff als Titel; nichts wird an eine KI gesendet.",
   "email.any_of": "eines davon",
   "email.attachments": "Anhänge",

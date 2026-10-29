@@ -15,7 +15,7 @@
 //! first, then -- only if there is new email -- a fetch job like the page's.
 //!
 //! A fetch whose filter turns the analysis on (email.md#analysis) hands its new
-//! emails to `analysis::analyse` when it ends.
+//! emails to `analysis::analyse` when it ends, with the attachments it read.
 //!
 //! A fetch whose filter saves attachments (email.md#attachments) keeps the
 //! wanted parts on the worker, and writes each as a document with its

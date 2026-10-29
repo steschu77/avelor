@@ -1,7 +1,9 @@
 //! Analysing entities with an AI (email.md#analysis): the email analysis -- Lite
 //! gives each new email its kind, a clean title, labels in use and active
 //! projects; Medium also points to check, a quick reply and questions, as a
-//! conversation linked to the email.
+//! conversation linked to the email. The attachments read go along with their email,
+//! and are analysed after the emails as Lite does an email: a clean title,
+//! their own date, a genre, labels and projects.
 //!
 //! An analysis goes plan → run → apply (architecture.md#conventions), one email
 //! after another, as a job: the plan picks the model (`AiAccounts::choose`),
