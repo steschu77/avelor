@@ -260,12 +260,12 @@ fn parse(path: &str, source: String, problems: &mut Vec<String>) -> Module {
                         }
                         _ => problems.push(format!(
                             "{path} has a default or namespace import from {}: only named imports bundle",
-                            decl.source.value
+                            decl.source.value.display()
                         )),
                     }
                 }
                 imports.push(Import {
-                    specifier: decl.source.value.to_string(),
+                    specifier: decl.source.value.display().to_string(),
                     names,
                 });
                 cuts.push(line_cut(&source, decl.span));
