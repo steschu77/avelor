@@ -3,8 +3,9 @@
 // features/sidebar.js) and rendered into the expanded vault area while its op
 // is "email". Also the account's auto-sync under the Email row of its pane
 // (called by features/workspace/accounts.js), with the same filter form. Both
-// can turn on the analysis of new email, with the model it runs with. On the
-// page, Esc closes it and Ctrl+Enter fetches (`registerVaultPage`).
+// can save the attachments of new email (which file types, up to what size),
+// and turn on its analysis, with the model it runs with. On the page, Esc
+// closes it and Ctrl+Enter fetches (`registerVaultPage`).
 //
 // The filter form is built once per opening and never re-rendered on Fetch
 // email, so its inputs keep focus while typing; only its chips and the matches
@@ -29,6 +30,7 @@ import {
   closeVaultArea, openVaultOp, registerVaultPage,
 } from '../../ui/page.js';
 import { notice } from '../../ui/page.js';
+import { renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
 import { iconEl } from '../../ui/icons.js';
 import {
@@ -75,6 +77,7 @@ export function openEmailFetch(account_id) {
     },
     auto: saved?.auto_update ?? true,
     analysis: { ...EMAIL_ANALYSIS_OFF, ...saved?.analysis },
+    attachments: { ...EMAIL_ATTACHMENTS_OFF, ...saved?.attachments },
     searching: false, // while a `email_search` / `email_headers` is answered
     error: null,
     matches: null, // [{ id, in_vault }] of the last search
@@ -352,7 +355,10 @@ function emailFetch() {
   m.fetching = true;
   const ids = m.matches.filter(match => m.selected.has(match.id)).map(match => match.id);
   const filter = m.listFilter ? JSON.parse(m.listFilter) : emailHostFilter();
-  const args = { account: m.account, ids, replace, filter, auto_update: m.auto, analysis: m.analysis };
+  const args = {
+    account: m.account, ids, replace, filter, auto_update: m.auto, analysis: m.analysis,
+    attachments: m.attachments,
+  };
   // Once the fetch runs, the page closes; the job card shows it.
   rpcCall('email_fetch', args).then(({ job }) => {
     emailFetchJobs.set(job, args.account);
@@ -388,14 +394,16 @@ function renderEmailPage() {
   filter.append(renderEmailFilterForm(email.form));
   form.append(section, filter);
 
+  els.attachments = accEl('div');
   els.analysis = accEl('div');
-  form.append(els.analysis);
+  form.append(els.attachments, els.analysis);
 
   els.matches = accEl('div', 'email__matches');
   grid.append(form, els.matches);
   page.append(grid);
   $('vault-area-body').replaceChildren(page);
 
+  renderEmailAttachmentsSection();
   renderEmailAnalysisSection();
   renderEmailSubtitle();
   renderEmailMatches();
@@ -602,6 +610,7 @@ export function renderEmailSync(account, rerender) {
   box.append(head);
   if (on) {
     box.append(renderEmailFilterForm(form));
+    box.append(renderEmailSyncAttachments(form, { ...EMAIL_ATTACHMENTS_OFF, ...sync.attachments }));
     box.append(renderEmailSyncAnalysis(account.id, { ...EMAIL_ANALYSIS_OFF, ...sync.analysis }));
   }
   if (form.error) box.append(accEl('div', 'error-note', form.error));
@@ -651,6 +660,70 @@ function emailSetSync(account, change) {
     if (form) form.error = e.message;
     form?.rerender();
   });
+}
+
+// ----------------------------------------------------------------------------
+// the attachments of new email (email.md#attachments), of Fetch email and of an
+// account's auto-sync: whether they are saved, which ones, up to what size
+
+const EMAIL_ATTACHMENTS_OFF = {
+  enabled: false, patterns: ['*.pdf', '*.jpg', '*.jpeg', '*.png'], 'max-size': 10,
+};
+const EMAIL_ATTACHMENT_SIZES = [[5, '5 MB'], [10, '10 MB'], [25, '25 MB']];
+
+// `attachments` ({ enabled, patterns, 'max-size' }) as a seg, Off or On, and
+// a body: while on, the file types (`renderPatternField`, of `owner`) and
+// the size they are saved up to. `onChange` gets the attachments as
+// changed; `rerender` (the page's scheduler) runs for an edit that changes
+// nothing.
+function renderEmailAttachments(owner, attachments, onChange, rerender) {
+  const seg = accSeg([[false, t('watch.off')], [true, t('watch.on')]], attachments.enabled,
+    enabled => onChange({ ...attachments, enabled }));
+  const body = accEl('div');
+  if (!attachments.enabled) {
+    body.append(accEl('div', 'page-text email__text', t('email.attachments_off')));
+    return { seg, body };
+  }
+  const types = accEl('div', 'form-field');
+  types.append(...renderPatternField(owner, attachments.patterns,
+    patterns => onChange({ ...attachments, patterns }), rerender));
+  const size = accEl('div', 'form-field');
+  size.append(accSeg(EMAIL_ATTACHMENT_SIZES, attachments['max-size'],
+    max => onChange({ ...attachments, 'max-size': max })));
+  const grid = accEl('div', 'form-grid');
+  grid.append(accEl('span', 'label', t('watch.file_types')), types, accEl('span', 'label', t('email.up_to')), size);
+  body.append(grid, accEl('div', 'page-text email__text', t('email.attachments_on')));
+  return { seg, body };
+}
+
+// Fetch email's second section, Attachments: built again on its changes, the
+// focus kept in its file types' input.
+function renderEmailAttachmentsSection() {
+  const block = email.els.attachments;
+  const active = document.activeElement;
+  const focusKey = block.contains(active) ? active.dataset.focusKey : undefined;
+  const { seg, body } = renderEmailAttachments('email-fetch', email.attachments, attachments => {
+    email.attachments = attachments;
+    renderEmailAttachmentsSection();
+    scheduleRenderEmailMatches();
+  }, renderEmailAttachmentsSection);
+  const head = accEl('div', 'section-head', t('email.section.attachments'));
+  head.append(seg);
+  block.replaceChildren(head, body);
+  if (focusKey) [...block.querySelectorAll('[data-focus-key]')].find(el => el.dataset.focusKey === focusKey)?.focus();
+}
+
+// The auto-sync's attachments, under its filter; saved at once.
+function renderEmailSyncAttachments(form, attachments) {
+  const save = next => emailSetSync(form.account, { attachments: next });
+  const { seg, body } = renderEmailAttachments(form.focusKey, attachments, save, () => form.rerender());
+  const grid = accEl('div', 'form-grid');
+  const field = accEl('div', 'form-field');
+  field.append(seg);
+  grid.append(accEl('span', 'label', t('email.attachments')), field);
+  const box = accEl('div', 'email__filter');
+  box.append(grid, body);
+  return box;
 }
 
 // ----------------------------------------------------------------------------
@@ -844,7 +917,8 @@ function renderEmailFooter() {
   const n = email.selected.size;
   const replace = emailReplacing().map(m => m.id);
   const replacing = replace.length;
-  const label = email.fetching ? t('email.starting') : t('email.fetch_n', { n });
+  const label = email.fetching ? t('email.starting')
+    : email.attachments.enabled ? t('email.fetch_with_attachments', { n }) : t('email.fetch_n', { n });
   const fetch = accEl('button', 'btn btn--primary', label);
   fetch.type = 'button';
   fetch.title = shortcutText('Ctrl+Enter');

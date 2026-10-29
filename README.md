@@ -34,7 +34,7 @@ It is a personal project, not a commercial product or a claim to have solved per
 - **Lenses on your data.** A dashboard of cards (the week, tasks, upcoming events, recent files), a document list, a timeline, and a calendar, each following one filter by project, source, or words.
 - **Projects, threads, and links.** Documents are grouped into projects and threads, linked to each other (a task to its letter), and labeled.
 - **A WYSIWYG editor.** Lists, tables, code blocks, links, and images, written back to Markdown; a change made to a file outside the app is taken in without losing yours.
-- **Google account sync.** Gmail and Google Calendar sync into the vault: email fetched by a filter or kept in sync automatically, new email announced; calendars two-way with full access, an event changed on both sides kept as a copy, never overwritten.
+- **Google account sync.** Gmail and Google Calendar sync into the vault: email fetched by a filter or kept in sync automatically, its attachments saved and new email announced; calendars two-way with full access, an event changed on both sides kept as a copy, never overwritten.
 - **Imports.** Scans are imported from folders on your PC, scanned pages arranged into documents. Images are read by an AI model's OCR.
 - **An assistant.** Conversations about a document, a thread, or a project, with Anthropic, OpenAI, Mistral, Gemini, or a local Ollama model, within a spend limit.
 - **Analysis.** New email is sorted by a model of your choice (what it is, a clean title, labels, projects); a closer look adds the points to check and the questions to ask, for an email a draft reply, as a conversation.

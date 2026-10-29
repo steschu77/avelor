@@ -11,6 +11,7 @@ use av_google::gmail::{self, EmailFilter};
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
+use av_vault::envelope::DocumentType;
 use serde::Deserialize;
 
 use super::fetch::{FetchPlan, find_account_email, plan_fetch, pump, start_fetch};
@@ -18,6 +19,7 @@ use super::{MATCH_CAP, Origin};
 use crate::app::App;
 use crate::google;
 use crate::google::accounts::Analysis;
+use crate::google::accounts::AttachmentSettings;
 use crate::google::accounts::AutoSync;
 use crate::google::accounts::FetchEmail;
 use crate::protocol::Req;
@@ -30,20 +32,22 @@ use av_vault::schema::remote::GMAIL_ID;
 pub(crate) struct SyncChange {
     pub(super) account: Id,
     #[serde(default)]
-    enabled: Option<bool>,
+    pub(super) enabled: Option<bool>,
     #[serde(default)]
     pub(super) filter: Option<EmailFilter>,
     #[serde(default)]
     pub(super) analysis: Option<Analysis>,
+    #[serde(default)]
+    pub(super) attachments: Option<AttachmentSettings>,
 }
 
 // ----------------------------------------------------------------------------
-/// `set_email_sync {account, enabled?, filter?, analysis?}`: change the
-/// account's auto-sync. Its filter drops the dates (the host sets them);
-/// its analysis is stored as given (its pick is checked when it runs);
-/// switching it on starts it from now -- only email that arrives from then on
-/// is fetched -- and switching it off keeps the filter. Answered after the
-/// `account` event.
+/// `set_email_sync {account, enabled?, filter?, analysis?, attachments?}`:
+/// change the account's auto-sync. Its filter drops the dates (the host
+/// sets them); its analysis (its pick is checked when it runs) and
+/// attachments are stored as given; switching it on starts it from now --
+/// only email that arrives from then on is fetched -- and switching it off
+/// keeps the filter. Answered after the `account` event.
 pub fn set_email_sync(app: &mut App, req: Req, change: SyncChange) {
     let now = DateTime::now();
     let updated = app.google.update(change.account, |account| {
@@ -58,6 +62,9 @@ pub fn set_email_sync(app: &mut App, req: Req, change: SyncChange) {
         }
         if let Some(analysis) = change.analysis {
             sync.analysis = Some(analysis);
+        }
+        if let Some(attachments) = change.attachments {
+            sync.attachments = Some(attachments);
         }
         if let Some(enabled) = change.enabled {
             if enabled && !sync.enabled {
@@ -172,6 +179,9 @@ pub(super) fn on_sync_listed(
         .filter(|sync| sync.enabled);
     // As it is now: a change made while the search ran counts.
     let analysis = sync.and_then(|sync| sync.analysis.clone());
+    let attachments = sync
+        .and_then(|sync| sync.attachments.clone())
+        .filter(|a| a.enabled);
     if app.vault.root() != root.as_deref() || sync.is_none() {
         return log::info!("Email auto-sync of {account}: dropped, the vault or setting changed");
     }
@@ -190,7 +200,10 @@ pub(super) fn on_sync_listed(
             return;
         }
     };
-    let known = app.vault.index().remote_values(Some(&account), GMAIL_ID);
+    let known = app
+        .vault
+        .index()
+        .remote_values(DocumentType::Email, Some(&account), GMAIL_ID);
     let (queue, _) = plan_fetch(ids, &HashSet::new(), &known);
     if queue.is_empty() {
         return log::info!("Email auto-sync of {account}: nothing new");
@@ -213,6 +226,7 @@ pub(super) fn on_sync_listed(
         origin: Origin::AutoSync,
         started,
         analysis,
+        attachments,
     };
     start_fetch(app, Text::new("email.syncing").arg("email", email), plan);
     pump(app);

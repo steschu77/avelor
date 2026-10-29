@@ -1,7 +1,7 @@
 # Avelor — Email
 
 > Email from a Google account into the vault: Fetch email, the auto-sync,
-> the new-email notices and the email analysis. The
+> the attachments, the new-email notices and the email analysis. The
 > account and its `fetch-email:` keys are `accounts.md`; the commands,
 > `api.md#email`.
 
@@ -29,7 +29,10 @@ the expanded vault area, filled with the account's last filter
   that. The fetch is a job (`ui.md#jobs-panel`); the page closes, and
   Fetch email reads its matches again when the job ends. Esc closes the
   page.
-- **Analysis** (section 2): Off, Lite or Medium, with the model it runs
+- **Attachments** (section 2): Off or On, the file types and the size
+  they are saved up to; on, the fetch saves the emails' attached files
+  (`email.md#attachments`).
+- **Analysis** (section 3): Off, Lite or Medium, with the model it runs
   with; the new emails are analysed after the fetch (`email.md#analysis`).
 
 ## Email auto-sync <a id="email-auto-sync"></a>
@@ -46,12 +49,45 @@ switched on, then since its last complete run.
 - A run that finds nothing new leaves no trace; one that does is a
   "Syncing email · <email>" job, and the account's `last-sync` moves on.
 - Emails already in the vault are skipped, never replaced.
-- Its own analysis, set under its filter, takes the new emails after a run
-  (`email.md#analysis`).
+- Its own attachments, set under its filter, are saved with the new emails
+  (`email.md#attachments`); its own analysis, under them, takes the new
+  emails after a run (`email.md#analysis`).
 - A failed run is shown once in the status bar, not again until a run
   succeeds.
 - The Email source's sync button stays shown, pressed, while auto-sync is
   on; it still opens Fetch email.
+
+## Attachments <a id="attachments"></a>
+
+A filter can save the files its emails bring: Fetch email's (section 2,
+Attachments, remembered with the filter as `fetch-email.attachments`) and each
+auto-sync's (under its filter, `fetch-email.auto-sync.attachments`;
+`accounts.md#google-file`). It is off by default; on, it takes the file
+types listed (`*.pdf *.jpg *.jpeg *.png` at first; patterns as a watch's,
+`import.md#watch-files`) up to a size: 5, 10 (at first) or 25 MB.
+
+- **What is saved**: each part of the email that isn't its text, whose name
+  matches one of the types, within the size. An image the email's HTML
+  shows (a logo, a signature) is never saved. A part without a name is
+  `attachment`; a name without an extension takes its type's (`.pdf`,
+  `.eml` for an attached email). The email's text still names every attached
+  file at its end.
+- **Where**: a document per file in `Attachments/`, with the file beside it
+  as its original (`vault.md#document`): `linked-to` the email, its source
+  the email's (`remote:` with its account, `message-id` and `gmail-id`),
+  titled by the file's name without its extension, dated as the email, its
+  text empty. Each is written in a vault edit of its own after its email; on
+  Windows the file carries the mark of the web, so SmartScreen and
+  Office's Protected View treat it as downloaded
+  (`architecture.md#platforms`).
+- **Once**: an email whose body is replaced gets only the files it doesn't
+  have yet (no document linked to it has an original of the same name and
+  size). The email lookups (`KnownEmails`, the replace's) take emails only,
+  so an attachment, which names its email's message too, is never taken for
+  it.
+- **The job's summary** counts them, "12 new · 5 attachments"; a file that
+  couldn't be written counts as "1 attachment failed" and is logged, and
+  the fetch still counts as complete, since the email is in the vault.
 
 ## New-email notices
 
@@ -61,7 +97,7 @@ After a fetch or an auto-sync run wrote new email, the status bar says so
 
 ## Email analysis <a id="analysis"></a>
 
-A filter can have its new email analysed: Fetch email's (section 2,
+A filter can have its new email analysed: Fetch email's (section 3,
 Analysis, remembered with the filter as `fetch-email.analysis`) and each
 auto-sync's (under its filter, `fetch-email.auto-sync.analysis`;
 `accounts.md#google-file`). It is off by default. A filter's analysis has
@@ -148,8 +184,8 @@ feature picks its model (`accounts.md#model-choice`).
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| G3 | Fetch email | Email source sync button → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; the analysis's level and model; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `account`; the job's end reads the matches again | emails in `Email/`; filter remembered |
-| G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its analysis | `set_email_sync {account, enabled?, filter?, analysis?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email, `account` | emails in `Email/` on their own |
+| G3 | Fetch email | Email source sync button → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; the attachments' types and size; the analysis's level and model; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `entity` per attachment, `account`; the job's end reads the matches again | emails in `Email/`, their attachments in `Attachments/`; filter remembered |
+| G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_email_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email and attachment, `account` | emails in `Email/` on their own |
 | G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email `check_limit`, `chat_stream` on a worker, `parse`, `apply_lite` through the vault edit, Medium's conversation through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their type kept; `email.subject` kept; Medium: a chat linked to the email |
 
 ## Design <a id="design"></a>
@@ -164,8 +200,9 @@ sequenceDiagram
     S-->>P: job (running), ok {job}
     loop until all ids done (or cancel_job)
         S->>W: get_raw_message(id)
-        W-->>S: Downloaded::parse (av_vault::email → markdown)
+        W-->>S: Downloaded::parse (av_vault::email → markdown, the wanted parts)
         S->>S: fetch_action → create / replace / skip in Email/
+        S->>S: save_attachments → Attachments/
         S-->>P: entity (+ content) or notice, job
     end
     S->>S: google::finish_sync (last-sync, last-fetch)
@@ -177,11 +214,16 @@ The fetch is plan → run → apply (`architecture.md#conventions`):
 - **plan** on the UI thread: `plan_fetch` skips the Gmail ids the vault
   knows;
 - **run** on up to 4 workers: the raw message, parsed by
-  `Downloaded::parse` — av-vault's MIME parser (`email.rs`) and its HTML →
-  markdown converter (`av_vault::html::to_markdown`);
+  `Downloaded::parse` — av-vault's MIME parser (`email.rs`), which hands
+  out each part's bytes decoded, and its HTML → markdown converter
+  (`av_vault::html::to_markdown`); the parts the filter's attachments want
+  are kept (`attachment_wanted`, pure), the others dropped there;
 - **apply** on the UI thread: `fetch_action` decides create, replace or
   skip, and `email_entity` maps the email to an entity (pure, tested); the
-  write goes through the vault edit.
+  write goes through the vault edit. Then `save_attachments` writes each
+  part the email doesn't have yet, `attachment_entity` mapping it to a
+  document (pure, tested) and `Index::create_with_original` writing the
+  file and the document, one vault edit each.
 
 The analysis (`analysis.rs`) is plan → run → apply as well: the plan picks
 the model and gathers the vault's context and each email's text on the UI
@@ -193,7 +235,7 @@ its own job in `AnalysisState`, so a fetch's and an auto-sync's can run
 side by side.
 
 `KnownEmails` (`email.rs`) tells which emails are in the vault: by `gmail-id`
-from the same account, or by Message-ID from any source. The preview's
+from the same account, or by Message-ID from any source, on emails only. The preview's
 header pages are fetched 8 in parallel (av-google's `gmail::get_headers`, scoped
 threads). The fetch's state lives in `EmailState`; a newer search
 supersedes a running one on the page's `email-preview` channel. The

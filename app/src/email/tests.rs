@@ -4,15 +4,18 @@ use std::collections::{HashSet, VecDeque};
 use av_google::gmail::EmailFilter;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
-use av_vault::envelope::Source;
+use av_vault::email;
+use av_vault::envelope::{DocumentType, Source};
 use av_vault::shared::OneOrMany;
 use serde_json::json;
 
-use super::apply::{Action, Stored, apply_email, fetch_action};
+use super::apply::{Action, Saved, Stored, apply_email, existing_email, fetch_action};
 use super::auto_sync::{on_sync_listed, sync_query};
-use super::entities::{Downloaded, email_entity};
+use super::entities::{AttachedTo, Downloaded, attachment_entity, email_entity};
 use super::fetch::{FetchPlan, finish, new_email_notice, plan_fetch, start_fetch};
+use super::preview::KnownEmails;
 use crate::google::accounts::Analysis;
+use crate::google::accounts::AttachmentSettings;
 use crate::testing::Harness;
 use crate::testing::{CONNECTED, DISCONNECTED, parse, reply, shape, shown, with_google};
 use crate::texts::Text;
@@ -45,7 +48,7 @@ Content-Type: text/html; charset=utf-8\r\n\
 // ------------------------------------------------------------------------
 fn downloaded(message_id: &str, body: &str) -> Downloaded {
     let date = DateTime::from_unix_millis(1_790_000_000_000);
-    let mut email = Downloaded::parse(RAW.as_bytes(), date);
+    let mut email = Downloaded::parse(RAW.as_bytes(), date, None);
     email.message_id = message_id.to_string();
     email.body = body.to_string();
     email
@@ -55,7 +58,7 @@ fn downloaded(message_id: &str, body: &str) -> Downloaded {
 #[test]
 fn a_raw_email_parses_into_its_parts() {
     let date = DateTime::from_unix_millis(1_790_000_000_000);
-    let email = Downloaded::parse(RAW.as_bytes(), date);
+    let email = Downloaded::parse(RAW.as_bytes(), date, None);
     assert_eq!(email.subject, "Nebenkosten 2026");
     assert_eq!(
         email.from,
@@ -138,7 +141,7 @@ fn applying_creates_skips_replaces_and_matches_by_message_id() {
         downloaded("<m1@x>", "First"),
         false,
     );
-    assert!(matches!(stored.unwrap(), Stored::Created(_)));
+    assert!(matches!(stored.unwrap(), (Stored::Created(_), _)));
     let sent = parse(&h.take());
     assert_eq!(shape(&sent), ["entity"]);
     let path = h.vault().join(sent[0]["data"]["path"].as_str().unwrap());
@@ -155,7 +158,7 @@ fn applying_creates_skips_replaces_and_matches_by_message_id() {
         downloaded("<m1@x>", "Second"),
         false,
     );
-    assert_eq!(again.unwrap(), Stored::Skipped);
+    assert_eq!(again.unwrap().0, Stored::Skipped);
     assert!(h.take().is_empty());
 
     let replaced = apply_email(
@@ -165,7 +168,7 @@ fn applying_creates_skips_replaces_and_matches_by_message_id() {
         downloaded("<m1@x>", "Second"),
         true,
     );
-    assert_eq!(replaced.unwrap(), Stored::Replaced);
+    assert_eq!(replaced.unwrap().0, Stored::Replaced);
     let sent = parse(&h.take());
     assert!(shape(&sent).contains(&"content"), "{sent:?}");
     let text = fs::read_to_string(&path).unwrap();
@@ -179,10 +182,171 @@ fn applying_creates_skips_replaces_and_matches_by_message_id() {
         false,
     );
     assert_eq!(
-        by_message_id.unwrap(),
+        by_message_id.unwrap().0,
         Stored::Skipped,
         "known from another account"
     );
+}
+
+/// An email with a PDF, a logo the HTML shows, and a zip.
+const RAW_ATTACHED: &str = "From: info@krause.example\r\n\
+Subject: Nebenkosten 2026\r\n\
+Message-ID: <att.1@krause.example>\r\n\
+Content-Type: multipart/mixed; boundary=\"m\"\r\n\
+\r\n\
+--m\r\n\
+Content-Type: text/html; charset=utf-8\r\n\
+\r\n\
+<p>The bill is attached.</p><img src=\"cid:logo\">\r\n\
+--m\r\n\
+Content-Type: image/png; name=\"logo.png\"\r\n\
+Content-ID: <logo>\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+iVBORw0KGgo=\r\n\
+--m\r\n\
+Content-Type: application/pdf; name=\"Abrechnung 2026.pdf\"\r\n\
+Content-Disposition: attachment; filename=\"Abrechnung 2026.pdf\"\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+JVBERi0xLjcK\r\n\
+--m\r\n\
+Content-Type: application/zip; name=\"belege.zip\"\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+UEsDBA==\r\n\
+--m--\r\n";
+
+// ------------------------------------------------------------------------
+/// Attachment settings as the page sends them.
+fn keep(patterns: &[&str], max_size: u32) -> AttachmentSettings {
+    let settings = json!({ "enabled": true, "patterns": patterns, "max-size": max_size });
+    serde_json::from_value(settings).unwrap()
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn the_wanted_attachments_are_kept_by_pattern_size_and_kind() {
+    let date = DateTime::from_unix_millis(1_790_000_000_000);
+    let names = |keep: Option<&AttachmentSettings>| {
+        let email = Downloaded::parse(RAW_ATTACHED.as_bytes(), date, keep);
+        let names: Vec<String> = email
+            .attachments
+            .iter()
+            .map(|a| a.filename.clone())
+            .collect();
+        names
+    };
+    assert!(names(None).is_empty(), "off: none kept");
+    assert_eq!(names(Some(&keep(&["*.PDF"], 10))), ["Abrechnung 2026.pdf"]);
+    assert_eq!(
+        names(Some(&keep(&["*.pdf", "*.zip", "*.png"], 10))),
+        ["Abrechnung 2026.pdf", "belege.zip"],
+        "never the logo the HTML shows"
+    );
+    assert!(
+        names(Some(&keep(&["*.pdf"], 0))).is_empty(),
+        "over the size"
+    );
+
+    let email = Downloaded::parse(RAW_ATTACHED.as_bytes(), date, Some(&keep(&["*"], 10)));
+    assert_eq!(email.attachments[0].bytes, b"%PDF-1.7\n");
+    assert!(email.body.contains("Attachments: "), "{}", email.body);
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn an_attachment_becomes_a_document_linked_to_its_email() {
+    let (account, email) = (connected_id(), Id::generate());
+    let date = DateTime::from_unix_millis(1_790_000_000_000);
+    let to = AttachedTo {
+        email,
+        account,
+        gmail_id: "g1",
+        message_id: "<m1@x>",
+        date,
+    };
+    let part = email::Attachment {
+        filename: " Abrechnung 2026.pdf ".into(),
+        content_type: "application/pdf".into(),
+        inline: false,
+        bytes: b"%PDF-".to_vec(),
+    };
+    let doc = attachment_entity(&to, &part);
+    assert_eq!(doc.title(), "Abrechnung 2026");
+    assert_eq!((doc.date(), doc.linked_to()), (Some(date), Some(email)));
+    assert_eq!(doc.kind(), DocumentType::Document);
+    let Some(Source::Remote(remote)) = doc.source() else {
+        panic!("{:?}", doc.source());
+    };
+    assert_eq!(remote.account, Some(account));
+    assert_eq!(remote.get(MESSAGE_ID), Some("<m1@x>"));
+    assert_eq!(remote.get(GMAIL_ID), Some("g1"));
+
+    let nameless = email::Attachment {
+        filename: ".pdf".into(),
+        ..part
+    };
+    assert_eq!(attachment_entity(&to, &nameless).title(), ".pdf");
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn applying_saves_each_attachment_once_beside_its_document() {
+    let mut h = with_google("email-attachments", EMAIL, &[]);
+    let account = connected_id();
+    let date = DateTime::from_unix_millis(1_790_000_000_000);
+    let attached = || Downloaded::parse(RAW_ATTACHED.as_bytes(), date, Some(&keep(&["*.pdf"], 10)));
+
+    let (stored, saved) = apply_email(&mut h.app, account, "g1", attached(), false).unwrap();
+    let Stored::Created(email) = stored else {
+        panic!("{stored:?}");
+    };
+    assert_eq!(
+        saved,
+        Saved {
+            saved: 1,
+            failed: 0
+        }
+    );
+    let sent = parse(&h.take());
+    assert_eq!(shape(&sent), ["entity", "entity"], "{sent:?}");
+    let doc = &sent[1]["data"];
+    assert_eq!(doc["linked_to"], json!(email));
+    assert!(
+        doc["path"].as_str().unwrap().starts_with("Attachments"),
+        "{doc}"
+    );
+    let original = &doc["document"]["original"];
+    assert_eq!(original["name"], "Abrechnung 2026.pdf");
+    assert_eq!(original["size"], 9);
+    let id = Id::parse(doc["id"].as_str().unwrap()).unwrap();
+    let path = h.app.vault.index().original_path(&id).unwrap();
+    assert_eq!(fs::read(&path).unwrap(), b"%PDF-1.7\n");
+    assert!(path.starts_with(h.vault().join("Attachments")));
+
+    // A replaced email gets only what it doesn't have yet.
+    let (stored, saved) = apply_email(&mut h.app, account, "g1", attached(), true).unwrap();
+    assert_eq!((stored, saved), (Stored::Replaced, Saved::default()));
+    let both = Some(&keep(&["*.pdf", "*.zip"], 10));
+    let email = Downloaded::parse(RAW_ATTACHED.as_bytes(), date, both);
+    let (_, saved) = apply_email(&mut h.app, account, "g1", email, true).unwrap();
+    assert_eq!(
+        saved,
+        Saved {
+            saved: 1,
+            failed: 0
+        }
+    );
+
+    // The attachments name the email's message, but aren't taken for it.
+    let index = h.app.vault.index();
+    assert_eq!(
+        existing_email(index, account, "g1", ""),
+        Some(index.all()[0].doc.id())
+    );
+    let known = KnownEmails::of(&h.app, account);
+    assert_eq!(known.gmail.len(), 1);
 }
 
 // ------------------------------------------------------------------------
@@ -373,6 +537,7 @@ fn auto_sync_waits_for_its_time_a_fetch_and_the_vault_scan() {
         origin: Origin::Manual,
         started: now,
         analysis: None,
+        attachments: None,
     };
     start_fetch(&mut h.app, Text::new("email.fetching"), plan);
     auto_sync(&mut h.app, now);
@@ -439,6 +604,7 @@ fn a_listing_with_nothing_new_leaves_no_trace_and_a_failure_shows_once() {
         origin: Origin::Manual,
         started: now,
         analysis: None,
+        attachments: None,
     };
     let manual = start_fetch(&mut h.app, Text::new("email.fetching"), plan);
     on_sync_listed(&mut h.app, account, root, now, Ok(vec!["g2".into()]));
@@ -466,6 +632,7 @@ fn a_complete_auto_sync_moves_its_start_on() {
         origin: Origin::AutoSync,
         started,
         analysis: None,
+        attachments: None,
     };
     start_fetch(&mut h.app, Text::new("email.fetching"), plan);
     finish(&mut h.app);
@@ -529,6 +696,7 @@ fn a_fetch_that_wrote_email_tells_the_page_after_its_end() {
         origin: Origin::Manual,
         started: DateTime::now(),
         analysis: None,
+        attachments: None,
     };
     start_fetch(&mut h.app, Text::new("email.fetching"), plan);
     h.app
@@ -601,8 +769,38 @@ fn the_auto_syncs_analysis_is_stored_as_given() {
         "no model yet"
     );
     let file = h.vault().join(".avelor/accounts/google_a.yaml");
-    let text = fs::read_to_string(file).unwrap();
+    let text = fs::read_to_string(&file).unwrap();
     assert!(text.contains("level: medium"), "{text}");
+
+    let attachments = json!({ "enabled": true, "patterns": ["*.pdf"], "max-size": 5 });
+    let args = json!({ "account": CONNECTED, "attachments": attachments });
+    let sent = h.call("set_email_sync", args);
+    assert_eq!(
+        sent[0]["data"]["fetch_email"]["auto_sync"]["attachments"],
+        attachments
+    );
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(
+        text.contains("      attachments:\n        enabled: true\n"),
+        "{text}"
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_fetch_remembers_its_attachments() {
+    let mut h = with_google("email-fetch-attachments", EMAIL, &[]);
+    let attachments = json!({ "enabled": false, "patterns": ["*.pdf"], "max-size": 10 });
+    let args = json!({ "account": CONNECTED, "ids": [], "attachments": attachments });
+    let mut sent = h.call("email_fetch", args);
+    assert!(sent.iter().any(|m| m["ok"]["job"].is_string()), "{sent:?}");
+    h.run_queue();
+    sent.extend(parse(&h.take()));
+    let account = sent.iter().find(|m| m["ev"] == "account").unwrap();
+    assert_eq!(
+        account["data"]["fetch_email"]["attachments"], attachments,
+        "kept while off"
+    );
 }
 
 // ------------------------------------------------------------------------
@@ -625,6 +823,7 @@ fn a_finished_fetch_hands_its_new_mails_to_the_analysis() {
             origin: Origin::Manual,
             started: DateTime::now(),
             analysis: Some(lite.clone()),
+            attachments: None,
         };
         let job = start_fetch(&mut h.app, Text::new("email.fetching"), plan);
         let fetch = h.app.email.fetch.as_mut().unwrap();

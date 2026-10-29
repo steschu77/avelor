@@ -773,21 +773,36 @@ impl Index {
     }
 
     // ------------------------------------------------------------------------
-    /// The first entity whose `remote:` source block has the property
-    /// `key: value` (e.g. `message-id`), from `account` if one is given.
-    pub fn find_remote(&self, account: Option<&Id>, key: &str, value: &str) -> Option<Id> {
+    /// The first entity of the type `kind` whose `remote:` source block has
+    /// the property `key: value` (e.g. `message-id`), from `account` if one
+    /// is given. The type tells an email from its attachments, which name its
+    /// message too.
+    pub fn find_remote(
+        &self,
+        kind: DocumentType,
+        account: Option<&Id>,
+        key: &str,
+        value: &str,
+    ) -> Option<Id> {
         self.documents
             .iter()
+            .filter(|e| e.doc.kind() == kind)
             .find(|e| remote_values(&e.doc, account, key).any(|v| v == value))
             .map(|e| e.doc.id())
     }
 
     // ------------------------------------------------------------------------
-    /// Every value of the `remote:` property `key` in the vault, from
-    /// `account` if one is given.
-    pub fn remote_values(&self, account: Option<&Id>, key: &str) -> HashSet<String> {
+    /// Every value of the `remote:` property `key` on the entities of the
+    /// type `kind`, from `account` if one is given.
+    pub fn remote_values(
+        &self,
+        kind: DocumentType,
+        account: Option<&Id>,
+        key: &str,
+    ) -> HashSet<String> {
         self.documents
             .iter()
+            .filter(|e| e.doc.kind() == kind)
             .flat_map(|e| remote_values(&e.doc, account, key))
             .map(str::to_string)
             .collect()
