@@ -59,19 +59,22 @@ struct Counts {
     read: usize,
     /// Files of a type nothing reads, or gone.
     unread: usize,
+    /// Encrypted PDFs: marked, not read.
+    encrypted: usize,
     /// Documents that got text meanwhile, or were removed: left as they are.
     kept: usize,
 }
 
 impl Counts {
     // ------------------------------------------------------------------------
-    /// "3 read · 1 failed · 1 unread", with the failures and what a stop
-    /// left of `queue`.
+    /// "3 read · 1 failed · 1 unread · 1 encrypted", with the failures and
+    /// what a stop left of `queue`.
     fn summary(&self, queue: &AiQueue<Id>) -> Vec<Text> {
         let counts = vec![
             (self.read, Text::new("count.read")),
             (queue.failed(), Text::new("count.failed")),
             (self.unread, Text::new("count.unread")),
+            (self.encrypted, Text::new("count.encrypted")),
             (queue.left(), Text::new("count.left")),
         ];
         count_summary(counts, Text::new("job.nothing_to_read"))
@@ -86,6 +89,8 @@ enum Step {
     Keep,
     /// No file, or one nothing reads here.
     Unread,
+    /// A PDF marked encrypted.
+    Encrypted,
     /// The file `path`, which came as `name`, of the kind `kind`.
     Read {
         kind: Kind,
@@ -105,6 +110,9 @@ fn step_for(doc: Option<&Document>, path: Option<PathBuf>) -> Step {
     let (Some(original), Some(path)) = (doc.original(), path) else {
         return Step::Unread;
     };
+    if original.encrypted {
+        return Step::Encrypted;
+    }
     let name = original.name.clone().or_else(|| {
         let file = path.file_name()?;
         Some(file.to_string_lossy().into_owned())
@@ -204,6 +212,11 @@ fn pump(app: &mut App, job: Id) {
                 log::info!("Attachment read {job}: {id} left unread");
                 continue;
             }
+            Step::Encrypted => {
+                read.queue.skip();
+                read.counts.encrypted += 1;
+                continue;
+            }
             Step::Read { kind, path, name } => (kind, path, name),
         };
         if kind.by_model() {
@@ -235,8 +248,12 @@ fn on_read(app: &mut App, job: Id, id: Id, kind: Kind, result: Result<String, Re
     if let Err(ReadError::File(e)) = &result {
         log::warn!("Attachment read {job}: could not read the file of {id}: {e}");
     }
+    let encrypted = matches!(result, Err(ReadError::Encrypted));
     let text = result.map_err(|e| e.words(&read.engine));
-    let written = text.and_then(|text| write(app, id, text));
+    let written = match encrypted {
+        true => mark_encrypted(app, id).map(|()| false),
+        false => text.and_then(|text| write(app, id, text)),
+    };
 
     let Some(read) = app.attachments.reads.get_mut(&job) else {
         return;
@@ -247,6 +264,10 @@ fn on_read(app: &mut App, job: Id, id: Id, kind: Kind, result: Result<String, Re
     let counts = &mut read.counts;
     match written {
         Ok(true) => counts.read += 1,
+        Ok(false) if encrypted => {
+            log::info!("Attachment read {job}: {id} is an encrypted PDF");
+            counts.encrypted += 1;
+        }
         Ok(false) => counts.kept += 1,
         Err(error) => {
             log::info!("Attachment read {job}: {id} failed: {error}");
@@ -286,6 +307,27 @@ fn write(app: &mut App, id: Id, text: String) -> Result<bool, Text> {
         Ok(_) => Ok(true),
         Err(e) => {
             log::warn!("Attachment read: {id} could not be written: {e}");
+            Err(Text::new("item.write_failed"))
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Mark the original of `id` as an encrypted PDF (`Original::encrypted`):
+/// no model is sent it, and its body stays empty. A failed write in words.
+fn mark_encrypted(app: &mut App, id: Id) -> Result<(), Text> {
+    let outcome = app.edit_written(|index, changes| {
+        index.edit(&id, changes, |doc| {
+            if let Some(mut original) = doc.original().cloned() {
+                original.encrypted = true;
+                doc.set_original(original);
+            }
+        })
+    });
+    match outcome {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            log::warn!("Attachment read: {id} could not be marked encrypted: {e}");
             Err(Text::new("item.write_failed"))
         }
     }
@@ -341,7 +383,7 @@ fn finish(app: &mut App, job: Id) {
 mod tests {
     use super::*;
     use crate::analysis::AnalysisLevel;
-    use crate::testing::{FakeOllama, Harness, TestPage, parse, pdf_of, shown, words};
+    use crate::testing::{FakeOllama, Harness, TestPage, encrypted, parse, pdf_of, shown, words};
     use serde_json::Value;
     use std::fs;
     use std::sync::{Arc, Mutex};
@@ -454,6 +496,7 @@ mod tests {
             file: Some("bill.pdf".into()),
             name: Some(name.into()),
             size: Some(4),
+            encrypted: false,
         };
         doc.set_original(original("Rechnung.pdf"));
         assert_eq!(step_for(Some(&doc), None), Step::Unread, "no file");
@@ -463,6 +506,10 @@ mod tests {
             name: "Rechnung.pdf".into(),
         };
         assert_eq!(step_for(Some(&doc), Some(path.clone())), read);
+        let mut marked = original("Rechnung.pdf");
+        marked.encrypted = true;
+        doc.set_original(marked);
+        assert_eq!(step_for(Some(&doc), Some(path.clone())), Step::Encrypted);
         doc.set_original(original("Rechnung.zip"));
         assert_eq!(step_for(Some(&doc), Some(path.clone())), Step::Unread);
         doc.set_original(original("Rechnung.txt"));
@@ -538,18 +585,20 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn a_scanned_pdf_on_a_model_without_pdfs_is_read_page_by_page() {
+    fn a_pdfs_scans_are_read_page_by_page_and_its_text_pages_as_they_are() {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let address = FakeOllama::new(&["m"])
             .answering_in_turn(&["Seite eins", "Seite zwei"])
             .recording(&requests)
             .start();
         let h = with_attachments("attachments-pdf-pages", &address);
-        let scan = pdf_of(&[
+        let lines = ["Zwischenblatt: die Anlagen zum Mietvertrag folgen."];
+        let pages = [
             TestPage::Scan(b"\xff\xd8 page one"),
+            TestPage::Text(&lines),
             TestPage::Scan(b"\xff\xd8 page two"),
-        ]);
-        fs::write(h.vault().join("Attachments/bill.pdf"), scan).unwrap();
+        ];
+        fs::write(h.vault().join("Attachments/bill.pdf"), pdf_of(&pages)).unwrap();
         let mut h = h;
         read(
             &mut h.app,
@@ -561,7 +610,10 @@ mod tests {
         let sent = until_done(&mut h, 1);
 
         assert!(of(&sent, "notice").is_empty(), "{sent:?}");
-        assert_eq!(body(&h, "bill.pdf.md"), "Seite eins\n\nSeite zwei\n");
+        assert_eq!(
+            body(&h, "bill.pdf.md"),
+            "Seite eins\n\nZwischenblatt: die Anlagen zum Mietvertrag folgen.\n\nSeite zwei\n"
+        );
         let requests = requests.lock().unwrap();
         assert_eq!(requests.len(), 2);
         for request in requests.iter() {
@@ -569,6 +621,37 @@ mod tests {
             assert_eq!(asked["content"], "Transcribe this page.");
             assert_eq!(asked["images"].as_array().map(Vec::len), Some(1));
         }
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_encrypted_pdf_is_marked_and_sent_to_no_model() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let address = FakeOllama::new(&["m"]).recording(&requests).start();
+        let h = with_attachments("attachments-pdf-encrypted", &address);
+        let lines = ["Kontoauszug Nr. 10 vom 30.10.2026 mit allen Buchungen"];
+        let pdf = encrypted(pdf_of(&[TestPage::Text(&lines)]));
+        fs::write(h.vault().join("Attachments/bill.pdf"), pdf).unwrap();
+        let mut h = h;
+        read(
+            &mut h.app,
+            "jan@example.com",
+            ids(&[BILL]),
+            Some(&pick()),
+            None,
+        );
+        let sent = until_done(&mut h, 1);
+
+        let notes: Vec<String> = of(&sent, "job")
+            .into_iter()
+            .map(|j| shown(&j["summary"]))
+            .collect();
+        assert!(notes.contains(&"1 encrypted".to_string()), "{notes:?}");
+        assert!(of(&sent, "notice").is_empty(), "{sent:?}");
+        assert!(requests.lock().unwrap().is_empty());
+        let bill = fs::read_to_string(h.vault().join("Attachments/bill.pdf.md")).unwrap();
+        assert!(bill.contains("    encrypted: true\n"), "{bill}");
+        assert_eq!(body(&h, "bill.pdf.md"), "");
     }
 
     // ------------------------------------------------------------------------
@@ -610,6 +693,7 @@ mod tests {
         let counts = Counts {
             read: 3,
             unread: 1,
+            encrypted: 1,
             kept: 2,
         };
         let mut queue = AiQueue::new(None, VecDeque::new());
@@ -617,7 +701,7 @@ mod tests {
         queue.fail("scan.jpg", Text::new("reader.no_text"));
         assert_eq!(
             words(&counts.summary(&queue)),
-            "3 read · 1 failed · 1 unread"
+            "3 read · 1 failed · 1 unread · 1 encrypted"
         );
     }
 }

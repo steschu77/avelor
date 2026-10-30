@@ -12,6 +12,7 @@ use crate::shared::{ColorRef, ContactRef, Genre, OneOrMany};
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
+use av_utils::is_false;
 use serde::{Deserialize, Serialize};
 
 // ----------------------------------------------------------------------------
@@ -145,6 +146,9 @@ pub struct Original {
     /// Its size in bytes when it was saved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
+    /// An encrypted PDF, which no model is sent (import.md#reading-pdfs).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub encrypted: bool,
 }
 
 // ----------------------------------------------------------------------------

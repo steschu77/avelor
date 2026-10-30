@@ -315,6 +315,10 @@
     "one": "{n} eliminado",
     "other": "{n} eliminados"
   },
+  "count.encrypted": {
+    "one": "{n} cifrado",
+    "other": "{n} cifrados"
+  },
   "count.entities": {
     "one": "{n} elemento",
     "other": "{n} elementos"
@@ -585,6 +589,7 @@
   "field.edit": "Editar",
   "field.remove_pattern": "Quitar {pattern}",
   "field.save": "Guardar",
+  "file.encrypted": "cifrado",
   "file.open": "Abrir en su aplicación",
   "find.count": "{at} de {n}",
   "find.next": "Siguiente (F3)",
@@ -782,7 +787,7 @@
   "props.when": "Cuándo",
   "props.where": "Dónde",
   "reader.blank": "El modelo no leyó ningún texto.",
-  "reader.encrypted": "El PDF está cifrado; este modelo no puede leerlo.",
+  "reader.encrypted": "El PDF está cifrado; no se envía a ningún modelo.",
   "reader.no_text": "El archivo no tiene texto.",
   "reader.page_unread": "La página {page} no tiene ni capa de texto ni una imagen escaneada que este modelo pueda leer.",
   "reader.pdf_unread": "No se pudo leer el PDF.",
