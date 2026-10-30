@@ -310,6 +310,7 @@
     "other": "{n} conversations"
   },
   "count.deleted": "{n} deleted",
+  "count.encrypted": "{n} encrypted",
   "count.entities": {
     "one": "{n} entity",
     "other": "{n} entities"
@@ -549,6 +550,7 @@
   "field.edit": "Edit",
   "field.remove_pattern": "Remove {pattern}",
   "field.save": "Save",
+  "file.encrypted": "encrypted",
   "file.open": "Open in its app",
   "find.also": "find",
   "find.count": "{at} of {n}",
@@ -839,7 +841,7 @@
   "props.when": "When",
   "props.where": "Where",
   "reader.blank": "The model read no text.",
-  "reader.encrypted": "The PDF is encrypted; this model can't read it.",
+  "reader.encrypted": "The PDF is encrypted; it isn't sent to a model.",
   "reader.no_text": "The file has no text.",
   "reader.page_unread": "Page {page} has neither a text layer nor a scanned image this model can read.",
   "reader.pdf_unread": "The PDF couldn't be read.",

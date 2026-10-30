@@ -310,6 +310,7 @@
     "other": "{n} Unterhaltungen"
   },
   "count.deleted": "{n} gelöscht",
+  "count.encrypted": "{n} verschlüsselt",
   "count.entities": {
     "one": "{n} Eintrag",
     "other": "{n} Einträge"
@@ -549,6 +550,7 @@
   "field.edit": "Bearbeiten",
   "field.remove_pattern": "{pattern} entfernen",
   "field.save": "Speichern",
+  "file.encrypted": "verschlüsselt",
   "file.open": "In seiner App öffnen",
   "find.also": "finden",
   "find.count": "{at} von {n}",
@@ -834,7 +836,7 @@
   "props.when": "Wann",
   "props.where": "Wo",
   "reader.blank": "Das Modell hat keinen Text gelesen.",
-  "reader.encrypted": "Das PDF ist verschlüsselt; dieses Modell kann es nicht lesen.",
+  "reader.encrypted": "Das PDF ist verschlüsselt; es wird an kein Modell geschickt.",
   "reader.no_text": "Die Datei enthält keinen Text.",
   "reader.page_unread": "Seite {page} hat weder eine Textebene noch ein gescanntes Bild, das dieses Modell lesen kann.",
   "reader.pdf_unread": "Das PDF konnte nicht gelesen werden.",
