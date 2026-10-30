@@ -1,19 +1,23 @@
-//! What a file reads to (import.md#import-scans, email.md#attachments): an
-//! image or a PDF through an AI model, transcribed into Markdown, a text
-//! file as it is. Import scans and an email's attachments read through it.
+//! What a file reads to (import.md#import-scans, import.md#reading-pdfs,
+//! email.md#attachments): an image through an AI model, transcribed into
+//! Markdown; a PDF from its text layer, its scanned pages or the whole file
+//! through the model; a text file as it is. Import scans and an email's
+//! attachments read through it.
 
 use std::path::Path;
 
-use av_llm::{ChatRequest, ChatResponse, Client, FileData, Message, Part, Provider};
+use av_llm::{ChatRequest, ChatResponse, Client, FileData, Message, Part, StopReason};
+use av_pdf::Document;
 use av_utils::cancel::Cancel;
 use av_utils::charsets::from_windows1252;
-use av_utils::error::Result;
+use av_utils::error::Error;
 use av_utils::mime::type_for;
 use av_utils::text::normalize;
 use av_vault::{email, html, md_writer};
 
 use crate::ai;
-use crate::texts;
+use crate::ai::accounts::Resolved;
+use crate::texts::{self, Text};
 
 /// How many more words a file must have before its progress is sent again.
 pub const PROGRESS_WORDS: usize = 10;
@@ -61,20 +65,244 @@ impl Kind {
     }
 
     // ------------------------------------------------------------------------
-    /// Whether a model reads it: an image or a PDF.
+    /// Whether a model may read it: an image, or a PDF's scanned pages.
     pub fn by_model(self) -> bool {
         matches!(self, Kind::Image | Kind::Pdf)
     }
+}
 
+// ----------------------------------------------------------------------------
+/// What reads a file's images and scanned pages.
+#[derive(Clone)]
+pub enum Engine {
+    /// A model of an AI account; its address names the account in failures.
+    Ai(Resolved),
+}
+
+// ----------------------------------------------------------------------------
+/// Why a file read to no text.
+#[derive(Debug)]
+pub enum ReadError {
+    /// The file can't be read from the disk.
+    File(Error),
+    /// The model's request failed.
+    Model(Error),
+    /// The model declined to read it.
+    Refused,
+    /// The model read no text.
+    Blank,
+    /// The file has no text.
+    NoText,
+    /// It can't be read here, in words.
+    Unreadable(Text),
+}
+
+impl ReadError {
     // ------------------------------------------------------------------------
-    /// Whether `provider`'s models take it inline: an image every one, a PDF
-    /// all but Ollama (`ProviderSpec::pdf`).
-    pub fn sent_to(self, provider: Provider) -> bool {
+    /// The failure in words, a model's failure named after `engine`'s
+    /// account.
+    pub fn words(&self, engine: &Engine) -> Text {
+        let Engine::Ai(ai) = engine;
         match self {
-            Kind::Image => true,
-            Kind::Pdf => provider.spec().pdf,
-            _ => false,
+            ReadError::File(_) => Text::new("reader.unread"),
+            ReadError::Model(e) => ai::chat_error(ai.provider, &ai.address, e),
+            ReadError::Refused => Text::new("reader.refused"),
+            ReadError::Blank => Text::new("reader.blank"),
+            ReadError::NoText => Text::new("reader.no_text"),
+            ReadError::Unreadable(why) => why.clone(),
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The text of `data`, the file `name` of the kind `kind`, read with
+/// `engine` where it needs a model, as markdown. `on_words` gets the words
+/// read so far, every `PROGRESS_WORDS` while a model answers and after each
+/// page of a PDF.
+pub fn read(
+    engine: &Engine,
+    cancel: &Cancel,
+    name: &str,
+    kind: Kind,
+    data: Vec<u8>,
+    mut on_words: impl FnMut(usize),
+) -> Result<String, ReadError> {
+    let text = match kind {
+        Kind::Image => {
+            let mime_type = type_for(Path::new(name)).to_string();
+            let file = FileData {
+                name: name.to_string(),
+                mime_type,
+                data,
+            };
+            transcribe(engine, cancel, Kind::Image, file, &mut on_words)?
+        }
+        Kind::Pdf => read_pdf(engine, cancel, name, data, &mut on_words)?,
+        _ => text_of(kind, &data).trim().to_string(),
+    };
+    match text.is_empty() {
+        true => Err(ReadError::NoText),
+        false => Ok(text),
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// A PDF's page as `plan_pdf` sees it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PageFacts {
+    /// Its text layer stands for it.
+    Text,
+    /// Nothing on it.
+    Blank,
+    /// One JPEG image covering it, its text layer too thin.
+    Jpeg,
+    /// Neither: an image of another kind, drawings, text without its
+    /// characters.
+    Other,
+}
+
+// ----------------------------------------------------------------------------
+/// How a PDF is read.
+#[derive(Debug, PartialEq)]
+pub enum PdfPlan {
+    /// From its text layer, without a model.
+    TextLayer,
+    /// The whole file sent to the model.
+    WholeFile,
+    /// Page by page: a text page as it is, a JPEG page by the model.
+    Pages,
+    /// Not at all, in words.
+    Unreadable(Text),
+}
+
+// ----------------------------------------------------------------------------
+/// What a page read to tells `plan_pdf`. A page with a little text and no
+/// large image (a cover sheet) is text.
+fn facts_of(page: &av_pdf::Page) -> PageFacts {
+    let mapped = page.glyphs > 0 && page.unmapped * 10 <= page.glyphs;
+    if page.usable() {
+        PageFacts::Text
+    } else if page.scan.is_some() {
+        PageFacts::Jpeg
+    } else if page.cover < av_pdf::SCAN_COVER && mapped {
+        PageFacts::Text
+    } else if page.blank {
+        PageFacts::Blank
+    } else {
+        PageFacts::Other
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// How to read a PDF of the pages `pages` (or that couldn't be parsed) with
+/// a model that takes PDFs (`takes_pdf`) or not: its text layer when every
+/// page has one (or is blank), else the whole file if the model takes it,
+/// else page by page if every page is text or a JPEG.
+pub fn plan_pdf(pages: Result<&[PageFacts], &av_pdf::Error>, takes_pdf: bool) -> PdfPlan {
+    if let Ok(pages) = pages {
+        let text_or_blank = pages
+            .iter()
+            .all(|p| matches!(p, PageFacts::Text | PageFacts::Blank));
+        if text_or_blank && pages.contains(&PageFacts::Text) {
+            return PdfPlan::TextLayer;
+        }
+    }
+    if takes_pdf {
+        return PdfPlan::WholeFile;
+    }
+    match pages {
+        Ok(pages) => match pages.iter().position(|p| *p == PageFacts::Other) {
+            Some(i) => PdfPlan::Unreadable(Text::new("reader.page_unread").arg("page", i + 1)),
+            None => PdfPlan::Pages,
+        },
+        Err(av_pdf::Error::Encrypted) => PdfPlan::Unreadable(Text::new("reader.encrypted")),
+        Err(_) => PdfPlan::Unreadable(Text::new("reader.pdf_unread")),
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// A PDF's text, by `plan_pdf`.
+fn read_pdf(
+    engine: &Engine,
+    cancel: &Cancel,
+    name: &str,
+    data: Vec<u8>,
+    on_words: &mut impl FnMut(usize),
+) -> Result<String, ReadError> {
+    let pages: Result<Vec<av_pdf::Page>, av_pdf::Error> = Document::parse(&data)
+        .map(|doc| (0..doc.page_count()).filter_map(|i| doc.page(i)).collect());
+    let facts: Result<Vec<PageFacts>, av_pdf::Error> = pages
+        .as_ref()
+        .map(|pages| pages.iter().map(facts_of).collect())
+        .map_err(|e| *e);
+    let Engine::Ai(ai) = engine;
+    let plan = plan_pdf(facts.as_deref(), ai.provider.spec().pdf);
+    match plan {
+        PdfPlan::WholeFile => {
+            let file = FileData {
+                name: name.to_string(),
+                mime_type: "application/pdf".to_string(),
+                data,
+            };
+            transcribe(engine, cancel, Kind::Pdf, file, on_words)
+        }
+        PdfPlan::Unreadable(why) => Err(ReadError::Unreadable(why)),
+        PdfPlan::TextLayer | PdfPlan::Pages => {
+            let (Ok(pages), Ok(facts)) = (pages, facts) else {
+                return Err(ReadError::NoText);
+            };
+            let mut texts = Vec::new();
+            let mut done = 0;
+            for (i, (page, facts)) in pages.into_iter().zip(facts).enumerate() {
+                if cancel.is_cancelled() {
+                    return Err(ReadError::Model(Error::Cancelled));
+                }
+                let text = match (facts, page.scan) {
+                    (PageFacts::Text, _) => md_writer::plain_to_markdown(&page.text),
+                    (PageFacts::Jpeg, Some(scan)) => {
+                        let file = FileData {
+                            name: format!("{name}, page {}.jpg", i + 1),
+                            mime_type: "image/jpeg".to_string(),
+                            data: scan.jpeg,
+                        };
+                        let mut page_words = |words| on_words(done + words);
+                        match transcribe(engine, cancel, Kind::Image, file, &mut page_words) {
+                            Err(ReadError::Blank) => String::new(),
+                            other => other?,
+                        }
+                    }
+                    _ => String::new(),
+                };
+                let text = text.trim().to_string();
+                if !text.is_empty() {
+                    done += word_count(&text);
+                    on_words(done);
+                    texts.push(text);
+                }
+            }
+            Ok(texts.join("\n\n"))
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// What `engine` reads `file` (an image, or a PDF of the kind `kind`) to,
+/// cleaned.
+fn transcribe(
+    engine: &Engine,
+    cancel: &Cancel,
+    kind: Kind,
+    file: FileData,
+    on_words: &mut impl FnMut(usize),
+) -> Result<String, ReadError> {
+    let Engine::Ai(ai) = engine;
+    let (client, model) = (&ai.client, &ai.model);
+    let response = ask(client, cancel, model, kind, file, on_words).map_err(ReadError::Model)?;
+    let text = clean(&response.text);
+    match (text.is_empty(), response.stop) {
+        (false, _) => Ok(text),
+        (true, StopReason::Refused) => Err(ReadError::Refused),
+        (true, _) => Err(ReadError::Blank),
     }
 }
 
@@ -82,7 +310,7 @@ impl Kind {
 /// The text of a file of a kind read here, as markdown: Markdown as it is,
 /// plain text and CSV line by line, HTML and an email converted. The bytes
 /// are UTF-8, else Windows-1252.
-pub fn text_of(kind: Kind, bytes: &[u8]) -> String {
+fn text_of(kind: Kind, bytes: &[u8]) -> String {
     if kind == Kind::Email {
         return email::parse(bytes).to_markdown(texts::text("email.attachments"));
     }
@@ -109,7 +337,7 @@ pub fn ask(
     kind: Kind,
     data: FileData,
     mut on_words: impl FnMut(usize),
-) -> Result<ChatResponse> {
+) -> Result<ChatResponse, Error> {
     let asked = if kind == Kind::Pdf { DOCUMENT } else { PAGE };
     let request = ChatRequest::new(model)
         .system(SYSTEM)
@@ -159,7 +387,7 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn kinds_go_by_extension_and_providers_take_theirs() {
+    fn kinds_go_by_extension() {
         assert_eq!(Kind::of("scan.JPG"), Some(Kind::Image));
         assert_eq!(Kind::of("p1.webp"), Some(Kind::Image));
         assert_eq!(Kind::of("Rechnung.PDF"), Some(Kind::Pdf));
@@ -169,10 +397,6 @@ mod tests {
         assert_eq!(Kind::of("Fwd.eml"), Some(Kind::Email));
         assert_eq!(Kind::of("archive.zip"), None);
         assert_eq!(Kind::of("attachment"), None);
-
-        assert!(Kind::Image.sent_to(Provider::Ollama));
-        assert!(Kind::Pdf.sent_to(Provider::Anthropic) && Kind::Pdf.sent_to(Provider::Gemini));
-        assert!(!Kind::Pdf.sent_to(Provider::Ollama));
         assert!(Kind::Pdf.by_model() && !Kind::Html.by_model());
     }
 
@@ -195,6 +419,30 @@ mod tests {
         );
         let email = b"From: a@x\r\nSubject: Hi\r\nContent-Type: text/plain\r\n\r\nThe text.\r\n";
         assert_eq!(text_of(Kind::Email, email).trim(), "The text.");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_pdf_is_read_from_its_text_layer_else_by_the_model() {
+        use PageFacts::*;
+        let plan = |pages: &[PageFacts], takes_pdf| plan_pdf(Ok(pages), takes_pdf);
+        assert_eq!(plan(&[Text, Blank, Text], true), PdfPlan::TextLayer);
+        assert_eq!(plan(&[Text, Blank], false), PdfPlan::TextLayer);
+        assert_eq!(plan(&[Text, Jpeg], true), PdfPlan::WholeFile);
+        assert_eq!(plan(&[Other], true), PdfPlan::WholeFile);
+        assert_eq!(plan(&[Text, Jpeg, Blank], false), PdfPlan::Pages);
+        assert_eq!(plan(&[Blank], false), PdfPlan::Pages, "nothing to read");
+        let PdfPlan::Unreadable(why) = plan(&[Jpeg, Other], false) else {
+            panic!("page 2 can't be read");
+        };
+        assert!(why.render().starts_with("Page 2 "), "{why}");
+
+        let encrypted = av_pdf::Error::Encrypted;
+        assert_eq!(plan_pdf(Err(&encrypted), true), PdfPlan::WholeFile);
+        let PdfPlan::Unreadable(why) = plan_pdf(Err(&encrypted), false) else {
+            panic!("no way to read it");
+        };
+        assert!(why.render().contains("encrypted"), "{why}");
     }
 
     // ------------------------------------------------------------------------

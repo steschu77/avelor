@@ -1,0 +1,10 @@
+[package]
+name = "av-pdf"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+av-utils = { path = "../av-utils" }
+
+[lints]
+workspace = true

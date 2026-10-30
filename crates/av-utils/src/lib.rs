@@ -6,6 +6,7 @@ pub mod error;
 pub mod fnv;
 pub mod fs;
 pub mod id;
+pub mod inflate;
 pub mod logger;
 pub mod mime;
 pub mod random;
