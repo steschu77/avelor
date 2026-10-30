@@ -1078,7 +1078,7 @@
   "watch.intro": "Ordner auf diesem PC, aus denen der Tresor liest. Eine Überwachung sagt, wo gesucht wird, welche Dateien genommen werden und wie sie gelesen werden.",
   "watch.keep_off.images": "Nur der gelesene Text kommt in den Tresor; die Bilder bleiben im Ordner.",
   "watch.keep_off.pdf": "Nur der gelesene Text kommt in den Tresor; die PDFs bleiben im Ordner. Ein verschlüsseltes PDF behält seine Datei trotzdem.",
-  "watch.keep_on.images": "Das gescannte Bild neben seinem Dokument in Scans/, geöffnet über seine Karte; ein Dokument aus mehreren Bildern behält noch keins.",
+  "watch.keep_on.images": "Das gescannte Bild neben seinem Dokument in Scans/, geöffnet über seine Karte; ein Dokument aus mehreren Bildern behält sie als ein PDF (JPEG, PNG).",
   "watch.keep_on.pdf": "Das PDF neben seinem Dokument in Scans/, geöffnet über seine Karte.",
   "watch.kind.images": "Bilder · OCR",
   "watch.kind.pdf": "PDF · Text, Scans",

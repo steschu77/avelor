@@ -1083,7 +1083,7 @@
   "watch.intro": "Folders on this PC the vault reads from. A watch says where to look, which files to take and how to read them.",
   "watch.keep_off.images": "Only the text read goes into the vault; the images stay in the folder.",
   "watch.keep_off.pdf": "Only the text read goes into the vault; the PDFs stay in the folder. An encrypted PDF keeps its file anyway.",
-  "watch.keep_on.images": "The scanned image beside its document in Scans/, opened from its card; a document of several images keeps none yet.",
+  "watch.keep_on.images": "The scanned image beside its document in Scans/, opened from its card; a document of several images keeps them as one PDF (JPEG, PNG).",
   "watch.keep_on.pdf": "The PDF beside its document in Scans/, opened from its card.",
   "watch.kind.images": "Images · OCR",
   "watch.kind.pdf": "PDF · text, scans",

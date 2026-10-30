@@ -1132,7 +1132,7 @@
   "watch.intro": "Carpetas de este PC de las que lee la bóveda. Una vigilancia indica dónde buscar, qué archivos tomar y cómo leerlos.",
   "watch.keep_off.images": "Solo el texto leído entra en la bóveda; las imágenes se quedan en la carpeta.",
   "watch.keep_off.pdf": "Solo el texto leído entra en la bóveda; los PDF se quedan en la carpeta. Un PDF cifrado conserva su archivo de todos modos.",
-  "watch.keep_on.images": "La imagen escaneada junto a su documento en Scans/, abierta desde su tarjeta; un documento de varias imágenes aún no conserva ninguna.",
+  "watch.keep_on.images": "La imagen escaneada junto a su documento en Scans/, abierta desde su tarjeta; un documento de varias imágenes las conserva como un PDF (JPEG, PNG).",
   "watch.keep_on.pdf": "El PDF junto a su documento en Scans/, abierto desde su tarjeta.",
   "watch.kind.images": "Imágenes · OCR",
   "watch.kind.pdf": "PDF · texto, escaneos",

@@ -11,8 +11,8 @@
 //! how a later listing tells the files already in the vault
 //! (`Index::scan_origins`). A watch's analysis takes the documents an import
 //! wrote (`analysis::analyse`), and with Keep original a document of one file
-//! keeps the file beside it (`document.original`); an encrypted PDF always
-//! does, as it has no text.
+//! keeps the file beside it (`document.original`), one of several images
+//! (JPEG, PNG) a PDF of them; an encrypted PDF always keeps its file, as it has no text.
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
