@@ -27,12 +27,11 @@ import { armedButton } from '../../ui/confirm.js';
 import {
   closeVaultArea, openVaultOp, registerVaultPage,
 } from '../../ui/page.js';
-import { notice } from '../../ui/page.js';
 import { renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
 import { iconEl } from '../../ui/icons.js';
 import {
-  aiAnyOffered, aiMissingHint, aiModelOf, aiModelPicker,
+  AI_ANALYSIS_OFF, aiModelOf, aiPickerWithHint,
 } from '../workspace/models.js';
 import { WATCH_READ_STEP } from '../workspace/folders.js';
 
@@ -75,7 +74,7 @@ export function openMailFetch(account_id) {
       to: filter.since === 'custom' && before ? mailDateInput(before) : '',
     },
     auto: saved?.auto_update ?? true,
-    analysis: { ...MAIL_ANALYSIS_OFF, ...saved?.analysis },
+    analysis: { ...AI_ANALYSIS_OFF, ...saved?.analysis },
     attachments: { ...MAIL_ATTACHMENTS_OFF, ...saved?.attachments },
     searching: false, // while a `mail_search` / `mail_headers` is answered
     error: null,
@@ -615,7 +614,7 @@ export function renderMailSync(account, rerender) {
   if (on) {
     box.append(renderMailFilterForm(form));
     box.append(renderMailSyncAttachments(form, { ...MAIL_ATTACHMENTS_OFF, ...sync.attachments }));
-    box.append(renderMailSyncAnalysis(account.id, { ...MAIL_ANALYSIS_OFF, ...sync.analysis }));
+    box.append(renderMailSyncAnalysis(account.id, { ...AI_ANALYSIS_OFF, ...sync.analysis }));
   }
   if (form.error) box.append(accEl('div', 'error-note', form.error));
   return box;
@@ -709,19 +708,16 @@ function renderMailAttachments(owner, attachments, onChange, rerender) {
 }
 
 // While the attachments are read: the picker of the model that reads them,
-// and what keeps the pick from working (`aiMissingHint`, as the analysis
-// has it).
+// and what keeps the pick from working (`aiPickerWithHint`).
 function renderMailReading(attachments, onChange) {
   const pick = attachments.models?.[WATCH_READ_STEP] ?? null;
-  const picker = aiModelPicker(pick,
-    model => onChange({ ...attachments, models: { ...attachments.models, [WATCH_READ_STEP]: model } }));
+  const { picker, hint } = aiPickerWithHint(pick,
+    model => onChange({ ...attachments, models: { ...attachments.models, [WATCH_READ_STEP]: model } }),
+    'reading attachments');
   const body = accEl('div', 'page-text mail__text');
   body.append('Reads each saved file into its document: images and PDFs with ', picker,
     ' (on Ollama, PDFs stay unread), text files as they are.');
-  const ai = aiModelOf(pick);
-  if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
-    body.append(notice('hint', ...aiMissingHint(ai, 'reading attachments')));
-  }
+  if (hint) body.append(hint);
   return body;
 }
 
@@ -766,12 +762,9 @@ function renderMailSyncAttachments(form, attachments) {
 // the analysis of new mail (mail.md#analysis), of Fetch mail and of an
 // account's auto-sync: a level, and the model it runs with
 
-const MAIL_ANALYSIS_OFF = { level: 'off', model: null };
-
 // `analysis` ({ level, model }) as a seg of its levels and a body: with the
 // analysis on, the picker of its model, and what keeps the pick from working
-// (`aiMissingHint`; not for a plain "pick a model", which the picker says
-// itself). `onChange` gets the analysis as changed.
+// (`aiPickerWithHint`). `onChange` gets the analysis as changed.
 function renderMailAnalysis(analysis, onChange) {
   const seg = accSeg([['off', 'Off'], ['lite', 'Lite'], ['medium', 'Medium']], analysis.level,
     level => onChange({ ...analysis, level }));
@@ -780,17 +773,15 @@ function renderMailAnalysis(analysis, onChange) {
     body.append('New mails keep their subject as title; nothing is sent to an AI.');
     return { seg, body };
   }
-  const picker = aiModelPicker(analysis.model, model => onChange({ ...analysis, model }));
+  const { picker, hint } = aiPickerWithHint(analysis.model,
+    model => onChange({ ...analysis, model }), 'the mail analysis');
   body.append('Sends each new mail to ', picker,
     ' for its kind, a clean title, and labels and projects from this vault',
     analysis.level === 'medium'
       ? '; and, for a mail that asks for it, a quick reply, points to check and questions, as a chat linked to the mail.'
       : '.',
     ' The text of its attachments read goes along, and each gets a clean title, its own date, a genre, labels and projects.');
-  const ai = aiModelOf(analysis.model);
-  if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
-    body.append(notice('hint', ...aiMissingHint(ai, 'the mail analysis')));
-  }
+  if (hint) body.append(hint);
   return { seg, body };
 }
 

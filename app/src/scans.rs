@@ -7,7 +7,9 @@
 //! (api.md#scans). What a file read to is kept in memory while the app runs.
 //! Every document written carries `scan: {watch, origin: [files]}`, which is
 //! how a later listing tells the files already in the vault
-//! (`Index::scan_origins`).
+//! (`Index::scan_origins`). A watch's analysis takes the documents an import
+//! wrote (`enrich::analyse`), and with Keep original a document of one image
+//! keeps the image beside it (`document.original`).
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
@@ -35,6 +37,7 @@ use serde_json::json;
 use crate::ai;
 use crate::app::App;
 use crate::app::Task;
+use crate::enrich::{self, Analysis, Batch};
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::protocol::Req;
@@ -288,7 +291,7 @@ pub(crate) struct ImportRequest {
 
 #[derive(Deserialize)]
 struct NewDocument {
-    /// Empty: the first page's proposed title.
+    /// The title the user gave; empty: the first page's proposed title.
     #[serde(default)]
     title: String,
     files: Vec<String>,
@@ -673,20 +676,40 @@ fn finish(app: &mut App) {
 
 // ----------------------------------------------------------------------------
 /// `scan_import {watch, docs}`: import each document into `Scans/` from its
-/// pages' text (`scan_document`). Answers `{imported, failed}` after an
-/// `entity` event per document written.
+/// pages' text (`scan_document`), one of one image with the image beside
+/// it if the watch keeps originals. Answers `{imported, failed}` after an
+/// `entity` event per document written; then, with the watch's analysis
+/// on, the documents written are analysed as a job, a title the user gave
+/// kept (`enrich::analyse`).
 pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
-    let (watch, root) = match app.watches.get(request.watch) {
-        Ok(watch) => (watch.id(), watch.settings().root()),
+    let (watch, root, name, keep, analysis) = match app.watches.get(request.watch) {
+        Ok(watch) => {
+            let settings = watch.settings();
+            let analysis = settings.analysis.clone().filter(Analysis::is_on);
+            let keep = settings.keep_original;
+            (
+                watch.id(),
+                settings.root(),
+                settings.display_name(),
+                keep,
+                analysis,
+            )
+        }
         Err(e) => return req.err(e),
     };
     let mut reply = ImportReply::default();
+    let mut titled = Vec::new();
     for doc in &request.docs {
-        match write_document(app, watch, &root, doc) {
-            Ok(id) => reply.imported.push(Imported {
-                files: &doc.files,
-                id,
-            }),
+        match write_document(app, watch, &root, doc, keep) {
+            Ok(id) => {
+                if !doc.title.trim().is_empty() {
+                    titled.push(id);
+                }
+                reply.imported.push(Imported {
+                    files: &doc.files,
+                    id,
+                });
+            }
             Err(error) => {
                 log::info!("Scan import: {:?} not imported: {error}", doc.files);
                 reply.failed.push(NotImported {
@@ -698,22 +721,53 @@ pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
     }
     let (imported, not) = (reply.imported.len(), reply.failed.len());
     log::info!("Scan import of {watch}: {imported} imported, {not} failed");
+    let documents: Vec<Id> = reply.imported.iter().map(|doc| doc.id).collect();
     req.ok(reply);
+    if let Some(analysis) = analysis {
+        enrich::analyse(app, Batch::scans(&name, documents, titled), &analysis);
+    }
 }
 
 // ----------------------------------------------------------------------------
-/// Write the document of `doc`'s pages; or say why not.
-fn write_document(app: &mut App, watch: Id, root: &Path, doc: &NewDocument) -> Result<Id, String> {
-    let document = {
+/// Write the document of `doc`'s pages, with its image beside it if `keep`
+/// and it has one page (`Index::create_with_original`); or say why not.
+fn write_document(
+    app: &mut App,
+    watch: Id,
+    root: &Path,
+    doc: &NewDocument,
+    keep: bool,
+) -> Result<Id, String> {
+    let (document, original) = {
         let pages = gather_pages(app, watch, root, doc)?;
-        scan_document(watch, &doc.title, &pages)
+        let original = match &pages[..] {
+            [page] if keep => Some(original_of(root, page.file)?),
+            _ => None,
+        };
+        (scan_document(watch, &doc.title, &pages), original)
     };
     let folder = Path::new(layout::SCANS);
-    app.edit(|index, changes| index.create(document, folder, changes))
-        .map_err(|e| {
-            log::warn!("Scan import: could not write the document: {e}");
-            "Could not write the document.".to_string()
-        })
+    app.edit(|index, changes| match &original {
+        Some((name, bytes)) => index.create_with_original(document, folder, name, bytes, changes),
+        None => index.create(document, folder, changes),
+    })
+    .map_err(|e| {
+        log::warn!("Scan import: could not write the document: {e}");
+        "Could not write the document.".to_string()
+    })
+}
+
+// ----------------------------------------------------------------------------
+/// The image `file` of the watch's folder `root` to keep beside its
+/// document: its name, without the subfolders, and its bytes.
+fn original_of(root: &Path, file: &str) -> Result<(String, Vec<u8>), String> {
+    let path = root.join(file);
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+    let bytes = std::fs::read(&path).map_err(|e| {
+        log::warn!("Scan import: could not read {file} to keep it: {e}");
+        format!("Could not read {file} to keep it.")
+    })?;
+    Ok((name.unwrap_or_else(|| file.to_string()), bytes))
 }
 
 // ----------------------------------------------------------------------------
@@ -1047,6 +1101,68 @@ mod tests {
         assert_eq!(doc.title(), "Taxes", "the title given, trimmed");
         let doc = scan_document(watch, "", &[page("")]);
         assert_eq!(doc.title(), "scan_0806", "the first file's name");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_import_keeps_a_single_image_and_hands_its_documents_to_the_analysis() {
+        let answer =
+            r#"{"title": "Brief der Stadtwerke", "date": "2020-03-01", "genre": "letter"}"#;
+        let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
+        let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+        let (mut h, folder) = with_scans_and(
+            "scan-import-analysis",
+            &[(".avelor/accounts/ollama.yaml", account)],
+        );
+        fs::write(folder.join("d.jpg"), "d.jpg").unwrap();
+        for (name, text) in [
+            ("a.jpg", "Sehr geehrter Herr"),
+            ("b.jpg", "Seite 1"),
+            ("d.jpg", "Seite 2"),
+        ] {
+            read_page(&mut h, &folder, name, text);
+        }
+        let analysis = json!({ "level": "lite", "model": { "account": OLLAMA_ID, "model": "m" } });
+        let settings = json!({ "watch": WATCH_ID, "analysis": analysis, "keep_original": true });
+        h.call("set_watch", settings);
+        let docs = json!([
+            { "title": "", "files": ["a.jpg"] },
+            { "title": "Mein Titel", "files": ["b.jpg", "d.jpg"] },
+        ]);
+        let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+        assert_eq!(shape(&sent), ["entity", "entity", "job", "reply"]);
+        assert_eq!(sent[2]["data"]["label"], "Analysing scans \u{b7} scans");
+        let path = |i: usize| h.vault().join(sent[i]["data"]["path"].as_str().unwrap());
+        let (single, double) = (path(0), path(1));
+        let done = |sent: &[String]| sent.iter().any(|m| m.contains(r#""state":"done""#));
+        h.wait_for(done);
+
+        let text = fs::read_to_string(&single).unwrap();
+        assert!(text.contains("title: Brief der Stadtwerke"), "{text}");
+        assert!(
+            text.contains("date: 2020-03-01T12:00:00Z") && text.contains("genre: letter"),
+            "{text}"
+        );
+        assert!(
+            text.contains("name: a.jpg") && text.contains("origin: a.jpg"),
+            "{text}"
+        );
+        let id = Id::parse(sent[0]["data"]["id"].as_str().unwrap()).unwrap();
+        let original = h.app.vault.index().original_path(&id).unwrap();
+        assert_eq!(
+            fs::read(&original).unwrap(),
+            b"a.jpg",
+            "the image beside it"
+        );
+        assert!(folder.join("a.jpg").exists(), "the watch's file stays");
+
+        let text = fs::read_to_string(&double).unwrap();
+        assert!(
+            text.contains("title: Mein Titel"),
+            "the title given stays: {text}"
+        );
+        assert!(text.contains("genre: letter"), "{text}");
+        assert!(!text.contains("original:"), "two images keep none: {text}");
     }
 
     // ------------------------------------------------------------------------

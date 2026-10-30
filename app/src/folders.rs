@@ -15,6 +15,7 @@ use serde_json::json;
 use crate::ai_accounts::ModelChoice;
 use crate::app::App;
 use crate::config_files::unique_names;
+use crate::enrich::Analysis;
 use crate::protocol::Req;
 use crate::sys;
 use crate::watches::{Collect, Watch, WatchKind, WatchMeta, WatchSettings, Watches};
@@ -86,6 +87,9 @@ pub(crate) struct WatchChange {
     /// Picks by step, set in the watch's `models`; the other steps keep
     /// theirs.
     models: Option<BTreeMap<String, ModelChoice>>,
+    /// Stored whole: its model kept while it is off.
+    analysis: Option<Analysis>,
+    keep_original: Option<bool>,
     enabled: Option<bool>,
 }
 
@@ -186,6 +190,12 @@ pub fn set_watch(app: &mut App, req: Req, change: WatchChange) {
         }
         if let Some(models) = change.models {
             settings.models.extend(models);
+        }
+        if let Some(analysis) = change.analysis {
+            settings.analysis = Some(analysis);
+        }
+        if let Some(keep_original) = change.keep_original {
+            settings.keep_original = keep_original;
         }
         if let Some(enabled) = change.enabled {
             settings.enabled = enabled;
@@ -397,6 +407,41 @@ mod tests {
                 && text.contains("model: small"),
             "{text}"
         );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_watchs_analysis_and_keep_original_are_stored() {
+        let (mut h, _) = with_watch("set-watch-analysis");
+        h.take();
+        let model = json!({ "account": Id::generate(), "model": "m" });
+        let analysis = json!({ "level": "off", "model": model });
+        let args = json!({ "watch": WATCH_ID, "analysis": analysis, "keep_original": true });
+        let sent = h.call("set_watch", args);
+        assert_eq!(shape(&sent), ["watch", "reply"]);
+        let watch = &sent[0]["data"];
+        assert_eq!(watch["analysis"], analysis, "off, its model kept");
+        assert_eq!(watch["keep_original"], true);
+        let file = watch_file(&h, "watch_images.yaml");
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(
+            text.contains(
+                "analysis:
+    level: off
+    model:"
+            ) && text.contains("keep-original: true"),
+            "{text}"
+        );
+        h.call(
+            "set_watch",
+            json!({ "watch": WATCH_ID, "keep_original": false }),
+        );
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(
+            !text.contains("keep-original"),
+            "written only when on: {text}"
+        );
+        assert!(text.contains("level: off"), "the analysis stays: {text}");
     }
 
     // ------------------------------------------------------------------------

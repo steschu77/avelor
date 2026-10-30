@@ -7,6 +7,7 @@ import { accEl } from '../../core/dom.js';
 import { runAction } from '../../core/actions.js';
 import { accounts } from '../../model/entities.js';
 import { showMenu } from '../../ui/menu.js';
+import { notice } from '../../ui/page.js';
 
 export const AI_PROVIDERS = [
   { kind: 'anthropic', name: 'Anthropic', placeholder: 'sk-ant-\u2026' },
@@ -82,6 +83,22 @@ export function aiMissingHint(ai, what) {
   open.type = 'button';
   open.addEventListener('click', () => aiOpenAccounts(ai.account?.id));
   return [accEl('span', '', text), open];
+}
+
+// An analysis that is off (`{level, model}`, a mail filter's or a watch's;
+// the model kept while it is off).
+export const AI_ANALYSIS_OFF = { level: 'off', model: null };
+
+// The picker of `choice` (`aiModelPicker`, calling `onPick`) and, when the
+// pick wouldn't work, why, for `what` (`aiMissingHint`), as a hint -- not
+// for a plain "pick a model", which the picker says itself: `{ picker, hint }`,
+// `hint` null without one.
+export function aiPickerWithHint(choice, onPick, what) {
+  const picker = aiModelPicker(choice, onPick);
+  const ai = aiModelOf(choice);
+  const plainPick = ai.problem === 'pick' && aiAnyOffered();
+  const hint = ai.problem && !plainPick ? notice('hint', ...aiMissingHint(ai, what)) : null;
+  return { picker, hint };
 }
 
 // The picker of a feature's model: a button naming the model `choice` picks

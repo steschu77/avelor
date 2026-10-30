@@ -58,6 +58,12 @@ account file is (`accounts.md#vault-accounts`). The file contains:
     `{account, model}` (`accounts.md#model-choice`), by step: `read` for
     reading images (`watches::READ_STEP`). A step without an entry has no
     pick yet
+  * `analysis`: the analysis of the documents it imports, `level` (`off`,
+    `lite`, `medium`) and the `model` it runs with, as a mail filter's
+    (`mail.md#analysis`), the model kept while the level is off; absent:
+    off
+  * `keep-original`: `true` if a document of one image keeps the image
+    beside it (`vault.md#document`); absent: it doesn't
   * `enabled`: `false` while the watch is off; it isn't listed under
     Sources then
   * `added`: when the watch was added
@@ -74,6 +80,12 @@ folder-watch:
     read:
       account: 019ff8a6-aa60-7e31-ab4b-3e861cb75fe1
       model: gemini-3.8-flash
+  analysis:
+    level: lite
+    model:
+      account: 019ff8a6-aa60-7e31-ab4b-3e861cb75fe1
+      model: gemini-3.8-flash
+  keep-original: true
   added: 2026-01-03T10:00:00Z
 ```
 
@@ -89,13 +101,15 @@ vault), following the Accounts page:
   folder is looked for before the watch is saved; the new watch takes its
   type's file types (and Collect: taken within 2 min, for images).
 - A watch's pane changes its name, folder, subfolders, file types, whether
-  it is a source, and its import process: the reading step. A step that
-  sends the file to an
-  AI has the picker of the model it runs with in its row
-  (`accounts.md#model-choice`): the reading step of images (`models`). A
-  step without a pick shows "Pick a model". What keeps a picked model from
-  working shows under its step, with a button to Accounts where the fix
-  is there.
+  it is a source, and its import process: the reading step, which always
+  runs, then Analysis and Keep original, each switched on or off by its
+  check. Analysis's check turns it on at Lite (or off, keeping its model);
+  while it is on, it offers Lite or Medium. A step that sends the file to
+  an AI has the picker of the model it runs with in its row
+  (`accounts.md#model-choice`): the reading step of images (`models`) and
+  the analysis (`analysis`). A step without a pick shows "Pick a model".
+  What keeps a picked model from working shows under its step, with a
+  button to Accounts where the fix is there.
 - Removing a watch deletes its file; what it imported stays in the vault.
 
 ## Import scans <a id="import-scans"></a>
@@ -146,11 +160,22 @@ The Import button of an images watch opens Import scans
   Ctrl+Enter) writes each document to `Scans/` in the vault: a `document`
   whose text is its pages' text in order, a blank line between them, dated
   by its first page, with the source `scan: { watch, origin: [files] }`; an
-  empty title takes the first page's, else the first file's name. A
-  document whose pages aren't read (or changed since), are no longer in the
-  folder or are in the vault already, isn't written and shows why.
-  Imported documents leave the page; their files count as in the vault
-  from then on.
+  empty title takes the first page's, else the first file's name (the
+  page sends a title only as edited). With Keep original, a document of
+  one image keeps the image beside it as its original
+  (`vault.md#document`), named as the file; one of several images keeps
+  none. A document whose pages aren't read (or changed since), are no
+  longer in the folder or are in the vault already, isn't written and
+  shows why. Imported documents leave the page; their files count as in
+  the vault from then on.
+- **Analysis**: with the watch's analysis on, the documents imported go to
+  "Analysing scans · <watch>" (`enrich::analyse`), the mail analysis's job
+  and request for a document (`mail.md#analysis`): a clean title, the
+  date the document carries, a genre, labels and projects, written at
+  once; a title typed before the import stays. At Medium a document also
+  gets its points to check and questions, as a chat "Document analysis ·
+  <title>" linked to it, as no mail carries them. A refused pick is a
+  notice ("Scan analysis · <watch>: …"); the documents stay imported.
 
 Escape closes the page; opening it again for the same watch lists the
 folder again and keeps the documents as arranged.
@@ -166,7 +191,7 @@ folder again and keeps the documents as arranged.
 | K2 | Read (OCR) | per file or Read all → `scanRead` | `scan_read {watch, files, again}` → the host checks the watch's OCR model → `ok {job}`; one file after another on workers → `scan_page` queued / reading (words) / read (words, title) / failed; job events; `account` | text per page |
 | K3 | Stop reading | Stop (or the job card's Stop) | `cancel_job {id: job}` → remaining pages `stopped`, job ends | — |
 | K4 | Arrange | drag pages, merge with previous/next, split, edit titles, tick | page only (`scanPlace`, `features/import/scans.js`) | documents as arranged |
-| K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}` | documents in `Scans/` |
+| K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}`; with the watch's analysis on, the job "Analysing scans" (G5's steps) → `entity`, `job`, `account` | documents in `Scans/`, analysed; one image kept beside its document |
 | K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
 
 ## Design <a id="design"></a>

@@ -189,6 +189,11 @@ feature picks its model (`accounts.md#model-choice`).
   `panel.md#cards`); the labels added to the mail's own, the projects
   joined. A title the user changed meanwhile stays. A wrong label or
   project is removed on the card like any other.
+- **Scans**: a watch's analysis takes the documents Import scans wrote
+  the same way (`import.md#import-scans`), named "Analysing scans ·
+  <watch>" and "Scan analysis · <watch>" (`enrich::Batch`). A scan has no
+  mail, so at Medium it is asked for `check` and `questions` too (no
+  reply), and gets a chat "Document analysis · <title>" linked to it.
 - **Attachments**: each attachment read gets a request of its own after
   the mails (`enrich::document_request`), Lite at either level: the genres
   it may get (av-vault's well-known ones, then those the vault's

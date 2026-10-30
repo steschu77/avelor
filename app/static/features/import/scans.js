@@ -362,7 +362,11 @@ function scanImport(docs) {
   const s = scan;
   s.error = null;
   s.importing = true;
-  const args = { watch: s.watch, docs: ready.map(doc => ({ title: scanDocTitle(doc), files: doc.pages })) };
+  // A title only as edited: the host proposes the one shown, and the
+  // analysis keeps a title given.
+  const args = {
+    watch: s.watch, docs: ready.map(doc => ({ title: doc.edited ? doc.title : '', files: doc.pages })),
+  };
   rpcCall('scan_import', args).then(reply => {
     if (scan === s) onScanImported(reply);
   }, e => {

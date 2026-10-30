@@ -22,6 +22,7 @@ use serde_yaml_ng::Value;
 use crate::ai_accounts::ModelChoice;
 use crate::config::is_false;
 use crate::config_files::{ConnectionStatus, SecretFile, remove_if_exists, write_yaml};
+use crate::enrich::Analysis;
 
 /// The extension of a Google account's secret, its refresh token.
 const TOKEN: &str = "token";
@@ -208,35 +209,6 @@ impl Default for MailSettings {
             attachments: None,
             rest: BTreeMap::new(),
         }
-    }
-}
-
-// ----------------------------------------------------------------------------
-/// How closely new mail is analysed (mail.md#analysis): Lite sorts it,
-/// Medium also drafts a reply and what to check, as a chat.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AnalysisLevel {
-    Off,
-    Lite,
-    Medium,
-}
-
-// ----------------------------------------------------------------------------
-/// A filter's mail analysis: its level, and the model it runs with
-/// (accounts.md#model-choice), kept while the level is off.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Analysis {
-    pub level: AnalysisLevel,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<ModelChoice>,
-}
-
-impl Analysis {
-    // ------------------------------------------------------------------------
-    /// Whether new mail is analysed at all.
-    pub fn is_on(&self) -> bool {
-        self.level != AnalysisLevel::Off
     }
 }
 

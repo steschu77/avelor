@@ -45,10 +45,10 @@ use serde_json::json;
 
 use crate::app::App;
 use crate::attachments;
-use crate::enrich;
+use crate::enrich::Analysis;
+use crate::enrich::{self, Batch};
 use crate::google;
 use crate::google::{SYNC_EVERY, first_due, later};
-use crate::google_accounts::Analysis;
 use crate::google_accounts::AttachmentSettings;
 use crate::google_accounts::AutoSync;
 use crate::google_accounts::MailSettings;
@@ -1068,7 +1068,7 @@ fn finish(app: &mut App) {
         }
         _ => {
             if let Some((mails, analysis)) = then {
-                enrich::analyse(app, &email, mails, Vec::new(), &analysis);
+                enrich::analyse(app, Batch::mail(&email, mails, Vec::new()), &analysis);
             }
         }
     }
@@ -2055,7 +2055,7 @@ UEsDBA==\r\n\
         let mut h = with_google("mail-read-after", MAIL, &[]);
         let account = connected_id();
         let lite = Analysis {
-            level: crate::google_accounts::AnalysisLevel::Lite,
+            level: crate::enrich::AnalysisLevel::Lite,
             model: None,
         };
         let reading = json!({ "enabled": true, "patterns": ["*.pdf"], "read": true });
@@ -2101,7 +2101,7 @@ UEsDBA==\r\n\
         let mut h = with_google("mail-analyse-after", MAIL, &[]);
         let account = connected_id();
         let lite = Analysis {
-            level: crate::google_accounts::AnalysisLevel::Lite,
+            level: crate::enrich::AnalysisLevel::Lite,
             model: None,
         };
         for stopped in [false, true] {

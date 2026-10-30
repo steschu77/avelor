@@ -20,6 +20,7 @@ use serde_yaml_ng::Value;
 use crate::ai_accounts::ModelChoice;
 use crate::config::is_false;
 use crate::config_files::{free_stem, load_config_files, remove_if_exists, write_yaml};
+use crate::enrich::Analysis;
 use crate::sys;
 
 /// The key of the reading step's model in `WatchSettings::models`.
@@ -82,6 +83,14 @@ pub struct WatchSettings {
     /// `READ_STEP` for reading images (accounts.md#model-choice).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub models: BTreeMap<String, ModelChoice>,
+    /// The analysis of the documents it imports (import.md#import-scans);
+    /// absent: off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis: Option<Analysis>,
+    /// Whether a document of one image keeps the image beside it
+    /// (`document.original`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub keep_original: bool,
     /// Off: the watch isn't listed under Sources.
     #[serde(default = "enabled_default", skip_serializing_if = "is_enabled")]
     pub enabled: bool,
@@ -111,6 +120,8 @@ impl WatchSettings {
             patterns: Vec::new(),
             collect: None,
             models: BTreeMap::new(),
+            analysis: None,
+            keep_original: false,
             enabled: true,
             added: None,
             rest: BTreeMap::new(),
@@ -175,6 +186,8 @@ pub struct WatchMeta<'a> {
     pub patterns: &'a [String],
     pub collect: Option<Collect>,
     pub models: &'a BTreeMap<String, ModelChoice>,
+    pub analysis: Option<&'a Analysis>,
+    pub keep_original: bool,
     pub enabled: bool,
     pub added: Option<DateTime>,
 }
@@ -224,6 +237,8 @@ impl Watch {
             patterns: &settings.patterns,
             collect: settings.collect,
             models: &settings.models,
+            analysis: settings.analysis.as_ref(),
+            keep_original: settings.keep_original,
             enabled: settings.enabled,
             added: settings.added,
         }
