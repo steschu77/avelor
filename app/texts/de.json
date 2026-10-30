@@ -472,7 +472,7 @@
   "email.reading": "wird gelesen …",
   "email.reading_blocked": "Das Lesen der Anhänge ist an: Wähle ein Modell, das dafür funktioniert, oder schalte es aus.",
   "email.reading_matches": "Treffer werden gelesen …",
-  "email.reads_with": "Liest jede gespeicherte Datei in ihr Dokument: Bilder und PDFs mit {picker} (bei Ollama bleiben PDFs ungelesen), Textdateien so, wie sie sind.",
+  "email.reads_with": "Liest jede gespeicherte Datei in ihr Dokument: Bilder und gescannte PDFs mit {picker}, den eigenen Text eines PDFs und Textdateien so, wie sie sind.",
   "email.replace_again": {
     "one": "Erneut klicken, um {n} Inhalt zu ersetzen",
     "other": "Erneut klicken, um {n} Inhalte zu ersetzen"
@@ -731,7 +731,10 @@
   "props.when": "Wann",
   "props.where": "Wo",
   "reader.blank": "Das Modell hat keinen Text gelesen.",
+  "reader.encrypted": "Das PDF ist verschlüsselt; dieses Modell kann es nicht lesen.",
   "reader.no_text": "Die Datei enthält keinen Text.",
+  "reader.page_unread": "Seite {page} hat weder eine Textebene noch ein gescanntes Bild, das dieses Modell lesen kann.",
+  "reader.pdf_unread": "Das PDF konnte nicht gelesen werden.",
   "reader.refused": "Das Modell hat das Lesen der Seite verweigert.",
   "reader.unread": "Die Datei konnte nicht gelesen werden.",
   "recurring.from": "ab {day}",

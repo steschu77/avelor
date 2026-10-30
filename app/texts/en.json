@@ -472,7 +472,7 @@
   "email.reading": "reading…",
   "email.reading_blocked": "Reading attachments is on: pick a model that works for it, or turn it off.",
   "email.reading_matches": "Reading matches…",
-  "email.reads_with": "Reads each saved file into its document: images and PDFs with {picker} (on Ollama, PDFs stay unread), text files as they are.",
+  "email.reads_with": "Reads each saved file into its document: images and scanned PDFs with {picker}, a PDF’s own text and text files as they are.",
   "email.replace_again": {
     "one": "Click again to replace {n} body",
     "other": "Click again to replace {n} bodies"
@@ -736,7 +736,10 @@
   "props.when": "When",
   "props.where": "Where",
   "reader.blank": "The model read no text.",
+  "reader.encrypted": "The PDF is encrypted; this model can't read it.",
   "reader.no_text": "The file has no text.",
+  "reader.page_unread": "Page {page} has neither a text layer nor a scanned image this model can read.",
+  "reader.pdf_unread": "The PDF couldn't be read.",
   "reader.refused": "The model declined to read the page.",
   "reader.unread": "Could not read the file.",
   "recurring.from": "from {day}",

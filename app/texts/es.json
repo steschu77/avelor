@@ -520,7 +520,7 @@
   "email.reading": "leyendo…",
   "email.reading_blocked": "La lectura de adjuntos está activada: elige un modelo que funcione para ella o desactívala.",
   "email.reading_matches": "Leyendo coincidencias…",
-  "email.reads_with": "Lee cada archivo guardado en su documento: las imágenes y los PDF con {picker} (con Ollama, los PDF se quedan sin leer), los archivos de texto tal cual.",
+  "email.reads_with": "Lee cada archivo guardado en su documento: las imágenes y los PDF escaneados con {picker}, el texto propio de un PDF y los archivos de texto tal cual.",
   "email.replace_again": {
     "one": "Haz clic de nuevo para sustituir {n} cuerpo",
     "other": "Haz clic de nuevo para sustituir {n} cuerpos"
@@ -782,7 +782,10 @@
   "props.when": "Cuándo",
   "props.where": "Dónde",
   "reader.blank": "El modelo no leyó ningún texto.",
+  "reader.encrypted": "El PDF está cifrado; este modelo no puede leerlo.",
   "reader.no_text": "El archivo no tiene texto.",
+  "reader.page_unread": "La página {page} no tiene ni capa de texto ni una imagen escaneada que este modelo pueda leer.",
+  "reader.pdf_unread": "No se pudo leer el PDF.",
   "reader.refused": "El modelo se negó a leer la página.",
   "reader.unread": "No se pudo leer el archivo.",
   "recurring.from": "desde el {day}",
