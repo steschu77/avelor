@@ -18,9 +18,9 @@ use av_vault::document::Document;
 use crate::ai;
 use crate::ai::accounts::ModelChoice;
 use crate::ai::queue::AiQueue;
-use crate::analysis;
+use crate::analysis::Analysis;
+use crate::analysis::{self, Batch};
 use crate::app::App;
-use crate::google::accounts::Analysis;
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::reader::{self, Kind};
@@ -179,7 +179,7 @@ pub fn read(
 /// (`analysis::analyse`).
 fn analyse(app: &mut App, email: &str, then: Option<(Vec<Id>, Analysis)>, read: Vec<Id>) {
     if let Some((emails, analysis)) = then {
-        analysis::analyse(app, email, emails, read, &analysis);
+        analysis::analyse(app, Batch::email(email, emails, read), &analysis);
     }
 }
 
@@ -392,7 +392,7 @@ fn finish(app: &mut App, job: Id) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::google::accounts::AnalysisLevel;
+    use crate::analysis::AnalysisLevel;
     use crate::testing::{FakeOllama, Harness, parse, shown, words};
     use serde_json::Value;
     use std::fs;

@@ -116,6 +116,70 @@ fn pages_become_one_document() {
 
 // ------------------------------------------------------------------------
 #[test]
+fn an_import_keeps_a_single_image_and_hands_its_documents_to_the_analysis() {
+    let answer = r#"{"title": "Brief der Stadtwerke", "date": "2020-03-01", "type": "letter"}"#;
+    let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
+    let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+    let (mut h, folder) = with_scans_and(
+        "scan-import-analysis",
+        &[(".avelor/accounts/ollama.yaml", account)],
+    );
+    fs::write(folder.join("d.jpg"), "d.jpg").unwrap();
+    for (name, text) in [
+        ("a.jpg", "Sehr geehrter Herr"),
+        ("b.jpg", "Seite 1"),
+        ("d.jpg", "Seite 2"),
+    ] {
+        read_page(&mut h, &folder, name, text);
+    }
+    let analysis = json!({ "level": "lite", "model": { "account": OLLAMA_ID, "model": "m" } });
+    let settings = json!({ "watch": WATCH_ID, "analysis": analysis, "keep_original": true });
+    h.call("set_watch", settings);
+    let docs = json!([
+        { "title": "", "files": ["a.jpg"] },
+        { "title": "Mein Titel", "files": ["b.jpg", "d.jpg"] },
+    ]);
+    let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+    assert_eq!(shape(&sent), ["entity", "entity", "job", "reply"]);
+    assert_eq!(
+        shown(&sent[2]["data"]["label"]),
+        "Analysing scans \u{b7} scans"
+    );
+    let path = |i: usize| h.vault().join(sent[i]["data"]["path"].as_str().unwrap());
+    let (single, double) = (path(0), path(1));
+    let done = |sent: &[String]| sent.iter().any(|m| m.contains(r#""state":"done""#));
+    h.wait_for(done);
+
+    let text = fs::read_to_string(&single).unwrap();
+    assert!(text.contains("title: Brief der Stadtwerke"), "{text}");
+    assert!(
+        text.contains("date: 2020-03-01T12:00:00Z") && text.contains("type: letter"),
+        "{text}"
+    );
+    assert!(
+        text.contains("name: a.jpg") && text.contains("origin: a.jpg"),
+        "{text}"
+    );
+    let id = Id::parse(sent[0]["data"]["id"].as_str().unwrap()).unwrap();
+    let original = h.app.vault.index().original_path(&id).unwrap();
+    assert_eq!(
+        fs::read(&original).unwrap(),
+        b"a.jpg",
+        "the image beside it"
+    );
+    assert!(folder.join("a.jpg").exists(), "the watch's file stays");
+
+    let text = fs::read_to_string(&double).unwrap();
+    assert!(
+        text.contains("title: Mein Titel"),
+        "the title given stays: {text}"
+    );
+    assert!(text.contains("type: letter"), "{text}");
+    assert!(!text.contains("original:"), "two images keep none: {text}");
+}
+
+// ------------------------------------------------------------------------
+#[test]
 fn import_writes_read_pages_and_says_why_not_the_others() {
     let (mut h, folder) = with_scans("scan-import");
     read_page(&mut h, &folder, "a.jpg", "# Bill 4711\n\nPay now.");

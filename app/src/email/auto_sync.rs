@@ -16,9 +16,9 @@ use serde::Deserialize;
 
 use super::fetch::{FetchPlan, find_account_email, plan_fetch, pump, start_fetch};
 use super::{MATCH_CAP, Origin};
+use crate::analysis::Analysis;
 use crate::app::App;
 use crate::google;
-use crate::google::accounts::Analysis;
 use crate::google::accounts::AttachmentSettings;
 use crate::google::accounts::AutoSync;
 use crate::google::accounts::FetchEmail;

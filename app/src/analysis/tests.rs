@@ -1,5 +1,4 @@
 use super::*;
-use av_utils::datetime::DateTime;
 use av_vault::document::Document;
 use av_vault::envelope::DocumentType;
 use av_vault::shared::DocType;
@@ -11,11 +10,11 @@ use super::answer::{
 use super::apply::{apply_document, apply_lite, medium_messages};
 use super::context::{BODY_CHARS, Context, DocText, EmailText, context};
 use super::request::{
-    DOCUMENT_SHAPE, LITE_SHAPE, MEDIUM_SHAPE, again, document_request, request_for,
+    DOCUMENT_MEDIUM_SHAPE, DOCUMENT_SHAPE, LITE_SHAPE, MEDIUM_SHAPE, again, document_request,
+    request_for,
 };
 use crate::ai;
 use crate::ai::accounts::ModelChoice;
-use crate::google::accounts::{Analysis, AnalysisLevel};
 use crate::testing::{FakeOllama, Harness, parse as parse_sent, shown};
 use crate::texts::Text;
 use av_vault::document::FileFormat;
@@ -219,13 +218,19 @@ fn doc_text(body: &str, date: Option<DateTime>) -> DocText {
         date,
         email: Some(("Abschlag".into(), "info@stadtwerke.example".into())),
         body: body.into(),
+        keep_title: false,
     }
 }
 
 // ------------------------------------------------------------------------
 #[test]
 fn an_attachment_is_asked_for_as_a_document() {
-    let request = document_request("m", &ctx(), &doc_text("Betrag 42 EUR", None));
+    let request = document_request(
+        AnalysisLevel::Medium,
+        "m",
+        &ctx(),
+        &doc_text("Betrag 42 EUR", None),
+    );
     let system = request.system.as_deref().unwrap();
     assert!(system.starts_with("You sort documents.") && system.contains(DOCUMENT_SHAPE));
     assert!(system.contains("- type:"), "{system}");
@@ -255,7 +260,11 @@ fn an_attachment_is_asked_for_as_a_document() {
 fn an_attachments_answer_takes_a_listed_type_and_its_own_date() {
     let email_date = DateTime::from_ymd_hms(2026, 10, 12, 9, 30, 0).unwrap();
     let doc = doc_text("", Some(email_date));
-    let read = |answer: &str| parse_document(answer, &ctx(), &doc).unwrap();
+    let read = |answer: &str| {
+        parse_document(answer, AnalysisLevel::Lite, &ctx(), &doc)
+            .unwrap()
+            .0
+    };
     let lite = read(
         r#"{"title": "Stadtwerke Abschlag Oktober", "date": "2026-10-01", "type": "BILL", "labels": ["rechnungen"], "projects": ["Auto"]}"#,
     );
@@ -293,7 +302,7 @@ fn an_attachments_answer_takes_a_listed_type_and_its_own_date() {
         None,
         "its own title"
     );
-    assert!(parse_document("Sorry.", &ctx(), &doc).is_err());
+    assert!(parse_document("Sorry.", AnalysisLevel::Lite, &ctx(), &doc).is_err());
 }
 
 // ------------------------------------------------------------------------
@@ -569,9 +578,7 @@ fn an_analysis_writes_the_title_labels_and_projects() {
     let ids = vec![Id::parse(EMAIL_ID).unwrap()];
     analyse(
         &mut h.app,
-        "jan@example.com",
-        ids,
-        Vec::new(),
+        Batch::email("jan@example.com", ids, Vec::new()),
         &at(AnalysisLevel::Lite),
     );
     let sent = until_done(&mut h);
@@ -606,9 +613,7 @@ fn medium_writes_a_chat_linked_to_the_email() {
     let email = Id::parse(EMAIL_ID).unwrap();
     analyse(
         &mut h.app,
-        "jan@example.com",
-        vec![email],
-        Vec::new(),
+        Batch::email("jan@example.com", vec![email], Vec::new()),
         &at(AnalysisLevel::Medium),
     );
     let sent = until_done(&mut h);
@@ -678,9 +683,7 @@ fn a_email_and_its_attachment_are_analysed_in_one_job() {
     let email = vec![Id::parse(EMAIL_ID).unwrap()];
     analyse(
         &mut h.app,
-        "jan@example.com",
-        email,
-        vec![bill],
+        Batch::email("jan@example.com", email, vec![bill]),
         &at(AnalysisLevel::Medium),
     );
     let sent = until_done(&mut h);
@@ -715,6 +718,97 @@ fn a_email_and_its_attachment_are_analysed_in_one_job() {
 
 // ------------------------------------------------------------------------
 #[test]
+fn a_scan_at_medium_gets_points_to_check_in_a_chat_of_its_own() {
+    let doc = DocText {
+        email: None,
+        ..doc_text("Betrag 42 EUR", None)
+    };
+    let request = document_request(AnalysisLevel::Medium, "m", &ctx(), &doc);
+    let system = request.system.as_deref().unwrap();
+    assert!(
+        system.contains(DOCUMENT_MEDIUM_SHAPE) && system.contains("- check:"),
+        "{system}"
+    );
+    assert!(!system.contains("- reply:"), "{system}");
+    let answer = r#"{"title": "Rechnung", "check": ["Der Betrag"], "reply": "Danke", "questions": ["Wann?"]}"#;
+    let (_, medium) = parse_document(answer, AnalysisLevel::Medium, &ctx(), &doc).unwrap();
+    let medium = medium.unwrap();
+    assert_eq!(
+        (medium.check, medium.reply, medium.questions),
+        (
+            vec!["Der Betrag".to_string()],
+            None,
+            vec!["Wann?".to_string()]
+        )
+    );
+    let questions = r#"{"questions": ["Wann?"]}"#;
+    let (_, none) = parse_document(questions, AnalysisLevel::Medium, &ctx(), &doc).unwrap();
+    assert_eq!(none, None, "questions alone make no conversation");
+    let (_, lite) = parse_document(answer, AnalysisLevel::Lite, &ctx(), &doc).unwrap();
+    assert_eq!(lite, None);
+
+    let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
+    let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+    let scan = Id::generate();
+    let files = [
+        (".avelor/accounts/ollama.yaml", account),
+        (
+            "Scans/s.md",
+            format!("---\nid: {scan}\ntitle: Seite 1\ndocument: {{}}\n---\nBetrag 42 EUR\n"),
+        ),
+    ];
+    let mut h = Harness::with_vault("analysis-scan", &files);
+    let batch = Batch::scans("Scanner", vec![scan], vec![scan]);
+    analyse(&mut h.app, batch, &at(AnalysisLevel::Medium));
+    let sent = until_done(&mut h);
+
+    let jobs = of(&sent, "job");
+    assert_eq!(shown(&jobs[0]["label"]), "Analysing scans \u{b7} Scanner");
+    assert_eq!(
+        shown(&jobs.last().unwrap()["summary"]),
+        "1 analysed \u{b7} 1 conversation"
+    );
+    let text = fs::read_to_string(h.vault().join("Scans/s.md")).unwrap();
+    assert!(
+        text.contains("title: Seite 1"),
+        "a title given stays: {text}"
+    );
+    let chat = h
+        .app
+        .vault
+        .index()
+        .all()
+        .iter()
+        .find(|e| e.doc.linked_to() == Some(scan))
+        .unwrap();
+    assert_eq!(chat.doc.title(), "Document analysis \u{b7} Seite 1");
+    let conversation = chat.doc.roles().conversation.clone().unwrap();
+    let [points] = &conversation.messages[..] else {
+        panic!("{conversation:?}");
+    };
+    assert_eq!(points.content.as_deref(), Some("- Der Betrag"));
+    assert_eq!(points.suggestions, ["Wann?"]);
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_refused_scan_pick_is_told_in_the_scans_words() {
+    let mut h = with_emails("analysis-scan-no-pick", "http://127.0.0.1:9", "");
+    let unpicked = Analysis {
+        level: AnalysisLevel::Lite,
+        model: None,
+    };
+    let batch = Batch::scans("Scanner", vec![Id::parse(EMAIL_ID).unwrap()], Vec::new());
+    analyse(&mut h.app, batch, &unpicked);
+    let sent = parse_sent(&h.take());
+    assert_eq!(
+        shown(&sent[0]["data"]["text"]),
+        "Scan analysis \u{b7} Scanner: For the scan analysis, pick a model."
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
 fn nothing_to_analyse_starts_nothing() {
     let mut h = with_emails("analysis-nothing", "http://127.0.0.1:9", "");
     let unpicked = Analysis {
@@ -723,9 +817,7 @@ fn nothing_to_analyse_starts_nothing() {
     };
     analyse(
         &mut h.app,
-        "jan@example.com",
-        Vec::new(),
-        Vec::new(),
+        Batch::email("jan@example.com", Vec::new(), Vec::new()),
         &unpicked,
     );
     assert!(h.take().is_empty(), "not even the refused pick");
@@ -740,9 +832,7 @@ fn a_newsletter_gets_no_chat() {
     let ids = vec![Id::parse(EMAIL_ID).unwrap()];
     analyse(
         &mut h.app,
-        "jan@example.com",
-        ids,
-        Vec::new(),
+        Batch::email("jan@example.com", ids, Vec::new()),
         &at(AnalysisLevel::Medium),
     );
     let sent = until_done(&mut h);
@@ -768,9 +858,11 @@ fn an_unreadable_answer_is_asked_again() {
     let mut h = with_emails("analysis-again", &address, "");
     analyse(
         &mut h.app,
-        "jan@example.com",
-        vec![Id::parse(EMAIL_ID).unwrap()],
-        Vec::new(),
+        Batch::email(
+            "jan@example.com",
+            vec![Id::parse(EMAIL_ID).unwrap()],
+            Vec::new(),
+        ),
         &at(AnalysisLevel::Lite),
     );
     let sent = until_done(&mut h);
@@ -809,9 +901,7 @@ fn a_cut_off_answer_is_not_asked_again() {
     let ids = vec![Id::parse(EMAIL_ID).unwrap()];
     analyse(
         &mut h.app,
-        "jan@example.com",
-        ids,
-        Vec::new(),
+        Batch::email("jan@example.com", ids, Vec::new()),
         &at(AnalysisLevel::Lite),
     );
     let sent = until_done(&mut h);
@@ -842,9 +932,7 @@ fn unreadable_answers_leave_the_mails_and_are_told_once() {
     let ids = vec![Id::parse(EMAIL_ID).unwrap(), Id::parse(EMAIL_2).unwrap()];
     analyse(
         &mut h.app,
-        "jan@example.com",
-        ids,
-        Vec::new(),
+        Batch::email("jan@example.com", ids, Vec::new()),
         &at(AnalysisLevel::Lite),
     );
     let sent = until_done(&mut h);
@@ -885,9 +973,7 @@ fn the_spend_limit_stops_it_between_emails() {
     let ids = vec![Id::parse(EMAIL_ID).unwrap(), Id::parse(EMAIL_2).unwrap()];
     analyse(
         &mut h.app,
-        "jan@example.com",
-        ids,
-        Vec::new(),
+        Batch::email("jan@example.com", ids, Vec::new()),
         &at(AnalysisLevel::Lite),
     );
     // The first email is on its way; then the limit is reached.
@@ -923,9 +1009,11 @@ fn a_refused_pick_is_told_and_starts_nothing() {
     };
     analyse(
         &mut h.app,
-        "jan@example.com",
-        vec![Id::parse(EMAIL_ID).unwrap()],
-        Vec::new(),
+        Batch::email(
+            "jan@example.com",
+            vec![Id::parse(EMAIL_ID).unwrap()],
+            Vec::new(),
+        ),
         &unpicked,
     );
     let sent = parse_sent(&h.take());
@@ -947,9 +1035,7 @@ fn stop_ends_it_and_a_late_answer_is_dropped() {
     let ids = vec![Id::parse(EMAIL_ID).unwrap(), Id::parse(EMAIL_2).unwrap()];
     analyse(
         &mut h.app,
-        "jan@example.com",
-        ids,
-        Vec::new(),
+        Batch::email("jan@example.com", ids, Vec::new()),
         &at(AnalysisLevel::Lite),
     );
     let job = *h.app.analysis.runs.keys().next().unwrap();

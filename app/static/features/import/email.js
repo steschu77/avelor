@@ -29,12 +29,11 @@ import { armedButton } from '../../ui/confirm.js';
 import {
   closeVaultArea, openVaultOp, registerVaultPage,
 } from '../../ui/page.js';
-import { notice } from '../../ui/page.js';
 import { renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
 import { iconEl } from '../../ui/icons.js';
 import {
-  aiAnyOffered, aiMissingHint, aiModelOf, aiModelPicker,
+  AI_ANALYSIS_OFF, aiModelOf, aiPickerWithHint,
 } from '../workspace/models.js';
 import { WATCH_READ_STEP } from '../workspace/folders.js';
 
@@ -77,7 +76,7 @@ export function openEmailFetch(account_id) {
       to: filter.since === 'custom' && before ? emailDateInput(before) : '',
     },
     auto: saved?.auto_update ?? true,
-    analysis: { ...EMAIL_ANALYSIS_OFF, ...saved?.analysis },
+    analysis: { ...AI_ANALYSIS_OFF, ...saved?.analysis },
     attachments: { ...EMAIL_ATTACHMENTS_OFF, ...saved?.attachments },
     searching: false, // while a `email_search` / `email_headers` is answered
     error: null,
@@ -614,7 +613,7 @@ export function renderEmailSync(account, rerender) {
   if (on) {
     box.append(renderEmailFilterForm(form));
     box.append(renderEmailSyncAttachments(form, { ...EMAIL_ATTACHMENTS_OFF, ...sync.attachments }));
-    box.append(renderEmailSyncAnalysis(account.id, { ...EMAIL_ANALYSIS_OFF, ...sync.analysis }));
+    box.append(renderEmailSyncAnalysis(account.id, { ...AI_ANALYSIS_OFF, ...sync.analysis }));
   }
   if (form.error) box.append(accEl('div', 'error-note', form.error));
   return box;
@@ -707,18 +706,15 @@ function renderEmailAttachments(owner, attachments, onChange, rerender) {
 }
 
 // While the attachments are read: the picker of the model that reads them,
-// and what keeps the pick from working (`aiMissingHint`, as the analysis
-// has it).
+// and what keeps the pick from working (`aiPickerWithHint`).
 function renderEmailReading(attachments, onChange) {
   const pick = attachments.models?.[WATCH_READ_STEP] ?? null;
-  const picker = aiModelPicker(pick,
-    model => onChange({ ...attachments, models: { ...attachments.models, [WATCH_READ_STEP]: model } }));
+  const { picker, hint } = aiPickerWithHint(pick,
+    model => onChange({ ...attachments, models: { ...attachments.models, [WATCH_READ_STEP]: model } }),
+    t('feature.reading_attachments'));
   const body = accEl('div', 'page-text email__text');
   body.append(...parts('email.reads_with', { picker }));
-  const ai = aiModelOf(pick);
-  if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
-    body.append(notice('hint', ...aiMissingHint(ai, t('feature.reading_attachments'))));
-  }
+  if (hint) body.append(hint);
   return body;
 }
 
@@ -763,12 +759,9 @@ function renderEmailSyncAttachments(form, attachments) {
 // the analysis of new email (email.md#analysis), of Fetch email and of an
 // account's auto-sync: a level, and the model it runs with
 
-const EMAIL_ANALYSIS_OFF = { level: 'off', model: null };
-
 // `analysis` ({ level, model }) as a seg of its levels and a body: with the
 // analysis on, the picker of its model, and what keeps the pick from working
-// (`aiMissingHint`; not for a plain "pick a model", which the picker says
-// itself). `onChange` gets the analysis as changed.
+// (`aiPickerWithHint`). `onChange` gets the analysis as changed.
 function renderEmailAnalysis(analysis, onChange) {
   const seg = accSeg([['off', t('watch.off')], ['lite', t('watch.level.lite')], ['medium', t('watch.level.medium')]], analysis.level,
     level => onChange({ ...analysis, level }));
@@ -777,13 +770,11 @@ function renderEmailAnalysis(analysis, onChange) {
     body.append(t('email.analysis_off'));
     return { seg, body };
   }
-  const picker = aiModelPicker(analysis.model, model => onChange({ ...analysis, model }));
+  const { picker, hint } = aiPickerWithHint(analysis.model,
+    model => onChange({ ...analysis, model }), t('feature.email_analysis'));
   body.append(...(analysis.level === 'medium'
     ? parts('email.analysis_medium', { picker }) : parts('email.analysis_lite', { picker })));
-  const ai = aiModelOf(analysis.model);
-  if (ai.problem && !(ai.problem === 'pick' && aiAnyOffered())) {
-    body.append(notice('hint', ...aiMissingHint(ai, t('feature.email_analysis'))));
-  }
+  if (hint) body.append(hint);
   return { seg, body };
 }
 

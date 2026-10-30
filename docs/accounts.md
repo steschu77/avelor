@@ -231,17 +231,17 @@ accounts with a detail pane.
   Auto-sync check beside it; the Email row has its own Auto-sync check and
   filter (`email.md#email-auto-sync`).
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
-  and Gemini with an API key, and Ollama by its address. A key or an address
-  is checked by listing the provider's models before it is stored; until
-  then it stays an input. The pane lists the models with their price per
-  million tokens: ticking one offers it in the features' pickers, and "Used
-  by" names, read only, what picked it (`accounts.md#model-choice`): Conversations,
-  a watch with its steps that run with it ("Scanner · OCR"), or an email
-  filter with its ("Fetch email · jan@gmail.com · analysis, reading"); an
-  unticked model still names them, as they are refused until they pick
-  another. A key provider's pane shows what its calls cost this month
-  (`accounts.md#spend-file`); an Ollama account shows whether the server
-  answers instead. Disconnecting forgets the key
+  and Gemini with an API key, and Ollama by its address. A key or an
+  address is checked by listing the provider's models before it is stored;
+  until then it stays an input. The pane lists the models with their price
+  per million tokens: ticking one offers it in the features' pickers, and
+  "Used by" names, read only, what picked it (`accounts.md#model-choice`):
+  Conversations, a watch with its steps that run with it ("Scanner · OCR,
+  analysis"), or an email filter with its ("Fetch email · jan@gmail.com ·
+  analysis, reading"); an unticked model still names them, as they are
+  refused until they pick another. A key provider's pane shows what its
+  calls cost this month (`accounts.md#spend-file`); an Ollama account
+  shows whether the server answers instead. Disconnecting forgets the key
   but keeps the account and its id, marked `disconnected`; removing
   deletes its files (Ollama accounts are removed directly).
 - The page widgets the Workspace pages share are `ui/`'s (`ui/page.js`,
@@ -258,6 +258,7 @@ the feature's own settings:
 |---|---|---|
 | The assistant | the vault's settings, `.avelor/vault.yaml` `chat-model` (`vault.md#vault-config`; `set_vault_settings`) | the assistant's head |
 | A watch's steps: reading its files (OCR) | the watch file's `models`, by step (`import.md#watch-files`; `set_watch`) | the step's row in the watch's pane; Import scans for reading |
+| A watch's analysis | the watch file's `analysis` (`import.md#watch-files`; `set_watch`) | the Analysis step of the watch's pane |
 | Fetch email's analysis | the Google account file's `fetch-email.analysis` (`email.md#analysis`; remembered by `email_fetch`) | Fetch email, section Analysis |
 | An auto-sync's analysis | the Google account file's `fetch-email.auto-sync.analysis` (`set_email_sync`) | the account's pane, under the auto-sync's filter |
 | Fetch email's reading of attachments | the Google account file's `fetch-email.attachments.models`, by step (`email.md#attachments`; remembered by `email_fetch`) | Fetch email, section Attachments |

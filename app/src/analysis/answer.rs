@@ -5,8 +5,7 @@ use av_utils::id::Id;
 use serde_json::Value;
 
 use super::context::{Context, DocText};
-use super::same;
-use crate::google::accounts::AnalysisLevel;
+use super::{AnalysisLevel, same};
 use crate::texts::Text;
 
 const DAY_SECONDS: i64 = 86_400;
@@ -84,16 +83,17 @@ pub fn parse(
 }
 
 // ----------------------------------------------------------------------------
-/// Read the `answer` of the analysis for the attachment `doc` against `ctx`
-/// as `parse` reads an email's: its type from the list only, in any case;
+/// Read the `answer` of the analysis at `level` for the document `doc`
+/// against `ctx` as `parse` reads an email's: its type from the list only, in any case;
 /// its date as `YYYY-MM-DD`, that day at 12:00 UTC, the same day in every
 /// time zone, dropped before 1900 or after the day after the document's
 /// date (its email's; now without one).
 pub fn parse_document(
     answer: &str,
+    level: AnalysisLevel,
     ctx: &Context,
     doc: &DocText,
-) -> std::result::Result<Lite, Text> {
+) -> std::result::Result<(Lite, Option<Medium>), Text> {
     let object = object_in(answer)?;
     let doc_type = object["type"]
         .as_str()
@@ -105,11 +105,13 @@ pub fn parse_document(
         .as_str()
         .and_then(day_of)
         .filter(|date| day(*date) <= latest);
-    Ok(Lite {
+    let lite = Lite {
         doc_type,
         date,
         ..shared_part(&object, ctx, &doc.title)
-    })
+    };
+    let medium = doc.medium(level).then(|| document_medium_of(&object));
+    Ok((lite, medium.flatten()))
 }
 
 // ----------------------------------------------------------------------------
@@ -182,10 +184,7 @@ fn medium_of(object: &Value, doc_type: Option<&str>) -> Option<Medium> {
     if doc_type == Some("newsletter") {
         return None;
     }
-    let points = |key: &str, most: usize| -> Vec<String> {
-        let points = names(&object[key]).into_iter().map(|p| cut(p, POINT_CHARS));
-        points.filter(|p| !p.is_empty()).take(most).collect()
-    };
+    let points = |key: &str, most: usize| points(object, key, most);
     let reply = object["reply"]
         .as_str()
         .map(|reply| cut(reply, REPLY_CHARS))
@@ -196,6 +195,26 @@ fn medium_of(object: &Value, doc_type: Option<&str>) -> Option<Medium> {
         questions: points("questions", QUESTIONS_PER_EMAIL),
     };
     (medium.reply.is_some() || !medium.check.is_empty()).then_some(medium)
+}
+
+// ----------------------------------------------------------------------------
+/// Medium's part of the answer `object` for a document without an email: its
+/// points to check and questions, no reply; no conversation without a point.
+fn document_medium_of(object: &Value) -> Option<Medium> {
+    let medium = Medium {
+        check: points(object, "check", CHECKS_PER_EMAIL),
+        reply: None,
+        questions: points(object, "questions", QUESTIONS_PER_EMAIL),
+    };
+    (!medium.check.is_empty()).then_some(medium)
+}
+
+// ----------------------------------------------------------------------------
+/// The points under `key` of the answer `object`: trimmed, cut at
+/// `POINT_CHARS`, the first `most` that aren't empty.
+fn points(object: &Value, key: &str, most: usize) -> Vec<String> {
+    let points = names(&object[key]).into_iter().map(|p| cut(p, POINT_CHARS));
+    points.filter(|p| !p.is_empty()).take(most).collect()
 }
 
 // ----------------------------------------------------------------------------

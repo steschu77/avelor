@@ -10,6 +10,7 @@
 
 import { accEl } from '../../core/dom.js';
 import { oncePerFrame } from '../../core/dom.js';
+import { titled } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { pageDate } from '../../core/format.js';
 import { registerActions, runAction } from '../../core/actions.js';
@@ -26,9 +27,7 @@ import {
 } from '../../ui/page.js';
 import { fieldEditKey, fieldEdits, renderEditField, renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
-import {
-  aiAnyOffered, aiMissingHint, aiModelOf, aiModelPicker,
-} from './models.js';
+import { AI_ANALYSIS_OFF, aiPickerWithHint } from './models.js';
 
 // The reading step's key in a watch's `models` (the host's `READ_STEP`).
 export const WATCH_READ_STEP = 'read';
@@ -366,9 +365,10 @@ function renderWatchFolderPart(id, settings) {
   return part;
 }
 
-// The import process: the type's read step, which always runs; a step
-// that sends the file to an AI shows the model it runs with, picked there
-// (accounts.md#model-choice).
+// The import process: the type's read step, which always runs, then the
+// analysis and Keep original, each switched by its check
+// (import.md#the-folders-page); a step that sends the file to an AI shows
+// the model it runs with, picked there (accounts.md#model-choice).
 function renderWatchSteps(id, type, settings) {
   const part = accEl('div', 'watch__part');
   const head = accEl('div', 'section-head', t('watch.import_process'));
@@ -379,23 +379,57 @@ function renderWatchSteps(id, type, settings) {
     name: type.read.name, label: t('watch.label.read'), note: type.read.note,
     ...(type.read.ocr ? watchModel(id, settings, WATCH_READ_STEP, 'OCR') : {}),
     options: type.read.collect ? renderWatchCollect(id, settings) : null,
-  }));
+  }), renderWatchAnalysis(id, settings), renderWatchKeepOriginal(id, settings));
   part.append(head, steps);
   return part;
 }
 
 // The model `step` runs with (`WATCH_READ_STEP` for reading): its picker,
-// and what keeps the picked model from it (`aiMissingHint`) -- not for a
-// plain "pick a model", which the picker says itself.
+// and what keeps the picked model from it (`aiPickerWithHint`).
 function watchModel(id, settings, step, what) {
   const choice = settings.models?.[step] ?? null;
-  const ai = aiModelOf(choice);
-  const plainPick = ai.problem === 'pick' && aiAnyOffered();
-  let hint = null;
-  if (ai.problem && !plainPick) {
-    hint = notice('hint', ...aiMissingHint(ai, what));
+  const { picker, hint } = aiPickerWithHint(choice, pick => watchSetModel(id, step, pick), what);
+  return { where: picker, hint };
+}
+
+// The analysis of the documents imported (`analysis`, as an email filter's):
+// its check switches it on at Lite, or off, keeping the model; while on,
+// its level and the model it runs with.
+function renderWatchAnalysis(id, settings) {
+  const analysis = { ...AI_ANALYSIS_OFF, ...settings.analysis };
+  const on = analysis.level !== 'off';
+  const set = next => watchSet(id, { analysis: next });
+  const step = {
+    name: t('watch.step.analysis'), label: t('watch.label.analyse'), on,
+    onToggle: () => set({ ...analysis, level: on ? 'off' : 'lite' }),
+  };
+  if (!on) {
+    return renderWatchStep({
+      ...step, note: t('watch.analysis_off.images'),
+    });
   }
-  return { where: aiModelPicker(choice, pick => watchSetModel(id, step, pick)), hint };
+  const { picker, hint } = aiPickerWithHint(analysis.model,
+    model => set({ ...analysis, model }), t('feature.scan_analysis'));
+  const options = accEl('dl', 'props step__opts');
+  const value = accEl('dd');
+  value.append(accSeg([['lite', t('watch.level.lite')], ['medium', t('watch.level.medium')]], analysis.level,
+    level => set({ ...analysis, level })));
+  options.append(accEl('dt', 'label', t('watch.level')), value);
+  const note = analysis.level === 'medium' ? t('watch.analysis_note_medium') : t('watch.analysis_note_lite');
+  return renderWatchStep({ ...step, note, where: picker, hint, options });
+}
+
+// Whether a document of one image keeps the image beside it
+// (`keep_original`).
+function renderWatchKeepOriginal(id, settings) {
+  const on = !!settings.keep_original;
+  return renderWatchStep({
+    name: t('watch.step.keep'), label: t('watch.label.keep'), on,
+    onToggle: () => watchSet(id, { keep_original: !on }),
+    note: on
+      ? t('watch.keep_on.images')
+      : t('watch.keep_off.images'),
+  });
 }
 
 // Pick `step`'s model. The whole map is sent, so the watch shows the other
@@ -405,16 +439,22 @@ export function watchSetModel(id, step, choice, onError = null) {
   watchSet(id, { models }, onError);
 }
 
-// One step: its check, which always runs, its title and kind, its note,
-// options and what keeps its model from it (`hint`), and the picker of the
-// model it runs with (`where`), if it sends the file to an AI.
-function renderWatchStep({ name, label, note, where, hint, options }) {
+// One step: its check -- switching it (`on`, `onToggle`), or always on --,
+// its title and kind, its note, options and what keeps its model from it
+// (`hint`), and the picker of the model it runs with (`where`), if it
+// sends the file to an AI.
+function renderWatchStep({ name, label, note, where, hint, options, on = true, onToggle = null }) {
   const row = accEl('div', 'step');
-  const check = accEl('button', 'check', '\u2713');
+  const check = accEl('button', 'check', on ? '\u2713' : '');
   check.type = 'button';
-  check.setAttribute('aria-pressed', 'true');
-  check.setAttribute('aria-disabled', 'true');
-  check.title = t('watch.always_runs');
+  check.setAttribute('aria-pressed', String(on));
+  if (onToggle) {
+    titled(check, on ? t('watch.turn_off') : t('watch.turn_on'));
+    check.addEventListener('click', onToggle);
+  } else {
+    check.setAttribute('aria-disabled', 'true');
+    titled(check, t('watch.always_runs'));
+  }
   const body = accEl('span', 'step__body');
   const title = accEl('span', 'step__title', name);
   title.append(accEl('span', 'label', label));

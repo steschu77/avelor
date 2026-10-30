@@ -12,6 +12,7 @@ use av_vault::shared::OneOrMany;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::analysis::{self, Analysis, Batch};
 use crate::app::App;
 use crate::protocol::Req;
 use crate::texts::Text;
@@ -27,7 +28,7 @@ pub(crate) struct ImportRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct NewDocument {
-    /// Empty: the first page's proposed title.
+    /// The title the user gave; empty: the first page's proposed title.
     #[serde(default)]
     pub(super) title: String,
     pub(super) files: Vec<String>,
@@ -55,20 +56,40 @@ pub(super) struct NotImported<'a> {
 
 // ----------------------------------------------------------------------------
 /// `scan_import {watch, docs}`: import each document into `Scans/` from its
-/// pages' text (`scan_document`). Answers `{imported, failed}` after an
-/// `entity` event per document written.
+/// pages' text (`scan_document`), one of one image with the image beside
+/// it if the watch keeps originals. Answers `{imported, failed}` after an
+/// `entity` event per document written; then, with the watch's analysis
+/// on, the documents written are analysed as a job, a title the user gave
+/// kept (`analysis::analyse`).
 pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
-    let (watch, root) = match app.watches.get(request.watch) {
-        Ok(watch) => (watch.id(), watch.settings().root()),
+    let (watch, root, name, keep, analysis) = match app.watches.get(request.watch) {
+        Ok(watch) => {
+            let settings = watch.settings();
+            let analysis = settings.analysis.clone().filter(Analysis::is_on);
+            let keep = settings.keep_original;
+            (
+                watch.id(),
+                settings.root(),
+                settings.display_name(),
+                keep,
+                analysis,
+            )
+        }
         Err(e) => return req.err(e),
     };
     let mut reply = ImportReply::default();
+    let mut titled = Vec::new();
     for doc in &request.docs {
-        match write_document(app, watch, &root, doc) {
-            Ok(id) => reply.imported.push(Imported {
-                files: &doc.files,
-                id,
-            }),
+        match write_document(app, watch, &root, doc, keep) {
+            Ok(id) => {
+                if !doc.title.trim().is_empty() {
+                    titled.push(id);
+                }
+                reply.imported.push(Imported {
+                    files: &doc.files,
+                    id,
+                });
+            }
             Err(error) => {
                 log::info!("Scan import: {:?} not imported: {error}", doc.files);
                 reply.failed.push(NotImported {
@@ -80,22 +101,53 @@ pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
     }
     let (imported, not) = (reply.imported.len(), reply.failed.len());
     log::info!("Scan import of {watch}: {imported} imported, {not} failed");
+    let documents: Vec<Id> = reply.imported.iter().map(|doc| doc.id).collect();
     req.ok(reply);
+    if let Some(analysis) = analysis {
+        analysis::analyse(app, Batch::scans(&name, documents, titled), &analysis);
+    }
 }
 
 // ----------------------------------------------------------------------------
-/// Write the document of `doc`'s pages; or say why not.
-fn write_document(app: &mut App, watch: Id, root: &Path, doc: &NewDocument) -> Result<Id, Text> {
-    let document = {
+/// Write the document of `doc`'s pages, with its image beside it if `keep`
+/// and it has one page (`Index::create_with_original`); or say why not.
+fn write_document(
+    app: &mut App,
+    watch: Id,
+    root: &Path,
+    doc: &NewDocument,
+    keep: bool,
+) -> Result<Id, Text> {
+    let (document, original) = {
         let pages = gather_pages(app, watch, root, doc)?;
-        scan_document(watch, &doc.title, &pages)
+        let original = match &pages[..] {
+            [page] if keep => Some(original_of(root, page.file)?),
+            _ => None,
+        };
+        (scan_document(watch, &doc.title, &pages), original)
     };
     let folder = Path::new(layout::SCANS);
-    app.edit(|index, changes| index.create(document, folder, changes))
-        .map_err(|e| {
-            log::warn!("Scan import: could not write the document: {e}");
-            Text::new("scans.write_failed")
-        })
+    app.edit(|index, changes| match &original {
+        Some((name, bytes)) => index.create_with_original(document, folder, name, bytes, changes),
+        None => index.create(document, folder, changes),
+    })
+    .map_err(|e| {
+        log::warn!("Scan import: could not write the document: {e}");
+        Text::new("scans.write_failed")
+    })
+}
+
+// ----------------------------------------------------------------------------
+/// The image `file` of the watch's folder `root` to keep beside its
+/// document: its name, without the subfolders, and its bytes.
+fn original_of(root: &Path, file: &str) -> Result<(String, Vec<u8>), Text> {
+    let path = root.join(file);
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+    let bytes = std::fs::read(&path).map_err(|e| {
+        log::warn!("Scan import: could not read {file} to keep it: {e}");
+        Text::new("scans.keep_unread").arg("file", file)
+    })?;
+    Ok((name.unwrap_or_else(|| file.to_string()), bytes))
 }
 
 // ----------------------------------------------------------------------------
