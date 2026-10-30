@@ -1,18 +1,16 @@
 //! Reading a mail's attachments (mail.md#attachments): after a fetch, the
 //! files its filter saved are read into their documents' bodies through
-//! `reader` -- an image or a PDF by the filter's read model, a text file as
-//! it is -- one after the other as a job, "Reading attachments · <email>".
+//! `reader` -- an image by the filter's read model, a PDF from its text
+//! layer or by the model, a text file as it is -- one after the other as a
+//! job, "Reading attachments · <email>".
 //! The analysis, if the filter asks for one, starts when it ends, with the
 //! attachments it read.
 
 use std::collections::{HashMap, VecDeque};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use av_llm::{ChatResponse, Client, FileData, Provider, StopReason};
 use av_utils::datetime::DateTime;
-use av_utils::error::Error;
 use av_utils::id::Id;
-use av_utils::mime::type_for;
 use av_vault::document::Document;
 
 use crate::ai;
@@ -22,7 +20,7 @@ use crate::enrich::Analysis;
 use crate::enrich::{self, Batch};
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
-use crate::reader::{self, Kind};
+use crate::reader::{self, Engine, Kind, ReadError};
 
 /// What the reading is called where its pick is refused
 /// (`AiAccounts::choose`).
@@ -42,10 +40,7 @@ struct Read {
     /// Whose mail it is, for the notices.
     email: String,
     account: Id,
-    client: Client,
-    provider: Provider,
-    address: String,
-    model: String,
+    engine: Engine,
     queue: VecDeque<Id>,
     current: Option<Id>,
     total: usize,
@@ -62,8 +57,7 @@ struct Counts {
     /// Documents whose text was written.
     read: usize,
     failed: usize,
-    /// Files of a type nothing reads, or that the model doesn't take, or
-    /// gone.
+    /// Files of a type nothing reads, or gone.
     unread: usize,
     /// Documents that got text meanwhile, or were removed: left as they are.
     kept: usize,
@@ -99,7 +93,7 @@ impl Counts {
 enum Step {
     /// It has text already, or is gone: left as it is.
     Keep,
-    /// No file, or one nothing reads here or the model doesn't take.
+    /// No file, or one nothing reads here.
     Unread,
     /// The file `path`, which came as `name`, of the kind `kind`.
     Read {
@@ -110,11 +104,10 @@ enum Step {
 }
 
 // ----------------------------------------------------------------------------
-/// What reading `doc`, whose original is at `path` (if it has one), takes
-/// with a model of `provider`: only an empty body is read, a file of a kind
-/// the reader knows -- by the name it came with -- and, for an image or a
-/// PDF, that the provider takes.
-fn step_for(doc: Option<&Document>, path: Option<PathBuf>, provider: Provider) -> Step {
+/// What reading `doc`, whose original is at `path` (if it has one), takes:
+/// only an empty body is read, a file of a kind the reader knows -- by the
+/// name it came with.
+fn step_for(doc: Option<&Document>, path: Option<PathBuf>) -> Step {
     let Some(doc) = doc.filter(|doc| doc.content().trim().is_empty()) else {
         return Step::Keep;
     };
@@ -129,8 +122,8 @@ fn step_for(doc: Option<&Document>, path: Option<PathBuf>, provider: Provider) -
         return Step::Unread;
     };
     match Kind::of(&name) {
-        Some(kind) if !kind.by_model() || kind.sent_to(provider) => Step::Read { kind, path, name },
-        _ => Step::Unread,
+        Some(kind) => Step::Read { kind, path, name },
+        None => Step::Unread,
     }
 }
 
@@ -173,10 +166,12 @@ pub fn read(
     let read = Read {
         email: email.to_string(),
         account: resolved.account,
-        client: resolved.client,
-        provider: resolved.provider,
-        address: resolved.address,
-        model: resolved.model,
+        engine: Engine::Ai {
+            client: resolved.client,
+            provider: resolved.provider,
+            address: resolved.address,
+            model: resolved.model,
+        },
         queue,
         current: None,
         total,
@@ -198,20 +193,6 @@ fn analyse(app: &mut App, email: &str, then: Option<(Vec<Id>, Analysis)>, read: 
 }
 
 // ----------------------------------------------------------------------------
-/// What the worker got: a text file's text, or the model's answer.
-enum Got {
-    Text(String),
-    Answer(ChatResponse),
-}
-
-// ----------------------------------------------------------------------------
-/// Why reading a file failed: the file, or the model.
-enum ReadError {
-    File(Error),
-    Model(Error),
-}
-
-// ----------------------------------------------------------------------------
 /// Read the next document of the read `job`, or finish it if none is left.
 /// Documents that need nothing are counted on the way.
 fn pump(app: &mut App, job: Id) {
@@ -229,7 +210,6 @@ fn pump(app: &mut App, job: Id) {
         let step = step_for(
             index.entry(&id).map(|e| &e.doc),
             index.original_path(&id).filter(|p| p.is_file()),
-            read.provider,
         );
         let (kind, path, name) = match step {
             Step::Keep => {
@@ -257,23 +237,12 @@ fn pump(app: &mut App, job: Id) {
         };
         read.queue.pop_front();
         read.current = Some(id);
-        let (client, model) = (read.client.clone(), read.model.clone());
+        let engine = read.engine.clone();
         return app.run_job(
             job,
             move |cancel| {
                 let data = std::fs::read(&path).map_err(|e| ReadError::File(e.into()))?;
-                if !kind.by_model() {
-                    return Ok(Got::Text(reader::text_of(kind, &data)));
-                }
-                let mime_type = type_for(Path::new(&name)).to_string();
-                let file = FileData {
-                    name,
-                    mime_type,
-                    data,
-                };
-                reader::ask(&client, cancel, &model, kind, file, |_| {})
-                    .map(Got::Answer)
-                    .map_err(ReadError::Model)
+                reader::read(&engine, cancel, &name, kind, data, |_| {})
             },
             move |app, result| on_read(app, job, id, kind, result),
         );
@@ -283,31 +252,15 @@ fn pump(app: &mut App, job: Id) {
 // ----------------------------------------------------------------------------
 /// The document `id` was read: write its text, or count the failure; then
 /// the next. Ignored if the read is gone (stopped).
-fn on_read(app: &mut App, job: Id, id: Id, kind: Kind, result: Result<Got, ReadError>) {
+fn on_read(app: &mut App, job: Id, id: Id, kind: Kind, result: Result<String, ReadError>) {
     let Some(read) = app.attachments.reads.get_mut(&job) else {
         return;
     };
     read.current = None;
-    let text = match result {
-        Ok(Got::Text(text)) => Ok(text.trim().to_string()),
-        Ok(Got::Answer(response)) => {
-            let text = reader::clean(&response.text);
-            match response.stop {
-                _ if !text.is_empty() => Ok(text),
-                StopReason::Refused => Err("The model declined to read the file.".to_string()),
-                _ => Err("The model read no text.".to_string()),
-            }
-        }
-        Err(ReadError::File(e)) => {
-            log::warn!("Attachment read {job}: could not read the file of {id}: {e}");
-            Err("Could not read the file.".to_string())
-        }
-        Err(ReadError::Model(e)) => Err(ai::chat_error(read.provider, &read.address, &e)),
-    };
-    let text = text.and_then(|text| match text.is_empty() {
-        true => Err("The file has no text.".to_string()),
-        false => Ok(text),
-    });
+    if let Err(ReadError::File(e)) = &result {
+        log::warn!("Attachment read {job}: could not read the file of {id}: {e}");
+    }
+    let text = result.map_err(|e| e.words(&read.engine));
     let written = text.and_then(|text| write(app, id, text));
 
     let Some(read) = app.attachments.reads.get_mut(&job) else {
@@ -429,9 +382,10 @@ fn finish(app: &mut App, job: Id) {
 mod tests {
     use super::*;
     use crate::enrich::AnalysisLevel;
-    use crate::testing::{FakeOllama, Harness, parse};
+    use crate::testing::{FakeOllama, Harness, TestPage, parse, pdf_of};
     use serde_json::Value;
     use std::fs;
+    use std::sync::{Arc, Mutex};
 
     const OLLAMA_ID: &str = "01a0e1cc-a24c-7490-82fe-e75669985b70";
     const SCAN: &str = "01a0e1cc-a24c-7490-82fe-e75669985b71";
@@ -453,8 +407,9 @@ mod tests {
 
     // ------------------------------------------------------------------------
     /// A vault with an Ollama account at `address` offering `m`, a mail,
-    /// and the attachments: a scan (an image), notes (text), a bill (a
-    /// PDF), an archive, and a document with text typed into it.
+    /// and the attachments: a scan (an image), notes (text), a bill (a PDF
+    /// with a text layer), an archive, and a document with text typed into
+    /// it.
     fn with_attachments(name: &str, address: &str) -> Harness {
         let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
         let mail = format!(
@@ -475,7 +430,11 @@ mod tests {
             files.push(attachment(id, file, name, body));
             files.push((format!("Attachments/{file}"), "Gr\u{fc}\u{df}e".to_string()));
         }
-        Harness::with_vault(name, &files)
+        let h = Harness::with_vault(name, &files);
+        let lines = ["Stadtwerke Rechnung Nr. 4711", "Betrag: 42,00 EUR"];
+        let bill = pdf_of(&[TestPage::Text(&lines)]);
+        fs::write(h.vault().join("Attachments/bill.pdf"), bill).unwrap();
+        h
     }
 
     // ------------------------------------------------------------------------
@@ -517,7 +476,7 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn what_a_document_takes_goes_by_its_body_its_file_and_the_provider() {
+    fn what_a_document_takes_goes_by_its_body_and_its_file() {
         let mut doc = Document::create(
             Default::default(),
             av_vault::envelope::Source::Created(Default::default()),
@@ -526,9 +485,9 @@ mod tests {
             av_vault::document::FileFormat::Markdown,
         );
         let path = PathBuf::from("bill.pdf");
-        assert_eq!(step_for(None, None, Provider::Ollama), Step::Keep);
+        assert_eq!(step_for(None, None), Step::Keep);
         assert_eq!(
-            step_for(Some(&doc), Some(path.clone()), Provider::Anthropic),
+            step_for(Some(&doc), Some(path.clone())),
             Step::Unread,
             "no original"
         );
@@ -538,40 +497,22 @@ mod tests {
             size: Some(4),
         };
         doc.set_original(original("Rechnung.pdf"));
-        assert_eq!(
-            step_for(Some(&doc), None, Provider::Anthropic),
-            Step::Unread,
-            "no file"
-        );
+        assert_eq!(step_for(Some(&doc), None), Step::Unread, "no file");
         let read = Step::Read {
             kind: Kind::Pdf,
             path: path.clone(),
             name: "Rechnung.pdf".into(),
         };
-        assert_eq!(
-            step_for(Some(&doc), Some(path.clone()), Provider::Anthropic),
-            read
-        );
-        assert_eq!(
-            step_for(Some(&doc), Some(path.clone()), Provider::Ollama),
-            Step::Unread
-        );
+        assert_eq!(step_for(Some(&doc), Some(path.clone())), read);
         doc.set_original(original("Rechnung.zip"));
-        assert_eq!(
-            step_for(Some(&doc), Some(path.clone()), Provider::Anthropic),
-            Step::Unread
-        );
+        assert_eq!(step_for(Some(&doc), Some(path.clone())), Step::Unread);
         doc.set_original(original("Rechnung.txt"));
-        let Step::Read { kind, .. } = step_for(Some(&doc), Some(path.clone()), Provider::Ollama)
-        else {
-            panic!("a text file is read on Ollama too");
+        let Step::Read { kind, .. } = step_for(Some(&doc), Some(path.clone())) else {
+            panic!("a text file is read");
         };
         assert_eq!(kind, Kind::Plain);
         doc.set_content("Typed.\n".into());
-        assert_eq!(
-            step_for(Some(&doc), Some(path), Provider::Anthropic),
-            Step::Keep
-        );
+        assert_eq!(step_for(Some(&doc), Some(path)), Step::Keep);
     }
 
     // ------------------------------------------------------------------------
@@ -605,12 +546,12 @@ mod tests {
             .filter(|n| !n.is_null())
             .collect();
         assert!(
-            notes.contains(&&Value::from("2 read · 2 unread")),
+            notes.contains(&&Value::from("3 read · 1 unread")),
             "{notes:?}"
         );
         assert!(
-            notes.contains(&&Value::from("3 analysed")),
-            "the mail, then the two attachments read: {notes:?}"
+            notes.contains(&&Value::from("4 analysed")),
+            "the mail, then the three attachments read: {notes:?}"
         );
         assert!(of(&sent, "notice").is_empty(), "{sent:?}");
 
@@ -625,11 +566,51 @@ mod tests {
             "not read, not analysed: {typed}"
         );
         assert_eq!(body(&h, "notes.txt.md"), "Gr\u{fc}\u{df}e\n");
-        assert_eq!(body(&h, "bill.pdf.md"), "", "Ollama takes no PDF");
+        let bill = body(&h, "bill.pdf.md");
+        assert!(
+            bill.starts_with("Stadtwerke Rechnung Nr. 4711")
+                && bill.contains("\nBetrag: 42,00 EUR"),
+            "from its text layer, without a request: {bill}"
+        );
         assert_eq!(body(&h, "photos.zip.md"), "");
         assert_eq!(body(&h, "typed.jpg.md"), "Typed by hand.\n");
         let mail = fs::read_to_string(h.vault().join("Mail/a.md")).unwrap();
         assert!(mail.contains("title: Abschlag Oktober"), "{mail}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_scanned_pdf_on_a_model_without_pdfs_is_read_page_by_page() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let address = FakeOllama::new(&["m"])
+            .answering_in_turn(&["Seite eins", "Seite zwei"])
+            .recording(&requests)
+            .start();
+        let h = with_attachments("attachments-pdf-pages", &address);
+        let scan = pdf_of(&[
+            TestPage::Scan(b"\xff\xd8 page one"),
+            TestPage::Scan(b"\xff\xd8 page two"),
+        ]);
+        fs::write(h.vault().join("Attachments/bill.pdf"), scan).unwrap();
+        let mut h = h;
+        read(
+            &mut h.app,
+            "jan@example.com",
+            ids(&[BILL]),
+            Some(&pick()),
+            None,
+        );
+        let sent = until_done(&mut h, 1);
+
+        assert!(of(&sent, "notice").is_empty(), "{sent:?}");
+        assert_eq!(body(&h, "bill.pdf.md"), "Seite eins\n\nSeite zwei\n");
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        for request in requests.iter() {
+            let asked = &request["messages"][1];
+            assert_eq!(asked["content"], "Transcribe this page.");
+            assert_eq!(asked["images"].as_array().map(Vec::len), Some(1));
+        }
     }
 
     // ------------------------------------------------------------------------

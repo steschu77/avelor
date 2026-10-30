@@ -38,7 +38,7 @@ read by OCR.
 | Constraint | Consequence |
 |---|---|
 | Windows and Linux desktop, Rust host + WebView2 page (WebKitGTK on Linux) | Win32 window and message loop, COM, WinHTTP, DPAPI, WIC (`windows` crate); GTK4 and WebKitGTK 6.0 on Linux (`architecture.md#platforms`) |
-| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `pulldown-cmark`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4` (with the `gdk_pixbuf` it brings), `webkit6`, `soup3`, `gio`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. SQLite is the system's (`winsqlite3.dll`, libsqlite3), a library of the platform as WinHTTP and libsoup are, through a hand-written binding (`av-store`). UUIDv7, dates are hand-written |
+| Minimal dependencies | Only `serde`, `serde_json`, `serde_yaml_ng`, `log`, `pulldown-cmark`, `windows`, `webview2-com` (+ `oxc`, `embed-resource`, `static_vcruntime` at build time); on Linux `gtk4` (with the `gdk_pixbuf` it brings), `webkit6`, `soup3`, `gio`, `glib`, `glib-unix` and `libc` instead of `windows` and `webview2-com`. SQLite is the system's (`winsqlite3.dll`, libsqlite3), a library of the platform as WinHTTP and libsoup are, through a hand-written binding (`av-store`). UUIDv7, dates, the inflater (`av-utils`, from the author's `miniz-rs`) and PDFs (`av-pdf`) are hand-written |
 | No npm, no third-party bundler | ES modules, checked and bundled into one classic script by `app/build.rs` with `av-bundle` (`development.md#the-bundled-page`) |
 | Small executable | release profile for size (`architecture.md#build`), no async runtime, PNG icon frames, CSS minified; new code and dependencies are measured with a `bloat` profile (`development.md#measuring-size`) |
 | The vault is the source of truth | No database of record, no drafts; every edit is written to the file; the index is built by a scan; the catalog beside the vault holds nothing the files don't, and spares the scan reading unchanged files (`vault.md#catalog`) |
@@ -141,6 +141,7 @@ flowchart LR
         store["av-store"]
         google["av-google"]
         llm["av-llm"]
+        pdf["av-pdf"]
         http["av-http"]
         utils["av-utils"]
     end
@@ -151,10 +152,12 @@ flowchart LR
     feat --> store
     feat --> google
     feat --> llm
+    feat --> pdf
     google --> http
     llm --> http
     vault --> utils
     store --> utils
+    pdf --> utils
     http --> utils
     vault --> files[("vault folder")]
     store --> catalog[("catalog")]
@@ -301,34 +304,38 @@ the assistant's run against a fake Ollama (`testing::FakeOllama`).
 
 ```mermaid
 flowchart BT
-    utils["av-utils<br/>error, datetime, base64, sha256,<br/>secret (DPAPI), logger, text, url, fs, cancel"]
+    utils["av-utils<br/>error, datetime, base64, sha256,<br/>secret (DPAPI), logger, text, url, fs, cancel, inflate"]
     http["av-http<br/>WinHTTP / libsoup client"]
     vault["av-vault<br/>envelope, document, index, schema,<br/>filenames, markdown, email, html, conversation"]
     store["av-store<br/>SQLite binding, catalog"]
     google["av-google<br/>OAuth, Gmail, Calendar, sync engine"]
     llm["av-llm<br/>5 providers, streaming, usage, prices"]
+    pdf["av-pdf<br/>text layer, scanned pages, writing"]
     bundle["av-bundle<br/>the page's scripts: dependency check<br/>(build only)"]
     app["app"]
     http --> utils
     vault --> utils
     store --> utils
+    pdf --> utils
     google --> http
     llm --> http
     app --> vault
     app --> store
     app --> google
     app --> llm
+    app --> pdf
     app -. build .-> bundle
 ```
 
 | Crate | Owns | Notes |
 |---|---|---|
-| av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), FNV, DPAPI `secret`, logger, random (BCrypt), url, text normalization, charsets, atomic writes (`fs`), MIME types by extension (`mime`), cross-thread `Cancel` | |
+| av-utils | shared `Error`, `DateTime`, `Id` (UUIDv7), base64, SHA-256 (BCrypt), FNV, DPAPI `secret`, logger, random (BCrypt), url, text normalization, charsets, atomic writes (`fs`), MIME types by extension (`mime`), cross-thread `Cancel`, DEFLATE and zlib data inflated (`inflate`, from the author's miniz-rs) | |
 | av-http | blocking `Client` / `Request` / `Response`; the process's one session (`Client::shared`); `Request::send_logged`, the one way the APIs are called: logged as `METHOD host/path`, timed, a non-2xx status as `Error::Http` with the reason the caller's parser reads from the body | WinHTTP; libsoup 3 on Linux, one session per worker thread; WinHTTP's IPv6 fast fallback on (a network whose IPv6 goes nowhere cost 21 s per new connection); a streamed read takes what has arrived (`WinHttpQueryDataAvailable`) |
 | av-vault | entity model (`envelope.rs`, `document.rs`, `shared.rs`), the schema's names (`schema.rs`), `Index` with structural ops and `Changes`, the entity edits' `Change` (`change.rs`, `Index::edit_entities`), the scan (`scan`, events applied by `Index::apply`), filenames, `to_html`, `MdWriter`, `plain_title`, a document's `plain_text`, HTML → markdown, MIME parser, conversation trees | no network, no UI; also hosts mail parsing |
 | av-store | what Avelor keeps beside a vault, nothing only it holds: the catalog, a row per file of the index with its words in FTS5 (`Catalog`: `open`, `cached`, `put`, `forget`, `keep_only`, `search`; `SETTLED`; `vault.md#catalog`), the SQLite binding (`sqlite.rs`: `Db`, `Stmt`, closed on drop) | plain types only, no av-vault; the system's SQLite (`architecture.md#platforms`); a connection stays on the thread that opened it |
 | av-google | OAuth loopback + PKCE (the wait under a `av_utils::cancel::Cancel`), token refresh, Gmail (filter → query, ids, headers, raw), Calendar v3 subset, the two-way sync engine (`plan` is pure); Google's error bodies (`reason`) | sends through `send_logged` |
 | av-bundle | the page's bundler (oxc): the ES modules from the entry through their imports, in the order they run, each a function scope in one classic script; its checks (no import cycle, named imports and exports only, no exported `let`, no write to an import, no name used without its import, the layers; `development.md#the-bundled-page`) | build-only: `app`'s build dependency, nothing of it in the exe |
+| av-pdf | a PDF read (`Document::parse`: cross-reference tables and streams, object streams, rebuilt by scanning for `n g obj`; the page tree) and its pages (`Document::page` → `Page`: the text layer through the fonts' `ToUnicode` maps or encodings, laid out in lines and paragraphs, `usable`; `blank`; `cover`; a scan's JPEG); writing one (`Writer`, `zlib_stored`); Flate through av-utils' `inflate` | av-utils only; an encrypted file refused (`Error::Encrypted`); tolerant: what can't be read is left out, never a panic; the module doc lists what it leaves out |
 | av-llm | `Client` over Anthropic, OpenAI (Responses API, not Chat Completions), Mistral, Gemini, Ollama; the providers' facts in one table (`ProviderSpec`, `PROVIDERS`: names, alias, default URL, key, uploads, auth) and one request builder from it (`Client::request`); streaming (SSE/NDJSON); normalized `Usage`, price table, `Ledger`; the providers' error bodies | sends through `send_logged`; dispatch by macro, no trait |
 
 The graph is acyclic and the network
@@ -412,7 +419,7 @@ knows neither: `app` turns the scan's texts into its rows.
 | `calendar.rs` | Google ⟷ vault event mapping (pure: `from_google`, `to_google`, `event_entity`, `exception_of`); `calendar_sync` and `set_calendar_sync`; `CalendarState`; the sync job as plan → run → apply, with the trash's deletes; the auto-sync (`auto_sync`, `on_auto_listed`) and its sync points (`changed`, `activated`, `waiting_delete`); their dispatch tests |
 | `watches.rs`, `folders.rs` | watch files in `.avelor/watches/` (with a watch's analysis and Keep original), the `Watches` sub-state, globbing, listing; the watch commands, the events `watches` / `watch` / `watch_removed`, their dispatch tests |
 | `scans.rs` | Import scans: `scan_list`, `scan_read`, `scan_previews`, `scan_open`, `scan_import`, the events `scan_page` / `scan_preview`, OCR as a job (the account and model resolved, the spend limit checked per page, the page read through `reader.rs`), `scan_document` (pages → document), an image kept beside a document of one page, the documents imported handed to the analysis; their dispatch tests |
-| `reader.rs` | what a file reads to, shared by Import scans and the attachments' reading: its `Kind` by extension, which providers take it (`ProviderSpec::pdf`), a text file's markdown (`text_of`), the model's request (`ask`, streamed) and its answer cleaned (`clean`, `word_count`); its tests |
+| `reader.rs` | what a file reads to, shared by Import scans and the attachments' reading: its `Kind` by extension; `read` with an `Engine` (a model), its failures in words (`ReadError`); a PDF by `plan_pdf` (`import.md#reading-pdfs`, pure, tested): its text layer through `av-pdf`, the whole file, or page by page; a text file's markdown (`text_of`), the model's request (`ask`, streamed) and its answer cleaned (`clean`, `word_count`); its tests |
 
 ## Platforms <a id="platforms"></a>
 
@@ -751,10 +758,11 @@ abort. Where the bundle lands and how to measure the size:
 
 | Part | Owns | Must not |
 |---|---|---|
-| av-utils | primitives with no domain (dates, ids, encodings, hashing, DPAPI, atomic writes) | know about vaults, Google, LLMs; carry network types |
+| av-utils | primitives with no domain (dates, ids, encodings, inflating, hashing, DPAPI, atomic writes) | know about vaults, Google, LLMs; carry network types |
 | av-http | transport, cancellation | know any API |
 | av-vault | the vault's schema, files, index, rules, conversions | do network or UI; start threads (the app decides where scan work runs) |
 | av-store | the SQLite binding, the catalog's tables | know av-vault; hold anything the vault's files don't |
+| av-pdf | reading and writing PDF files | know vaults or models; read or write files itself |
 | av-google / av-llm | their remote APIs, pure sync and pricing logic | touch the vault or the page's presets |
 | `app` feature modules | orchestration: plan → run → apply, accounts and watches files | parse messages, render, reach into other features |
 | `app` shell + protocol | Win32, WebView2, GTK, WebKitGTK, dialogs; message decoding and replies | contain feature logic |

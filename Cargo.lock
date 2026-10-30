@@ -73,6 +73,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "av-pdf"
+version = "0.2.0"
+dependencies = [
+ "av-utils",
+]
+
+[[package]]
 name = "av-store"
 version = "0.2.0"
 dependencies = [
@@ -111,6 +118,7 @@ dependencies = [
  "av-bundle",
  "av-google",
  "av-llm",
+ "av-pdf",
  "av-store",
  "av-utils",
  "av-vault",

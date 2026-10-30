@@ -180,6 +180,27 @@ The Import button of an images watch opens Import scans
 Escape closes the page; opening it again for the same watch lists the
 folder again and keeps the documents as arranged.
 
+## Reading PDFs <a id="reading-pdfs"></a>
+
+A PDF, a mail's attachment (`mail.md#attachments`), is read through
+`reader.rs` and `av-pdf` (`architecture.md#crates`), page by page:
+
+- **Text layer**: a page whose text layer has at least 20 letters, at most
+  one glyph in ten without its character, is that text, laid out in lines
+  and paragraphs by position, as plain text. A page with a little text and
+  no large image (a cover sheet) is text too; a blank page is skipped.
+  When every page is text or blank, the file is read from its text layer
+  without a model: free, at once, and nothing leaves the PC.
+- **The model**: otherwise a model that takes PDFs (every provider but
+  Ollama, `ProviderSpec::pdf`) is sent the whole file. On Ollama, a page
+  without a text layer whose largest image is a JPEG covering at least
+  half of it (a scan, often fitted with a margin: its `DCTDecode` stream
+  as it is) is read as an image, a request per page, and a text page as it is;
+  the pages follow each other, a blank line between them.
+- **Unreadable**: on Ollama, a PDF with a page that is neither (an image
+  of another kind, drawings, text whose characters its fonts don't name)
+  fails naming the page; an encrypted or broken one fails saying so.
+
 ## Flows
 
 | # | Flow | Trigger → page | Host → events | Result |

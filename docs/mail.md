@@ -94,16 +94,16 @@ types listed (`*.pdf *.jpg *.jpeg *.png` at first; patterns as a watch's,
   saved files' text becomes their documents' bodies, so the search finds
   a bill's words. When the fetch ends (not when it was stopped), "Reading
   attachments · <email>" reads them one after another (`attachments.rs`,
-  through `reader.rs`): an image (JPEG, PNG, GIF or WebP) or a PDF by the
-  model, transcribed into Markdown, a PDF by every provider but Ollama; a
-  text file as it is: Markdown, plain text and CSV line by line, HTML and
-  an attached mail converted. A file of another type, or a PDF on Ollama,
-  stays unread; one that fails keeps its document without text. A body is
-  written only while it is still empty. The spend limit is checked before
-  each file the model reads. The note: "3 read · 1 failed · 1 unread"; one
-  notice names the first failure. Stop ends it, and so does a vault
-  switch; the analysis starts when it ends, unless it was stopped, and
-  takes the attachments read too (`mail.md#analysis`).
+  through `reader.rs`): an image (JPEG, PNG, GIF or WebP) by the model,
+  transcribed into Markdown; a PDF from its text layer, else by the model
+  (`import.md#reading-pdfs`); a text file as it is: Markdown, plain text
+  and CSV line by line, HTML and an attached mail converted. A file of
+  another type stays unread; one that fails keeps its document without
+  text. A body is written only while it is still empty. The spend limit
+  is checked before each file the model reads. The note: "3 read · 1
+  failed · 1 unread"; one notice names the first failure. Stop ends it,
+  and so does a vault switch; the analysis starts when it ends, unless it
+  was stopped, and takes the attachments read too (`mail.md#analysis`).
 - **Explicit picks**: with Read on, Fetch waits for a pick that works,
   and the host refuses `mail_fetch` before anything is fetched, as for the
   analysis. An auto-sync's pick is checked when a run saved files; refused,
@@ -235,7 +235,7 @@ feature picks its model (`accounts.md#model-choice`).
 | G3 | Fetch mail | Mail source sync button → `openMailFetch` (`features/import/mail.js`) in the expanded vault area → `mail_labels`; filter edits (500 ms debounce) → `mail_search` (Auto-update; Manual: on Update); paging → `mail_headers`; the attachments' types, size and reading, with its model; the analysis's level and model; Fetch or Ctrl+Enter → `mail_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `mail_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per mail, `entity` per attachment, `account`; the job's end reads the matches again; then G7, G5 | mails in `Mail/`, their attachments in `Attachments/`; filter remembered |
 | G4 | Auto-sync mail | Mail row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_mail_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new mail a "Syncing mail" job, `entity` per mail and attachment, `account`; then G7, G5 | mails in `Mail/` on their own |
 | G6 | Open an attachment | the card's Attachments block: Open, or a double-click on a row; an attachment's card: its File row's Open → `openOriginal` (`features/selection.js`) | `open_file {id}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | the file in its app |
-| G7 | Read attachments | a fetch or an auto-sync run with Read on ends with saved files, or a Replace's without text | `attachments::read` → `AiAccounts::choose` (refused: a `notice`) → job "Reading attachments"; per document `step_for`, for an image or a PDF `check_limit` and `reader::ask` on a worker, for a text file `reader::text_of`; `set_content` through the vault edit → `entity`, `content`, `job`, `account`; at the end one `notice` for the failures, then G5 | the files' text in their documents |
+| G7 | Read attachments | a fetch or an auto-sync run with Read on ends with saved files, or a Replace's without text | `attachments::read` → `AiAccounts::choose` (refused: a `notice`) → job "Reading attachments"; per document `step_for`, for an image or a PDF `check_limit`, then `reader::read` on a worker (an image, or a PDF's scans or the whole file, by `reader::ask`; a PDF's text layer and a text file without a model); `set_content` through the vault edit → `entity`, `content`, `job`, `account`; at the end one `notice` for the failures, then G5 | the files' text in their documents |
 | G5 | Analyse new mail | a fetch or an auto-sync run with its analysis on ends with new mails or attachments read | `enrich::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing mail"; per mail, then per attachment, `check_limit`, `chat_stream` on a worker, `parse` / `parse_document`, `apply_lite` / `apply_document` through the vault edit, Medium's chat through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | mails retitled, labelled, in projects, their kind kept; `email.subject` kept; Medium: a chat linked to the mail |
 
 ## Design <a id="design"></a>
@@ -286,13 +286,13 @@ its own job in `EnrichState`, so a fetch's and an auto-sync's can run
 side by side.
 
 The attachments' reading (`attachments.rs`) is plan → run → apply too: the
-plan, per document, tells what it takes from its body, its original's
-name and the model's provider (`step_for`, pure, tested); the run reads
-the file on a worker and has the model read an image or a PDF
+plan, per document, tells what it takes from its body and its original's
+name (`step_for`, pure, tested); the run reads the file on a worker
+through `reader::read`, which has the model read an image or a PDF's scans
 (`reader::ask`, streamed, the pieces unused); the apply writes the text
 through the vault edit. `reader.rs` is shared with Import scans
-(`import.md#import-scans`). Each read is its own job in
-`AttachmentState`; its end starts the analysis it was handed.
+(`import.md#import-scans`). Each read is its own job in `AttachmentState`;
+its end starts the analysis it was handed.
 
 `KnownMails` (`mail.rs`) tells which mails are in the vault: by `gmail-id`
 from the same account, or by Message-ID from any source, on emails only. The preview's

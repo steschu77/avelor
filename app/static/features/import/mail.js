@@ -715,8 +715,8 @@ function renderMailReading(attachments, onChange) {
     model => onChange({ ...attachments, models: { ...attachments.models, [WATCH_READ_STEP]: model } }),
     'reading attachments');
   const body = accEl('div', 'page-text mail__text');
-  body.append('Reads each saved file into its document: images and PDFs with ', picker,
-    ' (on Ollama, PDFs stay unread), text files as they are.');
+  body.append('Reads each saved file into its document: images and scanned PDFs with ', picker,
+    ', a PDF\'s own text and text files as they are.');
   if (hint) body.append(hint);
   return body;
 }

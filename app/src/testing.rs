@@ -19,6 +19,7 @@ use crate::api;
 use crate::app::{App, UiQueue, UiTask};
 use crate::config::load_config;
 use crate::sys::UiSignal;
+use av_pdf::{Dict, Object, Stream, Writer};
 use av_utils::id::Id;
 
 // ----------------------------------------------------------------------------
@@ -179,6 +180,84 @@ pub fn shape(sent: &[Value]) -> Vec<&str> {
     sent.iter()
         .map(|m| m["ev"].as_str().unwrap_or("reply"))
         .collect()
+}
+
+// ----------------------------------------------------------------------------
+/// A page of `pdf_of`.
+pub enum TestPage<'a> {
+    /// Lines (Latin-1) in Helvetica: a text layer.
+    Text(&'a [&'a str]),
+    /// A JPEG covering the page: a scan.
+    Scan(&'a [u8]),
+}
+
+// ----------------------------------------------------------------------------
+/// A PDF of the A4 pages `pages`.
+pub fn pdf_of(pages: &[TestPage]) -> Vec<u8> {
+    let mut w = Writer::new();
+    let tree = w.reserve();
+    let mut kids = Vec::new();
+    for page in pages {
+        let (content, resources) = match page {
+            TestPage::Text(lines) => text_page(lines),
+            TestPage::Scan(jpeg) => scan_page(&mut w, jpeg),
+        };
+        let content = w.add(Object::Stream(Stream {
+            dict: Dict::default(),
+            data: content,
+        }));
+        let media = Object::Array([0, 0, 595, 842].map(Object::Int).to_vec());
+        let page = Dict::default()
+            .with("Type", Object::name("Page"))
+            .with("Parent", tree.into())
+            .with("MediaBox", media)
+            .with("Contents", content.into())
+            .with("Resources", resources.into());
+        kids.push(w.add(page.into()).into());
+    }
+    let pages = Dict::default()
+        .with("Type", Object::name("Pages"))
+        .with("Count", Object::Int(kids.len() as i64))
+        .with("Kids", Object::Array(kids));
+    w.put(tree, pages.into());
+    let catalog = Dict::default()
+        .with("Type", Object::name("Catalog"))
+        .with("Pages", tree.into());
+    let catalog = w.add(catalog.into());
+    w.finish(catalog)
+}
+
+// ----------------------------------------------------------------------------
+fn text_page(lines: &[&str]) -> (Vec<u8>, Dict) {
+    let mut content = b"BT /F1 12 Tf 14 TL 72 780 Td".to_vec();
+    for line in lines {
+        content.push(b' ');
+        Object::Str(line.chars().map(|c| c as u8).collect()).write_to(&mut content);
+        content.extend_from_slice(b" '");
+    }
+    content.extend_from_slice(b" ET");
+    let font = Dict::default()
+        .with("Type", Object::name("Font"))
+        .with("Subtype", Object::name("Type1"))
+        .with("BaseFont", Object::name("Helvetica"))
+        .with("Encoding", Object::name("WinAnsiEncoding"));
+    let fonts = Dict::default().with("F1", font.into());
+    (content, Dict::default().with("Font", fonts.into()))
+}
+
+// ----------------------------------------------------------------------------
+fn scan_page(w: &mut Writer, jpeg: &[u8]) -> (Vec<u8>, Dict) {
+    let image = Dict::default()
+        .with("Subtype", Object::name("Image"))
+        .with("Filter", Object::name("DCTDecode"))
+        .with("ColorSpace", Object::name("DeviceRGB"));
+    let image = w.add(Object::Stream(Stream {
+        dict: image,
+        data: jpeg.to_vec(),
+    }));
+    let images = Dict::default().with("Im0", image.into());
+    let content = b"q 595 0 0 842 0 0 cm /Im0 Do Q".to_vec();
+    (content, Dict::default().with("XObject", images.into()))
 }
 
 // ----------------------------------------------------------------------------
