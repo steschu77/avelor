@@ -23,6 +23,7 @@ use crate::chat;
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::texts::{self, Text};
+use crate::watches::WatchKind;
 use av_vault::markdown::plain_title;
 
 /// A longer title of Medium's conversation is cut.
@@ -151,7 +152,7 @@ pub struct Batch {
     /// What it is called where its pick is refused (`AiAccounts::choose`).
     pub(super) what: Text,
     emails: Vec<Id>,
-    documents: Vec<Id>,
+    pub(super) documents: Vec<Id>,
     /// The documents whose title the user gave: it stays.
     titled: Vec<Id>,
 }
@@ -172,13 +173,23 @@ impl Batch {
     }
 
     // ------------------------------------------------------------------------
-    /// The documents `documents` imported from the watch `watch`, those in
-    /// `titled` with the title the user gave.
-    pub fn scans(watch: &str, documents: Vec<Id>, titled: Vec<Id>) -> Self {
+    /// The documents `documents` imported from the watch `watch` of the type
+    /// `kind`, those in `titled` with the title the user gave.
+    pub fn scans(kind: WatchKind, watch: &str, documents: Vec<Id>, titled: Vec<Id>) -> Self {
+        let (label, notices) = match kind {
+            WatchKind::Images => (
+                Text::new("analysis.label.scans"),
+                Text::new("analysis.notices.scans"),
+            ),
+            WatchKind::Pdf => (
+                Text::new("analysis.label.pdfs"),
+                Text::new("analysis.notices.pdfs"),
+            ),
+        };
         Self {
-            label: Text::new("analysis.label.scans").arg("watch", watch),
-            notices: Text::new("analysis.notices.scans").arg("watch", watch),
-            what: scan_analysis(),
+            label: label.arg("watch", watch),
+            notices: notices.arg("watch", watch),
+            what: scan_analysis(kind),
             emails: Vec::new(),
             documents,
             titled,

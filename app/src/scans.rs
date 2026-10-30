@@ -1,5 +1,7 @@
-//! Import scans (import.md#import-scans): the files of an images folder watch,
-//! read by an AI account's OCR model and imported as documents into `Scans/`.
+//! Import scans (import.md#import-scans): the files of a folder watch, images
+//! or PDFs, read through `reader` (an image and a PDF's scanned pages by an AI
+//! account's model, a PDF's text layer without one) and imported as documents
+//! into `Scans/`.
 //!
 //! The page lists the files, has the ticked ones read (a job reading one file
 //! after the other, which `cancel_job` stops), arranges the pages into
@@ -8,8 +10,9 @@
 //! Every document written carries `scan: {watch, origin: [files]}`, which is
 //! how a later listing tells the files already in the vault
 //! (`Index::scan_origins`). A watch's analysis takes the documents an import
-//! wrote (`analysis::analyse`), and with Keep original a document of one image
-//! keeps the image beside it (`document.original`).
+//! wrote (`analysis::analyse`), and with Keep original a document of one file
+//! keeps the file beside it (`document.original`); an encrypted PDF always
+//! does, as it has no text.
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
@@ -25,13 +28,15 @@ use av_utils::id::Id;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::analysis;
 use crate::api::may_open;
 use crate::app::App;
 use crate::app::Task;
 use crate::protocol::Req;
 use crate::sys;
 use crate::texts::Text;
-use crate::watches::{self, FolderFile};
+use crate::watches::{self, FolderFile, WatchSettings};
+use av_utils::is_false;
 use read::ScanRead;
 
 mod import;
@@ -121,13 +126,15 @@ impl Stamp {
 }
 
 // ----------------------------------------------------------------------------
-/// A file's text, as the OCR model read it.
+/// A file's text, as it was read.
 struct Ocr {
     /// The file as it was read.
     stamp: Stamp,
     text: String,
     words: usize,
     title: String,
+    /// An encrypted PDF: no text, imported with the file beside it.
+    encrypted: bool,
 }
 
 // ----------------------------------------------------------------------------
@@ -152,6 +159,8 @@ struct FileInfo<'a> {
 struct PageRead<'a> {
     words: usize,
     title: &'a str,
+    #[serde(skip_serializing_if = "is_false")]
+    encrypted: bool,
 }
 
 // ----------------------------------------------------------------------------
@@ -177,6 +186,20 @@ pub(crate) struct OpenRequest {
 fn refuse(req: Req, error: Error, text: Text) {
     log::info!("Scan request refused: {text}");
     req.fail(error, text);
+}
+
+// ----------------------------------------------------------------------------
+/// Whether the analysis of the watch of `settings` can run, if it is on;
+/// else the refused pick: a watch neither reads nor imports while its
+/// analysis waits for a model that works, as Fetch email doesn't fetch.
+fn analysis_works(app: &App, settings: &WatchSettings) -> Result<(), (Error, Text)> {
+    let Some(analysis) = &settings.analysis else {
+        return Ok(());
+    };
+    let what = analysis::scan_analysis(settings.kind);
+    analysis
+        .check(&app.ai, what)
+        .map_err(|refusal| (refusal.error, refusal.text))
 }
 
 // ----------------------------------------------------------------------------
@@ -222,6 +245,7 @@ fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> 
             read: scans.cached(file).map(|ocr| PageRead {
                 words: ocr.words,
                 title: &ocr.title,
+                encrypted: ocr.encrypted,
             }),
             status: scans.status(watch, &file.name),
         })

@@ -6,12 +6,13 @@ use std::path::Path;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
 use av_vault::document::{Document, FileFormat};
-use av_vault::envelope::{Document as DocumentRole, Roles, Scan, Source};
+use av_vault::envelope::{Document as DocumentRole, Original, Roles, Scan, Source};
 use av_vault::schema::layout;
 use av_vault::shared::OneOrMany;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::{analysis_works, refuse};
 use crate::analysis::{self, Analysis, Batch};
 use crate::app::App;
 use crate::protocol::Req;
@@ -32,6 +33,10 @@ pub(crate) struct NewDocument {
     #[serde(default)]
     pub(super) title: String,
     pub(super) files: Vec<String>,
+    /// The document in the vault whose pages these are, read again: its
+    /// text is replaced.
+    #[serde(default)]
+    replace: Option<Id>,
 }
 
 // ----------------------------------------------------------------------------
@@ -62,15 +67,19 @@ pub(super) struct NotImported<'a> {
 /// on, the documents written are analysed as a job, a title the user gave
 /// kept (`analysis::analyse`).
 pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
-    let (watch, root, name, keep, analysis) = match app.watches.get(request.watch) {
+    let (watch, root, name, kind, keep, analysis) = match app.watches.get(request.watch) {
         Ok(watch) => {
             let settings = watch.settings();
+            if let Err((error, message)) = analysis_works(app, settings) {
+                return refuse(req, error, message);
+            }
             let analysis = settings.analysis.clone().filter(Analysis::is_on);
             let keep = settings.keep_original;
             (
                 watch.id(),
                 settings.root(),
                 settings.display_name(),
+                settings.kind,
                 keep,
                 analysis,
             )
@@ -104,13 +113,16 @@ pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
     let documents: Vec<Id> = reply.imported.iter().map(|doc| doc.id).collect();
     req.ok(reply);
     if let Some(analysis) = analysis {
-        analysis::analyse(app, Batch::scans(&name, documents, titled), &analysis);
+        let batch = Batch::scans(kind, &name, documents, titled);
+        analysis::analyse(app, batch, &analysis);
     }
 }
 
 // ----------------------------------------------------------------------------
-/// Write the document of `doc`'s pages, with its image beside it if `keep`
-/// and it has one page (`Index::create_with_original`); or say why not.
+/// Write the document of `doc`'s pages, with its file beside it if `keep`
+/// and it has one page (`Index::create_with_original`); an encrypted PDF
+/// always keeps it, marked so. Or replace the text of the document they
+/// were imported into (`replace_document`). Or say why not.
 fn write_document(
     app: &mut App,
     watch: Id,
@@ -118,13 +130,23 @@ fn write_document(
     doc: &NewDocument,
     keep: bool,
 ) -> Result<Id, Text> {
+    if let Some(id) = doc.replace {
+        return replace_document(app, watch, root, doc, id);
+    }
     let (document, original) = {
         let pages = gather_pages(app, watch, root, doc)?;
         let original = match &pages[..] {
-            [page] if keep => Some(original_of(root, page.file)?),
+            [page] if keep || page.encrypted => Some(original_of(root, page.file)?),
             _ => None,
         };
-        (scan_document(watch, &doc.title, &pages), original)
+        let mut document = scan_document(watch, &doc.title, &pages);
+        if pages.iter().any(|page| page.encrypted) {
+            document.set_original(Original {
+                encrypted: true,
+                ..Original::default()
+            });
+        }
+        (document, original)
     };
     let folder = Path::new(layout::SCANS);
     app.edit(|index, changes| match &original {
@@ -138,7 +160,60 @@ fn write_document(
 }
 
 // ----------------------------------------------------------------------------
-/// The image `file` of the watch's folder `root` to keep beside its
+/// Replace the text of the document `id` with `doc`'s pages read again: its
+/// pages must be the document's own (`scan.origin`). Its frontmatter stays,
+/// a title the user gave replaces its title, and its kept file's encrypted
+/// mark follows the new read.
+fn replace_document(
+    app: &mut App,
+    watch: Id,
+    root: &Path,
+    doc: &NewDocument,
+    id: Id,
+) -> Result<Id, Text> {
+    let index = app.vault.index();
+    let Some(document) = index.get(&id) else {
+        return Err(Text::new("scans.replaced_gone"));
+    };
+    let mut origin: Vec<&str> = match document.source() {
+        Some(Source::Scan(scan)) => scan.origin.as_slice().iter().map(String::as_str).collect(),
+        _ => Vec::new(),
+    };
+    let mut files: Vec<&str> = doc.files.iter().map(String::as_str).collect();
+    origin.sort_unstable();
+    files.sort_unstable();
+    if origin != files {
+        let title = document.title();
+        return Err(Text::new("scans.other_pages").arg("title", title));
+    }
+    let (text, encrypted) = {
+        let pages = gather_pages(app, watch, root, doc)?;
+        (pages_text(&pages), pages.iter().any(|page| page.encrypted))
+    };
+    let title = doc.title.trim().to_string();
+    let outcome = app.edit_written(|index, changes| {
+        index.edit(&id, changes, |d| {
+            d.set_content(text);
+            if !title.is_empty() {
+                d.set_title(title);
+            }
+            if let Some(mut original) = d.original().cloned() {
+                original.encrypted = encrypted;
+                d.set_original(original);
+            }
+        })
+    });
+    match outcome {
+        Ok(_) => Ok(id),
+        Err(e) => {
+            log::warn!("Scan import: could not replace the text of {id}: {e}");
+            Err(Text::new("scans.write_failed"))
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The file `file` of the watch's folder `root` to keep beside its
 /// document: its name, without the subfolders, and its bytes.
 fn original_of(root: &Path, file: &str) -> Result<(String, Vec<u8>), Text> {
     let path = root.join(file);
@@ -160,11 +235,14 @@ pub(super) struct ScanPage<'a> {
     pub(super) text: &'a str,
     /// The title proposed from its text.
     pub(super) title: &'a str,
+    /// An encrypted PDF, without text.
+    pub(super) encrypted: bool,
 }
 
 // ----------------------------------------------------------------------------
-/// The pages of `doc`: each not in the vault yet, still in the folder, and
-/// read as it is now; or why the document can't be imported.
+/// The pages of `doc`: each not in the vault yet (or in the document it
+/// replaces), still in the folder, and read as it is now; or why the
+/// document can't be imported.
 fn gather_pages<'a>(
     app: &'a App,
     watch: Id,
@@ -176,7 +254,10 @@ fn gather_pages<'a>(
     }
     let imported = app.vault.index().scan_origins(&watch);
     let page = |name: &'a String| {
-        if imported.contains_key(name) {
+        if imported
+            .get(name)
+            .is_some_and(|id| doc.replace != Some(*id))
+        {
             return Err(Text::new("scans.in_vault").arg("name", name.as_str()));
         }
         let file = FolderFile::read(root, name)
@@ -189,6 +270,7 @@ fn gather_pages<'a>(
             taken: file.taken,
             text: &ocr.text,
             title: &ocr.title,
+            encrypted: ocr.encrypted,
         })
     };
     doc.files.iter().map(page).collect()
@@ -224,7 +306,13 @@ pub(super) fn scan_document(watch: Id, title: &str, pages: &[ScanPage]) -> Docum
     if let Some(first) = first {
         document.set_date(first.taken);
     }
-    let texts: Vec<&str> = pages.iter().map(|page| page.text).collect();
-    document.set_content(format!("{}\n", texts.join("\n\n")));
+    document.set_content(pages_text(pages));
     document
+}
+
+// ----------------------------------------------------------------------------
+/// The pages' text, in order, a blank line between them.
+fn pages_text(pages: &[ScanPage]) -> String {
+    let texts: Vec<&str> = pages.iter().map(|page| page.text).collect();
+    format!("{}\n", texts.join("\n\n"))
 }

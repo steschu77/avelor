@@ -63,6 +63,7 @@
   "new.pick_start": "Elija primero una fecha de inicio",
   "panel.delete_armed": "Haga clic otra vez para eliminar",
   "panel.select_hint": "Seleccione un documento de la lista.",
+  "scans.analysis_blocked": "El análisis está activado: elija en el panel de la vigilancia un modelo que funcione para él o desactívelo.",
   "scans.blurb_single": "Cada imagen es un documento propio; arrastre páginas juntas para unirlas. Solo los archivos que lee se envían al OCR.",
   "scans.blurb_together": "Las imágenes tomadas con menos de dos minutos de diferencia son las páginas de un documento. Solo los archivos que lee se envían al OCR.",
   "scans.drag_to_arrange": "arrastre las páginas para ordenarlas",
@@ -70,8 +71,15 @@
   "scans.drop_new_doc": "Suelte aquí para hacer de ella un documento propio",
   "scans.not_read": "{name} no está leído o cambió desde entonces; vuelva a leerlo.",
   "scans.nothing_written": "No se escribe nada hasta que importa.",
+  "scans.other_pages": "«{title}» tiene otras páginas; vuelva a leerlas todas e impórtelas juntas.",
   "scans.proposed_title": "Título propuesto · edítelo antes de importar",
+  "scans.read_again_in_vault": "En la bóveda: vuelva a leerlo para sustituir el texto de su documento",
   "scans.read_running": "Todavía se está leyendo otra carpeta; deténgala o espérela.",
+  "scans.replace_again": {
+    "one": "Haga clic de nuevo para sustituir {n} texto",
+    "other": "Haga clic de nuevo para sustituir {n} textos"
+  },
+  "scans.replace_one_again": "Haga clic de nuevo para sustituir el texto de su documento",
   "scrub.drag": "Arrastre para elegir un rango de semanas",
   "search.catalog_behind": "La búsqueda no está disponible: el catálogo está desactualizado; vuelva a abrir la bóveda.",
   "settings.intro": "Cómo trabaja Avelor para usted en este PC. Un cambio vale al momento; el que espera al próximo inicio lo dice. Lo que comparten todos los que abren la bóveda se ajusta en sus propias páginas.",

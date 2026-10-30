@@ -33,18 +33,61 @@ import { AI_ANALYSIS_OFF, aiPickerWithHint } from './models.js';
 export const WATCH_READ_STEP = 'read';
 
 // The watch types (`type` in the watch file): how they show, what a new one
-// suggests, how a file is read (`read`, always the first step). A new
-// watch suggests the user's pictures, on Linux under `~`.
+// suggests, how a file is read (`read`, always the first step: `collect`
+// for pages joined into documents, `optional` if a file reads without a
+// model, `what` the model reads in a refusal's words, `used` in "Used by",
+// `previews` if the files have previews), the steps' notes and the import
+// page's title and blurb. A new watch suggests the user's pictures or
+// documents, on Linux under `~`.
+const WATCH_HOME = navigator.platform.startsWith('Win') ? '%USERPROFILE%\\' : '~/';
 const WATCH_TYPES = [
   {
     type: 'images', command: name => t('watch.import_scans', { name }), also: t('watch.scans_also'),
     name: t('watch.type.images'), hint: 'OCR', kind: t('watch.kind.images'), icon: '#i-image',
     files: t('watch.files.images'),
-    folder: navigator.platform.startsWith('Win') ? '%USERPROFILE%\\Pictures' : '~/Pictures',
+    folder: `${WATCH_HOME}Pictures`,
     patterns: ['*.jpg', '*.jpeg', '*.png', '*.webp'],
     read: {
-      name: t('watch.read.image_ocr'), ocr: true, collect: true,
+      name: t('watch.read.image_ocr'), ocr: true, collect: true, previews: true, what: t('feature.ocr'), used: t('feature.ocr'),
       note: t('watch.read.images_note'),
+    },
+    analysis: {
+      what: t('feature.scan_analysis'),
+      off: t('watch.analysis_off.images'),
+    },
+    keep: {
+      on: t('watch.keep_on.images'),
+      off: t('watch.keep_off.images'),
+    },
+    page: {
+      title: t('import.scans_title'),
+      date: t('scans.taken'),
+      dated: date => t('scans.taken_at', { date }),
+    },
+  },
+  {
+    type: 'pdf', command: name => t('watch.import_pdfs', { name }),
+    name: 'PDF', hint: t('watch.hint.pdf'), kind: t('watch.kind.pdf'), icon: '#i-document-pdf',
+    files: t('watch.files.pdf'),
+    folder: `${WATCH_HOME}Documents`,
+    patterns: ['*.pdf'],
+    read: {
+      name: t('watch.read.pdf'), ocr: true, optional: true, what: t('feature.scanned_pages'), used: t('accounts.step.reading'),
+      note: t('watch.read.pdf_note'),
+    },
+    analysis: {
+      what: t('feature.pdf_analysis'),
+      off: t('watch.analysis_off.pdf'),
+    },
+    keep: {
+      on: t('watch.keep_on.pdf'),
+      off: t('watch.keep_off.pdf'),
+    },
+    page: {
+      title: t('import.pdfs_title'),
+      blurb: t('import.pdfs_blurb'),
+      date: t('scans.date'),
+      dated: date => t('scans.date_at', { date }),
     },
   },
 ];
@@ -377,9 +420,9 @@ function renderWatchSteps(id, type, settings) {
   const steps = accEl('div', 'steps');
   steps.append(renderWatchStep({
     name: type.read.name, label: t('watch.label.read'), note: type.read.note,
-    ...(type.read.ocr ? watchModel(id, settings, WATCH_READ_STEP, 'OCR') : {}),
+    ...(type.read.ocr ? watchModel(id, settings, WATCH_READ_STEP, type.read.what) : {}),
     options: type.read.collect ? renderWatchCollect(id, settings) : null,
-  }), renderWatchAnalysis(id, settings), renderWatchKeepOriginal(id, settings));
+  }), renderWatchAnalysis(id, type, settings), renderWatchKeepOriginal(id, type, settings));
   part.append(head, steps);
   return part;
 }
@@ -395,7 +438,7 @@ function watchModel(id, settings, step, what) {
 // The analysis of the documents imported (`analysis`, as an email filter's):
 // its check switches it on at Lite, or off, keeping the model; while on,
 // its level and the model it runs with.
-function renderWatchAnalysis(id, settings) {
+function renderWatchAnalysis(id, type, settings) {
   const analysis = { ...AI_ANALYSIS_OFF, ...settings.analysis };
   const on = analysis.level !== 'off';
   const set = next => watchSet(id, { analysis: next });
@@ -404,12 +447,10 @@ function renderWatchAnalysis(id, settings) {
     onToggle: () => set({ ...analysis, level: on ? 'off' : 'lite' }),
   };
   if (!on) {
-    return renderWatchStep({
-      ...step, note: t('watch.analysis_off.images'),
-    });
+    return renderWatchStep({ ...step, note: type.analysis.off });
   }
   const { picker, hint } = aiPickerWithHint(analysis.model,
-    model => set({ ...analysis, model }), t('feature.scan_analysis'));
+    model => set({ ...analysis, model }), type.analysis.what);
   const options = accEl('dl', 'props step__opts');
   const value = accEl('dd');
   value.append(accSeg([['lite', t('watch.level.lite')], ['medium', t('watch.level.medium')]], analysis.level,
@@ -419,16 +460,14 @@ function renderWatchAnalysis(id, settings) {
   return renderWatchStep({ ...step, note, where: picker, hint, options });
 }
 
-// Whether a document of one image keeps the image beside it
+// Whether a document of one file keeps the file beside it
 // (`keep_original`).
-function renderWatchKeepOriginal(id, settings) {
+function renderWatchKeepOriginal(id, type, settings) {
   const on = !!settings.keep_original;
   return renderWatchStep({
     name: t('watch.step.keep'), label: t('watch.label.keep'), on,
     onToggle: () => watchSet(id, { keep_original: !on }),
-    note: on
-      ? t('watch.keep_on.images')
-      : t('watch.keep_off.images'),
+    note: on ? type.keep.on : type.keep.off,
   });
 }
 

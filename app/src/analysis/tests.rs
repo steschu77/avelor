@@ -758,7 +758,7 @@ fn a_scan_at_medium_gets_points_to_check_in_a_chat_of_its_own() {
         ),
     ];
     let mut h = Harness::with_vault("analysis-scan", &files);
-    let batch = Batch::scans("Scanner", vec![scan], vec![scan]);
+    let batch = Batch::scans(WatchKind::Images, "Scanner", vec![scan], vec![scan]);
     analyse(&mut h.app, batch, &at(AnalysisLevel::Medium));
     let sent = until_done(&mut h);
 
@@ -792,18 +792,27 @@ fn a_scan_at_medium_gets_points_to_check_in_a_chat_of_its_own() {
 
 // ------------------------------------------------------------------------
 #[test]
-fn a_refused_scan_pick_is_told_in_the_scans_words() {
+fn a_refused_scan_pick_is_told_in_the_watchs_words() {
     let mut h = with_emails("analysis-scan-no-pick", "http://127.0.0.1:9", "");
     let unpicked = Analysis {
         level: AnalysisLevel::Lite,
         model: None,
     };
-    let batch = Batch::scans("Scanner", vec![Id::parse(EMAIL_ID).unwrap()], Vec::new());
+    let documents = || vec![Id::parse(EMAIL_ID).unwrap()];
+    let batch = Batch::scans(WatchKind::Images, "Scanner", documents(), Vec::new());
     analyse(&mut h.app, batch, &unpicked);
     let sent = parse_sent(&h.take());
     assert_eq!(
         shown(&sent[0]["data"]["text"]),
         "Scan analysis \u{b7} Scanner: For the scan analysis, pick a model."
+    );
+    let batch = Batch::scans(WatchKind::Pdf, "Bills", documents(), Vec::new());
+    assert_eq!(batch.label.render(), "Analysing PDFs \u{b7} Bills");
+    analyse(&mut h.app, batch, &unpicked);
+    let sent = parse_sent(&h.take());
+    assert_eq!(
+        shown(&sent[0]["data"]["text"]),
+        "PDF analysis \u{b7} Bills: For the PDF analysis, pick a model."
     );
 }
 

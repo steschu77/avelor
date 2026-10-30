@@ -784,7 +784,7 @@ Vault/
     Created Here/      # *.md events made with New, in no calendar
   Email/                # *.md emails fetched from an account
   Attachments/         # an email's attached files, each beside its *.md document
-  Scans/               # *.md documents imported from a folder watch's scans
+  Scans/               # *.md documents imported from folder watches (scans, PDFs)
   .trash/              # deleted entities, at their vault-relative path (§ Trash)
   …any user folders for notes, letters, tasks…
 ```
