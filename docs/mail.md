@@ -90,20 +90,21 @@ types listed (`*.pdf *.jpg *.jpeg *.png` at first; patterns as a watch's,
   couldn't be written counts as "1 attachment failed" and is logged, and
   the fetch still counts as complete, since the mail is in the vault.
 - **Read**: with Read on (`read`, and the model in `models.read`, picked
-  as every feature picks its model, `accounts.md#model-choice`), the
-  saved files' text becomes their documents' bodies, so the search finds
-  a bill's words. When the fetch ends (not when it was stopped), "Reading
+  as every feature picks its model, `accounts.md#model-choice`), the saved
+  files' text becomes their documents' bodies, so the search finds a
+  bill's words. When the fetch ends (not when it was stopped), "Reading
   attachments · <email>" reads them one after another (`attachments.rs`,
   through `reader.rs`): an image (JPEG, PNG, GIF or WebP) by the model,
   transcribed into Markdown; a PDF from its text layer, else by the model
   (`import.md#reading-pdfs`); a text file as it is: Markdown, plain text
   and CSV line by line, HTML and an attached mail converted. A file of
-  another type stays unread; one that fails keeps its document without
-  text. A body is written only while it is still empty. The spend limit
-  is checked before each file the model reads. The note: "3 read · 1
-  failed · 1 unread"; one notice names the first failure. Stop ends it,
-  and so does a vault switch; the analysis starts when it ends, unless it
-  was stopped, and takes the attachments read too (`mail.md#analysis`).
+  another type stays unread; an encrypted PDF is marked, not read; one
+  that fails keeps its document without text. A body is written only while
+  it is still empty. The spend limit is checked before each file the model
+  reads. The note: "3 read · 1 failed · 1 unread · 1 encrypted"; one
+  notice names the first failure. Stop ends it, and so does a vault
+  switch; the analysis starts when it ends, unless it was stopped, and
+  takes the attachments read too (`mail.md#analysis`).
 - **Explicit picks**: with Read on, Fetch waits for a pick that works,
   and the host refuses `mail_fetch` before anything is fetched, as for the
   analysis. An auto-sync's pick is checked when a run saved files; refused,

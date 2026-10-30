@@ -318,7 +318,8 @@ function renderCardLinks(doc_id, row) {
 // Fill `block` with the attachments of the card `doc_id`: the documents
 // linked to it that stand for a file (`document.original`, vault.md#document;
 // a mail's attachments), a row each with its type's icon, its title, which
-// selects it, its size, and Open; a double-click on the row opens it too
+// selects it, its size (and "encrypted" for an encrypted PDF), and Open; a
+// double-click on the row opens it too
 // (`openOriginal`). The block is hidden while there are none.
 function renderCardAttachments(doc_id, block) {
   const rows = [];
@@ -337,7 +338,8 @@ function renderCardAttachments(doc_id, block) {
     open.title = 'Open in its app';
     open.append(iconEl('#i-open'));
     open.addEventListener('click', () => openOriginal(id));
-    const size = accEl('span', 'meta', original.size != null ? fileSize(original.size) : '');
+    const facts = [original.size != null ? fileSize(original.size) : '', original.encrypted ? 'encrypted' : ''];
+    const size = accEl('span', 'meta', facts.filter(Boolean).join(' \u00b7 '));
     row.append(iconEl(fileIcon(name)), title, size, open);
     row.addEventListener('dblclick', e => {
       if (!e.target.closest('button')) openOriginal(id);

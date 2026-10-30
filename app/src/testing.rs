@@ -228,6 +228,21 @@ pub fn pdf_of(pages: &[TestPage]) -> Vec<u8> {
 }
 
 // ----------------------------------------------------------------------------
+/// `pdf` with `/Encrypt` in its trailer: encrypted, as av-pdf reads it.
+pub fn encrypted(pdf: Vec<u8>) -> Vec<u8> {
+    let trailer = b"trailer\n<<";
+    let at = pdf
+        .windows(trailer.len())
+        .rposition(|w| w == trailer)
+        .unwrap()
+        + trailer.len();
+    let mut out = pdf[..at].to_vec();
+    out.extend_from_slice(b"/Encrypt 99 0 R ");
+    out.extend_from_slice(&pdf[at..]);
+    out
+}
+
+// ----------------------------------------------------------------------------
 fn text_page(lines: &[&str]) -> (Vec<u8>, Dict) {
     let mut content = b"BT /F1 12 Tf 14 TL 72 780 Td".to_vec();
     for line in lines {

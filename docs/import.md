@@ -191,15 +191,21 @@ A PDF, a mail's attachment (`mail.md#attachments`), is read through
   no large image (a cover sheet) is text too; a blank page is skipped.
   When every page is text or blank, the file is read from its text layer
   without a model: free, at once, and nothing leaves the PC.
-- **The model**: otherwise a model that takes PDFs (every provider but
-  Ollama, `ProviderSpec::pdf`) is sent the whole file. On Ollama, a page
-  without a text layer whose largest image is a JPEG covering at least
-  half of it (a scan, often fitted with a margin: its `DCTDecode` stream
-  as it is) is read as an image, a request per page, and a text page as it is;
-  the pages follow each other, a blank line between them.
-- **Unreadable**: on Ollama, a PDF with a page that is neither (an image
-  of another kind, drawings, text whose characters its fonts don't name)
-  fails naming the page; an encrypted or broken one fails saying so.
+- **Scans by the model**: otherwise a page without a text layer whose
+  largest image is a JPEG covering at least half of it (a scan, often
+  fitted with a margin: its `DCTDecode` stream as it is) is read by the
+  model as an image, a request per page, and a text page as it is; the
+  pages follow each other, a blank line between them. A text page never
+  leaves the PC.
+- **The whole file**: a PDF with a page that is neither (an image of
+  another kind, drawings, text whose characters its fonts don't name), or
+  that can't be parsed, is sent whole to a model that takes PDFs (every
+  provider but Ollama, `ProviderSpec::pdf`); so is one with a scan larger
+  than 3.75 MB (Anthropic takes images up to 5 MB as base64). On Ollama
+  such a PDF fails, naming the page.
+- **Encrypted**: an encrypted PDF is sent to no model. Its original is
+  marked (`encrypted: true`, `vault.md#document`), its body stays empty,
+  and its card's File row says "encrypted".
 
 ## Flows
 

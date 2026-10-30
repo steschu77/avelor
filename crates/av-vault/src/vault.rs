@@ -657,6 +657,7 @@ impl Index {
             file: None,
             name: Some(name.to_string()),
             size: Some(bytes.len() as u64),
+            encrypted: false,
         };
         // Named once the role is set: the role decides the type in the name.
         doc.set_original(original.clone());

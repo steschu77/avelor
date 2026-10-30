@@ -1,8 +1,9 @@
 //! What a file reads to (import.md#import-scans, import.md#reading-pdfs,
 //! mail.md#attachments): an image through an AI model, transcribed into
-//! Markdown; a PDF from its text layer, its scanned pages or the whole file
-//! through the model; a text file as it is. Import scans and a mail's
-//! attachments read through it.
+//! Markdown; a PDF from its text layer and its scanned pages through the
+//! model, the whole file only where that can't be done, an encrypted one
+//! not at all; a text file as it is. Import scans and a mail's attachments
+//! read through it.
 
 use std::path::Path;
 
@@ -19,6 +20,10 @@ use crate::ai;
 
 /// How many more words a file must have before its progress is sent again.
 pub const PROGRESS_WORDS: usize = 10;
+/// The largest scanned page sent as an image of its own to a model that
+/// takes PDFs too: Anthropic takes images up to 5 MB as base64. A larger
+/// page goes with the whole file.
+const MAX_PAGE_IMAGE: usize = (5 << 20) / 4 * 3;
 /// What the model is told, and asked of a page (an image) or a document (a
 /// PDF).
 const SYSTEM: &str = "You transcribe scanned pages and documents. Write the \
@@ -96,6 +101,8 @@ pub enum ReadError {
     Blank,
     /// The file has no text.
     NoText,
+    /// An encrypted PDF, which no model is sent.
+    Encrypted,
     /// It can't be read here, in words.
     Unreadable(String),
 }
@@ -114,6 +121,7 @@ impl ReadError {
             ReadError::Refused => "The model declined to read the file.".to_string(),
             ReadError::Blank => "The model read no text.".to_string(),
             ReadError::NoText => "The file has no text.".to_string(),
+            ReadError::Encrypted => "The PDF is encrypted; it isn't sent to a model.".to_string(),
             ReadError::Unreadable(why) => why.clone(),
         }
     }
@@ -159,7 +167,7 @@ pub enum PageFacts {
     Text,
     /// Nothing on it.
     Blank,
-    /// One JPEG image covering it, its text layer too thin.
+    /// A JPEG image covering most of it, its text layer too thin.
     Jpeg,
     /// Neither: an image of another kind, drawings, text without its
     /// characters.
@@ -172,23 +180,31 @@ pub enum PageFacts {
 pub enum PdfPlan {
     /// From its text layer, without a model.
     TextLayer,
-    /// The whole file sent to the model.
-    WholeFile,
-    /// Page by page: a text page as it is, a JPEG page by the model.
+    /// Page by page: a text page as it is, a JPEG page as an image by the
+    /// model.
     Pages,
+    /// The whole file sent to the model, for pages that are neither.
+    WholeFile,
+    /// Not at all: it is encrypted.
+    Encrypted,
     /// Not at all, in words.
     Unreadable(String),
 }
 
 // ----------------------------------------------------------------------------
-/// What a page read to tells `plan_pdf`. A page with a little text and no
-/// large image (a cover sheet) is text.
-fn facts_of(page: &av_pdf::Page) -> PageFacts {
+/// What a page read to tells `plan_pdf`, for a model that takes PDFs
+/// (`takes_pdf`) or not. A page with a little text and no large image (a
+/// cover sheet) is text; a scan too large to send alone is neither for a
+/// model that can take the whole file instead.
+fn facts_of(page: &av_pdf::Page, takes_pdf: bool) -> PageFacts {
     let mapped = page.glyphs > 0 && page.unmapped * 10 <= page.glyphs;
     if page.usable() {
         PageFacts::Text
-    } else if page.scan.is_some() {
-        PageFacts::Jpeg
+    } else if let Some(scan) = &page.scan {
+        match takes_pdf && scan.jpeg.len() > MAX_PAGE_IMAGE {
+            true => PageFacts::Other,
+            false => PageFacts::Jpeg,
+        }
     } else if page.cover < av_pdf::SCAN_COVER && mapped {
         PageFacts::Text
     } else if page.blank {
@@ -201,32 +217,29 @@ fn facts_of(page: &av_pdf::Page) -> PageFacts {
 // ----------------------------------------------------------------------------
 /// How to read a PDF of the pages `pages` (or that couldn't be parsed) with
 /// a model that takes PDFs (`takes_pdf`) or not: its text layer when every
-/// page has one (or is blank), else the whole file if the model takes it,
-/// else page by page if every page is text or a JPEG.
+/// page has one (or is blank), else page by page if every page is text or a
+/// JPEG, else the whole file if the model takes it. An encrypted one isn't
+/// read.
 pub fn plan_pdf(pages: Result<&[PageFacts], &av_pdf::Error>, takes_pdf: bool) -> PdfPlan {
-    if let Ok(pages) = pages {
-        let text_or_blank = pages
-            .iter()
-            .all(|p| matches!(p, PageFacts::Text | PageFacts::Blank));
-        if text_or_blank && pages.contains(&PageFacts::Text) {
-            return PdfPlan::TextLayer;
-        }
+    let pages = match pages {
+        Ok(pages) => pages,
+        Err(av_pdf::Error::Encrypted) => return PdfPlan::Encrypted,
+        Err(_) if takes_pdf => return PdfPlan::WholeFile,
+        Err(_) => return PdfPlan::Unreadable("The PDF couldn't be read.".to_string()),
+    };
+    let text_or_blank = pages
+        .iter()
+        .all(|p| matches!(p, PageFacts::Text | PageFacts::Blank));
+    if text_or_blank && pages.contains(&PageFacts::Text) {
+        return PdfPlan::TextLayer;
     }
-    if takes_pdf {
-        return PdfPlan::WholeFile;
-    }
-    match pages {
-        Ok(pages) => match pages.iter().position(|p| *p == PageFacts::Other) {
-            Some(i) => PdfPlan::Unreadable(format!(
-                "Page {} has neither a text layer nor a scanned image this model can read.",
-                i + 1
-            )),
-            None => PdfPlan::Pages,
-        },
-        Err(av_pdf::Error::Encrypted) => {
-            PdfPlan::Unreadable("The PDF is encrypted; this model can't read it.".to_string())
-        }
-        Err(_) => PdfPlan::Unreadable("The PDF couldn't be read.".to_string()),
+    match pages.iter().position(|p| *p == PageFacts::Other) {
+        None => PdfPlan::Pages,
+        Some(_) if takes_pdf => PdfPlan::WholeFile,
+        Some(i) => PdfPlan::Unreadable(format!(
+            "Page {} has neither a text layer nor a scanned image this model can read.",
+            i + 1
+        )),
     }
 }
 
@@ -241,12 +254,13 @@ fn read_pdf(
 ) -> Result<String, ReadError> {
     let pages: Result<Vec<av_pdf::Page>, av_pdf::Error> = Document::parse(&data)
         .map(|doc| (0..doc.page_count()).filter_map(|i| doc.page(i)).collect());
+    let Engine::Ai { provider, .. } = engine;
+    let takes_pdf = provider.spec().pdf;
     let facts: Result<Vec<PageFacts>, av_pdf::Error> = pages
         .as_ref()
-        .map(|pages| pages.iter().map(facts_of).collect())
+        .map(|pages| pages.iter().map(|p| facts_of(p, takes_pdf)).collect())
         .map_err(|e| *e);
-    let Engine::Ai { provider, .. } = engine;
-    let plan = plan_pdf(facts.as_deref(), provider.spec().pdf);
+    let plan = plan_pdf(facts.as_deref(), takes_pdf);
     match plan {
         PdfPlan::WholeFile => {
             let file = FileData {
@@ -256,6 +270,7 @@ fn read_pdf(
             };
             transcribe(engine, cancel, Kind::Pdf, file, on_words)
         }
+        PdfPlan::Encrypted => Err(ReadError::Encrypted),
         PdfPlan::Unreadable(why) => Err(ReadError::Unreadable(why)),
         PdfPlan::TextLayer | PdfPlan::Pages => {
             let (Ok(pages), Ok(facts)) = (pages, facts) else {
@@ -432,26 +447,54 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn a_pdf_is_read_from_its_text_layer_else_by_the_model() {
+    fn a_pdf_is_read_from_its_text_layer_and_scans_else_whole() {
         use PageFacts::*;
         let plan = |pages: &[PageFacts], takes_pdf| plan_pdf(Ok(pages), takes_pdf);
         assert_eq!(plan(&[Text, Blank, Text], true), PdfPlan::TextLayer);
         assert_eq!(plan(&[Text, Blank], false), PdfPlan::TextLayer);
-        assert_eq!(plan(&[Text, Jpeg], true), PdfPlan::WholeFile);
-        assert_eq!(plan(&[Other], true), PdfPlan::WholeFile);
-        assert_eq!(plan(&[Text, Jpeg, Blank], false), PdfPlan::Pages);
+        for takes_pdf in [true, false] {
+            assert_eq!(plan(&[Text, Jpeg, Blank], takes_pdf), PdfPlan::Pages);
+            assert_eq!(plan(&[Jpeg, Jpeg], takes_pdf), PdfPlan::Pages);
+        }
         assert_eq!(plan(&[Blank], false), PdfPlan::Pages, "nothing to read");
+        assert_eq!(plan(&[Other], true), PdfPlan::WholeFile);
+        assert_eq!(plan(&[Jpeg, Other], true), PdfPlan::WholeFile);
         let PdfPlan::Unreadable(why) = plan(&[Jpeg, Other], false) else {
             panic!("page 2 can't be read");
         };
         assert!(why.starts_with("Page 2 "), "{why}");
 
         let encrypted = av_pdf::Error::Encrypted;
-        assert_eq!(plan_pdf(Err(&encrypted), true), PdfPlan::WholeFile);
-        let PdfPlan::Unreadable(why) = plan_pdf(Err(&encrypted), false) else {
-            panic!("no way to read it");
+        for takes_pdf in [true, false] {
+            assert_eq!(plan_pdf(Err(&encrypted), takes_pdf), PdfPlan::Encrypted);
+        }
+        let broken = av_pdf::Error::Broken("no pages");
+        assert_eq!(plan_pdf(Err(&broken), true), PdfPlan::WholeFile);
+        assert!(matches!(
+            plan_pdf(Err(&broken), false),
+            PdfPlan::Unreadable(_)
+        ));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_scan_too_large_to_send_alone_goes_with_the_whole_file() {
+        let page = |size| av_pdf::Page {
+            scan: Some(av_pdf::Scan {
+                jpeg: vec![0; size],
+                upright: true,
+                cmyk: false,
+            }),
+            ..Default::default()
         };
-        assert!(why.contains("encrypted"), "{why}");
+        assert_eq!(facts_of(&page(1000), true), PageFacts::Jpeg);
+        let large = page(MAX_PAGE_IMAGE + 1);
+        assert_eq!(facts_of(&large, true), PageFacts::Other);
+        assert_eq!(
+            facts_of(&large, false),
+            PageFacts::Jpeg,
+            "Ollama has no limit"
+        );
     }
 
     // ------------------------------------------------------------------------

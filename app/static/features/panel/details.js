@@ -205,19 +205,20 @@ function genreField(doc) {
 
 // ----------------------------------------------------------------------------
 // The file a document stands for (vault.md#document; a mail's attachment):
-// its type's icon, the name it came with and its size, and Open, which
-// opens it in its app (`openOriginal`).
+// its type's icon, the name it came with, its size and whether it is an
+// encrypted PDF, and Open, which opens it in its app (`openOriginal`).
 function originalField(doc) {
     const original = doc.document.original;
     const name = original.name ?? original.file ?? '';
     const size = original.size != null ? ` \u00b7 ${fileSize(original.size)}` : '';
+    const encrypted = original.encrypted ? ' \u00b7 encrypted' : '';
     const open = accEl('button', 'icon-btn icon-btn--quiet');
     open.type = 'button';
     open.title = 'Open in its app';
     open.dataset.focusKey = 'open-file';
     open.append(iconEl('#i-open'));
     open.addEventListener('click', () => openOriginal(doc.doc_id));
-    return [iconEl(fileIcon(name)), `${name}${size}`, open];
+    return [iconEl(fileIcon(name)), `${name}${size}${encrypted}`, open];
 }
 
 // ----------------------------------------------------------------------------

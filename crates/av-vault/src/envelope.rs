@@ -145,6 +145,14 @@ pub struct Original {
     /// Its size in bytes when it was saved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
+    /// An encrypted PDF, which no model is sent (import.md#reading-pdfs).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub encrypted: bool,
+}
+
+// ----------------------------------------------------------------------------
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 // ----------------------------------------------------------------------------

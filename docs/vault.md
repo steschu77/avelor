@@ -332,7 +332,9 @@ next to the document's own file:
   name with the file's own extension (`vault.md#filenames`). Only a plain
   name counts, and none the scan would read as an entity,
 * `name`: the name the file came with,
-* `size`: its size in bytes when it was saved.
+* `size`: its size in bytes when it was saved,
+* `encrypted`: `true` for an encrypted PDF, which no model is sent
+  (`import.md#reading-pdfs`); absent: it isn't.
 
 ```yaml
 document:
