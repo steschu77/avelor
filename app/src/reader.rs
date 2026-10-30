@@ -82,6 +82,20 @@ impl Kind {
 pub enum Engine {
     /// A model of an AI account; its address names the account in failures.
     Ai(Resolved),
+    /// No model: only text files and text layers read, the rest fails with
+    /// `why` (the refused pick's message).
+    None { why: Text },
+}
+
+impl Engine {
+    // ------------------------------------------------------------------------
+    /// Whether it takes a PDF whole (`ProviderSpec::pdf`).
+    fn takes_pdf(&self) -> bool {
+        match self {
+            Engine::Ai(ai) => ai.provider.spec().pdf,
+            Engine::None { .. } => false,
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -109,15 +123,17 @@ impl ReadError {
     /// The failure in words, a model's failure named after `engine`'s
     /// account.
     pub fn words(&self, engine: &Engine) -> Text {
-        let Engine::Ai(ai) = engine;
-        match self {
-            ReadError::File(_) => Text::new("reader.unread"),
-            ReadError::Model(e) => ai::chat_error(ai.provider, &ai.address, e),
-            ReadError::Refused => Text::new("reader.refused"),
-            ReadError::Blank => Text::new("reader.blank"),
-            ReadError::NoText => Text::new("reader.no_text"),
-            ReadError::Encrypted => Text::new("reader.encrypted"),
-            ReadError::Unreadable(why) => why.clone(),
+        match (self, engine) {
+            (ReadError::File(_), _) => Text::new("reader.unread"),
+            (ReadError::Model(e), Engine::Ai(ai)) => ai::chat_error(ai.provider, &ai.address, e),
+            (ReadError::Model(e), Engine::None { .. }) => {
+                Text::new("reader.failed").arg("error", e.to_string())
+            }
+            (ReadError::Refused, _) => Text::new("reader.refused"),
+            (ReadError::Blank, _) => Text::new("reader.blank"),
+            (ReadError::NoText, _) => Text::new("reader.no_text"),
+            (ReadError::Encrypted, _) => Text::new("reader.encrypted"),
+            (ReadError::Unreadable(why), _) => why.clone(),
         }
     }
 }
@@ -246,8 +262,7 @@ fn read_pdf(
 ) -> Result<String, ReadError> {
     let pages: Result<Vec<av_pdf::Page>, av_pdf::Error> = Document::parse(&data)
         .map(|doc| (0..doc.page_count()).filter_map(|i| doc.page(i)).collect());
-    let Engine::Ai(ai) = engine;
-    let takes_pdf = ai.provider.spec().pdf;
+    let takes_pdf = engine.takes_pdf();
     let facts: Result<Vec<PageFacts>, av_pdf::Error> = pages
         .as_ref()
         .map(|pages| pages.iter().map(|p| facts_of(p, takes_pdf)).collect())
@@ -304,7 +319,7 @@ fn read_pdf(
 
 // ----------------------------------------------------------------------------
 /// What `engine` reads `file` (an image, or a PDF of the kind `kind`) to,
-/// cleaned.
+/// cleaned; without a model, why not.
 fn transcribe(
     engine: &Engine,
     cancel: &Cancel,
@@ -312,8 +327,10 @@ fn transcribe(
     file: FileData,
     on_words: &mut impl FnMut(usize),
 ) -> Result<String, ReadError> {
-    let Engine::Ai(ai) = engine;
-    let (client, model) = (&ai.client, &ai.model);
+    let (client, model) = match engine {
+        Engine::Ai(ai) => (&ai.client, &ai.model),
+        Engine::None { why } => return Err(ReadError::Unreadable(why.clone())),
+    };
     let response = ask(client, cancel, model, kind, file, on_words).map_err(ReadError::Model)?;
     let text = clean(&response.text);
     match (text.is_empty(), response.stop) {

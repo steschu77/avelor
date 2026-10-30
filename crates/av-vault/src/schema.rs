@@ -54,7 +54,7 @@ pub mod layout {
     pub const CALENDAR: &str = "Calendar";
     /// Conversations with the assistant.
     pub const CONVERSATIONS: &str = "Conversations";
-    /// Documents imported from a folder watch's scans.
+    /// Documents imported from folder watches: scans, PDFs.
     pub const SCANS: &str = "Scans";
     /// An email's attachments: a document per file, with the file beside it.
     pub const ATTACHMENTS: &str = "Attachments";

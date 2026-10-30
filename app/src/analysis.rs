@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ai::accounts::{AiAccounts, ModelChoice, Refusal};
 use crate::texts::Text;
+use crate::watches::WatchKind;
 use job::Run;
 
 mod answer;
@@ -36,9 +37,6 @@ pub(crate) use job::{Batch, analyse, stop};
 /// (`AiAccounts::choose`).
 pub fn email_analysis() -> Text {
     Text::new("feature.email_analysis")
-}
-pub fn scan_analysis() -> Text {
-    Text::new("feature.scan_analysis")
 }
 
 // ----------------------------------------------------------------------------
@@ -92,6 +90,16 @@ fn same(a: &str, b: &str) -> bool {
 #[derive(Default)]
 pub struct AnalysisState {
     runs: HashMap<Id, Run>,
+}
+
+// ----------------------------------------------------------------------------
+/// What the analysis of a watch of the type `kind` is called in a refused
+/// pick's words (`AiAccounts::choose`).
+pub fn scan_analysis(kind: WatchKind) -> Text {
+    match kind {
+        WatchKind::Images => Text::new("feature.scan_analysis"),
+        WatchKind::Pdf => Text::new("feature.pdf_analysis"),
+    }
 }
 
 #[cfg(test)]

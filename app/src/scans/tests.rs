@@ -3,11 +3,13 @@ use av_vault::envelope::Source;
 use serde_json::json;
 
 use super::import::{ScanPage, scan_document};
-use super::read::{PageEvent, PageStatus, ReadCounts, TITLE_LEN, title_of};
+use super::read::{PageEvent, PageStatus, ReadCounts, TITLE_LEN, readable, title_of};
 use crate::ai;
-use crate::reader;
+use crate::reader::{self, Kind};
 use crate::testing::Harness;
-use crate::testing::{FakeOllama, parse, reply, shape, shown, words};
+use crate::testing::{FakeOllama, TestPage, encrypted, parse, pdf_of, reply, shape, shown, words};
+use crate::texts::Text;
+use crate::watches::WatchKind;
 use serde_json::Value;
 use std::fs;
 use std::sync::{Arc, Mutex};
@@ -58,6 +60,74 @@ fn with_scans_and(name: &str, more: &[(&str, String)]) -> (Harness, PathBuf) {
 }
 
 // ------------------------------------------------------------------------
+/// A harness whose vault has a PDF watch on the folder `pdfs` beside it,
+/// reading with the Ollama account `account` if given (else with no
+/// pick), which holds a bill with a text layer, a lease of two scanned
+/// pages, an encrypted letter and a photo. And that folder.
+fn with_pdf_watch(name: &str, account: Option<String>) -> (Harness, PathBuf) {
+    let mut h = Harness::new(name);
+    let root = h.vault();
+    let folder = root.with_file_name("pdfs");
+    fs::create_dir_all(&folder).unwrap();
+    let bill = ["Stadtwerke Rechnung Nr. 4711", "Betrag: 42,00 EUR"];
+    let letter = ["Kontoauszug Nr. 10 mit allen Buchungen des Monats"];
+    let files = [
+        ("bill.pdf", pdf_of(&[TestPage::Text(&bill)])),
+        (
+            "lease.pdf",
+            pdf_of(&[
+                TestPage::Scan(b"\xff\xd8 page one"),
+                TestPage::Scan(b"\xff\xd8 page two"),
+            ]),
+        ),
+        ("letter.pdf", encrypted(pdf_of(&[TestPage::Text(&letter)]))),
+        ("photo.jpg", b"photo".to_vec()),
+    ];
+    for (file, bytes) in files {
+        fs::write(folder.join(file), bytes).unwrap();
+    }
+    let models = match account {
+        Some(_) => {
+            format!("\n  models:\n    read:\n      account: {OLLAMA_ID}\n      model: m")
+        }
+        None => String::new(),
+    };
+    let watch = format!(
+        "id: {WATCH_ID}\nfolder-watch:\n  type: pdf\n  folder: '{}'\n  patterns: ['*.pdf', '*.jpg']{models}\n",
+        folder.display()
+    );
+    let dir = root.join(".avelor/watches");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("watch_pdf.yaml"), watch).unwrap();
+    if let Some(account) = account {
+        let dir = root.join(".avelor/accounts");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("ollama.yaml"), account).unwrap();
+    }
+    crate::api::switch_to(&mut h.app, root);
+    h.wait_indexed();
+    h.take();
+    (h, folder)
+}
+
+// ------------------------------------------------------------------------
+/// Read `files` of the watch to the end: what the page got.
+fn read_all(h: &mut Harness, files: &[&str]) -> Vec<Value> {
+    let args = json!({ "watch": WATCH_ID, "files": files });
+    let request = json!({ "id": 1, "cmd": "scan_read", "args": args });
+    h.app.on_web_message(request.to_string());
+    let ended = |t: &String| t.contains(r#""state":"done""#);
+    parse(&h.wait_for(|sent| sent.iter().any(ended)))
+}
+
+// ------------------------------------------------------------------------
+/// The last `scan_page` of `file` in `sent`.
+fn last_page<'a>(sent: &'a [Value], file: &str) -> &'a Value {
+    let mut pages = sent.iter().filter(|m| m["ev"] == "scan_page");
+    &pages.rfind(|m| m["data"]["file"] == file).unwrap()["data"]
+}
+
+// ------------------------------------------------------------------------
 /// Keep `text` as what the file `name` of `folder` read to.
 fn read_page(h: &mut Harness, folder: &Path, name: &str, text: &str) {
     let file = FolderFile::read(folder, name).unwrap();
@@ -66,6 +136,7 @@ fn read_page(h: &mut Harness, folder: &Path, name: &str, text: &str) {
         words: reader::word_count(text),
         title: title_of(text),
         text: text.to_string(),
+        encrypted: false,
     };
     h.app.scans.cache.insert(file.path, ocr);
 }
@@ -85,12 +156,14 @@ fn pages_become_one_document() {
         taken: first,
         text: "# Bill",
         title,
+        encrypted: false,
     };
     let second = ScanPage {
         file: "scan_0807.jpg",
         taken: later,
         text: "Page two",
         title: "Page two",
+        encrypted: false,
     };
     let pages = [page("Bill"), second];
 
@@ -176,6 +249,172 @@ fn an_import_keeps_a_single_image_and_hands_its_documents_to_the_analysis() {
     );
     assert!(text.contains("genre: letter"), "{text}");
     assert!(!text.contains("original:"), "two images keep none: {text}");
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_pdf_watch_reads_text_layers_scans_by_page_and_imports_encrypted_pdfs() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let address = FakeOllama::new(&["m"])
+        .answering_in_turn(&["Seite eins", "Seite zwei"])
+        .recording(&requests)
+        .start();
+    let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+    let (mut h, folder) = with_pdf_watch("scan-pdf-watch", Some(account));
+    let sent = read_all(
+        &mut h,
+        &["bill.pdf", "lease.pdf", "letter.pdf", "photo.jpg"],
+    );
+
+    let job = sent.iter().find(|m| m["ev"] == "job").unwrap();
+    assert_eq!(shown(&job["data"]["label"]), "Reading PDFs \u{b7} pdfs");
+    let bill = last_page(&sent, "bill.pdf");
+    assert_eq!(bill["status"], "read");
+    assert_eq!(bill["title"], "Stadtwerke Rechnung Nr. 4711");
+    assert_eq!(last_page(&sent, "lease.pdf")["words"], 4);
+    let letter = last_page(&sent, "letter.pdf");
+    assert_eq!(
+        (&letter["status"], &letter["encrypted"]),
+        (&json!("read"), &json!(true))
+    );
+    let photo = last_page(&sent, "photo.jpg");
+    assert_eq!(shown(&photo["error"]), "Only PDF files can be read.");
+    assert_eq!(
+        requests.lock().unwrap().len(),
+        2,
+        "a request per scanned page"
+    );
+
+    // Without Keep original, only the encrypted PDF keeps its file.
+    let docs = json!([{ "files": ["bill.pdf"] }, { "files": ["letter.pdf"] }]);
+    let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+    assert_eq!(shape(&sent), ["entity", "entity", "reply"]);
+    let path = |i: usize| h.vault().join(sent[i]["data"]["path"].as_str().unwrap());
+    let text = fs::read_to_string(path(0)).unwrap();
+    assert!(!text.contains("original:"), "{text}");
+    assert!(text.contains("Stadtwerke Rechnung Nr. 4711"), "{text}");
+    let text = fs::read_to_string(path(1)).unwrap();
+    assert!(
+        text.contains("encrypted: true") && text.contains("name: letter.pdf"),
+        "{text}"
+    );
+    assert!(text.ends_with("---\n\n"), "no text: {text}");
+    let id = Id::parse(sent[1]["data"]["id"].as_str().unwrap()).unwrap();
+    let original = h.app.vault.index().original_path(&id).unwrap();
+    assert_eq!(
+        fs::read(original).unwrap(),
+        fs::read(folder.join("letter.pdf")).unwrap()
+    );
+
+    // With it, a PDF keeps its file.
+    h.call(
+        "set_watch",
+        json!({ "watch": WATCH_ID, "keep_original": true }),
+    );
+    let docs = json!([{ "files": ["lease.pdf"] }]);
+    let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+    let id = Id::parse(sent[0]["data"]["id"].as_str().unwrap()).unwrap();
+    let original = h.app.vault.index().original_path(&id).unwrap();
+    assert!(original.to_string_lossy().ends_with(".pdf"), "{original:?}");
+    let text = fs::read_to_string(h.vault().join(sent[0]["data"]["path"].as_str().unwrap()));
+    assert!(text.unwrap().ends_with("Seite eins\n\nSeite zwei\n"));
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn without_a_model_a_pdf_watch_reads_text_layers_only() {
+    let (mut h, _) = with_pdf_watch("scan-pdf-no-model", None);
+    let sent = read_all(&mut h, &["bill.pdf", "lease.pdf"]);
+    let reply = sent.iter().find(|m| m["re"] == 1).unwrap();
+    assert!(reply["ok"]["job"].is_string(), "{reply}");
+    assert_eq!(last_page(&sent, "bill.pdf")["status"], "read");
+    let lease = last_page(&sent, "lease.pdf");
+    assert_eq!(
+        shown(&lease["error"]),
+        "For the scanned pages, add an AI provider under Accounts."
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn pages_read_again_replace_their_documents_text_only_whole() {
+    let (mut h, folder) = with_scans("scan-replace");
+    read_page(&mut h, &folder, "c.jpg", "# New text");
+    read_page(&mut h, &folder, "a.jpg", "# A");
+    let id = Id::parse(IMPORTED_ID).unwrap();
+
+    let docs = json!([
+        { "files": ["c.jpg"] },
+        { "files": ["a.jpg", "c.jpg"], "replace": id },
+    ]);
+    let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+    let failed: Vec<String> = sent[0]["ok"]["failed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| shown(&f["error"]))
+        .collect();
+    assert_eq!(
+        failed,
+        [
+            "c.jpg is in the vault already.",
+            "\u{201c}Old\u{201d} has other pages; read them all again and import them together.",
+        ]
+    );
+
+    let docs = json!([{ "files": ["c.jpg"], "replace": id }]);
+    let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+    let reply = &reply(&sent)["ok"];
+    assert_eq!(reply["imported"], json!([{ "files": ["c.jpg"], "id": id }]));
+    let text = fs::read_to_string(h.vault().join("Scans/old.md")).unwrap();
+    assert!(text.contains("title: Old"), "the title stays: {text}");
+    assert!(text.ends_with("---\n# New text\n"), "{text}");
+
+    let docs = json!([{ "title": "Neu", "files": ["c.jpg"], "replace": id }]);
+    h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+    let text = fs::read_to_string(h.vault().join("Scans/old.md")).unwrap();
+    assert!(
+        text.contains("title: Neu"),
+        "a title given replaces it: {text}"
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_watch_whose_analysis_has_no_working_pick_neither_reads_nor_imports() {
+    let (mut h, folder) = with_scans("scan-analysis-blocked");
+    read_page(&mut h, &folder, "a.jpg", "# A");
+    let analysis = json!({ "level": "lite", "model": null });
+    h.call(
+        "set_watch",
+        json!({ "watch": WATCH_ID, "analysis": analysis }),
+    );
+    let read = json!({ "watch": WATCH_ID, "files": ["b.jpg"] });
+    let import = json!({ "watch": WATCH_ID, "docs": [{ "files": ["a.jpg"] }] });
+    for (cmd, args) in [("scan_read", read), ("scan_import", import)] {
+        let sent = h.call(cmd, args);
+        let message = shown(&sent[0]["err"]["text"]);
+        assert!(
+            message.starts_with("For the scan analysis,"),
+            "{cmd}: {sent:?}"
+        );
+    }
+    assert!(h.app.scans.read.is_none());
+    let index = h.app.vault.index();
+    let origins = index.scan_origins(&Id::parse(WATCH_ID).unwrap());
+    assert!(!origins.contains_key("a.jpg"), "nothing imported");
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_watch_reads_the_files_of_its_type() {
+    assert_eq!(readable(WatchKind::Images, "a.JPG"), Ok(Kind::Image));
+    assert_eq!(readable(WatchKind::Pdf, "a.pdf"), Ok(Kind::Pdf));
+    assert!(readable(WatchKind::Images, "a.pdf").is_err());
+    assert_eq!(
+        readable(WatchKind::Pdf, "a.jpg").map_err(|e| e.render()),
+        Err("Only PDF files can be read.".to_string())
+    );
 }
 
 // ------------------------------------------------------------------------
@@ -380,9 +619,18 @@ fn statuses_and_summaries_read_well() {
     assert_eq!(
         json(PageStatus::Read {
             words: 3,
-            title: "Bill"
+            title: "Bill",
+            encrypted: false,
         }),
         r#"{"status":"read","words":3,"title":"Bill"}"#
+    );
+    assert_eq!(
+        json(PageStatus::Read {
+            words: 0,
+            title: "",
+            encrypted: true,
+        }),
+        r#"{"status":"read","words":0,"title":"","encrypted":true}"#
     );
     let mut counts = ReadCounts {
         read: 2,
