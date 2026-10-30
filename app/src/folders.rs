@@ -141,7 +141,9 @@ pub fn create_watch(app: &mut App, req: Req, new: NewWatch) {
     let mut settings = WatchSettings::new(new.kind, folder);
     settings.name = new.name.trim().to_string();
     settings.patterns = clean(new.patterns);
-    settings.collect = new.collect;
+    if new.kind == WatchKind::Images {
+        settings.collect = new.collect;
+    }
     match app.watches.create(settings) {
         Ok(id) => {
             log::info!("Created folder watch {id}");
@@ -353,6 +355,18 @@ mod tests {
         let text = fs::read_to_string(watch_file(&h, "watch_images_2.yaml")).unwrap();
         assert!(text.contains("type: images"), "{text}");
         assert_eq!(h.app.watches.iter().count(), 2);
+
+        let args = json!({
+            "type": "pdf",
+            "folder": folder,
+            "patterns": ["*.pdf"],
+            "collect": "together",
+        });
+        let sent = h.call("create_watch", args);
+        assert_eq!(sent[0]["data"]["type"], "pdf");
+        let text = fs::read_to_string(watch_file(&h, "watch_pdf.yaml")).unwrap();
+        assert!(text.contains("type: pdf"), "{text}");
+        assert!(!text.contains("collect"), "an images watch's only: {text}");
     }
 
     // ------------------------------------------------------------------------

@@ -1,8 +1,9 @@
 # Avelor — Import from folder watches
 
 > Folder watches and importing from them: the watch files, the Folders
-> page, Import scans. The commands are `api.md#watches` and
-> `api.md#scans`; the `scan:` source, `vault.md#scan`.
+> page, Import scans and PDFs, reading a PDF. The commands are
+> `api.md#watches` and `api.md#scans`; the `scan:` source,
+> `vault.md#scan`.
 
 ## Overview
 
@@ -12,9 +13,11 @@ Importing turns those files into vault entities:
 
 1. **List**: the files in the folder that match the watch, with what is
    known about each (date, size), and whether it is already in the vault.
-2. **Read**: turn each file into text. Images need OCR.
+2. **Read**: turn each file into text. Images need OCR; a PDF has its
+   text, or scanned pages that need it.
 3. **Arrange**: group the read files into documents (several scanned pages
-   are one letter), order their pages, and give each a title.
+   are one letter), order their pages, and give each a title. A PDF is a
+   document of its own.
 4. **Import**: write the documents into the vault, each with a source block
    naming the watch and its files, so a later listing knows them.
 
@@ -41,7 +44,8 @@ account file is (`accounts.md#vault-accounts`). The file contains:
 * `id`: UUIDv7, unique identifier for the watch
 * `folder-watch`:
   * `type`: what the watch takes, chosen when it is added: `images` (scanned
-    pages, OCR; several images can be one document)
+    pages, OCR; several images can be one document) or `pdf` (one document
+    per PDF, read as `#reading-pdfs` says)
   * `name`: shown in the sidebar; absent: the folder's name
   * `folder`: as entered; `%VAR%`s such as `%USERPROFILE%` are expanded
     where it is used (on Linux a leading `~` and `$NAME`s). A folder
@@ -51,19 +55,20 @@ account file is (`accounts.md#vault-accounts`). The file contains:
     only the folder's own files)
   * `patterns`: file name patterns (`*.jpg`); a file matching any of them
     is taken
-  * `collect`: `images` only: `together` (images taken within 2 minutes of
-    each other are the pages of one document) or `single` (one document
-    per image)
+  * `collect`: an `images` watch's only: `together` (images taken within 2
+    minutes of each other are the pages of one document) or `single` (one
+    document per image)
   * `models`: the model each step that sends a file to an AI picked,
     `{account, model}` (`accounts.md#model-choice`), by step: `read` for
-    reading images (`watches::READ_STEP`). A step without an entry has no
-    pick yet
+    reading images and scanned pages (`watches::READ_STEP`). A step without
+    an entry has no pick yet
   * `analysis`: the analysis of the documents it imports, `level` (`off`,
     `lite`, `medium`) and the `model` it runs with, as a mail filter's
     (`mail.md#analysis`), the model kept while the level is off; absent:
     off
-  * `keep-original`: `true` if a document of one image keeps the image
-    beside it (`vault.md#document`); absent: it doesn't
+  * `keep-original`: `true` if a document of one file keeps the file
+    beside it (`vault.md#document`); absent: it doesn't, but an encrypted
+    PDF always does
   * `enabled`: `false` while the watch is off; it isn't listed under
     Sources then
   * `added`: when the watch was added
@@ -96,26 +101,28 @@ watches and adds new ones (with no vault open, the page says that
 watches are kept in the
 vault), following the Accounts page:
 
-- "Watch a folder" asks for the type first (Images), then for the folder,
-  suggested per type, typed or picked with Browse (`pick_folder`). The
-  folder is looked for before the watch is saved; the new watch takes its
-  type's file types (and Collect: taken within 2 min, for images).
+- "Watch a folder" asks for the type first (Images, PDF), then for the
+  folder, suggested per type (Pictures, Documents), typed or picked with
+  Browse (`pick_folder`). The folder is looked for before the watch is
+  saved; the new watch takes its type's file types (and Collect: taken
+  within 2 min, for images).
 - A watch's pane changes its name, folder, subfolders, file types, whether
   it is a source, and its import process: the reading step, which always
   runs, then Analysis and Keep original, each switched on or off by its
   check. Analysis's check turns it on at Lite (or off, keeping its model);
   while it is on, it offers Lite or Medium. A step that sends the file to
   an AI has the picker of the model it runs with in its row
-  (`accounts.md#model-choice`): the reading step of images (`models`) and
-  the analysis (`analysis`). A step without a pick shows "Pick a model".
+  (`accounts.md#model-choice`): the reading step (`models`), for a PDF
+  watch only its scanned pages', and the analysis (`analysis`). A step
+  without a pick shows "Pick a model".
   What keeps a picked model from working shows under its step, with a
   button to Accounts where the fix is there.
 - Removing a watch deletes its file; what it imported stays in the vault.
 
 ## Import scans <a id="import-scans"></a>
 
-The Import button of an images watch opens Import scans
-(`features/import/scans.js`) in the expanded vault area:
+The Import button of a watch opens Import scans, or Import PDFs for a PDF
+watch (`features/import/scans.js`), in the expanded vault area:
 
 - **Files in folder** lists the watch's files that aren't read yet and
   aren't in the vault: the files in its folder (and subfolders, if the
@@ -124,7 +131,9 @@ The Import button of an images watch opens Import scans
   its creation time, or its modified time if that is earlier (a copied
   file keeps its modified time). The section counts the files already in
   the vault and says when the folder was listed; the folder can be listed
-  again.
+  again. The files in the vault are hidden; "Show the N in the vault"
+  lists them too, to read them again: read again, a file's pages replace
+  its document's text on import.
 - **Previews**: the selected file of "Files in folder" (a click on its row
   selects it; the first one at first) is shown large beside the list, and
   each document in "Ready for import" has a strip of its pages' thumbnails
@@ -133,7 +142,7 @@ The Import button of an images watch opens Import scans
   current one, marked in both. A double-click on a preview opens the file
   in its default app (the image viewer). Previews are upright by the
   image's EXIF orientation; a file Windows (on Linux gdk-pixbuf) can't
-  decode keeps a striped box ("no preview").
+  decode keeps a striped box ("no preview"), and so does a PDF.
 - **Read** sends a file to the model the watch picked for reading it
   (`models.read`, picked in the page's foot, "Read by", or in the
   watch's pane; `accounts.md#model-choice`),
@@ -141,8 +150,11 @@ The Import button of an images watch opens Import scans
   which reads a mail's attachments too, `mail.md#attachments`), one file
   after the other, as a job in the jobs panel that can be stopped. The
   page shows each file as queued, then the words read so far. A file that
-  fails shows why, and can be read again. Only JPEG, PNG, GIF and WebP
-  images are read.
+  fails shows why, and can be read again. An images watch reads JPEG, PNG,
+  GIF and WebP images only, a PDF watch PDFs only (`#reading-pdfs`): their
+  text without a model, so Read works without a pick, which only the
+  scanned pages need; an encrypted PDF reads as "encrypted", without
+  text.
   What a file read to is kept while the app runs, as long as the file
   doesn't change; reading it again replaces it.
 - **Ready for import** groups the read pages into documents: with the
@@ -155,35 +167,54 @@ The Import button of an images watch opens Import scans
   document before, its last page to the document after; Split makes a
   document of every page. Each document's title is proposed from its first
   page's text (its first heading, else its first line), and can be edited.
-  Read reads a document's pages again.
+  Read reads a document's pages again. A PDF watch's documents are a PDF
+  each, not arranged: no dragging, arrows or Split.
 - **Import** (per document, or Import all for the ticked ones, also
   Ctrl+Enter) writes each document to `Scans/` in the vault: a `document`
   whose text is its pages' text in order, a blank line between them, dated
   by its first page, with the source `scan: { watch, origin: [files] }`; an
   empty title takes the first page's, else the first file's name (the
   page sends a title only as edited). With Keep original, a document of
-  one image keeps the image beside it as its original
+  one file (an image, a PDF) keeps it beside it as its original
   (`vault.md#document`), named as the file; one of several images keeps
-  none. A document whose pages aren't read (or changed since), are no
-  longer in the folder or are in the vault already, isn't written and
-  shows why. Imported documents leave the page; their files count as in
-  the vault from then on.
+  none. An encrypted PDF always keeps its file, marked `encrypted: true`,
+  and its body stays empty. A document whose pages aren't read (or
+  changed since), are no longer in the folder or are in the vault already,
+  isn't written and shows why. Imported documents leave the page; their
+  files count as in the vault from then on.
+- **Import again**: pages in the vault, read again, form a document of
+  their own (an images watch joins them only with pages of the same
+  document), marked "replaces “<title>”" and shown with the title the
+  document has. Its Import, and Import all with it, takes a second click
+  (`armedButton`, as Fetch mail's Replace); a note says the texts are
+  replaced and edits to them lost. Importing replaces the document's text
+  (`replace`), only when its pages are all of the document's own
+  (`scan.origin`), else it shows why; its frontmatter and kept file stay,
+  a title typed replaces its title, the encrypted mark follows the new
+  read, and the analysis runs on it again.
 - **Analysis**: with the watch's analysis on, the documents imported go to
-  "Analysing scans · <watch>" (`enrich::analyse`), the mail analysis's job
+  "Analysing scans · <watch>" ("Analysing PDFs · <watch>" for a PDF watch;
+  `enrich::analyse`), the mail analysis's job
   and request for a document (`mail.md#analysis`): a clean title, the
   date the document carries, a genre, labels and projects, written at
   once; a title typed before the import stays. At Medium a document also
   gets its points to check and questions, as a chat "Document analysis ·
-  <title>" linked to it, as no mail carries them. A refused pick is a
-  notice ("Scan analysis · <watch>: …"); the documents stay imported.
+  <title>" linked to it, as no mail carries them. A document without text
+  (an encrypted PDF) is left out. While the analysis is on without a
+  model that works, nothing is read or imported, as Fetch mail doesn't
+  fetch: Read and Import are off, with the note "The analysis is on: pick
+  a model that works for it in the watch's pane, or turn it off.", and
+  the host refuses `scan_read` and `scan_import` with the pick's
+  reason.
 
 Escape closes the page; opening it again for the same watch lists the
 folder again and keeps the documents as arranged.
 
 ## Reading PDFs <a id="reading-pdfs"></a>
 
-A PDF, a mail's attachment (`mail.md#attachments`), is read through
-`reader.rs` and `av-pdf` (`architecture.md#crates`), page by page:
+A PDF, a mail's attachment (`mail.md#attachments`) or a PDF watch's file
+(`#import-scans`), is read through `reader.rs` and `av-pdf`
+(`architecture.md#crates`), page by page:
 
 - **Text layer**: a page whose text layer has at least 20 letters, at most
   one glyph in ten without its character, is that text, laid out in lines
@@ -211,14 +242,14 @@ A PDF, a mail's attachment (`mail.md#attachments`), is read through
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| J1 | Add a watch | "Watch a folder" → type → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card and source |
+| J1 | Add a watch | "Watch a folder" → type (Images, PDF) → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card and source |
 | J2 | Edit | name, folder, subfolders, patterns, source on/off, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
 | J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |
 | K1 | Open Import scans | the watch source's Import or the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files, job}`; `scan_previews` → `scan_preview` per file | file list, large preview |
-| K2 | Read (OCR) | per file or Read all → `scanRead` | `scan_read {watch, files, again}` → the host checks the watch's OCR model → `ok {job}`; one file after another on workers → `scan_page` queued / reading (words) / read (words, title) / failed; job events; `account` | text per page |
+| K2 | Read | per file or Read all → `scanRead` | `scan_read {watch, files, again}` → the host checks the watch's model (a PDF watch reads on without one) → `ok {job}`; one file after another on workers through `reader::read` → `scan_page` queued / reading (words) / read (words, title, encrypted) / failed; job events; `account` | text per page |
 | K3 | Stop reading | Stop (or the job card's Stop) | `cancel_job {id: job}` → remaining pages `stopped`, job ends | — |
 | K4 | Arrange | drag pages, merge with previous/next, split, edit titles, tick | page only (`scanPlace`, `features/import/scans.js`) | documents as arranged |
-| K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}`; with the watch's analysis on, the job "Analysing scans" (G5's steps) → `entity`, `job`, `account` | documents in `Scans/`, analysed; one image kept beside its document |
+| K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}`; with the watch's analysis on, the job "Analysing scans" or "Analysing PDFs" (G5's steps) → `entity`, `job`, `account` | documents in `Scans/`, analysed; one file kept beside its document |
 | K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
 
 ## Design <a id="design"></a>
@@ -238,15 +269,17 @@ A PDF, a mail's attachment (`mail.md#attachments`), is read through
   change (size and modified time), like the read text; a newer request
   stops what is left of the one before. The page keeps one `<img>` per
   file and moves it into each render, so a preview is decoded once.
-- **Reading**: OCR is a job (`App::run_job_with_progress`, `jobs.rs`)
-  streaming from av-llm with `Part::Inline` images; the words so far reach
-  the page coalesced (`assistant.md#design` shows the shared streaming
-  shape). The watch's pick is checked once (`AiAccounts::choose`),
-  the spend limit checked before each page (`check_limit`). The read text
-  is kept in memory while the app runs. Ollama runs the model with a
-  context of 16,384 tokens (`ai::CONTEXT_TOKENS`, shared with the mail
-  analysis, so the model isn't loaded anew between them): a scanned page
-  alone came to 4,118 tokens, which its default of 4,096 refuses.
+- **Reading**: reading is a job (`App::run_job_with_progress`, `jobs.rs`)
+  through `reader::read`, streaming from av-llm with `Part::Inline` images
+  where a model reads; the words so far reach the page coalesced
+  (`assistant.md#design` shows the shared streaming shape). The watch's
+  pick is checked once (`AiAccounts::choose`; a PDF watch without a usable
+  one reads with `Engine::None`, its text layers only), the spend limit
+  checked before each file (`check_limit`). The read text is kept in
+  memory while the app runs. Ollama runs the model with a context of
+  16,384 tokens (`ai::CONTEXT_TOKENS`, shared with the mail analysis, so
+  the model isn't loaded anew between them): a scanned page alone came to
+  4,118 tokens, which its default of 4,096 refuses.
 - **Importing**: `scans::gather_pages` gathers the pages (the plan), and
   `scans::scan_document` turns pages into a document — a pure function
   with tests — written through the vault edit. The import has no run step:

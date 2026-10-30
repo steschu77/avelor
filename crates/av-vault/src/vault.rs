@@ -638,7 +638,8 @@ impl Index {
     /// `bytes`, the file that came as `name`. The file is written first,
     /// named after the document ([`filename::original_name`]), then the
     /// document as [`Index::create`] writes it; if that fails, the file is
-    /// removed again.
+    /// removed again. Flags of the original `doc` has already
+    /// (`Original::encrypted`) are kept.
     pub fn create_with_original(
         &mut self,
         mut doc: Document,
@@ -657,7 +658,7 @@ impl Index {
             file: None,
             name: Some(name.to_string()),
             size: Some(bytes.len() as u64),
-            encrypted: false,
+            ..doc.original().cloned().unwrap_or_default()
         };
         // Named once the role is set: the role decides the type in the name.
         doc.set_original(original.clone());

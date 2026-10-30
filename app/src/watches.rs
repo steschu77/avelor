@@ -33,6 +33,9 @@ pub const READ_STEP: &str = "read";
 pub enum WatchKind {
     /// Scanned pages, read by OCR; several images can be one document.
     Images,
+    /// PDFs, one document each, read from their text layer and their scans
+    /// (import.md#reading-pdfs).
+    Pdf,
 }
 
 impl WatchKind {
@@ -41,6 +44,7 @@ impl WatchKind {
     pub fn as_str(self) -> &'static str {
         match self {
             WatchKind::Images => "images",
+            WatchKind::Pdf => "pdf",
         }
     }
 }
@@ -76,18 +80,19 @@ pub struct WatchSettings {
     /// File name patterns (`*.jpg`); a file matching any of them is taken.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub patterns: Vec<String>,
-    /// Images only.
+    /// An images watch's only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collect: Option<Collect>,
     /// The model each step that sends a file to an AI picked, by step:
-    /// `READ_STEP` for reading images (accounts.md#model-choice).
+    /// `READ_STEP` for reading images and scanned pages
+    /// (accounts.md#model-choice).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub models: BTreeMap<String, ModelChoice>,
     /// The analysis of the documents it imports (import.md#import-scans);
     /// absent: off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub analysis: Option<Analysis>,
-    /// Whether a document of one image keeps the image beside it
+    /// Whether a document of one file keeps the file beside it
     /// (`document.original`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub keep_original: bool,
@@ -541,8 +546,8 @@ note: top-level kept
             b"id: 01a0e1cc-a24c-7490-82fe-e75669985b41\nfolder-watch:\n  type: images\n  folder: Downloads\n  enabled: false\n",
         );
         write(
-            "watch_pdf.yaml",
-            b"id: 01a0e1cc-a24c-7490-82fe-e75669985b45\nfolder-watch:\n  type: pdf\n  folder: Downloads\n",
+            "watch_chat.yaml",
+            b"id: 01a0e1cc-a24c-7490-82fe-e75669985b45\nfolder-watch:\n  type: chat\n  folder: Downloads\n",
         );
         write(
             "google_a.yaml",

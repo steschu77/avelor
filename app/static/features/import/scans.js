@@ -1,14 +1,18 @@
 // Import scans (import.md#import-scans;
-// api.md#scans): the import of an images folder watch, opened by the Import
+// api.md#scans): the import of a folder watch, images or PDFs (one
+// document each, read from their text or their scans), opened by the Import
 // button of its source (features/sidebar.js) or of its pane (features/workspace/folders.js,
 // through the `watch.import` action), and rendered
 // into the expanded vault area while its op is "scans". The host lists the
 // watch's files, reads the ones asked for with the model the watch picked
 // for OCR (its `models`' `read`, picked here or in its pane) as a job, which Stop ends
 // (`cancel_job`) and the account's spend limit stops, and writes the
-// documents into `Scans/`. The page groups the read pages into
-// documents, which the user arranges (drag and drop, merge, split) and
-// titles before importing them. The files are shown as previews: the host
+// documents into `Scans/`. The page groups an images watch's read pages
+// into documents, which the user arranges (drag and drop, merge, split),
+// and titles them before importing them. The files already in the vault
+// are hidden unless asked for; read again, they replace their document's
+// text, after a second click. While the watch's analysis has no model that
+// works, nothing is read or imported, as Fetch mail doesn't fetch. The images are shown as previews: the host
 // renders them (`scan_previews`), and a double-click opens one in its
 // default app (`scan_open`). On the page, Esc closes it and Ctrl+Enter
 // imports the ticked documents (`registerVaultPage`).
@@ -20,7 +24,8 @@ import { TIME_FORMAT, pageDate, parseDate } from '../../core/format.js';
 import { fileSize, plural } from '../../core/format.js';
 import { registerAction } from '../../core/actions.js';
 import { store } from '../../model/state.js';
-import { watches } from '../../model/entities.js';
+import { entities, watches } from '../../model/entities.js';
+import { armedButton } from '../../ui/confirm.js';
 import { iconEl } from '../../ui/icons.js';
 import { IMPORT_ICON } from '../../ui/icons.js';
 import { clearDropMark, dropTarget } from '../../ui/dropzone.js';
@@ -31,7 +36,7 @@ import {
   aiMissingHint, aiModelOf, aiModelPicker,
 } from '../workspace/models.js';
 import {
-  WATCH_READ_STEP, watchSetModel, watchSettings,
+  WATCH_READ_STEP, watchSetModel, watchSettings, watchType,
 } from '../workspace/folders.js';
 
 const SCAN_GROUP_MS = 2 * 60 * 1000; // pages taken this close are one document
@@ -56,9 +61,11 @@ export function openScanImport(watch_id) {
       listing: false, // while `scan_list` is being answered
       listed: null, // when the files were listed
       listError: null,
-      // file -> { file, size, taken, in_vault, read: { words, title } | null,
-      // status: 'queued' | 'reading' | 'failed' | null, words, error }
+      // file -> { file, size, taken, in_vault, read: { words, title, encrypted } | null,
+      // status: 'queued' | 'reading' | 'failed' | null, words, error, again }:
+      // `again` while a file in the vault is read again, to replace its text
       files: new Map(),
+      showInVault: false, // the files in the vault listed too
       // [{ key, title (once edited), edited, pages: [file], checked, error }]
       docs: [],
       nextDoc: 1,
@@ -72,7 +79,7 @@ export function openScanImport(watch_id) {
       previews: new Map(),
     };
   }
-  openVaultOp('scans', 'Import scans');
+  openVaultOp('scans', scanType()?.page.title ?? 'Import scans');
   scanList();
 }
 
@@ -104,7 +111,8 @@ function onScanFiles(listing) {
       taken: parseDate(f.taken),
       modified: f.modified,
       in_vault: f.in_vault,
-      read: f.read,
+      read: before?.again ? before.read : f.read,
+      again: !!before?.again && !!f.in_vault,
       status: f.status ?? (failed ? 'failed' : null),
       words: before?.words ?? 0,
       error: failed ? before.error : null,
@@ -130,7 +138,8 @@ rpcOn('scan_page', page => {
   const f = scan?.watch === page.watch ? scan.files.get(page.file) : null;
   if (!f) return;
   if (page.status === 'read') {
-    Object.assign(f, { read: { words: page.words, title: page.title }, status: null, error: null });
+    const read = { words: page.words, title: page.title, encrypted: !!page.encrypted };
+    Object.assign(f, { read, status: null, error: null });
     scanArrange();
   } else if (page.status === 'failed') {
     Object.assign(f, { status: 'failed', error: page.error });
@@ -148,7 +157,7 @@ function onScanImported(reply) {
   for (const { files, id } of reply.imported) {
     for (const file of files) {
       const f = scanFile(file);
-      if (f) f.in_vault = id;
+      if (f) Object.assign(f, { in_vault: id, again: false });
     }
   }
   for (const { files, error } of reply.failed) {
@@ -163,13 +172,19 @@ function onScanImported(reply) {
 // ----------------------------------------------------------------------------
 // files and documents
 
+// The type of the watch imported from (`watchType`).
+function scanType() {
+  return watchType(watches.get(scan.watch)?.type);
+}
+
 function scanFile(file) {
   return scan.files.get(file);
 }
 
-// A page that belongs in a document: read, and not in the vault yet.
+// A page that belongs in a document: read, and not in the vault yet, or
+// read again to replace its document's text.
 function scanReady(f) {
-  return !!f?.read && !f.in_vault;
+  return !!f?.read && (!f.in_vault || !!f.again);
 }
 
 // Being read, or waiting for it.
@@ -177,9 +192,29 @@ function scanBusy(f) {
   return f?.status === 'queued' || f?.status === 'reading';
 }
 
-// The files not read and not in the vault, by when they were taken.
+// The files to read, by when they were taken: those not read and not in the
+// vault, and with `showInVault` those in the vault not read again.
 function scanUnread() {
-  return [...scan.files.values()].filter(f => !f.read && !f.in_vault).sort(scanByTaken);
+  const toRead = f => (f.in_vault ? scan.showInVault && !(f.again && f.read) : !f.read);
+  return [...scan.files.values()].filter(toRead).sort(scanByTaken);
+}
+
+// The document in the vault `doc` replaces: its pages', read again.
+function scanDocReplaces(doc) {
+  return scanFile(doc.pages[0])?.in_vault ?? null;
+}
+
+// Whether the watch's analysis is on without a model that works: then
+// nothing is read or imported (the host refuses both).
+function scanAnalysisBlocked() {
+  const analysis = watchSettings(scan.watch).analysis;
+  return !!analysis && analysis.level !== 'off' && !!aiModelOf(analysis.model).problem;
+}
+
+// Whether reading waits: for a model that works, where the watch needs one
+// to read, or for the analysis's.
+function scanReadBlocked() {
+  return (!!scanSetup().problem && !scanType()?.read.optional) || scanAnalysisBlocked();
 }
 
 // The file shown large: the one chosen, else the first of `unread`.
@@ -206,13 +241,16 @@ function scanArrange() {
   for (const f of fresh.sort(scanByTaken)) scanPlace(f);
 }
 
-// Place the read page `f`: with the watch's Collect "together", into the
-// document that has a page taken within two minutes of it, before its
+// Place the read page `f`: with an images watch's Collect "together", into
+// the document that has a page taken within two minutes of it, before its
 // first page taken later; otherwise into a document of its own. Documents
 // go by the time of their first page.
 function scanPlace(f) {
-  const together = (watches.get(scan.watch)?.collect ?? 'together') === 'together';
-  const near = page => Math.abs(scanFile(page).taken - f.taken) <= SCAN_GROUP_MS;
+  const together = !!scanType()?.read.collect
+    && (watches.get(scan.watch)?.collect ?? 'together') === 'together';
+  // A page read again joins only the pages of its own document.
+  const near = page => scanFile(page).in_vault === f.in_vault
+    && Math.abs(scanFile(page).taken - f.taken) <= SCAN_GROUP_MS;
   const doc = together && scan.docs.find(d => d.pages.some(near));
   if (doc) {
     const later = doc.pages.findIndex(page => scanFile(page).taken > f.taken);
@@ -227,6 +265,8 @@ function scanPlace(f) {
 // name.
 function scanDocTitle(doc) {
   if (doc.edited) return doc.title;
+  const replaces = scanDocReplaces(doc);
+  if (replaces) return entities.get(replaces)?.title ?? scanStem(doc.pages[0]);
   return scanFile(doc.pages[0])?.read?.title || scanStem(doc.pages[0]);
 }
 
@@ -243,8 +283,10 @@ function scanPreviewKey(f) {
 }
 
 // Ask for the previews the page lacks: the file shown large first, then
-// the documents' pages, then the other files not in the vault.
+// the documents' pages, then the other files not in the vault. A PDF has
+// none yet.
 function scanRequestPreviews() {
+  if (!scanType()?.read.previews) return;
   const order = [scanCurrent()?.file, ...scan.docs.flatMap(doc => doc.pages), ...scan.files.keys()];
   const files = [...new Set(order)].filter(file => {
     const f = file && scanFile(file);
@@ -319,12 +361,17 @@ function scanPickModel(choice) {
   scheduleRenderScans();
 }
 
-// Read `files` with the OCR model; `again` reads files read before too.
+// Read `files` with the OCR model; `again` reads files read before too, as
+// do files in the vault, read again to replace their documents' text.
 function scanRead(files, again = false) {
-  const ai = scanSetup();
-  if (ai.problem || !files.length) return;
+  if (scanReadBlocked() || !files.length) return;
   const s = scan;
   s.error = null;
+  for (const f of files.map(scanFile).filter(f => f?.in_vault)) {
+    Object.assign(f, { again: true, read: null });
+    again = true;
+  }
+  scanArrange();
   const args = { watch: s.watch, files, again };
   rpcCall('scan_read', args).then(({ job }) => {
     if (scan === s) s.job = job;
@@ -357,7 +404,7 @@ function scanOpen(file) {
 // Import `docs`, leaving out those with a page being read.
 function scanImport(docs) {
   const ready = docs.filter(doc => !doc.pages.some(page => scanBusy(scanFile(page))));
-  if (!ready.length || scan.importing) return;
+  if (!ready.length || scan.importing || scanAnalysisBlocked()) return;
   for (const doc of ready) doc.error = null;
   const s = scan;
   s.error = null;
@@ -365,7 +412,10 @@ function scanImport(docs) {
   // A title only as edited: the host proposes the one shown, and the
   // analysis keeps a title given.
   const args = {
-    watch: s.watch, docs: ready.map(doc => ({ title: doc.edited ? doc.title : '', files: doc.pages })),
+    watch: s.watch,
+    docs: ready.map(doc => ({
+      title: doc.edited ? doc.title : '', files: doc.pages, replace: scanDocReplaces(doc) ?? undefined,
+    })),
   };
   rpcCall('scan_import', args).then(reply => {
     if (scan === s) onScanImported(reply);
@@ -452,16 +502,17 @@ function renderScans() {
 }
 
 function renderScanHead(watch) {
+  const type = scanType();
   const head = accEl('div', 'page-head');
   const patterns = watch.patterns.length ? watch.patterns.join(' ') : 'no file types';
-  head.append(accEl('span', 'page-title', 'Import scans'),
+  head.append(accEl('span', 'page-title', type.page.title),
     accEl('span', 'mono mono--small scans__where', `${watch.folder} \u00b7 ${patterns}`));
   const together = (watch.collect ?? 'together') === 'together';
-  const blurb = together
+  const blurb = type.page.blurb ?? `${together
     ? 'Images taken within two minutes of each other are the pages of one document.'
-    : 'Each image is a document of its own; drag pages together to join them.';
-  return [head, accEl('div', 'page-text',
-    `${blurb} Only the files you read are sent for OCR. Nothing is written until you import.`)];
+    : 'Each image is a document of its own; drag pages together to join them.'
+  } Only the files you read are sent for OCR.`;
+  return [head, accEl('div', 'page-text', `${blurb} Nothing is written until you import.`)];
 }
 
 // The files not read yet: each with a Read button, or where its read stands.
@@ -470,10 +521,11 @@ function renderScanFiles() {
   const files = [...scan.files.values()];
   const unread = scanUnread();
   const inVault = files.filter(f => f.in_vault).length;
+  const fresh = unread.filter(f => !f.in_vault).length;
 
   const head = accEl('div', 'section-head', 'Files in folder');
   const note = scan.listed
-    ? [`${unread.length} to read`, inVault && `${inVault} in the vault`,
+    ? [`${fresh} to read`, inVault && `${inVault} in the vault`,
       `listed ${TIME_FORMAT.format(scan.listed)}`]
       .filter(Boolean).join(' \u00b7 ')
     : 'listing\u2026';
@@ -483,11 +535,14 @@ function renderScanFiles() {
   again.title = 'List the folder again';
   again.disabled = scan.listing;
   again.addEventListener('click', scanList);
-  head.append(accEl('span', 'section-head__note', note), again);
+  head.append(accEl('span', 'section-head__note', note));
+  if (inVault) head.append(renderScanShowInVault(inVault));
+  head.append(again);
   part.append(head);
   if (scan.listError) part.append(accEl('div', 'error-note', scan.listError));
 
   const ai = scanSetup();
+  const blocked = scanReadBlocked();
   if (unread.length) {
     const list = accEl('div', 'scans__files');
     const columns = accEl('div', 'list-row scans__file scans__file--head label');
@@ -495,7 +550,7 @@ function renderScanFiles() {
       accEl('span'));
     list.append(columns);
     const current = scanCurrent(unread);
-    for (const f of unread) list.append(...renderScanFile(f, ai, f === current));
+    for (const f of unread) list.append(...renderScanFile(f, blocked, f === current));
     const box = accEl('div', 'scans__unread');
     box.append(list, renderScanFigure(current));
     part.append(box);
@@ -511,7 +566,7 @@ function renderScanFiles() {
   readAll.type = 'button';
   readAll.append(iconEl(SCAN_READ_ICON),
     readable.length === 1 ? 'Read 1 file' : `Read all ${readable.length} files`);
-  readAll.disabled = !readable.length || !!ai.problem;
+  readAll.disabled = !readable.length || blocked;
   readAll.addEventListener('click', () => scanRead(readable.map(f => f.file)));
   foot.append(readAll);
   if (files.some(scanBusy)) {
@@ -523,14 +578,37 @@ function renderScanFiles() {
   const by = accEl('span', 'note');
   by.append('Read by ', aiModelPicker(scanReadModel(), scanPickModel));
   foot.append(by);
-  if (ai.problem) foot.append(...aiMissingHint(ai, 'OCR'));
+  if (ai.problem) foot.append(...aiMissingHint(ai, scanType()?.read.what ?? 'OCR'));
+  if (scanAnalysisBlocked()) foot.append(renderScanAnalysisNote());
   part.append(foot);
   if (scan.error) part.append(accEl('div', 'error-note', scan.error));
   return part;
 }
 
-function renderScanFile(f, ai, current) {
+// The check that lists the `n` files in the vault too, to read them again.
+function renderScanShowInVault(n) {
+  const show = accEl('label', 'scans__show');
+  const check = accEl('button', 'check', scan.showInVault ? '\u2713' : '');
+  check.type = 'button';
+  check.setAttribute('aria-pressed', String(scan.showInVault));
+  check.title = scan.showInVault ? 'Hide the files in the vault' : 'List them, to read them again';
+  check.addEventListener('click', () => {
+    scan.showInVault = !scan.showInVault;
+    scheduleRenderScans();
+  });
+  show.append(check, accEl('span', 'label', `Show the ${n} in the vault`));
+  return show;
+}
+
+// Why nothing is read or imported while the analysis waits for a model.
+function renderScanAnalysisNote() {
+  return accEl('div', 'note scans__warning',
+    'The analysis is on: pick a model that works for it in the watch\u2019s pane, or turn it off.');
+}
+
+function renderScanFile(f, blocked, current) {
   const row = accEl('div', 'list-row scans__file');
+  if (f.in_vault) row.classList.add('scans__file--in-vault');
   if (current) row.setAttribute('aria-current', 'true');
   row.addEventListener('click', () => {
     scan.current = f.file;
@@ -546,8 +624,10 @@ function renderScanFile(f, ai, current) {
     status = accEl('button', 'icon-btn icon-btn--quiet scans__read');
     status.append(iconEl(SCAN_READ_ICON));
     status.type = 'button';
-    status.title = f.status === 'failed' ? 'Read again' : 'Read';
-    status.disabled = !!ai.problem;
+    status.title = f.in_vault
+      ? 'In the vault: read it again to replace its document\u2019s text'
+      : f.status === 'failed' ? 'Read again' : 'Read';
+    status.disabled = blocked;
     status.addEventListener('click', () => scanRead([f.file]));
   }
   row.append(name, accEl('span', 'meta', pageDate(f.taken, true)),
@@ -573,6 +653,7 @@ function renderScanDocs() {
   head.append(accEl('span', 'section-head__note',
     `${plural(scan.docs.length, 'document')} \u00b7 ${plural(pages, 'page')}`));
 
+  const arranges = !!scanType()?.read.collect;
   const select = accEl('div', 'select-bar');
   for (const [label, checked] of [['All', true], ['None', false]]) {
     const button = accEl('button', '', label);
@@ -583,30 +664,49 @@ function renderScanDocs() {
     });
     select.append(button);
   }
-  select.append(accEl('span', 'select-bar__note', 'drag pages to arrange them'));
+  if (arranges) select.append(accEl('span', 'select-bar__note', 'drag pages to arrange them'));
 
   const list = accEl('div', 'import__docs');
-  scan.docs.forEach((doc, index) => list.append(renderScanDoc(doc, index)));
-  const zone = accEl('div', 'label scans__newdoc', 'Drop here to make it a document of its own');
-  scanDropTarget(zone, file => scanMove(file, null));
-  list.append(zone);
+  scan.docs.forEach((doc, index) => list.append(renderScanDoc(doc, index, arranges)));
+  if (arranges) {
+    const zone = accEl('div', 'label scans__newdoc', 'Drop here to make it a document of its own');
+    scanDropTarget(zone, file => scanMove(file, null));
+    list.append(zone);
+  }
 
   const foot = accEl('div', 'scans__foot');
   const checked = scan.docs.filter(doc => doc.checked);
+  const replacing = checked.filter(scanDocReplaces);
   const importAll = accEl('button', 'btn btn--primary');
   importAll.type = 'button';
   importAll.append(iconEl(IMPORT_ICON), checked.length === scan.docs.length
     ? `Import all ${plural(checked.length, 'document')}`
     : `Import ${plural(checked.length, 'document')}`);
-  importAll.disabled = !checked.length || scan.importing;
-  importAll.addEventListener('click', () => scanImport(checked));
+  importAll.disabled = !checked.length || scan.importing || scanAnalysisBlocked();
+  // Replacing texts takes a second click; another set to replace asks again.
+  if (replacing.length) {
+    importAll.classList.add('btn--danger');
+    armedButton(importAll, `Click again to replace ${plural(replacing.length, 'text')}`,
+      () => scanImport(checked), `scan_import ${replacing.map(doc => doc.key).join(' ')}`);
+  } else {
+    importAll.addEventListener('click', () => scanImport(checked));
+  }
   foot.append(importAll, accEl('span', 'meta', scan.importing ? 'importing\u2026' : 'Ctrl+Enter'));
+  if (replacing.length) {
+    foot.append(accEl('div', 'note scans__warning',
+      `${plural(replacing.length, 'document is', 'documents are')} in the vault already: importing replaces ${replacing.length === 1 ? 'its text' : 'their texts'}, and edits to ${replacing.length === 1 ? 'it' : 'them'} are lost; the analysis runs on ${replacing.length === 1 ? 'it' : 'them'} again.`));
+  }
+  if (scanAnalysisBlocked()) foot.append(renderScanAnalysisNote());
   part.append(head, select, list, foot);
   return part;
 }
 
-function renderScanDoc(doc, index) {
+// A document to import (the `index`th); one of a watch whose pages are
+// arranged (`arranges`) has Split, and its pages move.
+function renderScanDoc(doc, index, arranges) {
   const row = accEl('div', 'list-row import__doc');
+  const replaces = scanDocReplaces(doc);
+  if (replaces) row.classList.add('import__doc--replace');
   const check = accEl('button', 'check', doc.checked ? '\u2713' : '');
   check.type = 'button';
   check.setAttribute('aria-pressed', String(doc.checked));
@@ -617,7 +717,7 @@ function renderScanDoc(doc, index) {
   });
 
   const head = accEl('div', 'import__doc-head');
-  scanDropTarget(head, file => scanMove(file, doc));
+  if (arranges) scanDropTarget(head, file => scanMove(file, doc));
   const titleBox = accEl('div', 'import__doc-title');
   const title = accEl('input', 'import__title');
   title.value = scanDocTitle(doc);
@@ -629,27 +729,37 @@ function renderScanDoc(doc, index) {
     doc.edited = true;
   });
   const first = scanFile(doc.pages[0]);
-  titleBox.append(title, accEl('span', 'meta',
-    `${plural(doc.pages.length, 'page')} \u00b7 ${pageDate(first.taken)}`));
+  const size = !arranges ? scanWords(first) : plural(doc.pages.length, 'page');
+  const replaced = replaces ? ` \u00b7 replaces \u201c${entities.get(replaces)?.title ?? 'its document'}\u201d` : '';
+  titleBox.append(title, accEl('span', 'meta', `${size} \u00b7 ${pageDate(first.taken)}${replaced}`));
 
   const n = doc.pages.length;
   const busy = doc.pages.some(page => scanBusy(scanFile(page)));
+  const blocked = scanReadBlocked();
   const acts = accEl('div', 'import__acts');
-  acts.append(
-    scanButton(SCAN_READ_ICON, 'Read', n === 1 ? 'Read the page again' : `Read the ${n} pages again`,
-      busy || !!scanSetup().problem, () => scanRead(doc.pages, true)),
-    scanButton(SCAN_SPLIT_ICON, 'Split',
+  acts.append(scanButton(SCAN_READ_ICON, 'Read',
+    n === 1 ? 'Read the page again' : `Read the ${n} pages again`,
+    busy || blocked, () => scanRead(doc.pages, true)));
+  if (arranges) {
+    acts.append(scanButton(SCAN_SPLIT_ICON, 'Split',
       n > 1 ? `Split into ${n} documents, one per page` : 'One page, nothing to split',
-      n < 2, () => scanSplit(doc)),
-    scanButton(IMPORT_ICON, 'Import', `Import as \u201c${scanDocTitle(doc)}\u201d`,
-      busy || scan.importing, () => scanImport([doc])));
+      n < 2, () => scanSplit(doc)));
+  }
+  const importOne = scanButton(IMPORT_ICON, 'Import', `Import as \u201c${scanDocTitle(doc)}\u201d`,
+    busy || scan.importing || scanAnalysisBlocked(), replaces ? null : () => scanImport([doc]));
+  if (replaces) {
+    importOne.classList.add('btn--danger');
+    armedButton(importOne, 'Click again to replace its document\u2019s text', () => scanImport([doc]),
+      `scan_import ${doc.key}`);
+  }
+  acts.append(importOne);
   head.append(titleBox, acts);
 
   const main = accEl('div', 'import__doc-main');
   main.append(head);
   if (doc.error) main.append(accEl('div', 'error-note', doc.error));
   const pages = accEl('div', 'import__pages');
-  doc.pages.forEach((file, i) => pages.append(renderScanPage(doc, index, file, i)));
+  doc.pages.forEach((file, i) => pages.append(renderScanPage(doc, index, file, i, arranges)));
   const body = accEl('div', 'import__doc-body');
   body.append(renderScanStrip(doc), pages);
   main.append(body);
@@ -660,10 +770,11 @@ function renderScanDoc(doc, index) {
   return row;
 }
 
-// A page of the document `doc` (the `index`th): its number, file and words,
-// and the buttons that move a first or last page to the document before or
-// after. The row is dragged to move it anywhere.
-function renderScanPage(doc, index, file, i) {
+// A page of the document `doc` (the `index`th): its number, file and words;
+// where pages are arranged (`arranges`), the buttons that move a first or
+// last page to the document before or after, and the row is dragged to move
+// it anywhere.
+function renderScanPage(doc, index, file, i, arranges) {
   const f = scanFile(file);
   const row = accEl('div', 'list-row import__page');
   if (file === scanDocCurrent(doc)) row.setAttribute('aria-current', 'true');
@@ -671,17 +782,23 @@ function renderScanPage(doc, index, file, i) {
     doc.current = file;
     scheduleRenderScans();
   });
-  row.draggable = true;
-  row.title = `${file} \u00b7 taken ${pageDate(f.taken, true)} \u00b7 drag it to move it`;
-  row.addEventListener('dragstart', e => scanDragStart(e, file));
-  row.addEventListener('dragend', scanDragEnd);
-  scanDropTarget(row, dragged => scanMove(dragged, doc, file));
+  row.title = `${file} \u00b7 taken ${pageDate(f.taken, true)}`;
+  if (arranges) {
+    row.draggable = true;
+    row.title += ' \u00b7 drag it to move it';
+    row.addEventListener('dragstart', e => scanDragStart(e, file));
+    row.addEventListener('dragend', scanDragEnd);
+    scanDropTarget(row, dragged => scanMove(dragged, doc, file));
+  }
 
-  let status = plural(f.read.words, 'word');
+  let status = scanWords(f);
   if (f.status === 'reading') status = `reading \u00b7 ${f.words} words`;
   else if (f.status === 'queued') status = 'queued';
   else if (f.status === 'failed') status = `failed \u00b7 ${status}`;
   const name = accEl('span', 'mono mono--small import__file', file);
+  row.append(accEl('span', 'mono mono--small import__page-no', String(i + 1)), name,
+    accEl('span', 'meta', status));
+  if (!arranges) return row;
 
   const prev = scan.docs[index - 1];
   const next = scan.docs[index + 1];
@@ -695,9 +812,13 @@ function renderScanPage(doc, index, file, i) {
     ? 'Only the last page can join the document after'
     : next ? 'Merge with the document after' : 'No document after this one',
   !(last && next), () => scanMove(file, next, next.pages[0]));
-  row.append(accEl('span', 'mono mono--small import__page-no', String(i + 1)), name,
-    accEl('span', 'meta', status), before, after);
+  row.append(before, after);
   return row;
+}
+
+// What the read file `f` read to: its words, or that it is encrypted.
+function scanWords(f) {
+  return f.read.encrypted ? 'encrypted' : plural(f.read.words, 'word');
 }
 
 // The document's current page: the one chosen, else its first.
@@ -751,7 +872,8 @@ function scanButton(icon, label, title, disabled, onClick) {
   button.title = title;
   button.disabled = disabled;
   button.append(iconEl(icon), label);
-  button.addEventListener('click', onClick);
+  // Without `onClick`, the caller arms it (`armedButton`).
+  if (onClick) button.addEventListener('click', onClick);
   return button;
 }
 

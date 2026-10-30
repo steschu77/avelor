@@ -1,5 +1,7 @@
-//! Import scans (import.md#import-scans): the files of an images folder watch,
-//! read by an AI account's OCR model and imported as documents into `Scans/`.
+//! Import scans (import.md#import-scans): the files of a folder watch, images
+//! or PDFs, read through `reader` (an image and a PDF's scanned pages by an AI
+//! account's model, a PDF's text layer without one) and imported as documents
+//! into `Scans/`.
 //!
 //! The page lists the files, has the ticked ones read (a job reading one file
 //! after the other, which `cancel_job` stops), arranges the pages into
@@ -8,8 +10,9 @@
 //! Every document written carries `scan: {watch, origin: [files]}`, which is
 //! how a later listing tells the files already in the vault
 //! (`Index::scan_origins`). A watch's analysis takes the documents an import
-//! wrote (`enrich::analyse`), and with Keep original a document of one image
-//! keeps the image beside it (`document.original`).
+//! wrote (`enrich::analyse`), and with Keep original a document of one file
+//! keeps the file beside it (`document.original`); an encrypted PDF always
+//! does, as it has no text.
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
@@ -20,14 +23,13 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use av_llm::{ChatResponse, Client, FileData, Provider, StopReason};
 use av_utils::base64::to_base64;
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::id::Id;
 use av_vault::document::{Document, FileFormat};
-use av_vault::envelope::{Document as DocumentRole, Roles, Scan, Source};
+use av_vault::envelope::{Document as DocumentRole, Original, Roles, Scan, Source};
 use av_vault::schema::layout;
 use av_vault::shared::OneOrMany;
 use serde::Deserialize;
@@ -37,14 +39,14 @@ use serde_json::json;
 use crate::ai;
 use crate::app::App;
 use crate::app::Task;
+use crate::config::is_false;
 use crate::enrich::{self, Analysis, Batch};
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::protocol::Req;
-use crate::reader::{self, Kind};
+use crate::reader::{self, Engine, Kind, ReadError};
 use crate::sys;
-use crate::watches::READ_STEP;
-use crate::watches::{self, FolderFile};
+use crate::watches::{self, FolderFile, READ_STEP, WatchKind, WatchSettings};
 use av_vault::markdown::plain_title;
 
 /// The longest proposed title, in characters.
@@ -133,13 +135,15 @@ impl Stamp {
 }
 
 // ----------------------------------------------------------------------------
-/// A file's text, as the OCR model read it.
+/// A file's text, as it was read.
 struct Ocr {
     /// The file as it was read.
     stamp: Stamp,
     text: String,
     words: usize,
     title: String,
+    /// An encrypted PDF: no text, imported with the file beside it.
+    encrypted: bool,
 }
 
 // ----------------------------------------------------------------------------
@@ -149,11 +153,10 @@ struct ScanRead {
     watch: Id,
     /// The watch's folder, which the files' names are relative to.
     root: PathBuf,
-    account: Id,
-    client: Client,
-    provider: Provider,
-    address: String,
-    model: String,
+    kind: WatchKind,
+    /// The account of the model, if one reads.
+    account: Option<Id>,
+    engine: Engine,
     queue: VecDeque<String>,
     /// The file being read; stopping the job cancels its read.
     current: Option<String>,
@@ -212,6 +215,8 @@ struct FileInfo<'a> {
 struct PageRead<'a> {
     words: usize,
     title: &'a str,
+    #[serde(skip_serializing_if = "is_false")]
+    encrypted: bool,
 }
 
 // ----------------------------------------------------------------------------
@@ -237,6 +242,8 @@ enum PageStatus<'a> {
     Read {
         words: usize,
         title: &'a str,
+        #[serde(skip_serializing_if = "is_false")]
+        encrypted: bool,
     },
     Failed {
         error: &'a str,
@@ -295,6 +302,10 @@ struct NewDocument {
     #[serde(default)]
     title: String,
     files: Vec<String>,
+    /// The document in the vault whose pages these are, read again: its
+    /// text is replaced.
+    #[serde(default)]
+    replace: Option<Id>,
 }
 
 // ----------------------------------------------------------------------------
@@ -323,6 +334,24 @@ fn refuse(req: Req, error: Error, message: impl Into<String>) {
     let message = message.into();
     log::info!("Scan request refused: {message}");
     req.fail(error, message);
+}
+
+// ----------------------------------------------------------------------------
+/// Whether the analysis of the watch of `settings` can run, if it is on;
+/// else the refused pick: a watch neither reads nor imports while its
+/// analysis waits for a model that works, as Fetch mail doesn't fetch.
+fn analysis_works(app: &App, settings: &WatchSettings) -> Result<(), (Error, String)> {
+    let Some(analysis) = settings.analysis.as_ref().filter(|a| a.is_on()) else {
+        return Ok(());
+    };
+    let what = enrich::scan_analysis(settings.kind);
+    match app
+        .ai
+        .choose(analysis.model.as_ref(), what, DateTime::now())
+    {
+        Ok(_) => Ok(()),
+        Err(refusal) => Err((refusal.error, refusal.message)),
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -381,6 +410,7 @@ fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> 
             read: scans.cached(file).map(|ocr| PageRead {
                 words: ocr.words,
                 title: &ocr.title,
+                encrypted: ocr.encrypted,
             }),
             status: scans.status(watch, &file.name),
         })
@@ -401,11 +431,19 @@ fn listing<'a>(app: &'a App, watch: Id, files: &'a [FolderFile]) -> Listing<'a> 
 /// (null if there is none: every file was read before). Before each file
 /// the account's spend limit is checked; reached, the read stops.
 pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
-    let (root, watch_name, picked) = match app.watches.get(request.watch) {
+    let (root, watch_name, picked, kind) = match app.watches.get(request.watch) {
         Ok(watch) => {
             let settings = watch.settings();
+            if let Err((error, message)) = analysis_works(app, settings) {
+                return refuse(req, error, message);
+            }
             let picked = settings.model(READ_STEP).cloned();
-            (settings.root(), settings.display_name(), picked)
+            (
+                settings.root(),
+                settings.display_name(),
+                picked,
+                settings.kind,
+            )
         }
         Err(e) => return req.err(e),
     };
@@ -415,8 +453,25 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         let message = "Another folder is still being read; stop it or wait for it.";
         return refuse(req, Error::Unsupported { what }, message);
     }
-    let resolved = match app.ai.choose(picked.as_ref(), "OCR", DateTime::now()) {
-        Ok(resolved) => resolved,
+    let what = match kind {
+        WatchKind::Images => "OCR",
+        WatchKind::Pdf => "the scanned pages",
+    };
+    // A PDF watch reads text layers without a model.
+    let (engine, account) = match app.ai.choose(picked.as_ref(), what, DateTime::now()) {
+        Ok(resolved) => {
+            let engine = Engine::Ai {
+                client: resolved.client,
+                provider: resolved.provider,
+                address: resolved.address,
+                model: resolved.model,
+            };
+            (engine, Some(resolved.account))
+        }
+        Err(refusal) if kind == WatchKind::Pdf => {
+            let why = refusal.message;
+            (Engine::None { why }, None)
+        }
         Err(refusal) => return refuse(req, refusal.error, refusal.message),
     };
 
@@ -425,8 +480,7 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         if app.scans.status(watch, &name).is_some() || queue.contains(&name) {
             continue;
         }
-        if Kind::of(&name) != Some(Kind::Image) {
-            let error = "Only JPEG, PNG, GIF and WebP images can be read.";
+        if let Err(error) = readable(kind, &name) {
             post_page(app, watch, &name, &PageStatus::Failed { error });
             continue;
         }
@@ -434,8 +488,13 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         let cached = file.as_ref().and_then(|f| app.scans.cached(f));
         match cached {
             Some(ocr) if !request.again => {
-                let (words, title) = (ocr.words, ocr.title.as_str());
-                post_page(app, watch, &name, &PageStatus::Read { words, title });
+                let (words, title, encrypted) = (ocr.words, ocr.title.as_str(), ocr.encrypted);
+                let status = PageStatus::Read {
+                    words,
+                    title,
+                    encrypted,
+                };
+                post_page(app, watch, &name, &status);
             }
             _ => {
                 post_page(app, watch, &name, &PageStatus::Queued);
@@ -451,18 +510,19 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         read.queue.extend(queue);
         post_progress(app);
     } else {
-        let label = format!("Reading scans · {watch_name}");
+        let label = match kind {
+            WatchKind::Images => format!("Reading scans · {watch_name}"),
+            WatchKind::Pdf => format!("Reading PDFs · {watch_name}"),
+        };
         let job = app.start_job(JobKind::ScanRead, label, total);
         log::info!("Scan read {job}: reading {total} files of {watch_name}");
         app.scans.read = Some(ScanRead {
             job,
             watch,
             root,
-            account: resolved.account,
-            client: resolved.client,
-            provider: resolved.provider,
-            address: resolved.address,
-            model: resolved.model,
+            kind,
+            account,
+            engine,
             queue: queue.into(),
             current: None,
             total,
@@ -487,8 +547,10 @@ fn pump(app: &mut App) {
     }
     // The pages read so far are counted (`account_used`): at its limit the
     // account takes no more.
-    if let Err(refusal) = app.ai.check_limit(read.account, DateTime::now()) {
-        return stop_at_limit(app, &refusal.message);
+    if let Some(account) = read.account {
+        if let Err(refusal) = app.ai.check_limit(account, DateTime::now()) {
+            return stop_at_limit(app, &refusal.message);
+        }
     }
     let Some(read) = &mut app.scans.read else {
         return;
@@ -497,14 +559,15 @@ fn pump(app: &mut App) {
         return finish(app);
     };
     let (job, watch, root) = (read.job, read.watch, read.root.clone());
-    let (client, model) = (read.client.clone(), read.model.clone());
+    let engine = read.engine.clone();
+    let kind = readable(read.kind, &name).unwrap_or(Kind::Image);
     post_page(app, watch, &name, &PageStatus::Reading { words: 0 });
 
     let (file, progress_file, done_file) = (name.clone(), name.clone(), name.clone());
     app.run_job_with_progress(
         job,
         move |progress, cancel| {
-            ocr(&client, cancel, &model, &root, &file, |words| {
+            read_file(&engine, cancel, &root, &file, kind, |words| {
                 progress.send_latest(words)
             })
         },
@@ -519,30 +582,34 @@ fn pump(app: &mut App) {
 }
 
 // ----------------------------------------------------------------------------
-/// Why reading a file failed: the file, or the model.
-enum ReadError {
-    File(Error),
-    Model(Error),
+/// The kind of file the watch of `kind` reads `name` as; or why it doesn't
+/// read it.
+fn readable(kind: WatchKind, name: &str) -> Result<Kind, &'static str> {
+    match (kind, Kind::of(name)) {
+        (WatchKind::Images, Some(Kind::Image)) => Ok(Kind::Image),
+        (WatchKind::Images, _) => Err("Only JPEG, PNG, GIF and WebP images can be read."),
+        (WatchKind::Pdf, Some(Kind::Pdf)) => Ok(Kind::Pdf),
+        (WatchKind::Pdf, _) => Err("Only PDF files can be read."),
+    }
 }
 
 // ----------------------------------------------------------------------------
-/// Read the image `name` in `root` with `model` (`reader::ask`): the file
-/// as it was read, and the model's answer. `on_words` gets the words read
-/// so far as the answer streams in.
-fn ocr(
-    client: &Client,
+/// Read the file `name` in `root`, of the kind `kind`, with `engine`
+/// (`reader::read`): the file as it was read, and its text. `on_words` gets
+/// the words read so far.
+fn read_file(
+    engine: &Engine,
     cancel: &Cancel,
-    model: &str,
     root: &Path,
     name: &str,
+    kind: Kind,
     on_words: impl FnMut(usize),
-) -> Result<(FolderFile, ChatResponse), ReadError> {
+) -> Result<(FolderFile, Result<String, ReadError>), Error> {
     // The file's facts first: a change while it is read makes the text stale.
-    let file = FolderFile::read(root, name).map_err(ReadError::File)?;
-    let data = FileData::from_path(&file.path).map_err(ReadError::File)?;
-    let response = reader::ask(client, cancel, model, Kind::Image, data, on_words)
-        .map_err(ReadError::Model)?;
-    Ok((file, response))
+    let file = FolderFile::read(root, name)?;
+    let data = std::fs::read(&file.path)?;
+    let text = reader::read(engine, cancel, name, kind, data, on_words);
+    Ok((file, text))
 }
 
 // ----------------------------------------------------------------------------
@@ -563,26 +630,31 @@ fn on_read(
     app: &mut App,
     job: Id,
     name: String,
-    result: Result<(FolderFile, ChatResponse), ReadError>,
+    result: Result<(FolderFile, Result<String, ReadError>), Error>,
 ) {
     let Some(read) = app.scans.read.as_mut().filter(|r| r.job == job) else {
         return;
     };
     read.current = None;
     let page = match result {
-        Ok((file, response)) => page_of(file, response),
-        Err(ReadError::File(e)) => {
+        Ok((file, Ok(text))) => Ok(page_of(file, text, false)),
+        Ok((file, Err(ReadError::Encrypted))) => Ok(page_of(file, String::new(), true)),
+        Ok((_, Err(e))) => Err(e.words(&read.engine)),
+        Err(e) => {
             log::warn!("Scan read {job}: could not read {name}: {e}");
             Err("Could not read the file.".to_string())
         }
-        Err(ReadError::Model(e)) => Err(ai::chat_error(read.provider, &read.address, &e)),
     };
     let (watch, account) = (read.watch, read.account);
     match page {
         Ok((path, ocr)) => {
             read.counts.read += 1;
-            let (words, title) = (ocr.words, ocr.title.as_str());
-            post_page(app, watch, &name, &PageStatus::Read { words, title });
+            let status = PageStatus::Read {
+                words: ocr.words,
+                title: &ocr.title,
+                encrypted: ocr.encrypted,
+            };
+            post_page(app, watch, &name, &status);
             app.scans.cache.insert(path, ocr);
         }
         Err(error) => {
@@ -592,29 +664,25 @@ fn on_read(
         }
     }
     // Saved per page, so a long read keeps what it spent.
-    ai::account_used(app, account);
+    if let Some(account) = account {
+        ai::account_used(app, account);
+    }
     post_progress(app);
     pump(app);
 }
 
 // ----------------------------------------------------------------------------
-/// The page a file read to, by the file's path; or why it has none.
-fn page_of(file: FolderFile, response: ChatResponse) -> Result<(PathBuf, Ocr), String> {
-    let text = reader::clean(&response.text);
-    if text.is_empty() {
-        return Err(match response.stop {
-            StopReason::Refused => "The model declined to read the page.",
-            _ => "The model read no text.",
-        }
-        .to_string());
-    }
+/// The page `file` read to, `text` (none for an `encrypted` PDF), by the
+/// file's path.
+fn page_of(file: FolderFile, text: String, encrypted: bool) -> (PathBuf, Ocr) {
     let ocr = Ocr {
         stamp: Stamp::of(&file),
         words: reader::word_count(&text),
         title: title_of(&text),
         text,
+        encrypted,
     };
-    Ok((file.path, ocr))
+    (file.path, ocr)
 }
 
 // ----------------------------------------------------------------------------
@@ -671,7 +739,9 @@ fn finish(app: &mut App) {
     let note = read.counts.summary();
     log::info!("Scan read {}: {note}", read.job);
     app.end_job(read.job, &note);
-    ai::account_used(app, read.account);
+    if let Some(account) = read.account {
+        ai::account_used(app, account);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -682,15 +752,19 @@ fn finish(app: &mut App) {
 /// on, the documents written are analysed as a job, a title the user gave
 /// kept (`enrich::analyse`).
 pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
-    let (watch, root, name, keep, analysis) = match app.watches.get(request.watch) {
+    let (watch, root, name, kind, keep, analysis) = match app.watches.get(request.watch) {
         Ok(watch) => {
             let settings = watch.settings();
+            if let Err((error, message)) = analysis_works(app, settings) {
+                return refuse(req, error, message);
+            }
             let analysis = settings.analysis.clone().filter(Analysis::is_on);
             let keep = settings.keep_original;
             (
                 watch.id(),
                 settings.root(),
                 settings.display_name(),
+                settings.kind,
                 keep,
                 analysis,
             )
@@ -724,13 +798,16 @@ pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
     let documents: Vec<Id> = reply.imported.iter().map(|doc| doc.id).collect();
     req.ok(reply);
     if let Some(analysis) = analysis {
-        enrich::analyse(app, Batch::scans(&name, documents, titled), &analysis);
+        let batch = Batch::scans(kind, &name, documents, titled);
+        enrich::analyse(app, batch, &analysis);
     }
 }
 
 // ----------------------------------------------------------------------------
-/// Write the document of `doc`'s pages, with its image beside it if `keep`
-/// and it has one page (`Index::create_with_original`); or say why not.
+/// Write the document of `doc`'s pages, with its file beside it if `keep`
+/// and it has one page (`Index::create_with_original`); an encrypted PDF
+/// always keeps it, marked so. Or replace the text of the document they
+/// were imported into (`replace_document`). Or say why not.
 fn write_document(
     app: &mut App,
     watch: Id,
@@ -738,13 +815,23 @@ fn write_document(
     doc: &NewDocument,
     keep: bool,
 ) -> Result<Id, String> {
+    if let Some(id) = doc.replace {
+        return replace_document(app, watch, root, doc, id);
+    }
     let (document, original) = {
         let pages = gather_pages(app, watch, root, doc)?;
         let original = match &pages[..] {
-            [page] if keep => Some(original_of(root, page.file)?),
+            [page] if keep || page.encrypted => Some(original_of(root, page.file)?),
             _ => None,
         };
-        (scan_document(watch, &doc.title, &pages), original)
+        let mut document = scan_document(watch, &doc.title, &pages);
+        if pages.iter().any(|page| page.encrypted) {
+            document.set_original(Original {
+                encrypted: true,
+                ..Original::default()
+            });
+        }
+        (document, original)
     };
     let folder = Path::new(layout::SCANS);
     app.edit(|index, changes| match &original {
@@ -758,7 +845,62 @@ fn write_document(
 }
 
 // ----------------------------------------------------------------------------
-/// The image `file` of the watch's folder `root` to keep beside its
+/// Replace the text of the document `id` with `doc`'s pages read again: its
+/// pages must be the document's own (`scan.origin`). Its frontmatter stays,
+/// a title the user gave replaces its title, and its kept file's encrypted
+/// mark follows the new read.
+fn replace_document(
+    app: &mut App,
+    watch: Id,
+    root: &Path,
+    doc: &NewDocument,
+    id: Id,
+) -> Result<Id, String> {
+    let index = app.vault.index();
+    let Some(document) = index.get(&id) else {
+        return Err("The document it replaces is gone.".to_string());
+    };
+    let mut origin: Vec<&str> = match document.source() {
+        Some(Source::Scan(scan)) => scan.origin.as_slice().iter().map(String::as_str).collect(),
+        _ => Vec::new(),
+    };
+    let mut files: Vec<&str> = doc.files.iter().map(String::as_str).collect();
+    origin.sort_unstable();
+    files.sort_unstable();
+    if origin != files {
+        let title = document.title();
+        return Err(format!(
+            "\u{201c}{title}\u{201d} has other pages; read them all again and import them together."
+        ));
+    }
+    let (text, encrypted) = {
+        let pages = gather_pages(app, watch, root, doc)?;
+        (pages_text(&pages), pages.iter().any(|page| page.encrypted))
+    };
+    let title = doc.title.trim().to_string();
+    let outcome = app.edit(|index, changes| {
+        index.edit(&id, changes, |d| {
+            d.set_content(text);
+            if !title.is_empty() {
+                d.set_title(title);
+            }
+            if let Some(mut original) = d.original().cloned() {
+                original.encrypted = encrypted;
+                d.set_original(original);
+            }
+        })
+    });
+    match outcome.and_then(|outcome| app.vault.require_written(outcome)) {
+        Ok(()) => Ok(id),
+        Err(e) => {
+            log::warn!("Scan import: could not replace the text of {id}: {e}");
+            Err("Could not write the document.".to_string())
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The file `file` of the watch's folder `root` to keep beside its
 /// document: its name, without the subfolders, and its bytes.
 fn original_of(root: &Path, file: &str) -> Result<(String, Vec<u8>), String> {
     let path = root.join(file);
@@ -780,11 +922,14 @@ struct ScanPage<'a> {
     text: &'a str,
     /// The title proposed from its text.
     title: &'a str,
+    /// An encrypted PDF, without text.
+    encrypted: bool,
 }
 
 // ----------------------------------------------------------------------------
-/// The pages of `doc`: each not in the vault yet, still in the folder, and
-/// read as it is now; or why the document can't be imported.
+/// The pages of `doc`: each not in the vault yet (or in the document it
+/// replaces), still in the folder, and read as it is now; or why the
+/// document can't be imported.
 fn gather_pages<'a>(
     app: &'a App,
     watch: Id,
@@ -796,7 +941,10 @@ fn gather_pages<'a>(
     }
     let imported = app.vault.index().scan_origins(&watch);
     let page = |name: &'a String| {
-        if imported.contains_key(name) {
+        if imported
+            .get(name)
+            .is_some_and(|id| doc.replace != Some(*id))
+        {
             return Err(format!("{name} is in the vault already."));
         }
         let file = FolderFile::read(root, name)
@@ -811,6 +959,7 @@ fn gather_pages<'a>(
             taken: file.taken,
             text: &ocr.text,
             title: &ocr.title,
+            encrypted: ocr.encrypted,
         })
     };
     doc.files.iter().map(page).collect()
@@ -845,9 +994,15 @@ fn scan_document(watch: Id, title: &str, pages: &[ScanPage]) -> Document {
     if let Some(first) = first {
         document.set_date(first.taken);
     }
-    let texts: Vec<&str> = pages.iter().map(|page| page.text).collect();
-    document.set_content(format!("{}\n", texts.join("\n\n")));
+    document.set_content(pages_text(pages));
     document
+}
+
+// ----------------------------------------------------------------------------
+/// The pages' text, in order, a blank line between them.
+fn pages_text(pages: &[ScanPage]) -> String {
+    let texts: Vec<&str> = pages.iter().map(|page| page.text).collect();
+    format!("{}\n", texts.join("\n\n"))
 }
 
 // ----------------------------------------------------------------------------
@@ -994,7 +1149,7 @@ fn title_of(text: &str) -> String {
 mod tests {
     use super::*;
     use crate::testing::Harness;
-    use crate::testing::{FakeOllama, parse, shape};
+    use crate::testing::{FakeOllama, TestPage, encrypted, parse, pdf_of, shape};
     use serde_json::Value;
     use std::fs;
     use std::sync::{Arc, Mutex};
@@ -1045,6 +1200,74 @@ mod tests {
     }
 
     // ------------------------------------------------------------------------
+    /// A harness whose vault has a PDF watch on the folder `pdfs` beside it,
+    /// reading with the Ollama account `account` if given (else with no
+    /// pick), which holds a bill with a text layer, a lease of two scanned
+    /// pages, an encrypted letter and a photo. And that folder.
+    fn with_pdf_watch(name: &str, account: Option<String>) -> (Harness, PathBuf) {
+        let mut h = Harness::new(name);
+        let root = h.vault();
+        let folder = root.with_file_name("pdfs");
+        fs::create_dir_all(&folder).unwrap();
+        let bill = ["Stadtwerke Rechnung Nr. 4711", "Betrag: 42,00 EUR"];
+        let letter = ["Kontoauszug Nr. 10 mit allen Buchungen des Monats"];
+        let files = [
+            ("bill.pdf", pdf_of(&[TestPage::Text(&bill)])),
+            (
+                "lease.pdf",
+                pdf_of(&[
+                    TestPage::Scan(b"\xff\xd8 page one"),
+                    TestPage::Scan(b"\xff\xd8 page two"),
+                ]),
+            ),
+            ("letter.pdf", encrypted(pdf_of(&[TestPage::Text(&letter)]))),
+            ("photo.jpg", b"photo".to_vec()),
+        ];
+        for (file, bytes) in files {
+            fs::write(folder.join(file), bytes).unwrap();
+        }
+        let models = match account {
+            Some(_) => {
+                format!("\n  models:\n    read:\n      account: {OLLAMA_ID}\n      model: m")
+            }
+            None => String::new(),
+        };
+        let watch = format!(
+            "id: {WATCH_ID}\nfolder-watch:\n  type: pdf\n  folder: '{}'\n  patterns: ['*.pdf', '*.jpg']{models}\n",
+            folder.display()
+        );
+        let dir = root.join(".avelor/watches");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("watch_pdf.yaml"), watch).unwrap();
+        if let Some(account) = account {
+            let dir = root.join(".avelor/accounts");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("ollama.yaml"), account).unwrap();
+        }
+        crate::api::switch_to(&mut h.app, root);
+        h.wait_scanned();
+        h.take();
+        (h, folder)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Read `files` of the watch to the end: what the page got.
+    fn read_all(h: &mut Harness, files: &[&str]) -> Vec<Value> {
+        let args = json!({ "watch": WATCH_ID, "files": files });
+        let request = json!({ "id": 1, "cmd": "scan_read", "args": args });
+        h.app.on_web_message(request.to_string());
+        let ended = |t: &String| t.contains(r#""state":"done""#);
+        parse(&h.wait_for(|sent| sent.iter().any(ended)))
+    }
+
+    // ------------------------------------------------------------------------
+    /// The last `scan_page` of `file` in `sent`.
+    fn last_page<'a>(sent: &'a [Value], file: &str) -> &'a Value {
+        let mut pages = sent.iter().filter(|m| m["ev"] == "scan_page");
+        &pages.rfind(|m| m["data"]["file"] == file).unwrap()["data"]
+    }
+
+    // ------------------------------------------------------------------------
     /// Keep `text` as what the file `name` of `folder` read to.
     fn read_page(h: &mut Harness, folder: &Path, name: &str, text: &str) {
         let file = FolderFile::read(folder, name).unwrap();
@@ -1053,6 +1276,7 @@ mod tests {
             words: reader::word_count(text),
             title: title_of(text),
             text: text.to_string(),
+            encrypted: false,
         };
         h.app.scans.cache.insert(file.path, ocr);
     }
@@ -1074,12 +1298,14 @@ mod tests {
             taken: first,
             text: "# Bill",
             title,
+            encrypted: false,
         };
         let second = ScanPage {
             file: "scan_0807.jpg",
             taken: later,
             text: "Page two",
             title: "Page two",
+            encrypted: false,
         };
         let pages = [page("Bill"), second];
 
@@ -1163,6 +1389,172 @@ mod tests {
         );
         assert!(text.contains("genre: letter"), "{text}");
         assert!(!text.contains("original:"), "two images keep none: {text}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_pdf_watch_reads_text_layers_scans_by_page_and_imports_encrypted_pdfs() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let address = FakeOllama::new(&["m"])
+            .answering_in_turn(&["Seite eins", "Seite zwei"])
+            .recording(&requests)
+            .start();
+        let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+        let (mut h, folder) = with_pdf_watch("scan-pdf-watch", Some(account));
+        let sent = read_all(
+            &mut h,
+            &["bill.pdf", "lease.pdf", "letter.pdf", "photo.jpg"],
+        );
+
+        let job = sent.iter().find(|m| m["ev"] == "job").unwrap();
+        assert_eq!(job["data"]["label"], "Reading PDFs \u{b7} pdfs");
+        let bill = last_page(&sent, "bill.pdf");
+        assert_eq!(bill["status"], "read");
+        assert_eq!(bill["title"], "Stadtwerke Rechnung Nr. 4711");
+        assert_eq!(last_page(&sent, "lease.pdf")["words"], 4);
+        let letter = last_page(&sent, "letter.pdf");
+        assert_eq!(
+            (&letter["status"], &letter["encrypted"]),
+            (&json!("read"), &json!(true))
+        );
+        let photo = last_page(&sent, "photo.jpg");
+        assert_eq!(photo["error"], "Only PDF files can be read.");
+        assert_eq!(
+            requests.lock().unwrap().len(),
+            2,
+            "a request per scanned page"
+        );
+
+        // Without Keep original, only the encrypted PDF keeps its file.
+        let docs = json!([{ "files": ["bill.pdf"] }, { "files": ["letter.pdf"] }]);
+        let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+        assert_eq!(shape(&sent), ["entity", "entity", "reply"]);
+        let path = |i: usize| h.vault().join(sent[i]["data"]["path"].as_str().unwrap());
+        let text = fs::read_to_string(path(0)).unwrap();
+        assert!(!text.contains("original:"), "{text}");
+        assert!(text.contains("Stadtwerke Rechnung Nr. 4711"), "{text}");
+        let text = fs::read_to_string(path(1)).unwrap();
+        assert!(
+            text.contains("encrypted: true") && text.contains("name: letter.pdf"),
+            "{text}"
+        );
+        assert!(text.ends_with("---\n\n"), "no text: {text}");
+        let id = Id::parse(sent[1]["data"]["id"].as_str().unwrap()).unwrap();
+        let original = h.app.vault.index().original_path(&id).unwrap();
+        assert_eq!(
+            fs::read(original).unwrap(),
+            fs::read(folder.join("letter.pdf")).unwrap()
+        );
+
+        // With it, a PDF keeps its file.
+        h.call(
+            "set_watch",
+            json!({ "watch": WATCH_ID, "keep_original": true }),
+        );
+        let docs = json!([{ "files": ["lease.pdf"] }]);
+        let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+        let id = Id::parse(sent[0]["data"]["id"].as_str().unwrap()).unwrap();
+        let original = h.app.vault.index().original_path(&id).unwrap();
+        assert!(original.to_string_lossy().ends_with(".pdf"), "{original:?}");
+        let text = fs::read_to_string(h.vault().join(sent[0]["data"]["path"].as_str().unwrap()));
+        assert!(text.unwrap().ends_with("Seite eins\n\nSeite zwei\n"));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn without_a_model_a_pdf_watch_reads_text_layers_only() {
+        let (mut h, _) = with_pdf_watch("scan-pdf-no-model", None);
+        let sent = read_all(&mut h, &["bill.pdf", "lease.pdf"]);
+        let reply = sent.iter().find(|m| m["re"] == 1).unwrap();
+        assert!(reply["ok"]["job"].is_string(), "{reply}");
+        assert_eq!(last_page(&sent, "bill.pdf")["status"], "read");
+        let lease = last_page(&sent, "lease.pdf");
+        assert_eq!(
+            lease["error"],
+            "For the scanned pages, add an AI provider under Accounts."
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn pages_read_again_replace_their_documents_text_only_whole() {
+        let (mut h, folder) = with_scans("scan-replace");
+        read_page(&mut h, &folder, "c.jpg", "# New text");
+        read_page(&mut h, &folder, "a.jpg", "# A");
+        let id = Id::parse(IMPORTED_ID).unwrap();
+
+        let docs = json!([
+            { "files": ["c.jpg"] },
+            { "files": ["a.jpg", "c.jpg"], "replace": id },
+        ]);
+        let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+        let failed: Vec<&str> = sent[0]["ok"]["failed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["error"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            failed,
+            [
+                "c.jpg is in the vault already.",
+                "\u{201c}Old\u{201d} has other pages; read them all again and import them together.",
+            ]
+        );
+
+        let docs = json!([{ "files": ["c.jpg"], "replace": id }]);
+        let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+        let reply = &sent.last().unwrap()["ok"];
+        assert_eq!(reply["imported"], json!([{ "files": ["c.jpg"], "id": id }]));
+        let text = fs::read_to_string(h.vault().join("Scans/old.md")).unwrap();
+        assert!(text.contains("title: Old"), "the title stays: {text}");
+        assert!(text.ends_with("---\n# New text\n"), "{text}");
+
+        let docs = json!([{ "title": "Neu", "files": ["c.jpg"], "replace": id }]);
+        h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+        let text = fs::read_to_string(h.vault().join("Scans/old.md")).unwrap();
+        assert!(
+            text.contains("title: Neu"),
+            "a title given replaces it: {text}"
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_watch_whose_analysis_has_no_working_pick_neither_reads_nor_imports() {
+        let (mut h, folder) = with_scans("scan-analysis-blocked");
+        read_page(&mut h, &folder, "a.jpg", "# A");
+        let analysis = json!({ "level": "lite", "model": null });
+        h.call(
+            "set_watch",
+            json!({ "watch": WATCH_ID, "analysis": analysis }),
+        );
+        let read = json!({ "watch": WATCH_ID, "files": ["b.jpg"] });
+        let import = json!({ "watch": WATCH_ID, "docs": [{ "files": ["a.jpg"] }] });
+        for (cmd, args) in [("scan_read", read), ("scan_import", import)] {
+            let sent = h.call(cmd, args);
+            let message = sent[0]["err"]["message"].as_str().unwrap_or_default();
+            assert!(
+                message.starts_with("For the scan analysis,"),
+                "{cmd}: {sent:?}"
+            );
+        }
+        assert!(h.app.scans.read.is_none());
+        let index = h.app.vault.index();
+        let origins = index.scan_origins(&Id::parse(WATCH_ID).unwrap());
+        assert!(!origins.contains_key("a.jpg"), "nothing imported");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_watch_reads_the_files_of_its_type() {
+        assert_eq!(readable(WatchKind::Images, "a.JPG"), Ok(Kind::Image));
+        assert_eq!(readable(WatchKind::Pdf, "a.pdf"), Ok(Kind::Pdf));
+        assert!(readable(WatchKind::Images, "a.pdf").is_err());
+        assert_eq!(
+            readable(WatchKind::Pdf, "a.jpg"),
+            Err("Only PDF files can be read.")
+        );
     }
 
     // ------------------------------------------------------------------------
@@ -1358,9 +1750,18 @@ mod tests {
         assert_eq!(
             json(PageStatus::Read {
                 words: 3,
-                title: "Bill"
+                title: "Bill",
+                encrypted: false,
             }),
             r#"{"status":"read","words":3,"title":"Bill"}"#
+        );
+        assert_eq!(
+            json(PageStatus::Read {
+                words: 0,
+                title: "",
+                encrypted: true,
+            }),
+            r#"{"status":"read","words":0,"title":"","encrypted":true}"#
         );
         let mut counts = ReadCounts {
             read: 2,

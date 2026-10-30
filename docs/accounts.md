@@ -232,13 +232,14 @@ accounts with a detail pane.
   per million tokens: ticking one offers it in the features' pickers, and
   "Used by" names, read only, what picked it (`accounts.md#model-choice`):
   Chats, a watch with its steps that run with it ("Scanner · OCR,
-  analysis"), or a mail filter with its ("Fetch mail · jan@gmail.com ·
-  analysis, reading"); an unticked model still names them, as they are
-  refused until they pick another. A key provider's pane shows what its
-  calls cost this month (`accounts.md#spend-file`); an Ollama account
-  shows whether the server answers instead. Disconnecting forgets the key
-  but keeps the account and its id, marked `disconnected`; removing
-  deletes its files (Ollama accounts are removed directly).
+  analysis", a PDF watch's reading as "reading"), or a mail filter with
+  its ("Fetch mail · jan@gmail.com · analysis, reading"); an unticked
+  model still names them, as they are refused until they pick another. A
+  key provider's pane shows what its calls cost this month
+  (`accounts.md#spend-file`); an Ollama account shows whether the server
+  answers instead. Disconnecting forgets the key but keeps the account and
+  its id, marked `disconnected`; removing deletes its files (Ollama
+  accounts are removed directly).
 - The page widgets the Workspace pages share are `ui/`'s (`ui/page.js`,
   `ui/field.js`, `ui/segmented.js`); the model picker every feature uses
   is `features/workspace/models.js` (`accounts.md#model-choice`).
@@ -252,7 +253,7 @@ the feature's own settings:
 | Feature | Kept in | Picked in |
 |---|---|---|
 | The assistant | the vault's settings, `.avelor/vault.yaml` `chat-model` (`vault.md#vault-config`; `set_vault_settings`) | the assistant's head |
-| A watch's steps: reading its files (OCR) | the watch file's `models`, by step (`import.md#watch-files`; `set_watch`) | the step's row in the watch's pane; Import scans for reading |
+| A watch's steps: reading its files (OCR, a PDF watch's scanned pages) | the watch file's `models`, by step (`import.md#watch-files`; `set_watch`) | the step's row in the watch's pane; Import scans for reading |
 | A watch's analysis | the watch file's `analysis` (`import.md#watch-files`; `set_watch`) | the Analysis step of the watch's pane |
 | Fetch mail's analysis | the Google account file's `mail.analysis` (`mail.md#analysis`; remembered by `mail_fetch`) | Fetch mail, section Analysis |
 | An auto-sync's analysis | the Google account file's `mail.auto-sync.analysis` (`set_mail_sync`) | the account's pane, under the auto-sync's filter |

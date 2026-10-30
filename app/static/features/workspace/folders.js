@@ -31,16 +31,51 @@ import { AI_ANALYSIS_OFF, aiPickerWithHint } from './models.js';
 export const WATCH_READ_STEP = 'read';
 
 // The watch types (`type` in the watch file): how they show, what a new one
-// suggests, how a file is read (`read`, always the first step). A new
-// watch suggests the user's pictures, on Linux under `~`.
+// suggests, how a file is read (`read`, always the first step: `collect`
+// for pages joined into documents, `optional` if a file reads without a
+// model, `what` the model reads in a refusal's words, `used` in "Used by",
+// `previews` if the files have previews), the steps' notes and the import
+// page's title and blurb. A new watch suggests the user's pictures or
+// documents, on Linux under `~`.
+const WATCH_HOME = navigator.platform.startsWith('Win') ? '%USERPROFILE%\\' : '~/';
 const WATCH_TYPES = [
   {
     type: 'images', name: 'Images', hint: 'OCR', kind: 'Images \u00b7 OCR', icon: '#i-image',
-    folder: navigator.platform.startsWith('Win') ? '%USERPROFILE%\\Pictures' : '~/Pictures',
+    folder: `${WATCH_HOME}Pictures`,
     patterns: ['*.jpg', '*.jpeg', '*.png', '*.webp'],
     read: {
-      name: 'Image OCR', ocr: true, collect: true,
+      name: 'Image OCR', ocr: true, collect: true, previews: true, what: 'OCR', used: 'OCR',
       note: 'The OCR model reads the text in each image. Images taken together become the pages of one document.',
+    },
+    analysis: {
+      what: 'the scan analysis',
+      off: 'A document keeps its first page\u2019s title, dated when its file was made.',
+    },
+    keep: {
+      on: 'The scanned image beside its document in Scans/, opened from its card; a document of several images keeps none yet.',
+      off: 'Only the text read goes into the vault; the images stay in the folder.',
+    },
+    page: { title: 'Import scans' },
+  },
+  {
+    type: 'pdf', name: 'PDF', hint: 'text, scans', kind: 'PDF \u00b7 text, scans', icon: '#i-document-pdf',
+    folder: `${WATCH_HOME}Documents`,
+    patterns: ['*.pdf'],
+    read: {
+      name: 'Read', ocr: true, optional: true, what: 'the scanned pages', used: 'reading',
+      note: 'Takes the text a PDF has; only scanned pages go to the model, as images. An encrypted PDF is imported without its text.',
+    },
+    analysis: {
+      what: 'the PDF analysis',
+      off: 'A document keeps its first line as its title, dated when its file was made.',
+    },
+    keep: {
+      on: 'The PDF beside its document in Scans/, opened from its card.',
+      off: 'Only the text read goes into the vault; the PDFs stay in the folder. An encrypted PDF keeps its file anyway.',
+    },
+    page: {
+      title: 'Import PDFs',
+      blurb: 'Each PDF is a document of its own. A PDF\u2019s own text is read here; only scanned pages go to the model.',
     },
   },
 ];
@@ -365,9 +400,9 @@ function renderWatchSteps(id, type, settings) {
   const steps = accEl('div', 'steps');
   steps.append(renderWatchStep({
     name: type.read.name, label: 'Read', note: type.read.note,
-    ...(type.read.ocr ? watchModel(id, settings, WATCH_READ_STEP, 'OCR') : {}),
+    ...(type.read.ocr ? watchModel(id, settings, WATCH_READ_STEP, type.read.what) : {}),
     options: type.read.collect ? renderWatchCollect(id, settings) : null,
-  }), renderWatchAnalysis(id, settings), renderWatchKeepOriginal(id, settings));
+  }), renderWatchAnalysis(id, type, settings), renderWatchKeepOriginal(id, type, settings));
   part.append(head, steps);
   return part;
 }
@@ -383,7 +418,7 @@ function watchModel(id, settings, step, what) {
 // The analysis of the documents imported (`analysis`, as a mail filter's):
 // its check switches it on at Lite, or off, keeping the model; while on,
 // its level and the model it runs with.
-function renderWatchAnalysis(id, settings) {
+function renderWatchAnalysis(id, type, settings) {
   const analysis = { ...AI_ANALYSIS_OFF, ...settings.analysis };
   const on = analysis.level !== 'off';
   const set = next => watchSet(id, { analysis: next });
@@ -392,12 +427,10 @@ function renderWatchAnalysis(id, settings) {
     onToggle: () => set({ ...analysis, level: on ? 'off' : 'lite' }),
   };
   if (!on) {
-    return renderWatchStep({
-      ...step, note: 'A document keeps its first page\u2019s title, dated when its file was made.',
-    });
+    return renderWatchStep({ ...step, note: type.analysis.off });
   }
   const { picker, hint } = aiPickerWithHint(analysis.model,
-    model => set({ ...analysis, model }), 'the scan analysis');
+    model => set({ ...analysis, model }), type.analysis.what);
   const options = accEl('dl', 'props step__opts');
   const value = accEl('dd');
   value.append(accSeg([['lite', 'Lite'], ['medium', 'Medium']], analysis.level,
@@ -409,16 +442,14 @@ function renderWatchAnalysis(id, settings) {
   return renderWatchStep({ ...step, note, where: picker, hint, options });
 }
 
-// Whether a document of one image keeps the image beside it
+// Whether a document of one file keeps the file beside it
 // (`keep_original`).
-function renderWatchKeepOriginal(id, settings) {
+function renderWatchKeepOriginal(id, type, settings) {
   const on = !!settings.keep_original;
   return renderWatchStep({
     name: 'Keep original', label: 'Keep', on,
     onToggle: () => watchSet(id, { keep_original: !on }),
-    note: on
-      ? 'The scanned image beside its document in Scans/, opened from its card; a document of several images keeps none yet.'
-      : 'Only the text read goes into the vault; the images stay in the folder.',
+    note: on ? type.keep.on : type.keep.off,
   });
 }
 

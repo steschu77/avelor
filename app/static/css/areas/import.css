@@ -72,6 +72,19 @@
   padding: 12px 0;
 }
 
+/* "Show the N in the vault": its check and label */
+.scans__show {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* a file in the vault, listed to be read again */
+.scans__file--in-vault .import__file {
+  color: var(--c-ink-soft);
+}
+
 .scans__foot {
   margin-top: 12px;
   display: flex;
@@ -96,6 +109,11 @@
   gap: 0 14px;
   align-items: start;
   padding: 14px 0;
+}
+
+/* a document read again: importing it replaces its text */
+.import__doc--replace {
+  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
 }
 
 .import__doc>.check {
@@ -554,10 +572,12 @@
 }
 
 .mail__footer>.error-note,
-.mail__warning {
+.mail__warning,
+.scans__warning {
   flex-basis: 100%;
 }
 
-.mail__warning {
+.mail__warning,
+.scans__warning {
   color: var(--c-ink-soft);
 }

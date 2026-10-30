@@ -34,13 +34,15 @@ use crate::app::App;
 use crate::chat;
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
+use crate::watches::WatchKind;
 use av_vault::markdown::plain_title;
 use av_vault::vault::Index;
 
 /// What the mail analysis is called in a refused pick's words
 /// (`AiAccounts::choose`).
 pub const MAIL_ANALYSIS: &str = "the mail analysis";
-pub const SCAN_ANALYSIS: &str = "the scan analysis";
+const SCAN_ANALYSIS: &str = "the scan analysis";
+const PDF_ANALYSIS: &str = "the PDF analysis";
 /// The most of a mail's body that is sent, in characters.
 const BODY_CHARS: usize = 8000;
 /// The most of an attachment's text that goes with its mail, in characters,
@@ -934,17 +936,31 @@ impl Batch {
     }
 
     // ------------------------------------------------------------------------
-    /// The documents `documents` imported from the watch `watch`, those in
-    /// `titled` with the title the user gave.
-    pub fn scans(watch: &str, documents: Vec<Id>, titled: Vec<Id>) -> Self {
+    /// The documents `documents` imported from the watch `watch` of the type
+    /// `kind`, those in `titled` with the title the user gave.
+    pub fn scans(kind: WatchKind, watch: &str, documents: Vec<Id>, titled: Vec<Id>) -> Self {
+        let (label, notices, what) = match kind {
+            WatchKind::Images => ("Analysing scans", "Scan analysis", scan_analysis(kind)),
+            WatchKind::Pdf => ("Analysing PDFs", "PDF analysis", scan_analysis(kind)),
+        };
         Self {
-            label: format!("Analysing scans \u{b7} {watch}"),
-            notices: format!("Scan analysis \u{b7} {watch}"),
-            what: SCAN_ANALYSIS,
+            label: format!("{label} \u{b7} {watch}"),
+            notices: format!("{notices} \u{b7} {watch}"),
+            what,
             mails: Vec::new(),
             documents,
             titled,
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// What the analysis of a watch of the type `kind` is called in a refused
+/// pick's words (`AiAccounts::choose`).
+pub fn scan_analysis(kind: WatchKind) -> &'static str {
+    match kind {
+        WatchKind::Images => SCAN_ANALYSIS,
+        WatchKind::Pdf => PDF_ANALYSIS,
     }
 }
 
@@ -2025,7 +2041,7 @@ mod tests {
             ),
         ];
         let mut h = Harness::with_vault("enrich-scan", &files);
-        let batch = Batch::scans("Scanner", vec![scan], vec![scan]);
+        let batch = Batch::scans(WatchKind::Images, "Scanner", vec![scan], vec![scan]);
         analyse(&mut h.app, batch, &at(AnalysisLevel::Medium));
         let sent = until_done(&mut h);
 
@@ -2056,18 +2072,27 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn a_refused_scan_pick_is_told_in_the_scans_words() {
+    fn a_refused_scan_pick_is_told_in_the_watchs_words() {
         let mut h = with_mails("enrich-scan-no-pick", "http://127.0.0.1:9", "");
         let unpicked = Analysis {
             level: AnalysisLevel::Lite,
             model: None,
         };
-        let batch = Batch::scans("Scanner", vec![Id::parse(MAIL_ID).unwrap()], Vec::new());
+        let documents = || vec![Id::parse(MAIL_ID).unwrap()];
+        let batch = Batch::scans(WatchKind::Images, "Scanner", documents(), Vec::new());
         analyse(&mut h.app, batch, &unpicked);
         let sent = parse_sent(&h.take());
         assert_eq!(
             sent[0]["data"]["message"],
             "Scan analysis \u{b7} Scanner: For the scan analysis, pick a model."
+        );
+        let batch = Batch::scans(WatchKind::Pdf, "Bills", documents(), Vec::new());
+        assert_eq!(batch.label, "Analysing PDFs \u{b7} Bills");
+        analyse(&mut h.app, batch, &unpicked);
+        let sent = parse_sent(&h.take());
+        assert_eq!(
+            sent[0]["data"]["message"],
+            "PDF analysis \u{b7} Bills: For the PDF analysis, pick a model."
         );
     }
 
