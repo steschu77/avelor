@@ -334,7 +334,8 @@ gets the role for a type from the email analysis (`email.md#analysis`),
 beside its `email` block; its kind stays a mail's
 (`vault.md#kind-derivation`).
 
-**Original** — a file that isn't markdown, such as an email's attachment,
+**Original** — a file that isn't markdown, such as an email's attachment
+or a scan (a document of several scanned images keeps a PDF of them),
 next to the document's own file:
 
 * `file`: its name in the document's folder: the document's generated

@@ -11,7 +11,9 @@
 //!   simple font's encoding with its `/Differences`; laid out into lines and
 //!   paragraphs by position. Type3 glyphs, predefined CJK CMaps, the reading
 //!   order of columns and form fields' values are left out.
-//! - Writing: objects and a cross-reference table, no compression.
+//! - Writing: objects and a cross-reference table, no compression; a PDF of
+//!   JPEG and PNG pages, the images as they are (a PNG with alpha,
+//!   interlaced or of 16 bits, and other images, are left out).
 
 mod cmap;
 mod content;
@@ -19,16 +21,18 @@ mod document;
 mod encoding;
 mod filter;
 mod font;
+mod jpeg;
 mod layout;
 mod lexer;
 mod object;
+mod png;
 mod write;
 
 pub use content::{Page, SCAN_COVER, Scan};
 pub use document::Document;
 pub use layout::{Line, to_text};
 pub use object::{Dict, Object, Ref, Stream};
-pub use write::{Writer, zlib_stored};
+pub use write::{Writer, image_pages, zlib_stored};
 
 // ----------------------------------------------------------------------------
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -38,6 +42,8 @@ pub enum Error {
     Encrypted,
     /// What the file lacks to be read.
     Broken(&'static str),
+    /// A page to write that isn't a JPEG, or a PNG a PDF takes as it is.
+    NotImage,
 }
 
 impl std::fmt::Display for Error {
@@ -46,6 +52,7 @@ impl std::fmt::Display for Error {
             Error::NotPdf => f.write_str("not a PDF"),
             Error::Encrypted => f.write_str("encrypted"),
             Error::Broken(what) => write!(f, "broken: {what}"),
+            Error::NotImage => f.write_str("not a JPEG or PNG"),
         }
     }
 }

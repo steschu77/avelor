@@ -120,8 +120,8 @@ pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
 
 // ----------------------------------------------------------------------------
 /// Write the document of `doc`'s pages, with its file beside it if `keep`
-/// and it has one page (`Index::create_with_original`); an encrypted PDF
-/// always keeps it, marked so. Or replace the text of the document they
+/// (`Index::create_with_original`): one page's file, or a PDF of its pages'
+/// images; an encrypted PDF always keeps its file, marked so. Or replace the text of the document they
 /// were imported into (`replace_document`). Or say why not.
 fn write_document(
     app: &mut App,
@@ -137,6 +137,7 @@ fn write_document(
         let pages = gather_pages(app, watch, root, doc)?;
         let original = match &pages[..] {
             [page] if keep || page.encrypted => Some(original_of(root, page.file)?),
+            [_, _, ..] if keep => pdf_of(root, &pages)?,
             _ => None,
         };
         let mut document = scan_document(watch, &doc.title, &pages);
@@ -223,6 +224,28 @@ fn original_of(root: &Path, file: &str) -> Result<(String, Vec<u8>), Text> {
         Text::new("scans.keep_unread").arg("file", file)
     })?;
     Ok((name.unwrap_or_else(|| file.to_string()), bytes))
+}
+
+// ----------------------------------------------------------------------------
+/// The images (JPEG, PNG) of `pages` of the watch's folder `root` as one
+/// PDF to keep beside their document, named after the first; none if a
+/// page is another image (`av_pdf::image_pages`).
+fn pdf_of(root: &Path, pages: &[ScanPage]) -> Result<Option<(String, Vec<u8>)>, Text> {
+    let mut files = Vec::new();
+    for page in pages {
+        files.push(original_of(root, page.file)?.1);
+    }
+    let images: Vec<&[u8]> = files.iter().map(Vec::as_slice).collect();
+    match av_pdf::image_pages(&images) {
+        Ok(pdf) => {
+            let stem = Path::new(pages[0].file).file_stem().unwrap_or_default();
+            Ok(Some((format!("{}.pdf", stem.to_string_lossy()), pdf)))
+        }
+        Err(e) => {
+            log::info!("Scan import: {} pages kept as none: {e}", pages.len());
+            Ok(None)
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------

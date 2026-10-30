@@ -248,7 +248,10 @@ fn an_import_keeps_a_single_image_and_hands_its_documents_to_the_analysis() {
         "the title given stays: {text}"
     );
     assert!(text.contains("type: letter"), "{text}");
-    assert!(!text.contains("original:"), "two images keep none: {text}");
+    assert!(
+        !text.contains("original:"),
+        "pages that aren't JPEGs or PNGs keep none: {text}"
+    );
 }
 
 // ------------------------------------------------------------------------
@@ -415,6 +418,59 @@ fn a_watch_reads_the_files_of_its_type() {
         readable(WatchKind::Pdf, "a.jpg").map_err(|e| e.render()),
         Err("Only PDF files can be read.".to_string())
     );
+}
+
+// ------------------------------------------------------------------------
+/// A JPEG of a gray `width` x 100 frame, its headers only.
+fn jpeg(width: u16) -> Vec<u8> {
+    let mut out = vec![0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 100];
+    out.extend_from_slice(&width.to_be_bytes());
+    out.extend_from_slice(&[1, 1, 0x11, 0, 0xff, 0xda, 0, 2, 0xff, 0xd9]);
+    out
+}
+
+// ------------------------------------------------------------------------
+/// A gray PNG of one pixel.
+fn png() -> Vec<u8> {
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let ihdr = [0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0];
+    for (kind, body) in [
+        (&b"IHDR"[..], ihdr.to_vec()),
+        (b"IDAT", av_pdf::zlib_stored(&[0, 0x80])),
+        (b"IEND", Vec::new()),
+    ] {
+        out.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        out.extend_from_slice(kind);
+        out.extend_from_slice(&body);
+        out.extend_from_slice(&[0; 4]);
+    }
+    out
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_document_of_several_images_keeps_them_as_one_pdf() {
+    let (mut h, folder) = with_scans("scan-import-pdf-original");
+    for (name, image) in [("x.jpg", jpeg(80)), ("y.jpg", jpeg(90)), ("z.png", png())] {
+        fs::write(folder.join(name), image).unwrap();
+        read_page(&mut h, &folder, name, "Seite");
+    }
+    h.call(
+        "set_watch",
+        json!({ "watch": WATCH_ID, "keep_original": true }),
+    );
+    let docs = json!([{ "files": ["x.jpg", "y.jpg", "z.png"] }]);
+    let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+    let id = Id::parse(sent[0]["data"]["id"].as_str().unwrap()).unwrap();
+    let text = fs::read_to_string(h.vault().join(sent[0]["data"]["path"].as_str().unwrap()));
+    assert!(text.unwrap().contains("name: x.pdf"));
+    let original = h.app.vault.index().original_path(&id).unwrap();
+    assert!(original.to_string_lossy().ends_with(".pdf"), "{original:?}");
+    let pdf = fs::read(original).unwrap();
+    let doc = av_pdf::Document::parse(&pdf).unwrap();
+    assert_eq!(doc.page_count(), 3);
+    assert_eq!(doc.page(1).unwrap().scan.unwrap().jpeg, jpeg(90));
+    assert!(doc.page(2).unwrap().cover > 0.9, "the PNG's page");
 }
 
 // ------------------------------------------------------------------------
