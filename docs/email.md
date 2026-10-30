@@ -189,6 +189,11 @@ feature picks its model (`accounts.md#model-choice`).
   `panel.md#cards`); the labels added to the email's own, the projects
   joined. A title the user changed meanwhile stays. A wrong label or
   project is removed on the card like any other.
+- **Scans**: a watch's analysis takes the documents Import scans wrote
+  the same way (`import.md#import-scans`), named "Analysing scans ·
+  <watch>" and "Scan analysis · <watch>" (`analysis::Batch`). A scan has no
+  email, so at Medium it is asked for `check` and `questions` too (no
+  reply), and gets a conversation "Document analysis · <title>" linked to it.
 - **Attachments**: each attachment read gets a request of its own after
   the emails (`analysis::request::document_request`), Lite at either level: the genres
   it may get (av-vault's well-known ones, then those the vault's

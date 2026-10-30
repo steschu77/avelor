@@ -529,7 +529,7 @@ function aiErrorText(e, account) {
 
 // What picked `model` of the AI account `account`: the names the Accounts
 // page shows in its "Used by" column. A watch is named once, with its steps
-// that run with the model (the reading step as OCR); so is a Google
+// that run with the model (the reading step as OCR, the analysis); so is a Google
 // account's email filter, Fetch email's or the auto-sync's (only while it
 // runs), with its steps while they are on: the analysis, and the
 // attachments' reading.
@@ -552,7 +552,11 @@ function aiUsersOf(account, model) {
   }
   for (const watch of watches.values()) {
     const models = watch.models ?? {};
-    const steps = is(models[WATCH_READ_STEP]) ? [t('feature.ocr')] : [];
+    const analysis = watch.analysis;
+    const steps = [
+      is(models[WATCH_READ_STEP]) && t('feature.ocr'),
+      !!analysis && analysis.level !== 'off' && is(analysis.model) && t('accounts.step.analysis'),
+    ].filter(Boolean);
     if (steps.length) users.push(`${watch.name} \u00b7 ${steps.join(', ')}`);
   }
   return users;

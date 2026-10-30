@@ -2,9 +2,9 @@
 
 use av_llm::{ChatRequest, Message};
 
+use super::AnalysisLevel;
 use super::context::{Context, DocText, EmailText};
 use crate::ai;
-use crate::google::accounts::AnalysisLevel;
 
 /// The JSON object each level asks for.
 pub(super) const LITE_SHAPE: &str =
@@ -50,6 +50,18 @@ has none.
 - projects: up to 2 projects from the list of projects the document clearly belongs to; none \
 if unsure.
 Use only genres, labels and projects from the lists, spelled as given.";
+
+/// What a document without an email (a scan) is asked for at Medium: its
+/// points to check, which no email's conversation carries.
+pub(super) const DOCUMENT_MEDIUM_SHAPE: &str = "{\"title\": \"...\", \"date\": \"YYYY-MM-DD\", \
+\"genre\": \"...\", \"labels\": [\"...\"], \"projects\": [\"...\"], \"check\": [\"...\"], \
+\"questions\": [\"...\"]}";
+
+const DOCUMENT_MEDIUM_RULES: &str = "
+- check: up to 3 points a closer look at the document should check, one sentence each: an \
+amount, a deadline, a claim, a condition; none if there is nothing to check.
+- questions: 1 to 3 short questions its reader might ask about the document.
+Write the points and the questions in the document's language.";
 
 // ----------------------------------------------------------------------------
 /// `names` as the request lists them: a line each, or "(none)".
@@ -105,10 +117,15 @@ pub fn request_for(
 }
 
 // ----------------------------------------------------------------------------
-/// The request of the analysis for the attachment `doc` to `model`, as
-/// Lite at either level: the instructions, then the lists of `ctx` and the
-/// document.
-pub fn document_request(model: &str, ctx: &Context, doc: &DocText) -> ChatRequest {
+/// The request of the analysis at `level` for the document `doc` to
+/// `model` -- an attachment as Lite at either level (`DocText::medium`):
+/// the instructions, then the lists of `ctx` and the document.
+pub fn document_request(
+    level: AnalysisLevel,
+    model: &str,
+    ctx: &Context,
+    doc: &DocText,
+) -> ChatRequest {
     let genres = listed(ctx.genres.iter().map(String::as_str).collect());
     let labels = listed(ctx.labels.iter().map(String::as_str).collect());
     let projects = listed(ctx.projects.iter().map(|(_, t)| t.as_str()).collect());
@@ -123,9 +140,15 @@ pub fn document_request(model: &str, ctx: &Context, doc: &DocText) -> ChatReques
         "Genres:\n{genres}\nLabels:\n{labels}\nProjects:\n{projects}\nThe document:\nFile: {}\n{email}\n{}",
         doc.name, doc.body
     );
-    let system = format!(
-        "You sort documents. Answer with one JSON object and nothing else: {DOCUMENT_SHAPE}.{DOCUMENT_RULES}"
-    );
+    let system = match doc.medium(level) {
+        true => format!(
+            "You sort documents and prepare them for their reader. Answer with one JSON object \
+and nothing else: {DOCUMENT_MEDIUM_SHAPE}.{DOCUMENT_RULES}{DOCUMENT_MEDIUM_RULES}"
+        ),
+        false => format!(
+            "You sort documents. Answer with one JSON object and nothing else: {DOCUMENT_SHAPE}.{DOCUMENT_RULES}"
+        ),
+    };
     ChatRequest::new(model)
         .system(system)
         .message(Message::user(text))

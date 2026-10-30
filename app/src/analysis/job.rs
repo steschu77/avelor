@@ -11,14 +11,15 @@ use av_vault::vault::SaveOutcome;
 use super::answer::{Lite, Medium, parse, parse_document};
 use super::apply::{apply_document, apply_lite, medium_messages};
 use super::context::{Context, DocText, EmailText, attachment_texts, context};
-use super::email_analysis;
-use super::request::{DOCUMENT_SHAPE, again, document_request, request_for, shape};
+use super::request::{
+    DOCUMENT_MEDIUM_SHAPE, DOCUMENT_SHAPE, again, document_request, request_for, shape,
+};
+use super::{Analysis, AnalysisLevel, email_analysis, scan_analysis};
 use crate::ai;
 use crate::ai::accounts::Resolved;
 use crate::ai::queue::AiQueue;
 use crate::app::App;
 use crate::chat;
-use crate::google::accounts::{Analysis, AnalysisLevel};
 use crate::jobs::JobKind;
 use crate::jobs::count_summary;
 use crate::texts::{self, Text};
@@ -34,8 +35,8 @@ const LITE_ATTEMPTS: u32 = 3;
 /// One analysis: its model, the vault's context, the emails left and the
 /// one being analysed.
 pub(super) struct Run {
-    /// Whose email it is, for the notices.
-    pub(super) email: String,
+    /// What its notices start with (`Batch::notices`).
+    pub(super) notices: Text,
     pub(super) ai: Resolved,
     pub(super) level: AnalysisLevel,
     pub(super) context: Context,
@@ -86,6 +87,7 @@ impl Item {
     fn shape(&self, level: AnalysisLevel) -> &'static str {
         match self {
             Item::Email(_) => shape(level),
+            Item::Document(doc) if doc.medium(level) => DOCUMENT_MEDIUM_SHAPE,
             Item::Document(_) => DOCUMENT_SHAPE,
         }
     }
@@ -94,7 +96,7 @@ impl Item {
     fn request(&self, level: AnalysisLevel, model: &str, ctx: &Context) -> ChatRequest {
         match self {
             Item::Email(email) => request_for(level, model, ctx, email),
-            Item::Document(doc) => document_request(model, ctx, doc),
+            Item::Document(doc) => document_request(level, model, ctx, doc),
         }
     }
 
@@ -107,7 +109,7 @@ impl Item {
     ) -> std::result::Result<(Lite, Option<Medium>), Text> {
         match self {
             Item::Email(email) => parse(answer, level, ctx, &email.title),
-            Item::Document(doc) => parse_document(answer, ctx, doc).map(|lite| (lite, None)),
+            Item::Document(doc) => parse_document(answer, level, ctx, doc),
         }
     }
 }
@@ -140,44 +142,88 @@ impl Counts {
 }
 
 // ----------------------------------------------------------------------------
-/// Analyse the emails `emails` of `email`'s account, each with its
-/// attachments' text, then the attachments read `documents`, as `analysis`
-/// says (its level and model; an attachment as Lite) as a job ("Analysing
-/// email · <email>"). Nothing to analyse starts nothing; a refused pick is a
-/// notice; what is no longer in the vault, and an attachment without text,
-/// is left out.
-pub fn analyse(
-    app: &mut App,
-    email: &str,
+/// What an analysis takes, and how its job and notices name it.
+pub struct Batch {
+    /// The job's label: "Analysing email · <email>".
+    pub(super) label: Text,
+    /// What its notices start with: "Email analysis · <email>".
+    pub(super) notices: Text,
+    /// What it is called where its pick is refused (`AiAccounts::choose`).
+    pub(super) what: Text,
     emails: Vec<Id>,
     documents: Vec<Id>,
-    analysis: &Analysis,
-) {
-    if emails.is_empty() && documents.is_empty() {
+    /// The documents whose title the user gave: it stays.
+    titled: Vec<Id>,
+}
+
+impl Batch {
+    // ------------------------------------------------------------------------
+    /// The new emails `emails` of `email`'s account, then the attachments read
+    /// `documents`.
+    pub fn email(email: &str, emails: Vec<Id>, documents: Vec<Id>) -> Self {
+        Self {
+            label: Text::new("analysis.label.email").arg("email", email),
+            notices: Text::new("analysis.notices.email").arg("email", email),
+            what: email_analysis(),
+            emails,
+            documents,
+            titled: Vec::new(),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The documents `documents` imported from the watch `watch`, those in
+    /// `titled` with the title the user gave.
+    pub fn scans(watch: &str, documents: Vec<Id>, titled: Vec<Id>) -> Self {
+        Self {
+            label: Text::new("analysis.label.scans").arg("watch", watch),
+            notices: Text::new("analysis.notices.scans").arg("watch", watch),
+            what: scan_analysis(),
+            emails: Vec::new(),
+            documents,
+            titled,
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Analyse `batch` as `analysis` says (its level and model) as a job: its
+/// emails, each with its attachments' text, then its documents (an
+/// attachment as Lite). Nothing to analyse starts nothing; a refused pick
+/// is a notice; what is no longer in the vault, and a document without
+/// text, is left out.
+pub fn analyse(app: &mut App, batch: Batch, analysis: &Analysis) {
+    if batch.emails.is_empty() && batch.documents.is_empty() {
         return;
     }
     let choice = analysis.model.as_ref();
-    let resolved = match app.ai.choose(choice, email_analysis(), DateTime::now()) {
+    let resolved = match app.ai.choose(choice, batch.what.clone(), DateTime::now()) {
         Ok(resolved) => resolved,
         Err(refusal) => {
-            let notice = Text::new("job.notice").arg(
-                "job",
-                Text::new("analysis.notices.email").arg("email", email),
-            );
+            let notice = Text::new("job.notice").arg("job", batch.notices.clone());
             return app.notice(notice.arg("text", refusal.text));
         }
     };
     let index = app.vault.index();
-    let emails = emails.iter().filter_map(|id| index.entry(id)).map(|entry| {
-        let mut email = EmailText::of(&entry.doc);
-        email.attachments = attachment_texts(index, email.id);
-        Item::Email(email)
-    });
-    let documents = documents
+    let emails = batch
+        .emails
+        .iter()
+        .filter_map(|id| index.entry(id))
+        .map(|entry| {
+            let mut email = EmailText::of(&entry.doc);
+            email.attachments = attachment_texts(index, email.id);
+            Item::Email(email)
+        });
+    let documents = batch
+        .documents
         .iter()
         .filter_map(|id| index.entry(id))
         .filter(|entry| !entry.doc.content().trim().is_empty())
-        .map(|entry| Item::Document(DocText::of(index, &entry.doc)));
+        .map(|entry| {
+            let mut doc = DocText::of(index, &entry.doc);
+            doc.keep_title = batch.titled.contains(&doc.id);
+            Item::Document(doc)
+        });
     let queue: VecDeque<Ask> = emails
         .chain(documents)
         .map(|item| Ask {
@@ -190,25 +236,25 @@ pub fn analyse(
         return;
     }
     let total = queue.len();
-    let attachments = queue
+    let documents = queue
         .iter()
         .filter(|ask| matches!(ask.item, Item::Document(_)))
         .count();
-    let failed = match (total - attachments, attachments) {
+    let failed = match (total - documents, documents) {
         (_, 0) => Text::new("ai.failed.emails"),
         (0, _) => Text::new("ai.failed.documents"),
         _ => Text::new("ai.failed.emails_documents"),
     };
-    let label = Text::new("analysis.label.email").arg("email", email);
-    let job = app.start_job(JobKind::EmailAnalysis, label, total);
+    let job = app.start_job(JobKind::EmailAnalysis, batch.label.clone(), total);
     log::info!(
-        "Email analysis {job}: {} emails and {attachments} attachments of {email} with {}, {:?}",
-        total - attachments,
+        "Analysis {job} ({}): {} emails and {documents} documents with {}, {:?}",
+        batch.label,
+        total - documents,
         resolved.model,
         analysis.level
     );
     let run = Run {
-        email: email.to_string(),
+        notices: batch.notices,
         queue: AiQueue::new(Some(resolved.account), queue),
         ai: resolved,
         level: analysis.level,
@@ -273,10 +319,10 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
             let (text, stop, thinking) = (&response.text, &response.stop, &response.thinking);
             match &found {
                 Ok(_) => log::debug!(
-                    "Email analysis {job}: {id}, attempt {attempt}, answered ({stop:?}): {text:?}, reasoning: {thinking:?}"
+                    "Analysis {job}: {id}, attempt {attempt}, answered ({stop:?}): {text:?}, reasoning: {thinking:?}"
                 ),
                 Err(_) => log::info!(
-                    "Email analysis {job}: {id}, attempt {attempt}, an answer that isn't the JSON object ({stop:?}): {text:?}, reasoning: {thinking:?}"
+                    "Analysis {job}: {id}, attempt {attempt}, an answer that isn't the JSON object ({stop:?}): {text:?}, reasoning: {thinking:?}"
                 ),
             }
             let cut = response.stop == StopReason::MaxTokens;
@@ -315,7 +361,7 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
             counts.conversations += usize::from(chat);
         }
         Err(error) => {
-            log::info!("Email analysis {job}: {id} failed: {error}");
+            log::info!("Analysis {job}: {id} failed: {error}");
             run.queue.fail(item.title(), error);
         }
     }
@@ -335,11 +381,12 @@ struct Written {
 }
 
 // ----------------------------------------------------------------------------
-/// Write `lite` into the email or attachment `item`, then an email's `medium`
-/// as a chat linked to it, by the model and account `by`, titled "Email
-/// analysis · <the email's title>". A title or an attachment's date the user
-/// changed since the plan stays; what is gone meanwhile gets nothing. A
-/// failed write is logged.
+/// Write `lite` into the email or document `item`, then `medium` as a conversation
+/// linked to it, by the model and account `by`, titled "Email analysis ·
+/// <the email's title>" or "Document analysis · <its title>". A title or a
+/// document's date the user changed since the plan stays, and a title the
+/// user gave; what is gone meanwhile gets nothing. A failed write is
+/// logged.
 fn write(
     app: &mut App,
     item: &Item,
@@ -355,7 +402,8 @@ fn write(
     let Some(entry) = app.vault.index().entry(&id) else {
         return Ok(gone);
     };
-    if entry.doc.title() != item.title() {
+    let given = matches!(item, Item::Document(doc) if doc.keep_title);
+    if entry.doc.title() != item.title() || given {
         lite.title = None;
     }
     if let Item::Document(doc) = item
@@ -364,7 +412,7 @@ fn write(
         lite.date = None;
     }
     let failed = |e: Error| {
-        log::warn!("Email analysis: {id} could not be written: {e}");
+        log::warn!("Analysis: {id} could not be written: {e}");
         Text::new("item.write_failed")
     };
     let outcome = app.edit(|index, changes| {
@@ -389,10 +437,12 @@ fn write(
             chat: false,
         });
     };
-    let title = plain_title(
-        &texts::filled("analysis.chat_title.email", &[("title", entry.doc.title())]),
-        CHAT_TITLE_CHARS,
-    );
+    let args = [("title", entry.doc.title())];
+    let title = match item {
+        Item::Email(_) => texts::filled("analysis.chat_title.email", &args),
+        Item::Document(_) => texts::filled("analysis.chat_title.document", &args),
+    };
+    let title = plain_title(&title, CHAT_TITLE_CHARS);
     let (model, account) = by;
     let messages = medium_messages(&medium, &model, account, DateTime::now());
     match chat::create(app, title, messages, Some(id)) {
@@ -401,7 +451,7 @@ fn write(
             chat: true,
         }),
         Err(e) => {
-            log::warn!("Email analysis: the chat of {id} could not be written: {e}");
+            log::warn!("Analysis: the conversation of {id} could not be written: {e}");
             Err(Text::new("analysis.chat_write_failed"))
         }
     }
@@ -415,7 +465,7 @@ pub fn stop(app: &mut App, job: Id) {
         return;
     };
     run.queue.stop();
-    log::info!("Email analysis {job}: stopped");
+    log::info!("Analysis {job}: stopped");
     finish(app, job);
 }
 
@@ -426,10 +476,7 @@ fn stop_at_limit(app: &mut App, job: Id, text: Text) {
     let Some(run) = app.analysis.runs.get(&job) else {
         return;
     };
-    let notice = Text::new("job.notice").arg(
-        "job",
-        Text::new("analysis.notices.email").arg("email", run.email.as_str()),
-    );
+    let notice = Text::new("job.notice").arg("job", run.notices.clone());
     app.notice(notice.arg("text", text));
     stop(app, job);
 }
@@ -443,10 +490,7 @@ fn finish(app: &mut App, job: Id) {
     };
     app.end_job_with(job, run.counts.summary(&run.queue), run.queue.limit());
     ai::account_used(app, run.ai.account);
-    if let Some(notice) = run.queue.failures(
-        Text::new("analysis.notices.email").arg("email", run.email.as_str()),
-        run.failed.clone(),
-    ) {
+    if let Some(notice) = run.queue.failures(run.notices.clone(), run.failed.clone()) {
         app.notice(notice);
     }
 }

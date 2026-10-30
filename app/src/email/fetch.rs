@@ -16,11 +16,11 @@ use serde_json::json;
 use super::Origin;
 use super::apply::{Saved, Stored, apply_email};
 use super::entities::Downloaded;
-use crate::analysis;
+use crate::analysis::Analysis;
+use crate::analysis::{self, Batch};
 use crate::app::App;
 use crate::attachments;
 use crate::google;
-use crate::google::accounts::Analysis;
 use crate::google::accounts::AttachmentSettings;
 use crate::google::accounts::FetchEmail;
 use crate::jobs::JobKind;
@@ -464,7 +464,7 @@ pub(super) fn finish(app: &mut App) {
         }
         _ => {
             if let Some((emails, analysis)) = then {
-                analysis::analyse(app, &email, emails, Vec::new(), &analysis);
+                analysis::analyse(app, Batch::email(&email, emails, Vec::new()), &analysis);
             }
         }
     }

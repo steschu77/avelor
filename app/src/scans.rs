@@ -7,7 +7,9 @@
 //! (api.md#scans). What a file read to is kept in memory while the app runs.
 //! Every document written carries `scan: {watch, origin: [files]}`, which is
 //! how a later listing tells the files already in the vault
-//! (`Index::scan_origins`).
+//! (`Index::scan_origins`). A watch's analysis takes the documents an import
+//! wrote (`analysis::analyse`), and with Keep original a document of one image
+//! keeps the image beside it (`document.original`).
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps

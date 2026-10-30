@@ -14,7 +14,7 @@ use super::auto_sync::{on_sync_listed, sync_query};
 use super::entities::{AttachedTo, Downloaded, attachment_entity, email_entity};
 use super::fetch::{FetchPlan, finish, new_email_notice, plan_fetch, start_fetch};
 use super::preview::KnownEmails;
-use crate::google::accounts::Analysis;
+use crate::analysis::Analysis;
 use crate::google::accounts::AttachmentSettings;
 use crate::testing::Harness;
 use crate::testing::{CONNECTED, DISCONNECTED, parse, reply, shape, shown, with_google};
@@ -824,7 +824,7 @@ fn a_finished_fetch_reads_its_attachments_before_the_analysis() {
     let mut h = with_google("email-read-after", EMAIL, &[]);
     let account = connected_id();
     let lite = Analysis {
-        level: crate::google::accounts::AnalysisLevel::Lite,
+        level: crate::analysis::AnalysisLevel::Lite,
         model: None,
     };
     let reading = json!({ "enabled": true, "patterns": ["*.pdf"], "read": true });
@@ -868,7 +868,7 @@ fn a_finished_fetch_hands_its_new_mails_to_the_analysis() {
     let mut h = with_google("email-analyse-after", EMAIL, &[]);
     let account = connected_id();
     let lite = Analysis {
-        level: crate::google::accounts::AnalysisLevel::Lite,
+        level: crate::analysis::AnalysisLevel::Lite,
         model: None,
     };
     for stopped in [false, true] {

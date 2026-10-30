@@ -10,7 +10,7 @@ use av_vault::document::Document;
 use av_vault::envelope::DocumentType;
 use av_vault::shared::Genre;
 
-use super::same;
+use super::{AnalysisLevel, same};
 use av_vault::vault::Index;
 
 /// The most of an email's body that is sent, in characters.
@@ -150,28 +150,32 @@ pub(super) fn attachment_texts(index: &Index, email: Id) -> Vec<(String, String)
 }
 
 // ----------------------------------------------------------------------------
-/// An attachment as the analysis sends it: its read text, and the email it
-/// came with.
+/// A document as the analysis sends it: an attachment's read text and the
+/// email it came with, or a scan's text.
 #[derive(Debug, Clone)]
 pub struct DocText {
     pub id: Id,
-    /// Its title when the analysis was planned: its file's name, for one
-    /// just saved.
+    /// Its title when the analysis was planned: its file's name, for an
+    /// attachment just saved.
     pub title: String,
     /// The name its file came with.
     pub name: String,
-    /// Its date when the analysis was planned: its email's, for one just
-    /// saved.
+    /// Its date when the analysis was planned: its email's, for an
+    /// attachment just saved.
     pub date: Option<DateTime>,
-    /// The subject and sender of the email it is linked to.
+    /// The subject and sender of the email it is linked to; `None` for a
+    /// scan.
     pub email: Option<(String, String)>,
     /// Cut at `BODY_CHARS`.
     pub body: String,
+    /// The user gave its title: it stays.
+    pub keep_title: bool,
 }
 
 impl DocText {
     // ------------------------------------------------------------------------
-    /// `doc`, an attachment, with the email of `index` it is linked to.
+    /// `doc`, with the email of `index` it is linked to if it is an
+    /// attachment.
     pub fn of(index: &Index, doc: &Document) -> Self {
         let email = doc.linked_to().and_then(|id| index.get(&id));
         let email = email
@@ -188,6 +192,14 @@ impl DocText {
             date: doc.date(),
             email,
             body: cut_marked(doc.content(), BODY_CHARS, CUT).into_owned(),
+            keep_title: false,
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether it is asked about at Medium when the analysis is: a document
+    /// without an email, whose points to check no email's conversation carries.
+    pub(super) fn medium(&self, level: AnalysisLevel) -> bool {
+        level == AnalysisLevel::Medium && self.email.is_none()
     }
 }

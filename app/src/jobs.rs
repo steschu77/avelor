@@ -64,7 +64,7 @@ impl JobKind {
             JobKind::EmailFetch => "Email fetch",
             JobKind::CalendarSync => "Calendar sync",
             JobKind::ScanRead => "Scan read",
-            JobKind::EmailAnalysis => "Email analysis",
+            JobKind::EmailAnalysis => "Analysis",
             JobKind::AttachmentRead => "Attachment read",
         }
     }
