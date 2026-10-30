@@ -66,9 +66,9 @@ account file is (`accounts.md#vault-accounts`). The file contains:
     `lite`, `medium`) and the `model` it runs with, as a mail filter's
     (`mail.md#analysis`), the model kept while the level is off; absent:
     off
-  * `keep-original`: `true` if a document of one file keeps the file
-    beside it (`vault.md#document`); absent: it doesn't, but an encrypted
-    PDF always does
+  * `keep-original`: `true` if a document keeps its file beside it (one
+    of several images a PDF of them, `vault.md#document`); absent: it
+    doesn't, but an encrypted PDF always does
   * `enabled`: `false` while the watch is off; it isn't listed under
     Sources then
   * `added`: when the watch was added
@@ -176,8 +176,12 @@ watch (`features/import/scans.js`), in the expanded vault area:
   empty title takes the first page's, else the first file's name (the
   page sends a title only as edited). With Keep original, a document of
   one file (an image, a PDF) keeps it beside it as its original
-  (`vault.md#document`), named as the file; one of several images keeps
-  none. An encrypted PDF always keeps its file, marked `encrypted: true`,
+  (`vault.md#document`), named as the file; one of several images keeps a
+  PDF of them, a page each as it is (`av_pdf::image_pages`: a JPEG as it
+  is, a PNG's image data as it is; sized by its density, else fitted into
+  A4, a JPEG turned by its EXIF orientation), named after the first file;
+  one with another image (WebP, GIF, a PNG with alpha) keeps none. An
+  encrypted PDF always keeps its file, marked `encrypted: true`,
   and its body stays empty. A document whose pages aren't read (or
   changed since), are no longer in the folder or are in the vault already,
   isn't written and shows why. Imported documents leave the page; their

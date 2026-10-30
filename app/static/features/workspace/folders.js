@@ -52,7 +52,7 @@ const WATCH_TYPES = [
       off: 'A document keeps its first page\u2019s title, dated when its file was made.',
     },
     keep: {
-      on: 'The scanned image beside its document in Scans/, opened from its card; a document of several images keeps none yet.',
+      on: 'The scanned image beside its document in Scans/, opened from its card; a document of several images keeps them as one PDF (JPEG, PNG).',
       off: 'Only the text read goes into the vault; the images stay in the folder.',
     },
     page: { title: 'Import scans' },

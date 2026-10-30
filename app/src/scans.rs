@@ -11,8 +11,8 @@
 //! how a later listing tells the files already in the vault
 //! (`Index::scan_origins`). A watch's analysis takes the documents an import
 //! wrote (`enrich::analyse`), and with Keep original a document of one file
-//! keeps the file beside it (`document.original`); an encrypted PDF always
-//! does, as it has no text.
+//! keeps the file beside it (`document.original`), one of several images
+//! (JPEG, PNG) a PDF of them; an encrypted PDF always keeps its file, as it has no text.
 //!
 //! The page shows the files as previews: `scan_previews` renders them
 //! (`sys::preview`: WIC on Windows, gdk-pixbuf on Linux) on a worker and keeps
@@ -805,8 +805,8 @@ pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
 
 // ----------------------------------------------------------------------------
 /// Write the document of `doc`'s pages, with its file beside it if `keep`
-/// and it has one page (`Index::create_with_original`); an encrypted PDF
-/// always keeps it, marked so. Or replace the text of the document they
+/// (`Index::create_with_original`): one page's file, or a PDF of its pages'
+/// images; an encrypted PDF always keeps its file, marked so. Or replace the text of the document they
 /// were imported into (`replace_document`). Or say why not.
 fn write_document(
     app: &mut App,
@@ -822,6 +822,7 @@ fn write_document(
         let pages = gather_pages(app, watch, root, doc)?;
         let original = match &pages[..] {
             [page] if keep || page.encrypted => Some(original_of(root, page.file)?),
+            [_, _, ..] if keep => pdf_of(root, &pages)?,
             _ => None,
         };
         let mut document = scan_document(watch, &doc.title, &pages);
@@ -910,6 +911,28 @@ fn original_of(root: &Path, file: &str) -> Result<(String, Vec<u8>), String> {
         format!("Could not read {file} to keep it.")
     })?;
     Ok((name.unwrap_or_else(|| file.to_string()), bytes))
+}
+
+// ----------------------------------------------------------------------------
+/// The images (JPEG, PNG) of `pages` of the watch's folder `root` as one
+/// PDF to keep beside their document, named after the first; none if a
+/// page is another image (`av_pdf::image_pages`).
+fn pdf_of(root: &Path, pages: &[ScanPage]) -> Result<Option<(String, Vec<u8>)>, String> {
+    let mut files = Vec::new();
+    for page in pages {
+        files.push(original_of(root, page.file)?.1);
+    }
+    let images: Vec<&[u8]> = files.iter().map(Vec::as_slice).collect();
+    match av_pdf::image_pages(&images) {
+        Ok(pdf) => {
+            let stem = Path::new(pages[0].file).file_stem().unwrap_or_default();
+            Ok(Some((format!("{}.pdf", stem.to_string_lossy()), pdf)))
+        }
+        Err(e) => {
+            log::info!("Scan import: {} pages kept as none: {e}", pages.len());
+            Ok(None)
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1388,7 +1411,10 @@ mod tests {
             "the title given stays: {text}"
         );
         assert!(text.contains("genre: letter"), "{text}");
-        assert!(!text.contains("original:"), "two images keep none: {text}");
+        assert!(
+            !text.contains("original:"),
+            "pages that aren't JPEGs or PNGs keep none: {text}"
+        );
     }
 
     // ------------------------------------------------------------------------
@@ -1555,6 +1581,59 @@ mod tests {
             readable(WatchKind::Pdf, "a.jpg"),
             Err("Only PDF files can be read.")
         );
+    }
+
+    // ------------------------------------------------------------------------
+    /// A JPEG of a gray `width` x 100 frame, its headers only.
+    fn jpeg(width: u16) -> Vec<u8> {
+        let mut out = vec![0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 100];
+        out.extend_from_slice(&width.to_be_bytes());
+        out.extend_from_slice(&[1, 1, 0x11, 0, 0xff, 0xda, 0, 2, 0xff, 0xd9]);
+        out
+    }
+
+    // ------------------------------------------------------------------------
+    /// A gray PNG of one pixel.
+    fn png() -> Vec<u8> {
+        let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+        let ihdr = [0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0];
+        for (kind, body) in [
+            (&b"IHDR"[..], ihdr.to_vec()),
+            (b"IDAT", av_pdf::zlib_stored(&[0, 0x80])),
+            (b"IEND", Vec::new()),
+        ] {
+            out.extend_from_slice(&(body.len() as u32).to_be_bytes());
+            out.extend_from_slice(kind);
+            out.extend_from_slice(&body);
+            out.extend_from_slice(&[0; 4]);
+        }
+        out
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_document_of_several_images_keeps_them_as_one_pdf() {
+        let (mut h, folder) = with_scans("scan-import-pdf-original");
+        for (name, image) in [("x.jpg", jpeg(80)), ("y.jpg", jpeg(90)), ("z.png", png())] {
+            fs::write(folder.join(name), image).unwrap();
+            read_page(&mut h, &folder, name, "Seite");
+        }
+        h.call(
+            "set_watch",
+            json!({ "watch": WATCH_ID, "keep_original": true }),
+        );
+        let docs = json!([{ "files": ["x.jpg", "y.jpg", "z.png"] }]);
+        let sent = h.call("scan_import", json!({ "watch": WATCH_ID, "docs": docs }));
+        let id = Id::parse(sent[0]["data"]["id"].as_str().unwrap()).unwrap();
+        let text = fs::read_to_string(h.vault().join(sent[0]["data"]["path"].as_str().unwrap()));
+        assert!(text.unwrap().contains("name: x.pdf"));
+        let original = h.app.vault.index().original_path(&id).unwrap();
+        assert!(original.to_string_lossy().ends_with(".pdf"), "{original:?}");
+        let pdf = fs::read(original).unwrap();
+        let doc = av_pdf::Document::parse(&pdf).unwrap();
+        assert_eq!(doc.page_count(), 3);
+        assert_eq!(doc.page(1).unwrap().scan.unwrap().jpeg, jpeg(90));
+        assert!(doc.page(2).unwrap().cover > 0.9, "the PNG's page");
     }
 
     // ------------------------------------------------------------------------

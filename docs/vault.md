@@ -325,7 +325,8 @@ fields:
 distinction with no effect on which fields are valid — easy to change at
 any time, only available for entities with the `document` role.
 
-**Original** — a file that isn't markdown, such as a mail's attachment,
+**Original** — a file that isn't markdown, such as a mail's attachment
+or a scan (a document of several scanned images keeps a PDF of them),
 next to the document's own file:
 
 * `file`: its name in the document's folder: the document's generated
