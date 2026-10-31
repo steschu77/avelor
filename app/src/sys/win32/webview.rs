@@ -116,7 +116,7 @@ fn setup(hwnd: HWND, webview: &ICoreWebView2, prefs: &Prefs) -> Result<()> {
     unsafe {
         if let Ok(settings) = webview.Settings() {
             let _ = settings.SetIsStatusBarEnabled(false);
-            let _ = settings.SetIsZoomControlEnabled(false);
+            let _ = settings.SetIsZoomControlEnabled(true);
             let _ = settings.SetIsScriptEnabled(true);
             if let Ok(s3) = settings.cast::<ICoreWebView2Settings3>() {
                 let _ = s3.SetAreBrowserAcceleratorKeysEnabled(false);
