@@ -76,6 +76,53 @@ fn fit(width: u32, height: u32, max_w: u32, max_h: u32) -> (u32, u32) {
     (scaled(width), scaled(height))
 }
 
+// ----------------------------------------------------------------------------
+/// The page's zoom levels, Chromium's: WebView2's own Ctrl+wheel steps
+/// through them, so the host's zoom does too.
+const ZOOM_LEVELS: [f64; 17] = [
+    0.25,
+    1.0 / 3.0,
+    0.5,
+    2.0 / 3.0,
+    0.75,
+    0.8,
+    0.9,
+    1.0,
+    1.1,
+    1.25,
+    1.5,
+    1.75,
+    2.0,
+    2.5,
+    3.0,
+    4.0,
+    5.0,
+];
+
+// ----------------------------------------------------------------------------
+/// A step of the page's zoom, from a zoom key or Ctrl+wheel.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Zoom {
+    In,
+    Out,
+    Reset,
+}
+
+impl Zoom {
+    // ------------------------------------------------------------------------
+    /// The level after `level`: the next one up or down, the same at either
+    /// end, or 100%. A level read back rounded counts as the one it's close to.
+    fn level_after(self, level: f64) -> f64 {
+        const CLOSE: f64 = 0.01;
+        match self {
+            Self::In => ZOOM_LEVELS.into_iter().find(|&l| l > level + CLOSE),
+            Self::Out => ZOOM_LEVELS.into_iter().rev().find(|&l| l < level - CLOSE),
+            Self::Reset => Some(1.0),
+        }
+        .unwrap_or(level)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,5 +134,19 @@ mod tests {
         assert_eq!(fit(4000, 1000, 360, 508), (360, 90));
         assert_eq!(fit(100, 50, 360, 508), (100, 50));
         assert_eq!(fit(10_000, 1, 360, 508), (360, 1), "at least a pixel");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn zoom_steps_through_the_levels() {
+        assert_eq!(Zoom::In.level_after(1.0), 1.1);
+        assert_eq!(Zoom::Out.level_after(1.0), 0.9);
+        assert_eq!(Zoom::In.level_after(1.05), 1.1, "between two levels");
+        assert_eq!(Zoom::Out.level_after(1.05), 1.0, "between two levels");
+        assert_eq!(Zoom::In.level_after(1.1 - 1e-9), 1.25, "read back rounded");
+        assert_eq!(Zoom::Out.level_after(1.1 + 1e-9), 1.0, "read back rounded");
+        assert_eq!(Zoom::In.level_after(5.0), 5.0, "the top");
+        assert_eq!(Zoom::Out.level_after(0.25), 0.25, "the bottom");
+        assert_eq!(Zoom::Reset.level_after(2.5), 1.0);
     }
 }

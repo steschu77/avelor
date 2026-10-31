@@ -6,6 +6,7 @@ use std::path::Path;
 use crate::app::Outbox;
 use crate::app::Prefs;
 use crate::page;
+use crate::sys::Zoom;
 use crate::sys::win32::window::WindowProc;
 use webview2_com::{
     AcceleratorKeyPressedEventHandler, CreateCoreWebView2ControllerCompletedHandler,
@@ -19,7 +20,10 @@ use webview2_com::{
 use webview2_com::{WebMessageReceivedEventHandler, take_pwstr};
 use windows::Win32::Foundation::{E_POINTER, HWND};
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
-use windows::Win32::UI::Input::KeyboardAndMouse::VK_F11;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetKeyState, VIRTUAL_KEY, VK_0, VK_ADD, VK_CONTROL, VK_F11, VK_MENU, VK_NUMPAD0, VK_OEM_MINUS,
+    VK_OEM_PLUS, VK_SUBTRACT,
+};
 use windows::core::{Error, HSTRING, Interface, PCWSTR, PWSTR, Result};
 
 // ----------------------------------------------------------------------------
@@ -77,15 +81,17 @@ fn on_controller_created(hwnd: HWND, controller: ICoreWebView2Controller) -> Res
     WindowProc::with_window(hwnd, |window| {
         prefs = window.on_controller(controller.clone(), &webview)
     });
-    take_f11(hwnd, &controller)?;
+    take_keys(hwnd, &controller)?;
     setup(hwnd, &webview, &prefs)
 }
 
 // ----------------------------------------------------------------------------
-/// F11 goes to the window, never to the page: fullscreen, as in a browser
-/// (`WindowProc::toggle_fullscreen`). A held key's repeats are left out.
-fn take_f11(hwnd: HWND, controller: &ICoreWebView2Controller) -> Result<()> {
-    let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_sender, args| {
+/// The keys the host takes, never the page. F11 goes to the window:
+/// fullscreen, as in a browser (`WindowProc::toggle_fullscreen`); a held
+/// key's repeats are left out. The zoom keys (`zoom_key`) zoom the page:
+/// the browser's own went with its accelerator keys (`setup`).
+fn take_keys(hwnd: HWND, controller: &ICoreWebView2Controller) -> Result<()> {
+    let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |sender, args| {
         let Some(args) = args else {
             return Ok(());
         };
@@ -97,16 +103,49 @@ fn take_f11(hwnd: HWND, controller: &ICoreWebView2Controller) -> Result<()> {
             args.VirtualKey(&mut key)?;
             args.PhysicalKeyStatus(&mut status)?;
         }
-        if kind == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && key == u32::from(VK_F11.0) {
+        if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN {
+            return Ok(());
+        }
+        if key == u32::from(VK_F11.0) {
             unsafe { args.SetHandled(true)? };
             if !status.WasKeyDown.as_bool() {
                 WindowProc::with_window(hwnd, WindowProc::toggle_fullscreen);
+            }
+        } else if let Some(zoom) = zoom_key(key)
+            && let Some(controller) = sender
+        {
+            let mut level = 1.0;
+            unsafe {
+                args.SetHandled(true)?;
+                controller.ZoomFactor(&mut level)?;
+                controller.SetZoomFactor(zoom.level_after(level))?;
             }
         }
         Ok(())
     }));
     let mut token: i64 = 0;
     unsafe { controller.add_AcceleratorKeyPressed(&handler, &mut token) }
+}
+
+// ----------------------------------------------------------------------------
+/// The zoom of the virtual key `key` with Ctrl, as in a browser: Plus,
+/// Minus or 0, on the main keys or the number pad. Not with Alt: AltGr is
+/// Ctrl+Alt, and AltGr+0 types `}` on a German keyboard.
+fn zoom_key(key: u32) -> Option<Zoom> {
+    let down = |vk: VIRTUAL_KEY| unsafe { GetKeyState(i32::from(vk.0)) } < 0;
+    if !down(VK_CONTROL) || down(VK_MENU) {
+        return None;
+    }
+    let is = |vk: VIRTUAL_KEY| key == u32::from(vk.0);
+    if is(VK_OEM_PLUS) || is(VK_ADD) {
+        Some(Zoom::In)
+    } else if is(VK_OEM_MINUS) || is(VK_SUBTRACT) {
+        Some(Zoom::Out)
+    } else if is(VK_0) || is(VK_NUMPAD0) {
+        Some(Zoom::Reset)
+    } else {
+        None
+    }
 }
 
 // ----------------------------------------------------------------------------
