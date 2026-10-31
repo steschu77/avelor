@@ -31,14 +31,14 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "av-bundle"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "oxc",
 ]
 
 [[package]]
 name = "av-google"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "av-http",
  "av-utils",
@@ -49,7 +49,7 @@ dependencies = [
 
 [[package]]
 name = "av-http"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "av-utils",
  "gio",
@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "av-llm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "av-http",
  "av-utils",
@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "av-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "av-utils",
  "log",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "av-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glib",
  "libc",
@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "av-vault"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "av-utils",
  "log",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "avelor"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "av-bundle",
  "av-google",
