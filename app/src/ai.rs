@@ -340,7 +340,6 @@ mod tests {
     use super::*;
     use crate::testing::{FakeOllama, Harness, shape};
     use serde_json::{Value, json};
-    use std::net::TcpListener;
 
     // ------------------------------------------------------------------------
     #[test]
@@ -414,13 +413,9 @@ mod tests {
     #[test]
     fn an_address_that_does_not_answer_stores_nothing() {
         let mut h = with_vault("ai-refused");
-        // A port that was free a moment ago: nothing listens there.
-        let port = TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
-        let address = format!("http://127.0.0.1:{port}");
+        // Nothing listens on port 1: the tests' servers take free ports
+        // (port 0), which a port freed for this test could become.
+        let address = "http://127.0.0.1:1".to_string();
         let args = json!({ "provider": "ollama", "address": address });
         let sent = h.call_waiting("connect_ai", args);
 

@@ -428,14 +428,9 @@ fn cancel_aborts_reading_the_body() {
 // ----------------------------------------------------------------------------
 #[test]
 fn refused_connection_is_a_network_error() {
-    let port = TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
-    let result = client()
-        .request(Method::Get, &format!("http://127.0.0.1:{port}/"))
-        .send();
+    // Nothing listens on port 1: the tests' servers take free ports
+    // (port 0), which a port freed for this test could become.
+    let result = client().request(Method::Get, "http://127.0.0.1:1/").send();
     match result {
         // With the HTTP stack's text.
         Err(Error::Network { msg }) => assert!(msg.len() > 10, "{msg}"),
