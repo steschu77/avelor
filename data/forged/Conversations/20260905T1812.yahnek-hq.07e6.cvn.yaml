@@ -164,4 +164,194 @@ conversation:
     sender: Lisa
     date: 2026-11-12T15:20:40Z
     content: that is exactly what a ghost would want you to think
-  active: 01a1d058-c140-79f1-9963-331a449f990d
+  - id: 01a1e019-0ae0-776a-8d1e-ad910f5d0509
+    parent: 01a1d058-c140-79f1-9963-331a449f990d
+    sender: Alex
+    date: 2026-11-15T16:45:00Z
+    content: Fixed the air pump at Speedy Mart. Free coffee for life.
+  - id: 01a1e019-f540-7c9a-a81f-e76da55a2b6f
+    parent: 01a1e019-0ae0-776a-8d1e-ad910f5d0509
+    sender: Maya
+    date: 2026-11-15T16:46:00Z
+    content: You have a job. Two, actually.
+  - id: 01a20fcb-6e40-790c-b72b-17d2a635aba2
+    parent: 01a1e019-f540-7c9a-a81f-e76da55a2b6f
+    sender: Oma
+    date: 2026-11-24T23:02:00Z
+    content: Das Auto ist kaputt, es macht kein Geräusch!!!
+  - id: 01a20fd4-9600-7eda-b28e-fabfb1a0e88a
+    parent: 01a20fcb-6e40-790c-b72b-17d2a635aba2
+    sender: Oma
+    date: 2026-11-24T23:12:00Z
+    content: Wie ein Zeppelin!!!
+  - id: 01a2105c-1580-741b-ac0f-5c2854dcaffd
+    parent: 01a20fd4-9600-7eda-b28e-fabfb1a0e88a
+    sender: Lisa
+    date: 2026-11-25T01:40:00Z
+    content: pickles found the lebkuchen
+  - id: 01a2105c-63a0-7be8-a899-ae721a3071d1
+    parent: 01a2105c-1580-741b-ac0f-5c2854dcaffd
+    sender: Lisa
+    date: 2026-11-25T01:40:20Z
+    content: beagles 2 oma 0
+  - id: 01a21227-adc0-7095-9e6c-f8d8330a12a4
+    parent: 01a2105c-63a0-7be8-a899-ae721a3071d1
+    sender: Oma
+    date: 2026-11-25T10:02:00Z
+    content: Guten Morgen!!! ☀️
+  - id: 01a21228-9820-7408-ac13-80af5b4d00b8
+    parent: 01a21227-adc0-7095-9e6c-f8d8330a12a4
+    sender: Maya
+    date: 2026-11-25T10:03:00Z
+    content: Mama it's 4 am
+  - id: 01a21229-0d50-7a97-90c0-9d24304bcf12
+    parent: 01a21228-9820-7408-ac13-80af5b4d00b8
+    sender: Oma
+    date: 2026-11-25T10:03:30Z
+    content: Frühstück ist fertig
+  - id: 01a21948-5320-7084-8f56-e8de2ff91de8
+    parent: 01a21229-0d50-7a97-90c0-9d24304bcf12
+    sender: Lisa
+    date: 2026-11-26T19:15:00Z
+    content: the turkey doesn't fit in the oven
+  - id: 01a21948-7a30-7d72-aa14-2228e2421a86
+    parent: 01a21948-5320-7084-8f56-e8de2ff91de8
+    sender: Lisa
+    date: 2026-11-26T19:15:10Z
+    content: PIVOT
+  - id: 01a21949-3d80-742e-979a-11a3f7d79e64
+    parent: 01a21948-7a30-7d72-aa14-2228e2421a86
+    sender: Alex
+    date: 2026-11-26T19:16:00Z
+    content: I'm still at work. Don't pivot the turkey.
+  - id: 01a2195f-3680-75c8-9c23-041a06593e9b
+    parent: 01a21949-3d80-742e-979a-11a3f7d79e64
+    sender: Oma
+    date: 2026-11-26T19:40:00Z
+    content: Ich habe eine Gans gekauft. Die passt.
+  - id: 01a21cb2-a740-753b-a123-6a6de465f8a3
+    parent: 01a2195f-3680-75c8-9c23-041a06593e9b
+    sender: Lisa
+    date: 2026-11-27T11:10:00Z
+    content: oma took me to black friday. it's 5am. send help
+  - id: 01a21d32-d3c0-7802-bbe8-178ae0763976
+    parent: 01a21cb2-a740-753b-a123-6a6de465f8a3
+    sender: Lisa
+    date: 2026-11-27T13:30:00Z
+    content: she bought an air fryer for germany
+  - id: 01a21d33-be20-7b67-a866-8eef1a9558ba
+    parent: 01a21d32-d3c0-7802-bbe8-178ae0763976
+    sender: Alex
+    date: 2026-11-27T13:31:00Z
+    content: It'll work for about one second.
+  - id: 01a24621-09a0-789e-879d-eadc696889d7
+    parent: 01a21d33-be20-7b67-a866-8eef1a9558ba
+    sender: Oma
+    date: 2026-12-05T12:15:00Z
+    content: Flug gestrichen. Schnee in Hamburg!!!
+  - id: 01a24621-f400-718a-823a-d6002badf34b
+    parent: 01a24621-09a0-789e-879d-eadc696889d7
+    sender: Lisa
+    date: 2026-12-05T12:16:00Z
+    content: oma you walked to school in snow
+  - id: 01a24622-6930-70a1-a56b-32ca14b22697
+    parent: 01a24621-f400-718a-823a-d6002badf34b
+    sender: Oma
+    date: 2026-12-05T12:16:30Z
+    content: Bergauf. In beide Richtungen.
+  - id: 01a24b8c-0fc0-754a-a142-b7430ad41996
+    parent: 01a24622-6930-70a1-a56b-32ca14b22697
+    sender: Alex
+    date: 2026-12-06T13:30:00Z
+    content: Who ate the chocolate out of my boots
+  - id: 01a24b8c-5de0-7ea0-bf37-df052c82e5ca
+    parent: 01a24b8c-0fc0-754a-a142-b7430ad41996
+    sender: Lisa
+    date: 2026-12-06T13:30:20Z
+    content: 🐶
+  - id: 01a25c68-c5e0-754f-90a4-ab504fc256d1
+    parent: 01a24b8c-5de0-7ea0-bf37-df052c82e5ca
+    sender: Herr Petersen
+    date: 2026-12-09T20:05:00Z
+    content: Moin. Hier liegt Schnee.
+  - id: 01a25c68-ecf0-7b14-8ab5-7c47d85c0beb
+    parent: 01a25c68-c5e0-754f-90a4-ab504fc256d1
+    sender: Herr Petersen
+    date: 2026-12-09T20:05:10Z
+    content: <Media omitted>
+  - id: 01a25c69-b040-73bb-84a1-fb19b247fd21
+    parent: 01a25c68-ecf0-7b14-8ab5-7c47d85c0beb
+    sender: Lisa
+    date: 2026-12-09T20:06:00Z
+    content: who is this
+  - id: 01a25c6a-9aa0-705d-9b81-70502eb60689
+    parent: 01a25c69-b040-73bb-84a1-fb19b247fd21
+    sender: Oma
+    date: 2026-12-09T20:07:00Z
+    content: Herr Petersen!!! Mein Nachbar!!!
+  - id: 01a2717d-ce80-7cbe-a592-25432ca3c628
+    parent: 01a25c6a-9aa0-705d-9b81-70502eb60689
+    sender: Lisa
+    date: 2026-12-13T22:20:00Z
+    content: dad put a motor in omas pyramid
+  - id: 01a2717d-f590-726f-90f2-aeafcd224c1b
+    parent: 01a2717d-ce80-7cbe-a592-25432ca3c628
+    sender: Lisa
+    date: 2026-12-13T22:20:10Z
+    content: the angels are gone
+  - id: 01a2814c-7000-78d5-88f9-b67958e0f0f4
+    parent: 01a2717d-f590-726f-90f2-aeafcd224c1b
+    sender: Oma
+    date: 2026-12-17T00:00:00Z
+    content: Streik!!! Wieder kein Flug
+  - id: 01a28468-f240-75fc-9155-88ddbd03de09
+    parent: 01a2814c-7000-78d5-88f9-b67958e0f0f4
+    sender: Alex
+    date: 2026-12-17T14:30:00Z
+    content: January 2nd. Gus was right.
+  - id: 01a2aa2c-ea40-78a7-95bc-183dbdb5fb4c
+    parent: 01a28468-f240-75fc-9155-88ddbd03de09
+    sender: Lisa
+    date: 2026-12-24T22:30:00Z
+    content: IT'S SNOWING
+  - id: 01a2aa2d-d4a0-7e0f-9ac4-527e680adfa8
+    parent: 01a2aa2c-ea40-78a7-95bc-183dbdb5fb4c
+    sender: Oma
+    date: 2026-12-24T22:31:00Z
+    content: Das ist kein Schnee.
+  - id: 01a2adc2-4600-7927-b098-ab094fb19696
+    parent: 01a2aa2d-d4a0-7e0f-9ac4-527e680adfa8
+    sender: Lisa
+    date: 2026-12-25T15:12:00Z
+    content: two christmases. oma should stay forever, no cap
+  - id: 01a2b0f1-17c0-7079-bced-8923b5cd2698
+    parent: 01a2adc2-4600-7927-b098-ab094fb19696
+    sender: Maya
+    date: 2026-12-26T06:02:00Z
+    content: Alex. It's 12:02. Put the phone down.
+  - id: 01a2b0f1-8cf0-7460-a1b7-46474158b253
+    parent: 01a2b0f1-17c0-7079-bced-8923b5cd2698
+    sender: Alex
+    date: 2026-12-26T06:02:30Z
+    content: Technically it's after Christmas.
+  - id: 01a2b314-9400-7039-bbba-dd73abcd2df9
+    parent: 01a2b0f1-8cf0-7460-a1b7-46474158b253
+    sender: Oma
+    date: 2026-12-26T16:00:00Z
+    content: Bei uns geht Weihnachten bis Lichtmess.
+  - id: 01a2b315-7e60-76f2-84ea-cac9d90a90f5
+    parent: 01a2b314-9400-7039-bbba-dd73abcd2df9
+    sender: Maya
+    date: 2026-12-26T16:01:00Z
+    content: We're a German household now.
+  - id: 01a2d660-d540-7729-829d-6356253e555b
+    parent: 01a2b315-7e60-76f2-84ea-cac9d90a90f5
+    sender: Oma
+    date: 2027-01-02T12:30:00Z
+    content: Guten Morgen!!! Heute fliege ich.
+  - id: 01a2d661-bfa0-7a47-95e4-401885aaa5ab
+    parent: 01a2d660-d540-7729-829d-6356253e555b
+    sender: Lisa
+    date: 2027-01-02T12:31:00Z
+    content: oma pls stay
+  active: 01a2d661-bfa0-7a47-95e4-401885aaa5ab
