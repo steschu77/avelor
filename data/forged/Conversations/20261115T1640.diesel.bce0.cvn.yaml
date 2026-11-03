@@ -1,0 +1,104 @@
+id: 01a1e014-7700-7c79-9caf-2fbab292bce0
+title: Diesel
+date: 2026-11-15T16:40:00Z
+projects:
+- 01a1e026-c680-7a8b-bff3-4cbe3873173a
+import:
+  origin: WhatsApp Chat with Diesel.txt
+conversation:
+  messages:
+  - id: 01a1e014-7700-715d-abb6-c90d8a25b338
+    sender: Diesel
+    date: 2026-11-15T16:40:00Z
+    content: The air pump works. First time since 2014. There's a line.
+  - id: 01a1e015-6160-70e9-951e-229671eec14e
+    parent: 01a1e014-7700-715d-abb6-c90d8a25b338
+    sender: Alex
+    date: 2026-11-15T16:41:00Z
+    content: Free coffee?
+  - id: 01a1e015-af80-7fa2-8d16-9069b5ce469f
+    parent: 01a1e015-6160-70e9-951e-229671eec14e
+    sender: Diesel
+    date: 2026-11-15T16:41:20Z
+    content: For life.
+  - id: 01a20092-07e0-770d-86ca-8879283e5f2b
+    parent: 01a1e015-af80-7fa2-8d16-9069b5ce469f
+    sender: Diesel
+    date: 2026-11-22T00:05:00Z
+    content: You saw nothing.
+  - id: 01a20092-f240-70f6-89d0-8774bdd5c638
+    parent: 01a20092-07e0-770d-86ca-8879283e5f2b
+    sender: Alex
+    date: 2026-11-22T00:06:00Z
+    content: Your pickup makes no noise.
+  - id: 01a20093-6770-7c37-95b5-730a770c32e2
+    parent: 01a20092-f240-70f6-89d0-8774bdd5c638
+    sender: Diesel
+    date: 2026-11-22T00:06:30Z
+    content: If my customers find out, I'm done.
+  - id: 01a20b48-0900-7a8b-b31f-529df11dc8cb
+    parent: 01a20093-6770-7c37-95b5-730a770c32e2
+    sender: Alex
+    date: 2026-11-24T02:00:00Z
+    content: Can I borrow the big car tomorrow? My mother-in-law lands at 3:40.
+  - id: 01a20b49-ddc0-72a4-8440-58d1cba901e7
+    parent: 01a20b48-0900-7a8b-b31f-529df11dc8cb
+    sender: Diesel
+    date: 2026-11-24T02:02:00Z
+    content: Bring it back charged. The slushie outlet's behind the car wash.
+  - id: 01a23e9b-af00-7704-8b77-ee4e5b7da371
+    parent: 01a20b49-ddc0-72a4-8440-58d1cba901e7
+    sender: Diesel
+    date: 2026-12-04T01:12:00Z
+    content: She won't start. Dealer says six weeks.
+  - id: 01a23e9c-9960-733c-99dd-d6b7fbd3ac59
+    parent: 01a23e9b-af00-7704-8b77-ee4e5b7da371
+    sender: Alex
+    date: 2026-12-04T01:13:00Z
+    content: Saturday.
+  - id: 01a247f5-c9a0-72fe-a07f-5d78edad8498
+    parent: 01a23e9c-9960-733c-99dd-d6b7fbd3ac59
+    sender: Alex
+    date: 2026-12-05T20:47:00Z
+    content: Dead 12-volt battery. Forklifts do the same. 47 minutes.
+  - id: 01a247f6-b400-7882-87bc-4d89ddfeb106
+    parent: 01a247f5-c9a0-72fe-a07f-5d78edad8498
+    sender: Diesel
+    date: 2026-12-05T20:48:00Z
+    content: What do I owe you
+  - id: 01a247f7-9e60-73ae-b9b9-8a6660524714
+    parent: 01a247f6-b400-7882-87bc-4d89ddfeb106
+    sender: Alex
+    date: 2026-12-05T20:49:00Z
+    content: It's a golf cart with a mortgage. I take payment in hot dogs.
+  - id: 01a25646-a4c0-789a-a34f-c63267e9ae2a
+    parent: 01a247f7-9e60-73ae-b9b9-8a6660524714
+    sender: Diesel
+    date: 2026-12-08T15:30:00Z
+    content: Sent you something. Not a word to anyone.
+  - id: 01a26d65-8720-7f2b-99c3-837e50569683
+    parent: 01a25646-a4c0-789a-a34f-c63267e9ae2a
+    sender: Diesel
+    date: 2026-12-13T03:15:00Z
+    content: Lady with an electric minivan at pump 4. Says you know why.
+  - id: 01a2728b-e320-7d41-99a8-84069cc47272
+    parent: 01a26d65-8720-7f2b-99c3-837e50569683
+    sender: Diesel
+    date: 2026-12-14T03:15:00Z
+    content: Your daughter calls it Volt Club. Don't tell anyone.
+  - id: 01a2728c-cd80-77f6-998e-95bbc29f2ed2
+    parent: 01a2728b-e320-7d41-99a8-84069cc47272
+    sender: Alex
+    date: 2026-12-14T03:16:00Z
+    content: First rule.
+  - id: 01a2c953-2880-7525-b362-4626af91bc96
+    parent: 01a2728c-cd80-77f6-998e-95bbc29f2ed2
+    sender: Diesel
+    date: 2026-12-30T23:40:00Z
+    content: Scottsdale. I drive. A charging stop every 250 miles.
+  - id: 01a2c954-12e0-7472-b3d8-f7b0db96ba6c
+    parent: 01a2c953-2880-7525-b362-4626af91bc96
+    sender: Alex
+    date: 2026-12-30T23:41:00Z
+    content: Gus says F.
+  active: 01a2c954-12e0-7472-b3d8-f7b0db96ba6c

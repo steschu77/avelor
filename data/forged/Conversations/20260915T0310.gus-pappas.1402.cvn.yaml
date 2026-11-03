@@ -39,4 +39,34 @@ conversation:
     sender: Alex
     date: 2026-11-14T04:42:00Z
     content: The auction's on the 16th. I'm not an animal.
-  active: 01a1d85c-c1c0-755e-bb96-44a307c4a18c
+  - id: 01a286e9-d0c0-70a5-a7eb-f97fc21f54c0
+    parent: 01a1d85c-c1c0-755e-bb96-44a307c4a18c
+    sender: Alex
+    date: 2026-12-18T02:10:00Z
+    content: Oma flies home January 2nd.
+  - id: 01a286ea-45f0-7fe6-aca9-c26120a02f2a
+    parent: 01a286e9-d0c0-70a5-a7eb-f97fc21f54c0
+    sender: Gus
+    date: 2026-12-18T02:10:30Z
+    content: told you
+  - id: 01a289aa-c580-7e9e-9614-7b4de4a3f731
+    parent: 01a286ea-45f0-7fe6-aca9-c26120a02f2a
+    sender: Alex
+    date: 2026-12-18T15:00:00Z
+    content: Sent you half the motel.
+  - id: 01a289ab-61c0-70e1-a199-e5fce9f3d903
+    parent: 01a289aa-c580-7e9e-9614-7b4de4a3f731
+    sender: Gus
+    date: 2026-12-18T15:00:40Z
+    content: F
+  - id: 01a2c957-bc60-7c04-820e-bcd89370afe2
+    parent: 01a289ab-61c0-70e1-a199-e5fce9f3d903
+    sender: Alex
+    date: 2026-12-30T23:45:00Z
+    content: Diesel drives us to Scottsdale. Electric.
+  - id: 01a2c958-0a80-73d1-bcd1-4ca2f818f301
+    parent: 01a2c957-bc60-7c04-820e-bcd89370afe2
+    sender: Gus
+    date: 2026-12-30T23:45:20Z
+    content: F
+  active: 01a2c958-0a80-73d1-bcd1-4ca2f818f301

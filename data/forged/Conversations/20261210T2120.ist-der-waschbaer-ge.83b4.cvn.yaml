@@ -1,0 +1,39 @@
+id: 01a261d3-cc00-739e-996a-0d9beb2f83b4
+title: Ist der Waschbär gefährlich?
+date: 2026-12-10T21:20:00Z
+tags:
+- oma
+linked-to: 01a26017-c420-7267-82c2-e4f75b198373
+ai: {}
+conversation:
+  messages:
+  - id: 01a261d3-cc00-7e1c-bbf3-86ecc65b1f43
+    date: 2026-12-10T21:20:00Z
+    content: Ist der Waschbär gefährlich? Er wohnt auf unserem Dachboden.
+  - id: 01a261d4-8780-7e41-be10-6a7e0e9bb953
+    parent: 01a261d3-cc00-7e1c-bbf3-86ecc65b1f43
+    model: qwen3
+    account: 01a06f8f-f320-7b22-a9d8-565e208965b3
+    date: 2026-12-10T21:20:48Z
+    content: Waschbären sind meistens scheu, können aber kratzen und beißen, wenn sie sich bedroht fühlen. Bitte nicht füttern, und rufen Sie einen Fachmann, der ihn umsiedelt.
+  - id: 01a261d5-c7d0-7e15-a6f2-1dbc88e81c90
+    parent: 01a261d4-8780-7e41-be10-6a7e0e9bb953
+    date: 2026-12-10T21:22:10Z
+    content: Er mag Lebkuchen.
+  - id: 01a261d6-40e8-793f-ac08-a3beedac361a
+    parent: 01a261d5-c7d0-7e15-a6f2-1dbc88e81c90
+    model: qwen3
+    account: 01a06f8f-f320-7b22-a9d8-565e208965b3
+    date: 2026-12-10T21:22:41Z
+    content: Das glaube ich sofort. Bitte trotzdem nicht füttern.
+  - id: 01a261d6-8b20-7d16-bc37-9242ed0bbbd3
+    parent: 01a261d6-40e8-793f-ac08-a3beedac361a
+    date: 2026-12-10T21:23:00Z
+    content: Zu spät.
+  - id: 01a261d7-13d8-75d0-9b17-1b2724a1077d
+    parent: 01a261d6-8b20-7d16-bc37-9242ed0bbbd3
+    model: qwen3
+    account: 01a06f8f-f320-7b22-a9d8-565e208965b3
+    date: 2026-12-10T21:23:35Z
+    content: Dann ab jetzt bitte nicht mehr. Und sagen Sie Alex Bescheid.
+  active: 01a261d7-13d8-75d0-9b17-1b2724a1077d
