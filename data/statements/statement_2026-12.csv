@@ -1,0 +1,38 @@
+
+"Umsätze Girokonto";"Zeitraum: 30 Tage";
+"Neuer Kontostand";"32.474,22 EUR";
+
+"Buchungstag";"Wertstellung (Valuta)";"Vorgang";"Buchungstext";"Umsatz in EUR";
+"offen";"--";"Kartenverfügung";"Kto/IBAN: 004273185520  Buchungstext: Big Dough Donuts>Springfi US        2026-12-31T08:10:55                 ";"-16,20";
+"offen";"--";"Kartenverfügung";"Kto/IBAN: 004273185520  Buchungstext: Fireworks Shack>Springfie US        2026-12-30T16:47:22                 ";"-59,95";
+"31.12.2026";"31.12.2026";"Übertrag / Überweisung";"Auftraggeber: Cogsworth Classic Restoration Buchungstext: Payroll 12/16/2026-12/31/2026 empl.  12 Restoration Mechanic Ref. MZ29AB2T83NLEASJ/16372";"1.872,46";
+"28.12.2026";"28.12.2026";"Lastschrift / Belastung";"Auftraggeber: StreamFlix Inc. Buchungstext: SF-88213470 StreamFlix Standard 12/ 2026 member A7Y4471K6Q Ref. 8DTTL630GBHPMXB4/88264";"-15,99";
+"28.12.2026";"28.12.2026";"Lastschrift / Belastung";"Auftraggeber: Scottsdale Classic Car Auction LLC Buchungstext: Scottsdale Classic Car Auction//Sco 2026-12-26T00:01:07 KFN 1 VJ 2905 Ref. U4FGLLH0D1PLOJBY/1437";"-100,00";
+"28.12.2026";"28.12.2026";"Lastschrift / Belastung";"Auftraggeber: Springfield Grocers Inc. Buchungstext: Springfield Grocers 07//Springfield 2026-12-24T11:10:26 KFN 1 VJ 2905 Ref. 7UXMRLNXHYSG4VSU/16183";"-186,52";
+"24.12.2026";"23.12.2026";"Auszahlung GAA";"Auftraggeber: First Bank of Springfield Buchungstext: FBS ATM 10203040/Springfield/US 2026-12-23T16:20:11 KFN 1 VJ 2905 Bargeldauszahlung Ref. K8KW90D1ATZMLD66/377095";"-200,00";
+"22.12.2026";"22.12.2026";"Lastschrift / Belastung";"Auftraggeber: Speedy Mart Inc. Buchungstext: Speedy Mart 0417//Springfield/US 2026-12-21T08:05:33 KFN 1 VJ 2905 Ref. 19HH727PIZSNSOL5/18049";"-42,10";
+"22.12.2026";"22.12.2026";"Lastschrift / Belastung";"Auftraggeber: GameVault Inc. Buchungstext: GAMEVAULT*GIFTCARD//555-0142/US 2026-12-20T21:03:17 KFN 1 VJ 2905 Ref. MMJ4G3O2Z859JNEY/1308";"-50,00";
+"21.12.2026";"21.12.2026";"Übertrag / Überweisung";"Auftraggeber: Ingrid Brenner Buchungstext: Frohe Weihnachten, für Lisa. Kuss,  Oma Ref. CIYJJPNJ10J2YNGH/156766";"100,00";
+"21.12.2026";"21.12.2026";"Lastschrift / Belastung";"Auftraggeber: Springfield Hardware Inc. Buchungstext: Springfield Hardware//Springfield/U 2026-12-19T11:20:05 KFN 1 VJ 2905 Ref. 0NMUFNL8IFKBOIZJ/199660";"-49,99";
+"21.12.2026";"21.12.2026";"Lastschrift / Belastung";"Auftraggeber: Maple Street Jewelers Buchungstext: Maple Street Jewelers//Springfield/ 2026-12-19T14:22:51 KFN 1 VJ 2905 Ref. QR8K13SGJFDEKCGO/110046";"-149,00";
+"21.12.2026";"21.12.2026";"Lastschrift / Belastung";"Auftraggeber: Slice of Heaven LLC Buchungstext: Slice of Heaven Pizza//Springfield/ 2026-12-18T18:40:09 KFN 1 VJ 2905 Ref. QF3GKPS5UBD8QY2D/14006";"-52,40";
+"18.12.2026";"18.12.2026";"Übertrag / Überweisung";"Empfänger: Gus PappasKto/IBAN: 5512088311 BLZ/BIC: SPCUUS41XXX  Buchungstext: Scottsdale motel Jan 15-17, my half . I'm not an animal. Ref. 7BTTPV69PJ920Q53/116815";"-89,50";
+"16.12.2026";"16.12.2026";"Lastschrift / Belastung";"Auftraggeber: Critter Busters LLC Buchungstext: Critter Busters//Springfield/US 2026-12-15T09:10:40 KFN 1 VJ 2905 Ref. LVDQ2A4MX70PBBTP/360902";"-95,00";
+"15.12.2026";"15.12.2026";"Übertrag / Überweisung";"Auftraggeber: Cogsworth Classic Restoration Buchungstext: Payroll 12/01/2026-12/15/2026 empl.  12 Restoration Mechanic Ref. VHB6ZBRV9DDGLW0O/10770";"1.872,46";
+"14.12.2026";"14.12.2026";"Lastschrift / Belastung";"Auftraggeber: North Pole Tree Lot Buchungstext: North Pole Tree Lot//Springfield/US 2026-12-12T10:35:12 KFN 1 VJ 2905 Ref. DWZ7DVPRW4C8OAQ6/4021";"-65,00";
+"11.12.2026";"11.12.2026";"Übertrag / Überweisung";"Empfänger: Alexander and Maya YahnekKto/IBAN: 004273185539 BLZ/BIC: FBSPUS44XXX  Buchungstext: House fund, starting over Ref. UK4QTL0A3NFREAY4/917725";"-500,00";
+"10.12.2026";"10.12.2026";"Lastschrift / Belastung";"Auftraggeber: Springfield Power & Light Buchungstext: Account 7734-1313 1313 Mockingbird  Lane electricity 11/2026 meter read  11/30 Ref. 1QLTIJDHGMYSL03M/11050";"-131,06";
+"09.12.2026";"09.12.2026";"Lastschrift / Belastung";"Auftraggeber: Springfield Wireless Buchungstext: Customer 555-0167 family plan 3 lin es invoice 12/2026 Ref. YD7WVYBSECMKP06R/2437";"-112,60";
+"08.12.2026";"08.12.2026";"Übertrag / Überweisung";"Auftraggeber: Earl Mahoney Buchungstext: Thanks for the 12V. Not a word to a nyone. D. Ref. 77S8VUU6Q92166P2/13116";"200,00";
+"08.12.2026";"08.12.2026";"Lastschrift / Belastung";"Auftraggeber: Springfield Vet Clinic Buchungstext: Springfield Vet Clinic//Springfield 2026-12-07T17:40:22 KFN 1 VJ 2905 Ref. 9MRM6IHAT0IU8PR9/6758";"-145,00";
+"08.12.2026";"08.12.2026";"Lastschrift / Belastung";"Auftraggeber: Steady Hands Insurance Buchungstext: Policy SH-AUTO-2291 premium 12/2026  Thank you for driving steadily Ref. BS4E02U1KVYDO8J9/1556";"-96,40";
+"07.12.2026";"07.12.2026";"Lastschrift / Belastung";"Auftraggeber: Speedy Mart Inc. Buchungstext: Speedy Mart 0417//Springfield/US 2026-12-06T15:10:44 KFN 1 VJ 2905 Ref. MCFBVJ7HNY7K5HOD/72977";"-38,40";
+"04.12.2026";"04.12.2026";"Übertrag / Überweisung";"Auftraggeber: Springfield Power Station Buchungstext: Final pay empl. 4471, unused vacati on 6 days. Red stapler: not returne d Ref. K1CZVK7X74EMALL8/56908";"794,88";
+"04.12.2026";"04.12.2026";"Lastschrift / Belastung";"Auftraggeber: Gear Street Tool Supply Co. Buchungstext: Gear Street Tool Supply//Springfiel 2026-12-03T12:20:31 KFN 1 VJ 2905 Ref. E2WOIEX2HNK5IYSX/1489";"-312,48";
+"03.12.2026";"03.12.2026";"Lastschrift / Belastung";"Auftraggeber: PetPal Supplies Inc. Buchungstext: PetPal Supplies 112//Springfield/US 2026-12-02T17:48:05 KFN 1 VJ 2905 Ref. EUZ397JF0XBNO00N/15829";"-41,37";
+"02.12.2026";"30.11.2026";"Kontoführungsentgelt";" Buchungstext: Entgelt Visa-Kreditkarte Zeitraum: 01.11.2026 bis 30.11.2026 Ref. 2MZW7JWNNW3D760A/76328";"-1,90";
+"02.12.2026";"02.12.2026";"Lastschrift / Belastung";"Auftraggeber: Big Dough Donuts LLC Buchungstext: Big Dough Donuts//Springfield/US 2026-12-01T07:12:40 KFN 1 VJ 2905 Ref. EXBWEETK9U029VAA/6639";"-22,80";
+"01.12.2026";"01.12.2026";"Lastschrift / Belastung";"Auftraggeber: First Bank of Springfield Buchungstext: Loan 0042-7318-6601 installment 1 o f 360 principal and interest 1502.3 5 escrow 425.00 Ref. 0ET101YYV8S1QX9X/5798";"-1.927,35";
+
+"Alter Kontostand";"32.059,28 EUR";
+

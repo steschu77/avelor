@@ -5,7 +5,7 @@ import:
   origin: statement_2026-11.csv
 transactions:
   account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
-  amount: 3679.27
+  amount: 3832.75
   transactions:
   - id: 01a19c21-7200-712c-a348-ef95216cc40c
     title: Salary November
@@ -60,8 +60,68 @@ transactions:
   - id: 01a1d5a3-2000-7d35-81a4-6e101d4e755f
     title: Security deposit refund (partial)
     date: 2026-11-13T16:00:00Z
-    status: pending
+    status: booked
     amount: 775.0
     sender: Shady Pines Properties
     receiver: Alexander Yahnek
     linked-to: 01a1c140-9e80-76bf-9bd7-fce93dafe486
+  - id: 01a1dff4-6be0-77ff-bc8c-cd1ef4b90e4f
+    title: Speedy Mart, two coffees
+    date: 2026-11-15T16:05:00Z
+    status: booked
+    amount: -4.98
+    sender: Alexander Yahnek
+    receiver: Speedy Mart
+  - id: 01a1f17f-1540-7e28-a381-825898fea100
+    title: Microchip registration, Pickles
+    date: 2026-11-19T01:50:00Z
+    status: booked
+    amount: -19.95
+    sender: Alexander Yahnek
+    receiver: Found Paws Microchip Registry
+    linked-to: 01a184d0-3500-7343-ac41-fd2f44a910db
+  - id: 01a20922-b800-7bef-8dcf-0e197d15ef2a
+    title: Security deposit refund (the rest)
+    date: 2026-11-23T16:00:00Z
+    status: booked
+    amount: 375.0
+    sender: Shady Pines Properties
+    receiver: Alexander Yahnek
+    linked-to: 01a20927-4be0-7e4c-b0a0-904e39074d19
+  - id: 01a20b1a-4240-7f96-bfae-4227eabffcda
+    title: Springfield Grocers, the turkey
+    date: 2026-11-24T01:10:00Z
+    status: booked
+    amount: -64.8
+    sender: Alexander Yahnek
+    receiver: Springfield Grocers
+    linked-to: 01a1be44-2760-7a82-aad3-cee411f0618e
+  - id: 01a20fce-2d60-7748-9076-919b2abb4954
+    title: Airport parking
+    date: 2026-11-24T23:05:00Z
+    status: booked
+    amount: -12.0
+    sender: Alexander Yahnek
+    receiver: Springfield Regional Airport
+  - id: 01a21d0e-34c0-7ee6-b7f5-c6c675ac2341
+    title: Big Dough Donuts, the last day
+    date: 2026-11-27T12:50:00Z
+    status: booked
+    amount: -28.8
+    sender: Alexander Yahnek
+    receiver: Big Dough Donuts
+  - id: 01a22161-fe80-7e28-bbfa-57de739128b2
+    title: StreamFlix
+    date: 2026-11-28T09:00:00Z
+    status: booked
+    amount: -15.99
+    sender: Alexander Yahnek
+    receiver: StreamFlix
+  - id: 01a22ed8-f460-7670-a2ea-d58b01a3b1d1
+    title: Storage of Oma's suitcase, including labor
+    date: 2026-11-30T23:45:00Z
+    status: booked
+    amount: -75.0
+    sender: Alexander Yahnek
+    receiver: Shady Pines Properties
+    linked-to: 01a22ee6-b000-71f9-8207-bafc44e3ded1

@@ -1,0 +1,32 @@
+id: 01a23f1a-06c0-7855-ac22-5e7bca70eb19
+title: Is an electric car just a golf cart?
+date: 2026-12-04T03:30:00Z
+projects:
+- 01a1e026-c680-7a8b-bff3-4cbe3873173a
+linked-to: 01a23f23-2e80-70c3-87f1-5a9d438f754f
+ai: {}
+conversation:
+  messages:
+  - id: 01a23f1a-06c0-7392-8eff-cb191cc89531
+    date: 2026-12-04T03:30:00Z
+    content: A friend's electric pickup won't start. The big battery is full. Any ideas?
+  - id: 01a23f1a-31b8-7783-b717-cd64ae37c94e
+    parent: 01a23f1a-06c0-7392-8eff-cb191cc89531
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-12-04T03:30:11Z
+    content: |-
+      Check the 12-volt battery first. Like a golf cart or an electric forklift, an EV has a small 12-volt battery that runs the controls and wakes the car up. When it's dead, the car stays dark, however full the big battery is. It's the most common reason an EV won't start.
+
+      Test it with a multimeter: below about 12 volts, replace it like any car battery. Leave the orange cables alone: that's the high-voltage side.
+  - id: 01a23f1b-6650-7f88-b125-5394351850bf
+    parent: 01a23f1a-31b8-7783-b717-cd64ae37c94e
+    date: 2026-12-04T03:31:30Z
+    content: So it's a golf cart with a mortgage.
+  - id: 01a23f1b-7208-7798-95d2-7b7df8db54de
+    parent: 01a23f1b-6650-7f88-b125-5394351850bf
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-12-04T03:31:33Z
+    content: A golf cart with a mortgage and an app.
+  active: 01a23f1b-7208-7798-95d2-7b7df8db54de

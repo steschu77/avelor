@@ -1,0 +1,32 @@
+id: 01a20ada-2c00-7fc3-800b-e4c47bc15599
+title: Would my deposit script have fired?
+date: 2026-11-24T00:00:00Z
+projects:
+- 01a0029c-68c0-79cd-804f-54d54c96489b
+linked-to: 01a0029c-68c0-79cd-804f-54d54c96489b
+ai: {}
+conversation:
+  messages:
+  - id: 01a20ada-2c00-7a65-ae20-b416b91c57cc
+    date: 2026-11-24T00:00:00Z
+    content: Shady Pines paid back the $375. Would the script in the Money Pit readme have fired?
+  - id: 01a20ada-5ae0-799c-a22e-15df52794a52
+    parent: 01a20ada-2c00-7a65-ae20-b416b91c57cc
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-11-24T00:00:12Z
+    content: |-
+      No. It checks each payment from Shady Pines on its own: `tx.amount >= 1150`. The deposit came back in two payments, $775 on November 13 and $375 today, and neither reaches $1,150. The task would stay open, and Maya would get no message.
+
+      (The script is an idea in the readme; nothing runs it yet.)
+  - id: 01a20adb-29e8-7d59-9726-48fe47592ae1
+    parent: 01a20ada-5ae0-799c-a22e-15df52794a52
+    date: 2026-11-24T00:01:05Z
+    content: So Maya never gets her 'Told you'.
+  - id: 01a20adb-3d70-7a73-831b-2761d115da12
+    parent: 01a20adb-29e8-7d59-9726-48fe47592ae1
+    model: claude-sonnet-5-5
+    account: 019ff8a2-1680-7ef9-8fbb-298888292ba7
+    date: 2026-11-24T00:01:10Z
+    content: Not from the script. To fire on the total, it would add up Shady Pines' refunds first. Or you tell her yourself.
+  active: 01a20adb-3d70-7a73-831b-2761d115da12

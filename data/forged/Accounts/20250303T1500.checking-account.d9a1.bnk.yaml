@@ -6,6 +6,6 @@ bank-account:
   type: checking
   number: 0042-7318-5520
   currency: USD
-  balance: 31130.8
+  balance: 32059.28
   owner: Alexander Yahnek
   institution: First Bank of Springfield
