@@ -176,6 +176,24 @@ impl Harness {
     }
 
     // ------------------------------------------------------------------------
+    /// `call`, then the queue run until `done` holds for all the page got:
+    /// a fast worker's events may come with the reply already.
+    pub fn call_until(
+        &mut self,
+        cmd: &str,
+        args: Value,
+        done: impl Fn(&[String]) -> bool,
+    ) -> Vec<String> {
+        let request = json!({ "id": 1, "cmd": cmd, "args": args });
+        let first = self.send(&request.to_string());
+        if done(&first) {
+            return first;
+        }
+        let later = self.wait_for(|later| done(&[first.as_slice(), later].concat()));
+        [first, later].concat()
+    }
+
+    // ------------------------------------------------------------------------
     /// What the page got since the last call.
     pub fn take(&self) -> Vec<String> {
         std::mem::take(&mut *self.sent.borrow_mut())

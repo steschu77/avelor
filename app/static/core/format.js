@@ -61,11 +61,6 @@ export function relativeDay(date) {
 }
 
 // ----------------------------------------------------------------------------
-// Two texts in the page's order, through a shared collator (`localeCompare`
-// builds one per call).
-export const compareText = new Intl.Collator(locale).compare;
-
-// ----------------------------------------------------------------------------
 // Every date format of the page, here and through shared instances
 // (`toLocale*String` builds a formatter per call); named by what they show,
 // the examples in US English.
@@ -114,6 +109,22 @@ export function shortMonthDate(date, withTime) {
 export function pageDate(iso, withTime) {
   if (!iso) return t('date.never');
   return (withTime ? DAY_MONTH_YEAR_TIME : DAY_MONTH_YEAR).format(new Date(iso));
+}
+
+// ----------------------------------------------------------------------------
+// Two texts in the page's order, through a shared collator (`localeCompare`
+// builds one per call).
+export const compareText = new Intl.Collator(locale).compare;
+
+// ----------------------------------------------------------------------------
+// A sum of money in `currency`, an ISO code ("$1,234.56"); with two decimals
+// if it names none.
+export function money(amount, currency) {
+  try {
+    return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(amount);
+  } catch {
+    return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  }
 }
 
 // ----------------------------------------------------------------------------

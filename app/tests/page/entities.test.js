@@ -1,8 +1,9 @@
 import { equal, test } from './harness.js';
-import { vault } from './vault.js';
+import { entity, vault } from './vault.js';
 import {
-  NO_PROJECT, assistantConversations, entities, knownThreads, matchesFilter, projectNames, projectScope, projectsFor,
-  projectsInOrder, projectsOf, sourceKeyOf, threadMatchesFilter, threadMembers, threadOf, threadProjects, threads,
+  NO_PROJECT, assistantConversations, entities, entityOf, knownThreads, matchesFilter, parseContact, projectNames, projectScope,
+  projects, projectsFor, projectsInOrder, projectsOf, sourceKeyOf, threadMatchesFilter, threadMembers, threadOf, threadProjects,
+  threads, watches,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -125,6 +126,15 @@ test('the source of a scan or an import is its folder watch', () => {
   equal([sourceKeyOf({ source: { scan: { watch: 'w1' } } }), sourceKeyOf({ source: { scan: {} } })], ['watch:w1', null]);
 });
 
+test("the source of a statement is its account's watch, whichever imported it", () => {
+  watches.clear();
+  watches.set('w0', { id: 'w0', type: 'images', account: 'bank' });
+  watches.set('w1', { id: 'w1', type: 'statements', account: 'savings' });
+  watches.set('w3', { id: 'w3', type: 'statements', account: 'bank' });
+  const imported = account => sourceKeyOf({ statement: { account }, source: { import: { watch: 'w2' } } });
+  equal([imported('bank'), imported('other')], ['watch:w3', 'watch:w2']);
+});
+
 test('the conversations with an AI on an entity, the newest first', () => {
   const chat = (id, date, more = {}) => ({ id, kind: 'conversation', date, source: { ai: {} }, linked_to: 'letter', ...more });
   vault(
@@ -132,4 +142,28 @@ test('the conversations with an AI on an entity, the newest first', () => {
     chat('5', '2027-07-10', { linked_to: null }),
   );
   equal([ids(assistantConversations('letter')), ids(assistantConversations(null))], [['3', '2', '1'], ['5']]);
+});
+
+test('a contact of the vault, one named with an email, and one as written', () => {
+  vault({ id: 'maya', kind: 'contact', title: 'Maya Yahnek' }, { id: 'nameless', kind: 'contact', title: '' });
+  equal(parseContact('@maya'), { id: 'maya', name: 'Maya Yahnek' });
+  equal(parseContact('@nameless').name, 'untitled');
+  equal(parseContact('@gone'), { name: '@gone' });
+  equal(parseContact('Maya <maya@example.org>'), { name: 'Maya', email: 'maya@example.org' });
+  equal(parseContact('Shady Pines Properties'), { name: 'Shady Pines Properties' });
+});
+
+test('an entity as the page keeps it', () => {
+  const day = entityOf({ id: 'a', date: '2027-07-08', event: { end: '2027-07-10' } });
+  equal([day.doc_id, day.date, day.end, day.all_day], ['a', new Date(2027, 6, 8), new Date(2027, 6, 10), true]);
+  const task = entityOf({ id: 'b', date: '2027-07-08T10:00:00Z', task: { due: '2027-07-09', done: '2027-07-08T11:00:00Z' } });
+  equal([task.all_day, task.due, task.done.getTime()], [false, new Date(2027, 6, 9), Date.UTC(2027, 6, 8, 11)]);
+  equal(entityOf({ id: 'c' }).date, undefined);
+});
+
+test("the tests' entities are as the page keeps them", () => {
+  for (const meta of [{ id: 'a', date: '2027-07-08', event: { end: '2027-07-10' } }, { id: 'b', date: '2027-07-08T10:00:00Z', task: { due: '2027-07-09' } }, { id: 'c' }]) {
+    equal(entity(meta), entityOf(meta));
+  }
+  equal(projects.size, 0);
 });

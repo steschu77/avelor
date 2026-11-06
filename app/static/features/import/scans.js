@@ -57,7 +57,7 @@ let scan = null; // the page's state, see openScanImport
 
 // Open the page for `watch_id` and list its files. The page of the same
 // watch keeps its documents, as they were arranged.
-export function openScanImport(watch_id) {
+function openScanImport(watch_id) {
   if (scan?.watch !== watch_id) {
     scan = {
       watch: watch_id,

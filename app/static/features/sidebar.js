@@ -27,8 +27,7 @@ import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
-import { watchType } from './workspace/folders.js';
-import { openScanImport } from './import/scans.js';
+import { importWatch, watchName, watchType } from './workspace/folders.js';
 import { openEmailFetch } from './import/email.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
@@ -185,8 +184,8 @@ function renderSidebar() {
   // A row click filters by the source; its button opens the New menu, imports
   // from a watch or syncs an account's.
   const sourceRows = vaultSources().map(source => {
-    const { key, name, icon, account } = source;
-    const row = rowFor(`source:${key}`, name, () =>
+    const { key, name, icon, watch, account } = source;
+    const row = rowFor(`source:${key}${watch && !watch.folder ? ':no-folder' : ''}`, name, () =>
       sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', icon, () => selectSource(key), sourceButton(source)));
     updateNavItem(row, sourceCounts.get(key) ?? 0, key === selected_source);
     if (account) {
@@ -293,26 +292,32 @@ function toggleArchived() {
 }
 
 // The sources as the vault panel lists them: what was made in the app; each
-// enabled folder watch's, under its name, what it imported; each connected
-// account's.
+// enabled folder watch's, under its name (a statements watch's is its bank
+// account's), what it imported; each connected account's.
 function vaultSources() {
   return [
     { key: 'created', name: t('sidebar.created_here'), icon: '#i-home' },
     ...[...watches.values()].filter(watch => watch.enabled).map(watch => {
       const { icon, also } = watchType(watch.type);
-      return { key: watchSourceKey(watch.id), name: watch.name, icon, also, watch };
+      return { key: watchSourceKey(watch.id), name: watchName(watch), icon, also, watch };
     }),
     ...[...accounts.values()].flatMap(accountSources),
   ];
 }
 
-// A source's button: Created Here's opens the New menu; a watch's opens the
-// import page of its type; an account's syncs.
+// A source's button: Created Here's opens the New menu; a watch's imports
+// (`importWatch`), a bank account's whose folder isn't chosen yet has none; an
+// account's syncs.
 function sourceButton(source) {
   const { key, name, watch, account } = source;
   if (key === 'created') return { icon: '#i-add', title: t('sidebar.new_title'), onClick: (_row, button) => runAction('new', button) };
   if (account) return { icon: '#i-arrow-sync', title: t('sidebar.sync', { name }), onClick: () => syncSource(source) };
-  return { icon: IMPORT_ICON, title: t('sidebar.import_from', { name }), onClick: () => openScanImport(watch.id) };
+  if (!watch?.folder) return null;
+  return {
+    icon: IMPORT_ICON,
+    title: watch.type === 'statements' ? t('sidebar.import_statements', { name }) : t('sidebar.import_from', { name }),
+    onClick: () => importWatch(watch.id),
+  };
 }
 
 // The vault panel's rows as places Go to finds: each filters by its project

@@ -177,7 +177,8 @@ impl Batch {
     /// `kind`, those in `titled` with the title the user gave.
     pub fn scans(kind: WatchKind, watch: &str, documents: Vec<Id>, titled: Vec<Id>) -> Self {
         let (label, notices) = match kind {
-            WatchKind::Images => (
+            // A statements watch imports no documents to analyse.
+            WatchKind::Images | WatchKind::Statements => (
                 Text::new("analysis.label.scans"),
                 Text::new("analysis.notices.scans"),
             ),

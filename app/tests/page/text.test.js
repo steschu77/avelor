@@ -24,6 +24,10 @@ test("the host's text, its arguments texts too", () => {
   equal([textOf(null), textOf({})], ['', '']);
 });
 
+test("a date and a sum in the host's text", () => {
+  equal(textOf({ key: 'test.named', args: { name: { date: '2027-07-09' }, n: { amount: 12.5, currency: 'USD' } } }), '7/9/2027 of $12.50');
+});
+
 test("a list of the host's texts is joined", () => {
   equal(textOf([{ key: 'test.plain' }, { key: 'test.count', args: { n: 1 } }]), 'plain \u00b7 1 entry');
 });

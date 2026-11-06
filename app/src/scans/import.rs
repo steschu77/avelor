@@ -12,12 +12,12 @@ use av_vault::shared::OneOrMany;
 use serde::Deserialize;
 use serde::Serialize;
 
-use super::{analysis_works, refuse};
+use super::{analysis_works, refuse, refuse_statements};
 use crate::analysis::{self, Analysis, Batch};
 use crate::app::App;
 use crate::protocol::Req;
 use crate::texts::Text;
-use crate::watches::FolderFile;
+use crate::watches::{FolderFile, WatchKind};
 
 // ----------------------------------------------------------------------------
 /// `scan_import`'s args: the documents, each its pages in order.
@@ -70,6 +70,9 @@ pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
     let (watch, root, name, kind, keep, analysis) = match app.watches.get(request.watch) {
         Ok(watch) => {
             let settings = watch.settings();
+            if settings.kind == WatchKind::Statements {
+                return refuse_statements(req);
+            }
             if let Err((error, message)) = analysis_works(app, settings) {
                 return refuse(req, error, message);
             }

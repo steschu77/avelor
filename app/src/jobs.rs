@@ -30,21 +30,23 @@ pub enum JobKind {
     ScanRead,
     EmailAnalysis,
     AttachmentRead,
+    StatementImport,
 }
 
 impl JobKind {
     // ------------------------------------------------------------------------
     /// Whether `cancel_job` can stop it: all but the indexing, as a
-    /// half-indexed vault helps nobody.
+    /// half-indexed vault helps nobody, and a statements import, which reads
+    /// a few small files and is done.
     fn stoppable(self) -> bool {
-        self != JobKind::Indexing
+        !matches!(self, JobKind::Indexing | JobKind::StatementImport)
     }
 
     // ------------------------------------------------------------------------
     /// Whether it belongs to the open vault, so a vault switch stops it
     /// first: it writes into the vault (email fetch, calendar sync, email
-    /// analysis, attachment read), or reads for one of its watches with one
-    /// of its AI accounts (scan read).
+    /// analysis, attachment read, statements import), or reads for one of
+    /// its watches with one of its AI accounts (scan read).
     fn vault_bound(self) -> bool {
         matches!(
             self,
@@ -53,6 +55,7 @@ impl JobKind {
                 | JobKind::ScanRead
                 | JobKind::EmailAnalysis
                 | JobKind::AttachmentRead
+                | JobKind::StatementImport
         )
     }
 
@@ -66,6 +69,7 @@ impl JobKind {
             JobKind::ScanRead => "Scan read",
             JobKind::EmailAnalysis => "Analysis",
             JobKind::AttachmentRead => "Attachment read",
+            JobKind::StatementImport => "Statement import",
         }
     }
 }
@@ -336,7 +340,7 @@ pub fn stop(app: &mut App, id: Id) {
         JobKind::ScanRead => scans::stop_read(app),
         JobKind::EmailAnalysis => analysis::stop(app, id),
         JobKind::AttachmentRead => attachments::stop(app, id),
-        JobKind::CalendarSync | JobKind::Indexing => {}
+        JobKind::CalendarSync | JobKind::Indexing | JobKind::StatementImport => {}
     }
 }
 

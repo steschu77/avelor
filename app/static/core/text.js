@@ -10,6 +10,7 @@ const catalog = JSON.parse($('texts')?.textContent || '{}');
 const forms = new Intl.PluralRules(locale);
 const ordinals = new Intl.PluralRules(locale, { type: 'ordinal' });
 const number = new Intl.NumberFormat(locale);
+const day = new Intl.DateTimeFormat(locale);
 
 // ----------------------------------------------------------------------------
 // The text of `key` with its placeholders, {name}, filled in from `args`, a
@@ -44,9 +45,9 @@ const MARK = String.fromCharCode(1);
 export const ordinal = n => t('ordinal', { n, ordinal: true });
 
 // ----------------------------------------------------------------------------
-// A text the host sent (texts.rs): `{ key, args }`, an argument a text too, a
-// sum of money (`{ amount, currency }`); a list of texts is a job's summary,
-// its parts joined.
+// A text the host sent (texts.rs): `{ key, args }`, an argument a text too,
+// a date (`{ date }`) or a sum of money (`{ amount, currency }`); a list of
+// texts is a job's summary, its parts joined.
 export function textOf(text) {
   if (Array.isArray(text)) return text.map(textOf).join(' \u00b7 ');
   if (!text?.key) return '';
@@ -57,6 +58,10 @@ export function textOf(text) {
 
 function argOf(value) {
   if (value?.key) return textOf(value);
+  if (value?.date) {
+    const [y, m, d] = value.date.split('-').map(Number);
+    return day.format(new Date(y, m - 1, d));
+  }
   if (value?.currency) {
     const money = new Intl.NumberFormat(locale, { style: 'currency', currency: value.currency });
     return money.format(value.amount);

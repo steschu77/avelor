@@ -54,8 +54,11 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
   due date as seen from today (tagged when overdue), its assignee and when
   it was done (`task.done`), for an email its sender, followed by its type
   when the email analysis found one ("Stadtwerke · notification",
-  `email.md#analysis`), and for a document its type and the file it stands
-  for, with Open (`vault.md#document`; `renderCardDetails`,
+  `email.md#analysis`), for any entity but an event (whose start it is)
+  its date, for a document its type and the file it stands for, with Open (`vault.md#document`), for a bank account its bank,
+  number, balance and holder, and for a statement its account, its transactions
+  (and how many are pending) and the balance it ends with
+  (`vault.md#statement`; `renderCardDetails`,
   `features/panel/details.js`). A task's fields and a document's type are
   editable in place while the host can write the entity
   (`panel.md#field-edits`); the rest is read-only;
@@ -521,6 +524,10 @@ one shows them as text:
   vault (`@id`) shows its name and stays the contact until the text is
   changed. Empty removes it.
 - **Done**: when the task was marked done (`task.done`), shown only.
+- **Date** (any entity's but an event's, whose start it is): its day
+  typed in (`dateField`), a scan's or a mail's wrong date corrected; a
+  time of day it has is kept. Through `edit_entities`' `{date}`; as text
+  while the host can't write the entity.
 - **Type** (a document): typed in, with the types the vault's documents
   use offered (`#type-list`); empty removes it. The card's icon follows.
 
@@ -587,7 +594,8 @@ type (`kind`, `Document::kind()`):
   saved like a document),
 - `thread` → `onThread` into the page's `threads` Map, which
   the Documents lens reads for a thread's row,
-- everything else → `onDocMeta` into `entities`: an entity's rows in the
+- everything else → `onDocMeta` into `entities`, as `entityOf` makes it
+  (`model/entities.js`: its dates as Dates, whether it is all day): an entity's rows in the
   Documents lens, including thread members, emails, and conversations.
 
 The sidebar's per-project counts are derived on the page,

@@ -331,11 +331,11 @@ What the app writes on its own is no step: a conflict copy
 (`#held-saves`), what a job writes (Fetch email, with the attachments it
 saves and reads, `email.md#fetch-email`, `email.md#attachments`; a
 calendar's sync, `calendar.md`; the email analysis, `email.md#analysis`;
-an import of scans, `import.md#import-scans`), the calendar entity a check makes
-(`calendar.md#syncing`); nor are a conversation
-with the assistant (`assistant.md`), the folder watches
-(`import.md#folder-watches`), Delete for good and Empty trash
-(`vault.md#trash`).
+an import of scans or of statements, `import.md#import-scans`,
+`import.md#statements`), the calendar entity a check makes
+(`calendar.md#syncing`); nor are a conversation with the assistant
+(`assistant.md`), the folder watches (`import.md#folder-watches`),
+Delete for good and Empty trash (`vault.md#trash`).
 
 ## Closing the app <a id="closing-the-app"></a>
 

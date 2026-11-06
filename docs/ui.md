@@ -58,7 +58,9 @@ the Vault page alone.
   (`projectsInOrder`). Creating and editing projects, and dropping rows on
   them, is `panel.md#projects`.
 - **Sources**: "Created Here" (with a "+" that opens New); each enabled
-  folder watch under its name (`import.md#folder-watches`); per
+  folder watch under its name, a statements watch under its account's
+  (its account's statements, whichever watch imported them), with its
+  Import button (`import.md#folder-watches`); per
   connected Google account an Email source (unless its access is off), one
   source per checked calendar. A source
   counts and filters the entities that came through it (`sourceKeyOf`);

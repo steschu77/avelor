@@ -10,10 +10,9 @@
 // runs after this module's, which app.js imports before every feature.
 
 import { rpcOn } from '../core/rpc.js';
-import { parseDate } from '../core/format.js';
 import { store } from './state.js';
 import { NO_WORDS } from './state.js';
-import { entities } from './entities.js';
+import { entities, entityOf } from './entities.js';
 import { projects } from './entities.js';
 import { threads } from './entities.js';
 import { accounts } from './entities.js';
@@ -59,21 +58,7 @@ rpcOn('content', ({ id, source, html }) => onDocContent(id, source, html));
 
 // ----------------------------------------------------------------------------
 function onDocMeta(doc_id, meta) {
-  const parsedDate = parseDate(meta.date);
-  // YYYY-MM-DD vs. full datetime string
-  const all_day = parsedDate && meta.date.length === 10;
-
-  entities.set(doc_id, {
-    ...meta,
-    doc_id,
-    date: parsedDate,
-    // an event's end (all-day: the day after the last)
-    end: parseDate(meta.event?.end),
-    // a task's due date, and when it was marked done
-    due: parseDate(meta.task?.due),
-    done: parseDate(meta.task?.done),
-    all_day,
-  });
+  entities.set(doc_id, entityOf(meta));
   store.setState({ entities_rev: store.getState().entities_rev + 1 });
 }
 

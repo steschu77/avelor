@@ -1,15 +1,16 @@
-// What a card shows of its event, task, email or document (panel.md#cards):
-// the details grid (`renderCardDetails`) with the contacts and the calendar
-// as chips that select what they name, a task's fields and a document's
+// What a card shows of its event, task, email, document, bank account or
+// statement (panel.md#cards):
+// the details grid (`renderCardDetails`) with the contacts, the calendar
+// and the account as chips that select what they name, a task's fields and a document's
 // type editable where the host can write them (`edit_entities`), and a
 // task's tag (`taskTag`), which the day view's task rows and the calendar's
 // grid show too.
 
 import { accEl } from '../../core/dom.js';
-import { DATE_FORMAT, MONTH, WEEKDAY, addDays, fileSize, sameDay } from '../../core/format.js';
+import { DATE_FORMAT, MONTH, WEEKDAY, addDays, fileSize, money, sameDay } from '../../core/format.js';
 import { TIME_FORMAT, isoInstant, localDay, relativeDay } from '../../core/format.js';
 import { ordinal, t } from '../../core/text.js';
-import { entities } from '../../model/entities.js';
+import { entities, parseContact } from '../../model/entities.js';
 import { googleKept, googleType, isOverdue } from '../../model/calendar.js';
 import { byDay, icalDate, parseSchedule, ruleSupported } from '../../model/schedule.js';
 import { editEntityLocal } from '../../model/structure.js';
@@ -37,11 +38,12 @@ export function dueTag(text) {
 // grid, filled with its kinds' rows in this order: an event's (`eventFields`,
 // `occurrence`'s times on a day card), a task's (`taskFields`, or `taskText`
 // while the host can't write it), an email's (`emailFields`), its date (any
-// entity's but an event's, whose start it is: `dateField`), and a document's
-// type and the file it stands for (`originalField`). A task's fields, the
-// date and a document's type are editable while the host can write the entity
-// (`taskFields`, `docTypeField`). Rows without a value are left out; hidden for
-// an entity with none of them.
+// entity's but an event's, whose start it is: `dateField`), a document's type
+// and the file it stands for (`originalField`), a bank account's
+// (`bankAccountFields`), and a statement's (`statementFields`). A task's
+// fields, the date and a document's type are editable while the host can
+// write the entity (`taskFields`, `docTypeField`). Rows without a value are left
+// out; hidden for an entity with none of them.
 //
 // Drawn again on every entity change: while one of its fields has the focus,
 // that waits until the block is left, so what is typed stays (as a title
@@ -65,6 +67,8 @@ export function renderCardDetails(row, doc, occurrence = null) {
     if (doc?.kind === 'document' && doc.writable) add(t('props.type'), docTypeField(doc));
     else if (doc?.kind === 'document' && doc.type) add(t('props.type'), doc.type);
     if (doc?.document?.original) add(t('props.file'), ...originalField(doc));
+    if (doc?.['bank-account']) bankAccountFields(doc, add);
+    if (doc?.statement) statementFields(doc, add);
     row.replaceChildren(...parts);
     row.hidden = !parts.length;
     if (focusKey) row.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true });
@@ -266,6 +270,29 @@ function docTypeField(doc) {
 }
 
 // ----------------------------------------------------------------------------
+// A bank account's bank, number, balance and holder.
+function bankAccountFields(doc, add) {
+    const account = doc['bank-account'];
+    if (account.bank) add(t('props.bank'), account.bank);
+    if (account.number) add(t('props.number'), account.number);
+    if (account.balance != null) add(t('props.balance'), money(account.balance, account.currency));
+    if (account.holder) add(t('props.holder'), contactChip(account.holder));
+}
+
+// ----------------------------------------------------------------------------
+// A statement's account, its transactions and the balance it ends with
+// (vault.md#statement).
+function statementFields(doc, add) {
+    const { statement } = doc;
+    const holder = entities.get(statement.account);
+    if (holder) add(t('props.account'), entityChip(statement.account, holder.title || t('untitled')));
+    const transactions = statement.transactions ?? [];
+    const pending = transactions.filter(transaction => transaction.status === 'pending').length;
+    add(t('props.transactions'), String(transactions.length - pending) + (pending ? ` \u00b7 ${t('statement.pending', { n: pending })}` : ''));
+    if (statement.balance != null) add(t('props.balance'), money(statement.balance, holder?.['bank-account']?.currency));
+}
+
+// ----------------------------------------------------------------------------
 // The file a document stands for (vault.md#document; an email's attachment):
 // its type's icon, the name it came with, its size and whether it is an
 // encrypted PDF, and Open, which opens it in its app (`openOriginal`).
@@ -390,17 +417,6 @@ function monthDayText(entry) {
     const n = Number(entry);
     if (n === -1) return t('schedule.last_day');
     return n < 0 ? t('schedule.nth_last_day', { nth: ordinal(-n) }) : t('schedule.month_day', { n });
-}
-
-// ----------------------------------------------------------------------------
-// A contact as the vault keeps it (a guest, an assignee): a contact of the
-// vault (`@id`) as its id and title, "Name <email>" as the name and the
-// email, else as written.
-export function parseContact(ref) {
-    const id = /^@(.+)$/.exec(ref)?.[1];
-    if (id && entities.has(id)) return { id, name: entities.get(id).title || t('untitled') };
-    const named = /^(.+?)\s*<([^<>]+)>$/.exec(ref);
-    return named ? { name: named[1], email: named[2] } : { name: ref };
 }
 
 // ----------------------------------------------------------------------------
