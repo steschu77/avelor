@@ -29,6 +29,7 @@
   "bank.choose_kind": "Elija el tipo de cuenta.",
   "bank.enter_name": "Introduzca el nombre de la cuenta.",
   "bank.enter_number": "Introduzca el número de la cuenta.",
+  "bank.no_accounts_text": "Los movimientos vienen de los extractos de su banco. Añada una cuenta bancaria, exporte sus extractos como archivos CSV a una carpeta y cada uno se lee en la cuenta.",
   "calendar.reconnect": "vuelva a conectar la cuenta",
   "chat.ask_anything": "Pregunte lo que quiera…",
   "chat.click_to_edit": "Haga clic para editar y volver a enviar",

@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/timeline.css">
   <link rel="stylesheet" href="css/areas/calendar.css">
+  <link rel="stylesheet" href="css/areas/bank.css">
   <link rel="stylesheet" href="css/areas/panel.css">
   <link rel="stylesheet" href="css/areas/editor.css">
   <link rel="stylesheet" href="css/areas/assistant.css">
@@ -76,6 +77,7 @@
         <button type="button" data-lens="documents" aria-selected="false" data-t="lens.documents"></button>
         <button type="button" data-lens="timeline" aria-selected="false" data-t="lens.timeline"></button>
         <button type="button" data-lens="calendar" aria-selected="false" data-t="lens.calendar"></button>
+        <button type="button" data-lens="bank" aria-selected="false" data-t="lens.bank"></button>
       </nav>
     </header>
 
@@ -152,6 +154,7 @@
         <button type="button" class="chip chip--action" id="label-add-btn" data-t-title="header.filter_label" data-t-aria-label="header.filter_label"
           aria-haspopup="menu" hidden>+</button>
         <span class="meta docs-count" id="doc-count" hidden></span>
+        <span class="meta docs-count" id="bank-count" hidden></span>
         <button type="button" class="tool lens-types" id="types-btn" data-t-title="header.types_title"
           hidden><span data-t="header.types"></span><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
         <span class="meta" id="dash-today" hidden></span>
@@ -227,6 +230,9 @@
           <div class="cal__weeks" id="calendar-weeks"></div>
         </div>
       </div>
+
+      <!-- Bank (features/lenses/bank.js) -->
+      <div class="stack bank-lens" id="lens-bank" hidden></div>
 
     </main>
 
