@@ -3,27 +3,31 @@
 // PC. The page follows Workspace -> Accounts: a card per watch, a menu of
 // the watch types, and a new watch's pane that asks for its folder first.
 // Once the host has found the folder, the watch is saved with its type's
-// file types, and its full pane shows. Import, here and on the watch's
-// source in the sidebar, opens the import page of its type (images:
-// features/import/scans.js, through the `watch.import` action). The
-// sidebar follows `watches_rev` (app.js).
+// file types, and its full pane shows. A bank account is added here with
+// its statements watch, whose folder can wait: its pane asks for the
+// account, then the folder. Import, here and on the watch's source in the
+// sidebar (`importWatch`), opens the import page of its type (images and
+// PDFs: features/import/scans.js, through the `watch.import` action), or
+// imports a statements watch's files into its account at once. The sidebar
+// follows `watches_rev` (app.js).
 
 import { accEl } from '../../core/dom.js';
 import { oncePerFrame } from '../../core/dom.js';
 import { titled } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
-import { pageDate } from '../../core/format.js';
+import { money, pageDate } from '../../core/format.js';
 import { runAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
-import { watches } from '../../model/entities.js';
+import { entities, parseContact, watches } from '../../model/entities.js';
+import { structureCall } from '../../model/structure.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
 import { iconEl } from '../../ui/icons.js';
-import { IMPORT_ICON } from '../../ui/icons.js';
+import { IMPORT_ICON, KIND_ICONS } from '../../ui/icons.js';
 import {
   addTile, detailFooter, detailHead, detailPane, draftKind, itemCard, listDetailPage, listSection,
-  notice, pageList, replaceVaultPage, sentDrafts, setPageFocus,
+  notice, pageList, replaceVaultPage, sentDrafts, setPageFocus, stat, stats,
 } from '../../ui/page.js';
 import { fieldEditKey, fieldEdits, renderEditField, renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
@@ -37,8 +41,9 @@ export const WATCH_READ_STEP = 'read';
 // for pages joined into documents, `optional` if a file reads without a
 // model, `what` the model reads in a refusal's words, `used` in "Used by",
 // `previews` if the files have previews), the steps' notes and the import
-// page's title and blurb. A new watch suggests the user's pictures or
-// documents, on Linux under `~`.
+// page's title and blurb. Account statements have none of these: each file
+// goes into the watch's bank account as it is (import.md#statements). A new
+// watch suggests the user's pictures or documents, on Linux under `~`.
 const WATCH_HOME = navigator.platform.startsWith('Win') ? '%USERPROFILE%\\' : '~/';
 const WATCH_TYPES = [
   {
@@ -82,12 +87,35 @@ const WATCH_TYPES = [
       blurb: t('import.pdfs_blurb'),
     },
   },
+  {
+    type: 'statements', name: t('watch.type.statements'), hint: 'CSV', kind: t('watch.type.statements'),
+    icon: KIND_ICONS['bank-account'].icon,
+    folder: `${WATCH_HOME}Documents`,
+    patterns: ['*.csv'],
+  },
+];
+
+// A bank account's kinds (`bank-account.type`), in words.
+const ACCOUNT_KINDS = [
+  ['checking', t('account_kind.checking')], ['savings', t('account_kind.savings')], ['credit-card', t('account_kind.credit_card')],
 ];
 
 let selectedWatch = null; // a watch id, 'new:<type>' for a new watch's pane, or null
 const watchDrafts = sentDrafts(); // watch id -> the changes sent, shown until done
 let watchError = null; // { watch, message } from the last failed op
 const knownWatches = new Set(); // the ids of the watches the page knows
+// A new bank account's pane ('new:statements', `renderNewAccountPane`).
+let accountDraft = newAccountDraft();
+
+// What the new bank account's pane holds: the vault's account picked (its
+// id; null for a new one), the new one's fields, the folder, whether it is
+// being added, and the last refusal (the folder's apart).
+function newAccountDraft() {
+  return {
+    account: null, title: '', number: '', type: null, institution: '', folder: '',
+    saving: false, error: null, folderError: null,
+  };
+}
 
 export function watchType(type) {
   return WATCH_TYPES.find(entry => entry.type === type);
@@ -96,6 +124,21 @@ export function watchType(type) {
 // The watch's settings, with what was sent but isn't confirmed yet.
 export function watchSettings(id) {
   return { ...watches.get(id), ...watchDrafts.get(id) };
+}
+
+// A watch's name: a statements watch's is its bank account's title.
+export function watchName(watch) {
+  if (watch.type !== 'statements') return watch.name;
+  return entities.get(watch.account)?.title || t('kind.bank_account');
+}
+
+// Import, here and on the watch's source: a statements watch's new files
+// go into its account as a job (`statements_import`, its summary in the jobs
+// panel); the others open the import page of their type (`watch.import`).
+// A refusal shows in the status bar.
+export function importWatch(id) {
+  if (watches.get(id)?.type === 'statements') rpcCall('statements_import', { watch: id });
+  else runAction('watch.import', id);
 }
 
 // ----------------------------------------------------------------------------
@@ -144,13 +187,15 @@ function watchSetCall(watch, change, shown = {}) {
     .finally(scheduleRenderFolders);
 }
 
-// Show a new watch's pane, its folder ready for input.
+// Show a new watch's pane, its folder ready for input; a new bank
+// account's, its name.
 function watchStartDraft(type) {
   const draft = `new:${type}`;
   fieldEdits.delete(fieldEditKey(draft, 'folder'));
   selectedWatch = draft;
   watchError = null;
-  setPageFocus(fieldEditKey(draft, 'folder'));
+  accountDraft = newAccountDraft();
+  setPageFocus(fieldEditKey(draft, type === 'statements' ? 'title' : 'folder'));
   scheduleRenderFolders();
 }
 
@@ -207,6 +252,60 @@ function watchRemove(watch) {
   }).finally(scheduleRenderFolders);
 }
 
+// The vault's bank accounts no watch imports into.
+function freeAccounts() {
+  const taken = new Set([...watches.values()].map(watch => watch.account).filter(Boolean));
+  return [...entities.values()].filter(doc => doc.kind === 'bank-account' && !taken.has(doc.id));
+}
+
+// The vault's account the new bank account's pane picked, while no watch
+// has it; else null, a new account.
+function pickedAccount() {
+  return freeAccounts().find(doc => doc.id === accountDraft.account) ?? null;
+}
+
+// Whether the new bank account's pane can be added: an account picked, or
+// a new one's name, number and kind given.
+function canAddAccount() {
+  const d = accountDraft;
+  if (d.saving) return false;
+  return !!pickedAccount() || !!(d.title.trim() && d.number.trim() && d.type);
+}
+
+// Add the bank account of the new pane with its statements watch
+// (`create_watch`): the account picked, or a new one of the fields given;
+// the folder if one is given. A folder that isn't there shows under the
+// folder, any other refusal under the pane's parts.
+function addAccount() {
+  if (!canAddAccount()) return;
+  const d = accountDraft;
+  const type = watchType('statements');
+  const args = { type: type.type, patterns: type.patterns };
+  if (d.folder.trim()) args.folder = d.folder.trim();
+  const picked = pickedAccount();
+  if (picked) {
+    args.account = picked.id;
+  } else {
+    args.new_account = {
+      title: d.title.trim(), number: d.number.trim(), type: d.type, institution: d.institution.trim(),
+    };
+  }
+  Object.assign(d, { saving: true, error: null, folderError: null });
+  rpcCall('create_watch', args).then(({ id }) => {
+    if (selectedWatch === `new:${type.type}`) selectedWatch = id;
+    if (accountDraft === d) accountDraft = newAccountDraft();
+  }, e => {
+    Object.assign(d, { saving: false, [e.code === 'file_not_found' ? 'folderError' : 'error']: e.message });
+  }).finally(scheduleRenderFolders);
+  scheduleRenderFolders();
+}
+
+// Change fields of the bank account `id` (`set_bank_account`): its bank,
+// number or kind.
+function setBankAccount(id, change) {
+  structureCall('set_bank_account', { entity: id, ...change });
+}
+
 // ----------------------------------------------------------------------------
 // rendering
 
@@ -223,22 +322,31 @@ function renderWatchList() {
     list.append(accEl('div', 'page-text', t('watch.no_vault')));
     return list;
   }
-  if (watches.size) list.append(listSection(t('watch.section.watches')));
-  for (const watch of watches.values()) list.append(renderWatchCard(watch));
-  list.append(listSection(t('watch.section.add')), renderWatchAdd());
+  const all = [...watches.values()];
+  for (const [name, part] of [
+    [t('watch.section.watches'), all.filter(watch => watch.type !== 'statements')],
+    [t('watch.section.accounts'), all.filter(watch => watch.type === 'statements')],
+  ]) {
+    if (part.length) list.append(listSection(name), ...part.map(renderWatchCard));
+  }
+  list.append(listSection(t('watch.section.add')), renderWatchAdd(), renderAccountAdd());
   return list;
 }
 
+// A watch's card; a statements watch's names its account, by the end of
+// its number.
 function renderWatchCard(watch) {
   const type = watchType(watch.type);
   const settings = watchSettings(watch.id);
   const patterns = settings.patterns.length ? settings.patterns.join(' ') : t('watch.no_file_types');
+  const number = entities.get(watch.account)?.['bank-account']?.number;
+  const status = settings.enabled ? (number ? `\u2026${number.slice(-4)}` : '') : t('watch.status_off');
   return itemCard({
     icon: type.icon,
     kind: type.kind,
-    status: settings.enabled ? '' : 'off',
-    title: settings.name,
-    sub: `${settings.folder} \u00b7 ${patterns}`,
+    status,
+    title: watchName(settings),
+    sub: `${settings.folder || t('watch.folder_unset')} \u00b7 ${patterns}`,
     cut: true,
     current: watch.id === selectedWatch,
     onSelect: () => {
@@ -249,13 +357,15 @@ function renderWatchCard(watch) {
 }
 
 // "Watch a folder": a menu of the types; choosing one opens its new pane.
+// A statements watch comes with its bank account (`renderAccountAdd`).
 function renderWatchAdd() {
+  const kind = draftKind(selectedWatch);
   return addTile({
     label: t('watch.add_watch'),
     hint: t('watch.add_watch_hint'),
-    current: !!draftKind(selectedWatch),
+    current: !!kind && kind !== 'statements',
     onClick: tile => {
-      const items = WATCH_TYPES.map(type => ({
+      const items = WATCH_TYPES.filter(type => type.type !== 'statements').map(type => ({
         label: type.name,
         hint: type.hint,
         run: () => watchStartDraft(type.type),
@@ -265,16 +375,26 @@ function renderWatchAdd() {
   });
 }
 
-// The selected watch's pane, a new watch's, or a hint while there is none.
+// "Add a bank account": the new bank account's pane.
+function renderAccountAdd() {
+  return addTile({
+    label: t('bank.add_account'),
+    hint: 'CSV',
+    current: draftKind(selectedWatch) === 'statements',
+    onClick: () => watchStartDraft('statements'),
+  });
+}
+
+// The selected watch's pane, a new watch's or bank account's, or a hint
+// while there is none.
 function renderWatchDetail() {
   if (!store.getState().vault_path) return detailPane();
   const type = watchType(draftKind(selectedWatch));
-  if (type) return renderNewWatchPane(type);
+  if (type) return type.type === 'statements' ? renderNewAccountPane(type) : renderNewWatchPane(type);
   const watch = watches.get(selectedWatch);
   if (watch) return renderWatchPane(watch);
   const pane = detailPane();
-  pane.append(accEl('div', 'page-text',
-    t('watch.none_yet')));
+  pane.append(accEl('div', 'page-text', t('watch.none_yet')));
   return pane;
 }
 
@@ -292,16 +412,17 @@ export function watchFormGrid() {
 }
 
 // The folder of `id` (a watch, or 'new:<type>'): text with a pencil, or an
-// input until the host has found it, and Browse to pick one instead. Its
-// note (being checked, or the error) goes on a line of its own.
-function renderWatchFolder(id, saved, suggestion) {
+// input until the host has found it (starting with `value`), and Browse to
+// pick one instead. Its note (being checked, or the error) goes on a line
+// of its own.
+function renderWatchFolder(id, saved, { value = saved, placeholder = value } = {}) {
   const key = fieldEditKey(id, 'folder');
   const [field, note] = renderEditField(id, 'folder', {
     saved,
     required: true,
     mono: true,
-    value: saved ?? suggestion,
-    placeholder: suggestion ?? '',
+    value: value ?? '',
+    placeholder: placeholder ?? '',
     editTitle: t('watch.change_folder'),
     onSave: folder => watchSaveFolder(id, folder),
     rerender: scheduleRenderFolders,
@@ -316,36 +437,180 @@ function renderWatchFolder(id, saved, suggestion) {
   return note ? [field, note] : [field];
 }
 
+// A new watch's pane: its folder.
 function renderNewWatchPane(type) {
   const id = `new:${type.type}`;
   const pane = detailPane();
   pane.append(
     detailHead(t('watch.new_head', { kind: type.kind }), { icon: type.icon }),
     accEl('div', 'pane-title', type.name),
-    accEl('div', 'page-text',
-      t('watch.new_note', { patterns: type.patterns.join(' '), files: type.files })));
+    accEl('div', 'page-text', t('watch.new_note', { patterns: type.patterns.join(' '), files: type.files })));
   const part = accEl('div', 'watch__part');
   const [grid, row] = watchFormGrid();
-  row(t('watch.folder'), ...renderWatchFolder(id, null, type.folder));
+  row(t('watch.folder'), ...renderWatchFolder(id, null, { value: type.folder }));
   part.append(accEl('div', 'section-head', t('watch.folder')), grid);
   pane.append(part, accEl('div', 'page-text', t('watch.set_once_saved')));
   return pane;
 }
 
+// A new bank account's pane (`accountDraft`): the account -- a new one's
+// name, number and kind, which it needs, and its bank; or one of the
+// vault's no watch has --, then the folder of its statements, which can
+// wait. Add account saves both (`addAccount`).
+function renderNewAccountPane(type) {
+  const id = `new:${type.type}`;
+  const d = accountDraft;
+  const free = freeAccounts();
+  const picked = pickedAccount();
+  const pane = detailPane();
+  pane.append(
+    detailHead(t('watch.new_account_head', { kind: type.kind }), { icon: type.icon }),
+    accEl('div', 'pane-title', picked ? picked.title || t('untitled') : t('kind.bank_account')),
+    accEl('div', 'page-text', t('watch.new_account_note')));
+
+  const add = accEl('button', 'btn btn--primary', t('watch.add_account'));
+  add.type = 'button';
+  add.disabled = !canAddAccount();
+  add.addEventListener('click', addAccount);
+  // An input of the draft's `field`, in a field as wide as the row: typing
+  // keeps it there and updates Add account, Enter adds.
+  const input = (field, placeholder, mono = false) => {
+    const el = accEl('input', mono ? 'input input--mono edit-field__input' : 'input edit-field__input');
+    el.type = 'text';
+    el.value = d[field];
+    el.placeholder = placeholder;
+    el.spellcheck = false;
+    el.autocomplete = 'off';
+    el.dataset.focusKey = fieldEditKey(id, field);
+    el.disabled = d.saving;
+    el.addEventListener('input', () => {
+      d[field] = el.value;
+      add.disabled = !canAddAccount();
+    });
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addAccount();
+      }
+    });
+    const wrap = accEl('span', 'edit-field edit-field--edit watch__folder');
+    wrap.append(el);
+    return wrap;
+  };
+
+  const account = accEl('div', 'watch__part');
+  const [grid, row] = watchFormGrid();
+  if (free.length) row(t('props.account'), renderAccountPick(picked, free));
+  if (picked) {
+    const fields = picked['bank-account'] ?? {};
+    const kind = ACCOUNT_KINDS.find(([value]) => value === fields.type)?.[1];
+    row(t('props.bank'), accEl('span', '', fields.institution || '\u2014'));
+    row(t('props.number'), accEl('span', 'mono', fields.number || '\u2014'));
+    row(t('props.kind'), accEl('span', '', kind ?? '\u2014'));
+  } else {
+    row(t('docs.name'), input('title', t('watch.name_placeholder')));
+    row(t('props.number'), input('number', t('watch.number_placeholder'), true),
+      accEl('span', 'note watch__note', t('watch.number_note')));
+    row(t('props.kind'), accSeg(ACCOUNT_KINDS, d.type, kind => {
+      d.type = kind;
+      scheduleRenderFolders();
+    }, d.saving));
+    row(t('props.bank'), input('institution', t('watch.optional')));
+  }
+  account.append(accEl('div', 'section-head', t('props.account')), grid);
+
+  const statements = accEl('div', 'watch__part');
+  const head = accEl('div', 'section-head', t('watch.statements'));
+  head.append(accEl('span', 'section-head__note', t('watch.can_wait')));
+  const [folderGrid, folderRow] = watchFormGrid();
+  const folder = input('folder', type.folder, true);
+  const browse = accEl('button', 'btn', t('watch.browse'));
+  browse.type = 'button';
+  browse.disabled = d.saving;
+  browse.addEventListener('click', () => {
+    rpcCall('pick_folder', { title: t('watch.pick_statements_title') }).then(({ path }) => {
+      if (!path) return;
+      Object.assign(d, { folder: path, folderError: null });
+      scheduleRenderFolders();
+    });
+  });
+  folder.append(browse);
+  folderRow(t('watch.folder'), folder, ...(d.folderError ? [accEl('span', 'error-note watch__note', d.folderError)] : []));
+  folderRow(t('watch.format'), accEl('span', '', 'comdirect (CSV)'), accEl('span', 'note watch__note',
+    t('watch.takes_statements', { patterns: type.patterns.join(' ') })));
+  statements.append(head, folderGrid);
+
+  pane.append(account, statements);
+  if (d.error) pane.append(notice('error', d.error));
+  pane.append(detailFooter(t('watch.change_once_added'), add));
+  return pane;
+}
+
+// The new bank account's pick: a new account, or one of the vault's that
+// no watch has (`free`).
+function renderAccountPick(picked, free) {
+  const pick = accEl('button', 'tool', picked ? picked.title || t('untitled') : t('watch.new_account'));
+  pick.type = 'button';
+  pick.setAttribute('aria-haspopup', 'menu');
+  pick.disabled = accountDraft.saving;
+  pick.append(iconEl('#i-chevron-down'));
+  pick.addEventListener('click', () => {
+    const choose = account => () => {
+      Object.assign(accountDraft, { account, error: null });
+      scheduleRenderFolders();
+    };
+    const items = [{ label: t('watch.new_account'), hint: '', run: choose(null) }, ...free.map(doc => ({
+      label: doc.title || t('untitled'),
+      hint: doc['bank-account']?.number ?? '',
+      run: choose(doc.id),
+    }))];
+    showMenu(pick, items, { matchWidth: true });
+  });
+  return pick;
+}
+
+// The pane's Import button (`importWatch`); without a folder it waits for
+// one.
+function importButton(id, title, folder = true) {
+  const button = accEl('button', 'btn');
+  button.type = 'button';
+  button.title = folder ? title : t('watch.choose_folder_first');
+  button.disabled = !folder;
+  button.append(iconEl(IMPORT_ICON), t('watch.import'));
+  button.addEventListener('click', () => importWatch(id));
+  return button;
+}
+
+// A watch's pane: its head with Import, its name (a statements watch: its
+// bank account, `renderStatementsParts`), its folder, the steps every file
+// takes, an error, and Remove.
 function renderWatchPane(watch) {
   const id = watch.id;
   const type = watchType(watch.type);
   const settings = watchSettings(id);
+  const statements = watch.type === 'statements';
   const pane = detailPane();
-
-  const importButton = accEl('button', 'btn');
-  importButton.type = 'button';
-  importButton.title = t('watch.import_files');
-  importButton.append(iconEl(IMPORT_ICON), t('watch.import'));
-  importButton.addEventListener('click', () => runAction('watch.import', id));
+  const button = statements
+    ? importButton(id, t('watch.import_statements'), !!settings.folder)
+    : importButton(id, t('watch.import_files'));
   pane.append(detailHead(t('watch.head', { kind: type.kind, date: pageDate(watch.added) }),
-    { icon: type.icon, button: importButton }));
+    { icon: type.icon, button }));
+  pane.append(...(statements ? renderStatementsParts(id, watch) : renderWatchName(id, settings)),
+    renderWatchFolderPart(id, settings),
+    statements ? renderStatementSteps() : renderWatchSteps(id, type, settings));
+  if (watchError?.watch === id) {
+    pane.append(notice('error', watchError.message));
+  }
 
+  const remove = accEl('button', 'btn btn--ghost', t('watch.remove_dots'));
+  remove.type = 'button';
+  armedButton(remove, t('watch.remove_again'), () => watchRemove(id), `remove_watch ${id}`);
+  pane.append(detailFooter(statements ? t('watch.remove_note_statements') : t('watch.remove_note'), remove));
+  return pane;
+}
+
+// A watch's name, its folder's while it has none.
+function renderWatchName(id, settings) {
   const [name, nameNote] = renderEditField(id, 'name', {
     saved: settings.name,
     value: settings.name,
@@ -358,26 +623,127 @@ function renderWatchPane(watch) {
     },
     rerender: scheduleRenderFolders,
   });
-  pane.append(name);
-  if (nameNote) pane.append(nameNote);
+  return nameNote ? [name, nameNote] : [name];
+}
 
-  pane.append(renderWatchFolderPart(id, settings), renderWatchSteps(id, type, settings));
-  if (watchError?.watch === id) {
-    pane.append(notice('error', watchError.message));
+// A statements watch's bank account (import.md#the-folders-page): what it
+// holds, its name (the watch's), bank, number and kind, its currency, owner
+// and file as they are. Import writes the new files into the account at
+// once, once the folder is chosen.
+function renderStatementsParts(id, watch) {
+  const account = entities.get(watch.account);
+  if (!account) {
+    return [accEl('div', 'pane-title', t('kind.bank_account')),
+      notice('error', t('watch.account_gone_note'))];
   }
+  return [...renderAccountName(id, account), renderAccountStats(account), renderAccountPart(id, account)];
+}
 
-  const remove = accEl('button', 'btn btn--ghost', t('watch.remove_dots'));
-  remove.type = 'button';
-  armedButton(remove, t('watch.remove_again'), () => watchRemove(id), `remove_watch ${id}`);
-  pane.append(detailFooter(t('watch.remove_note'), remove));
-  return pane;
+// The account's name, the watch's too: renamed with `set_title`.
+function renderAccountName(id, account) {
+  const key = fieldEditKey(id, 'account');
+  const [name, note] = renderEditField(id, 'account', {
+    saved: account.title || null,
+    value: account.title,
+    required: true,
+    textClass: 'pane-title edit-field__text',
+    editTitle: t('watch.rename_account'),
+    onSave: title => {
+      fieldEdits.delete(key);
+      structureCall('set_title', { id: account.id, title });
+      scheduleRenderFolders();
+    },
+    rerender: scheduleRenderFolders,
+  });
+  return note ? [name, note] : [name];
+}
+
+// What the account holds: its balance and what is pending, its bookings,
+// and its newest statement.
+function renderAccountStats(account) {
+  const fields = account['bank-account'] ?? {};
+  const statements = [...entities.values()].filter(doc => doc.statement?.account === account.id);
+  const bookings = statements.flatMap(doc => doc.statement.bookings ?? []);
+  const pending = bookings.filter(booking => booking.status === 'pending').length;
+  const newest = statements.reduce((a, b) => (a && a.date >= b.date ? a : b), null);
+  const balance = fields.balance != null ? money(fields.balance, fields.currency) : '\u2014';
+  return stats(
+    stat(t('props.balance'), balance, pending ? t('watch.bookings_pending', { n: pending }) : null),
+    stat(t('props.bookings'), String(bookings.length - pending),
+      statements.length ? t('watch.from_statements', { n: statements.length }) : t('watch.none_imported')),
+    stat(t('watch.newest_statement'), newest?.title || t('watch.none'), newest?.source?.import?.origin ?? null));
+}
+
+// The account's fields: bank, number and kind changed here
+// (`set_bank_account`), currency, owner and file as they are.
+function renderAccountPart(id, account) {
+  const fields = account['bank-account'] ?? {};
+  const edit = (field, saved, title, mono = false) => {
+    const key = fieldEditKey(id, field);
+    const [wrap, note] = renderEditField(id, field, {
+      saved: saved ?? null,
+      empty: '\u2014',
+      value: saved ?? '',
+      mono,
+      editTitle: title,
+      onSave: value => {
+        fieldEdits.delete(key);
+        setBankAccount(account.id, { [field]: value });
+        scheduleRenderFolders();
+      },
+      rerender: scheduleRenderFolders,
+    });
+    wrap.classList.add('watch__folder');
+    return note ? [wrap, note] : [wrap];
+  };
+  const part = accEl('div', 'watch__part');
+  const head = accEl('div', 'section-head', t('props.account'));
+  head.append(accEl('span', 'section-head__note', t('watch.name_is_source')));
+  const [grid, row] = watchFormGrid();
+  row(t('props.bank'), ...edit('institution', fields.institution, t('watch.change_bank')));
+  row(t('props.number'), ...edit('number', fields.number, t('watch.change_number'), true),
+    accEl('span', 'note watch__note', t('watch.number_note')));
+  row(t('props.kind'), accSeg(ACCOUNT_KINDS, fields.type ?? null, type => setBankAccount(account.id, { type })));
+  row(t('watch.currency'), fields.currency
+    ? accEl('span', '', fields.currency) : accEl('span', 'note', t('watch.currency_from_file')));
+  if (fields.owner) row(t('props.owner'), accEl('span', '', parseContact(fields.owner).name));
+  const path = accEl('span', 'meta truncate-start', account.path);
+  path.title = account.path;
+  row(t('accounts.in_vault'), path);
+  part.append(head, grid);
+  return part;
+}
+
+// The steps a statement takes, each always (import.md#statements).
+function renderStatementSteps() {
+  const part = accEl('div', 'watch__part');
+  const head = accEl('div', 'section-head', t('watch.import_process'));
+  head.append(accEl('span', 'section-head__note', t('watch.for_each_file')));
+  const steps = accEl('div', 'steps');
+  steps.append(
+    renderWatchStep({
+      name: t('watch.step.read_rows'), label: t('watch.label.read'),
+      note: t('watch.step.read_rows_note'),
+    }),
+    renderWatchStep({
+      name: t('watch.step.skip'), label: t('watch.label.rule'),
+      note: t('watch.step.skip_note'),
+    }),
+    renderWatchStep({
+      name: t('watch.step.balance'), label: t('watch.label.rule'),
+      note: t('watch.step.balance_note'),
+    }));
+  part.append(head, steps);
+  return part;
 }
 
 // Where to look and which files to take, and whether the watch is a source.
+// A statements watch's folder may not be chosen yet: then its field is open.
 function renderWatchFolderPart(id, settings) {
   const part = accEl('div', 'watch__part');
   const [grid, row] = watchFormGrid();
-  row(t('watch.folder'), ...renderWatchFolder(id, settings.folder));
+  row(t('watch.folder'), ...renderWatchFolder(id, settings.folder || null,
+    { value: settings.folder, placeholder: watchType(settings.type)?.folder }));
   row(t('watch.subfolders'),
     accEl('span', 'note', settings.subfolders ? t('watch.subfolders_in') : t('watch.subfolders_out')),
     accSeg([[true, t('watch.include')], [false, t('watch.ignore')]], settings.subfolders,
@@ -499,8 +865,10 @@ function renderWatchCollect(id, settings) {
   return options;
 }
 
-// Re-render while visible when the op, the vault, the watches, or the AI
-// accounts (the reading step's model) change.
+// Re-render while visible when the op, the vault, the watches, the AI
+// accounts (the reading step's model), or the entities (a statements
+// watch's account) change.
 store.subscribe(
-  [state => state.vault_op, state => state.vault_path, state => state.watches_rev, state => state.accounts_rev],
+  [state => state.vault_op, state => state.vault_path, state => state.watches_rev, state => state.accounts_rev,
+    state => state.entities_rev],
   () => scheduleRenderFolders());

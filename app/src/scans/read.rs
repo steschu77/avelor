@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 
-use super::{Ocr, Stamp, analysis_works, refuse};
+use super::{Ocr, Stamp, analysis_works, refuse, refuse_statements};
 use crate::ai;
 use crate::ai::queue::AiQueue;
 use crate::app::App;
@@ -167,9 +167,13 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         let text = Text::new("scans.read_running");
         return refuse(req, Error::Unsupported { what }, text);
     }
-    let what = match kind {
-        WatchKind::Images => Text::new("feature.ocr"),
-        WatchKind::Pdf => Text::new("feature.scanned_pages"),
+    let (what, reading) = match kind {
+        WatchKind::Images => (Text::new("feature.ocr"), Text::new("scans.reading")),
+        WatchKind::Pdf => (
+            Text::new("feature.scanned_pages"),
+            Text::new("scans.reading_pdfs"),
+        ),
+        WatchKind::Statements => return refuse_statements(req),
     };
     // A PDF watch reads text layers without a model.
     let (engine, account) = match app.ai.choose(picked.as_ref(), what, DateTime::now()) {
@@ -218,10 +222,7 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         read.queue.extend(queue);
         post_progress(app);
     } else {
-        let label = match kind {
-            WatchKind::Images => Text::new("scans.reading").arg("watch", watch_name.to_string()),
-            WatchKind::Pdf => Text::new("scans.reading_pdfs").arg("watch", watch_name.to_string()),
-        };
+        let label = reading.arg("watch", watch_name.as_str());
         let job = app.start_job(JobKind::ScanRead, label, total);
         log::info!("Scan read {job}: reading {total} files of {watch_name}");
         app.scans.read = Some(ScanRead {
@@ -283,6 +284,7 @@ pub(super) fn readable(kind: WatchKind, name: &str) -> Result<Kind, Text> {
         (WatchKind::Images, _) => Err(Text::new("scans.images_only")),
         (WatchKind::Pdf, Some(Kind::Pdf)) => Ok(Kind::Pdf),
         (WatchKind::Pdf, _) => Err(Text::new("scans.pdfs_only")),
+        (WatchKind::Statements, _) => Err(Text::new("scans.statements_as_they_are")),
     }
 }
 

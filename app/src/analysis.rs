@@ -97,7 +97,7 @@ pub struct AnalysisState {
 /// pick's words (`AiAccounts::choose`).
 pub fn scan_analysis(kind: WatchKind) -> Text {
     match kind {
-        WatchKind::Images => Text::new("feature.scan_analysis"),
+        WatchKind::Images | WatchKind::Statements => Text::new("feature.scan_analysis"),
         WatchKind::Pdf => Text::new("feature.pdf_analysis"),
     }
 }

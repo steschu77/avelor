@@ -9,7 +9,7 @@ use core::fmt;
 use std::collections::BTreeMap;
 
 use crate::shared::{ColorRef, ContactRef, Genre, OneOrMany};
-use av_utils::datetime::DateTime;
+use av_utils::datetime::{Date, DateTime};
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_utils::is_false;
@@ -188,8 +188,51 @@ pub struct Booking {
     pub sender: Option<ContactRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receiver: Option<ContactRef>,
+    /// What the booking is for, in the bank's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
+    /// `card`, `direct-debit`, `transfer`, `cash` or `fee`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// The bank's reference, which tells a booking imported twice.
+    #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    /// The other side's account number or IBAN, and its BIC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iban: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bic: Option<String>,
     #[serde(rename = "linked-to", default, skip_serializing_if = "Option::is_none")]
     pub linked_to: Option<Id>,
+}
+
+impl Booking {
+    pub fn is_pending(&self) -> bool {
+        self.status.as_deref() == Some("pending")
+    }
+
+    pub fn day(&self) -> Option<Date> {
+        self.date.map(|date| date.date)
+    }
+
+    pub fn cents(&self) -> Option<i64> {
+        self.amount.map(to_cents)
+    }
+
+    /// The other side: who was paid for money out, who paid for money in.
+    pub fn party(&self) -> Option<&ContactRef> {
+        if self.amount.is_some_and(|amount| amount < 0.0) {
+            self.receiver.as_ref()
+        } else {
+            self.sender.as_ref()
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// An amount of money in cents.
+pub fn to_cents(amount: f64) -> i64 {
+    (amount * 100.0).round() as i64
 }
 
 // ----------------------------------------------------------------------------
@@ -199,6 +242,10 @@ pub struct Statement {
     pub account: Option<Id>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<f64>,
+    /// The account's balance at the statement's end, its booked bookings
+    /// counted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balance: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bookings: Vec<Booking>,
 }
@@ -458,6 +505,12 @@ pub struct Empty {}
 // ----------------------------------------------------------------------------
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Import {
+    /// The folder watch the file was imported from (`import.md#folder-watches`);
+    /// absent for a file that came another way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watch: Option<Id>,
+    /// The file's name: relative to the watch's folder when `watch` is
+    /// given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
 }
@@ -603,6 +656,7 @@ impl Envelope {
         if let Some(statement) = &roles.statement {
             for booking in &statement.bookings {
                 out.extend(booking.title.as_deref());
+                out.extend(booking.purpose.as_deref());
                 names(&mut out, booking.sender.iter().chain(&booking.receiver));
             }
         }
@@ -1031,5 +1085,32 @@ contact:
         let composed = env.compose().unwrap();
         assert!(composed.contains("model: gpt-5-mini"), "{composed}");
         assert_eq!(Envelope::parse(&composed).unwrap(), env);
+    }
+
+    #[test]
+    fn a_booking_names_its_day_cents_and_other_side() {
+        let shop = ContactRef::Name("Shop".into());
+        let me = ContactRef::Name("Me".into());
+        let out = Booking {
+            date: Some(DateTime::from_iso8601("2026-12-01").unwrap()),
+            status: Some("pending".into()),
+            amount: Some(-12.34),
+            sender: Some(me.clone()),
+            receiver: Some(shop.clone()),
+            ..Booking::default()
+        };
+        assert!(out.is_pending());
+        assert_eq!(out.day(), Some(Date::from_ymd(2026, 12, 1).unwrap()));
+        assert_eq!(out.cents(), Some(-1234));
+        assert_eq!(out.party(), Some(&shop));
+        let back = Booking {
+            amount: Some(20.0),
+            sender: Some(shop.clone()),
+            receiver: Some(me),
+            ..Booking::default()
+        };
+        assert!(!back.is_pending());
+        assert_eq!(back.party(), Some(&shop));
+        assert_eq!(Booking::default().cents(), None);
     }
 }

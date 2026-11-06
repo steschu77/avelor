@@ -189,6 +189,15 @@ fn refuse(req: Req, error: Error, text: Text) {
 }
 
 // ----------------------------------------------------------------------------
+/// Refuse to read or import a statements watch's files as scans: they go
+/// into their account (`bank::statements_import`).
+fn refuse_statements(req: Req) {
+    let what = "reading statements as scans".to_string();
+    let text = Text::new("scans.statements_watch");
+    refuse(req, Error::Unsupported { what }, text);
+}
+
+// ----------------------------------------------------------------------------
 /// Whether the analysis of the watch of `settings` can run, if it is on;
 /// else the refused pick: a watch neither reads nor imports while its
 /// analysis waits for a model that works, as Fetch email doesn't fetch.

@@ -11,9 +11,9 @@
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { titled } from '../../core/dom.js';
 import { rpcCall, rpcOn } from '../../core/rpc.js';
-import { pageDate } from '../../core/format.js';
+import { money, pageDate } from '../../core/format.js';
 import { registerAction } from '../../core/actions.js';
-import { locale, t } from '../../core/text.js';
+import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
 import { vaultSettings } from '../../model/entities.js';
@@ -686,7 +686,7 @@ function aiToggleOffered(account, modelId, on) {
 
 // What was spent: "$3.18".
 function aiCost(n) {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(n ?? 0);
+  return money(n ?? 0, 'USD');
 }
 
 function aiPrice(price) {

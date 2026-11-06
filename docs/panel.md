@@ -54,8 +54,11 @@ holds `selected_entity`, `selected_thread` and `threads_rev`, and
   due date as seen from today (tagged when overdue), its assignee and when
   it was done (`task.done`), for an email its sender, followed by its kind
   when the email analysis found one ("Stadtwerke · Request",
-  `email.md#analysis`), and for a document its genre and the file it stands
-  for, with Open (`vault.md#document`; `renderCardDetails`,
+  `email.md#analysis`), for a document its genre and the file it stands
+  for, with Open (`vault.md#document`), for a bank account its bank,
+  number, balance and owner, and for a statement its account, its bookings
+  (and how many are pending) and the balance it ends with
+  (`vault.md#statement`; `renderCardDetails`,
   `features/panel/details.js`). A task's fields and a document's genre are
   editable in place while the host can write the entity
   (`panel.md#field-edits`); the rest is read-only;

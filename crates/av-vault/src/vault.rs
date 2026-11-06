@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use crate::document::{Document, FileFormat};
 use crate::envelope::DocumentType;
 use crate::envelope::Source;
+use crate::envelope::Statement;
 use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::fs::{FileStamp, write_atomic};
@@ -520,6 +521,15 @@ impl Index {
             .collect();
         sort_by_date(&mut members);
         members
+    }
+
+    // ------------------------------------------------------------------------
+    /// The statements of the bank account `account`, each with its entity.
+    pub fn statements_of(&self, account: Id) -> impl Iterator<Item = (&Document, &Statement)> {
+        self.documents.iter().filter_map(move |e| {
+            let statement = e.doc.roles().statement.as_ref()?;
+            (statement.account == Some(account)).then_some((&e.doc, statement))
+        })
     }
 
     // ------------------------------------------------------------------------

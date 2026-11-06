@@ -15,6 +15,7 @@ use serde_json::json;
 use crate::ai::accounts::ModelChoice;
 use crate::analysis::Analysis;
 use crate::app::App;
+use crate::bank;
 use crate::protocol::Req;
 use crate::sys;
 use crate::texts::{self, Text};
@@ -65,6 +66,8 @@ fn post(app: &App, id: Id) {
 pub(crate) struct NewWatch {
     #[serde(rename = "type")]
     kind: WatchKind,
+    /// A statements watch's may be empty: it is chosen later.
+    #[serde(default)]
     folder: String,
     #[serde(default)]
     name: String,
@@ -72,6 +75,12 @@ pub(crate) struct NewWatch {
     patterns: Vec<String>,
     #[serde(default)]
     collect: Option<Collect>,
+    /// A statements watch's bank account: one in the vault, or a new one
+    /// (`new_account`).
+    #[serde(default)]
+    account: Option<Id>,
+    #[serde(default)]
+    new_account: Option<bank::NewAccount>,
 }
 
 // ----------------------------------------------------------------------------
@@ -116,20 +125,42 @@ fn check_folder(folder: &str) -> Result<String, (Error, Text)> {
 }
 
 // ----------------------------------------------------------------------------
-/// `create_watch {type, folder, name?, patterns?, collect?}`: save
-/// a watch once its folder checks out. Answers its id, after the `watch`
-/// event; nothing is stored if the folder isn't there, no vault is open, or
-/// saving fails.
+/// `create_watch {type, folder, name?, patterns?, collect?, account?,
+/// new_account?}`: save a watch once its folder checks out. A statements
+/// watch may wait for its folder; it imports into `account`, a bank account
+/// no other watch has, or into the new account `new_account`
+/// (`bank::new_account`, its `entity` event first). Answers its id, after
+/// the `watch` event; nothing is stored if the folder isn't there, the
+/// account can't be taken, no vault is open, or saving fails.
 pub fn create_watch(app: &mut App, req: Req, new: NewWatch) {
-    let folder = match check_folder(&new.folder) {
-        Ok(folder) => folder,
-        Err((error, message)) => return req.fail(error, message),
+    let statements = new.kind == WatchKind::Statements;
+    let folder = if statements && new.folder.trim().is_empty() {
+        String::new()
+    } else {
+        match check_folder(&new.folder) {
+            Ok(folder) => folder,
+            Err((error, message)) => return req.fail(error, message),
+        }
     };
+    if app.watches.folder().as_os_str().is_empty() {
+        return req.fail(
+            Error::InvalidPath {
+                path: Default::default(),
+            },
+            Text::new("watch.open_vault_first"),
+        );
+    }
     let mut settings = WatchSettings::new(new.kind, folder);
     settings.name = new.name.trim().to_string();
     settings.patterns = unique_trimmed(new.patterns);
     if new.kind == WatchKind::Images {
         settings.collect = new.collect;
+    }
+    if statements {
+        settings.account = match take_account(app, new.account, new.new_account) {
+            Ok(account) => Some(account),
+            Err((error, message)) => return req.fail(error, message),
+        };
     }
     match app.watches.create(settings) {
         Ok(id) => {
@@ -137,11 +168,38 @@ pub fn create_watch(app: &mut App, req: Req, new: NewWatch) {
             post(app, id);
             req.ok(json!({ "id": id }));
         }
-        Err(e @ Error::InvalidPath { .. }) => {
-            req.fail(e, Text::new("watch.open_vault_first"));
-        }
         Err(e) => req.save_failed(e, Text::new("save.watch")),
     }
+}
+
+// ----------------------------------------------------------------------------
+/// The bank account a new statements watch imports into: `account`, if it
+/// is one and no other watch has it, or the new account `new`; one of them.
+fn take_account(
+    app: &mut App,
+    account: Option<Id>,
+    new: Option<bank::NewAccount>,
+) -> Result<Id, (Error, Text)> {
+    let id = match (account, new) {
+        (Some(id), None) => id,
+        (None, Some(new)) => return bank::new_account(app, new),
+        _ => {
+            let arg = "account".to_string();
+            return Err((
+                Error::InvalidArgument { arg },
+                Text::new("watch.choose_account"),
+            ));
+        }
+    };
+    if !bank::is_account(app, id) {
+        return Err((Error::NotFound, Text::new("watch.account_gone")));
+    }
+    if app.watches.iter().any(|w| w.settings().account == Some(id)) {
+        let arg = "account".to_string();
+        let text = Text::new("watch.account_taken");
+        return Err((Error::InvalidArgument { arg }, text));
+    }
+    Ok(id)
 }
 
 // ----------------------------------------------------------------------------

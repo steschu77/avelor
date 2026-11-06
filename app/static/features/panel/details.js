@@ -1,15 +1,16 @@
-// What a card shows of its event, task, email or document (panel.md#cards):
-// the details grid (`renderCardDetails`) with the contacts and the calendar
-// as chips that select what they name, a task's fields and a document's
+// What a card shows of its event, task, email, document, bank account or
+// statement (panel.md#cards):
+// the details grid (`renderCardDetails`) with the contacts, the calendar
+// and the account as chips that select what they name, a task's fields and a document's
 // genre editable where the host can write them (`edit_entities`), and a
 // task's tag (`taskTag`), which the day view's task rows and the calendar's
 // grid show too.
 
 import { accEl } from '../../core/dom.js';
-import { DATE_FORMAT, MONTH, WEEKDAY, addDays, fileSize, sameDay } from '../../core/format.js';
+import { DATE_FORMAT, MONTH, WEEKDAY, addDays, fileSize, money, sameDay } from '../../core/format.js';
 import { TIME_FORMAT, isoInstant, localDay, relativeDay } from '../../core/format.js';
 import { ordinal, t } from '../../core/text.js';
-import { entities } from '../../model/entities.js';
+import { entities, parseContact } from '../../model/entities.js';
 import { isOverdue } from '../../model/calendar.js';
 import { byDay, icalDate, parseSchedule, ruleSupported } from '../../model/schedule.js';
 import { editEntityLocal } from '../../model/structure.js';
@@ -40,7 +41,9 @@ export function dueTag(text) {
 // when it is due (from today, marked when overdue), its assignee and when
 // it was done; an email's sender and its kind (the email analysis's,
 // `EMAIL_KINDS`); a document's genre, and the file it stands for
-// (`originalField`). A task's fields and a document's genre are editable
+// (`originalField`); a bank account's bank, number, balance and owner; a
+// statement's account, its bookings and the balance it ends with
+// (vault.md#statement). A task's fields and a document's genre are editable
 // while the host can write the entity (`taskFields`, `genreField`). Rows
 // without a value are left out; hidden for an entity with none of them.
 //
@@ -92,6 +95,22 @@ export function renderCardDetails(row, doc, occurrence = null) {
     if (doc?.kind === 'document' && doc.writable) add(t('props.genre'), genreField(doc));
     else if (doc?.kind === 'document' && doc.genre) add(t('props.genre'), doc.genre);
     if (doc?.document?.original) add(t('props.file'), ...originalField(doc));
+    const account = doc?.['bank-account'];
+    if (account) {
+        if (account.institution) add(t('props.bank'), account.institution);
+        if (account.number) add(t('props.number'), account.number);
+        if (account.balance != null) add(t('props.balance'), money(account.balance, account.currency));
+        if (account.owner) add(t('props.owner'), contactChip(account.owner));
+    }
+    const statement = doc?.statement;
+    if (statement) {
+        const holder = entities.get(statement.account);
+        if (holder) add(t('props.account'), entityChip(statement.account, holder.title || t('untitled')));
+        const bookings = statement.bookings ?? [];
+        const pending = bookings.filter(booking => booking.status === 'pending').length;
+        add(t('props.bookings'), String(bookings.length - pending) + (pending ? ` \u00b7 ${t('statement.pending', { n: pending })}` : ''));
+        if (statement.balance != null) add(t('props.balance'), money(statement.balance, holder?.['bank-account']?.currency));
+    }
     row.replaceChildren(...parts);
     row.hidden = !parts.length;
     if (focusKey) row.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true });
@@ -334,17 +353,6 @@ function monthDayText(entry) {
     const n = Number(entry);
     if (n === -1) return t('schedule.last_day');
     return n < 0 ? t('schedule.nth_last_day', { nth: ordinal(-n) }) : t('schedule.month_day', { n });
-}
-
-// ----------------------------------------------------------------------------
-// A contact as the vault keeps it (a guest, an assignee): a contact of the
-// vault (`@id`) as its id and title, "Name <email>" as the name and the
-// email, else as written.
-export function parseContact(ref) {
-    const id = /^@(.+)$/.exec(ref)?.[1];
-    if (id && entities.has(id)) return { id, name: entities.get(id).title || t('untitled') };
-    const named = /^(.+?)\s*<([^<>]+)>$/.exec(ref);
-    return named ? { name: named[1], email: named[2] } : { name: ref };
 }
 
 // ----------------------------------------------------------------------------

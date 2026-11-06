@@ -5,12 +5,14 @@
 //! keys are preserved verbatim in `extra` so round-tripping a document
 //! through the app never loses user data.
 
+use crate::envelope::BankAccount;
 use crate::envelope::Conversation;
 use crate::envelope::Email;
 use crate::envelope::Event;
 use crate::envelope::Message;
 use crate::envelope::Original;
 use crate::envelope::Remote;
+use crate::envelope::Statement;
 use crate::envelope::Task;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
 use crate::markdown;
@@ -487,6 +489,18 @@ impl Document {
     /// role.
     pub fn set_email(&mut self, email: Option<Email>) {
         self.envelope_mut().roles.email = email;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's `bank-account` block; `None` drops the role.
+    pub fn set_bank_account(&mut self, account: Option<BankAccount>) {
+        self.envelope_mut().roles.bank_account = account;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's `statement` block; `None` drops the role.
+    pub fn set_statement(&mut self, statement: Option<Statement>) {
+        self.envelope_mut().roles.statement = statement;
     }
 
     // ------------------------------------------------------------------------

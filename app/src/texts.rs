@@ -4,6 +4,7 @@
 
 use std::sync::OnceLock;
 
+use av_utils::datetime::{Date, DateTime};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -104,6 +105,14 @@ pub fn filled(key: &'static str, args: &[(&str, &str)]) -> String {
         text = text.replace(&format!("{{{name}}}"), value);
     }
     text
+}
+
+// ----------------------------------------------------------------------------
+/// `date` for a text's placeholder: the page writes it as the locale does
+/// (`core/text.js`), the host as ISO 8601.
+pub fn date(date: Date) -> Value {
+    let day = DateTime { date, time: None };
+    serde_json::json!({ "date": day.as_iso8601() })
 }
 
 // ----------------------------------------------------------------------------
