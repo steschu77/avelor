@@ -200,7 +200,7 @@ export function watchSourceKey(id) {
 
 // The statements watch of the bank account `id`, if it has one; no other
 // watch imports into it.
-function accountWatch(id) {
+export function accountWatch(id) {
   return [...watches.values()].find(watch => watch.type === 'statements' && watch.account === id) ?? null;
 }
 

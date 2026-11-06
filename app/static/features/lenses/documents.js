@@ -58,10 +58,10 @@ foundEl.append(foundTextEl);
 
 // ----------------------------------------------------------------------------
 // The type selection (features/lenses/types.js): every type shown at first
-// but events, which have a lens of their own.
+// but events and bank items, which have lenses of their own.
 const docTypes = typeBar({
   lens: 'documents', el: $('doc-types'), pref: 'doc_hidden', barPref: 'doc_types_bar',
-  hiddenAtFirst: ['events'],
+  hiddenAtFirst: ['events', 'bank'],
 });
 
 $('doc-show-all').addEventListener('click', docTypes.showAll);

@@ -1,7 +1,7 @@
 import { equal, test } from './harness.js';
 import {
-  addDays, dayStart, fileSize, isoInstant, localDay, monthEndOf, monthStartOf, pageDate, parseDate, relativeDay, sameDay,
-  weekStartOf,
+  addDays, amountText, dayStart, fileSize, isoInstant, localDay, monthEndOf, monthStartOf, pageDate, parseDate, relativeDay,
+  sameDay, signedAmount, weekStartOf,
 } from '../../static/core/format.js';
 
 test("a day is the local day's start, not UTC's", () => {
@@ -37,6 +37,11 @@ test('a day as seen from today', () => {
 
 test('no date is never', () => {
   equal(pageDate(null), 'date.never');
+});
+
+test('an amount without one, and with its sign', () => {
+  equal(amountText(null), '');
+  equal([signedAmount(-9.99)[0], signedAmount(9.99)[0], signedAmount(0)[0]], ['\u2212', '+', '+']);
 });
 
 test("a file's size in its unit", () => {

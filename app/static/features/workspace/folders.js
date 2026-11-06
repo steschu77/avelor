@@ -20,6 +20,7 @@ import { registerActions, runAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { entities, parseContact, watches } from '../../model/entities.js';
+import { ACCOUNT_TYPES, ledger, statementsOf } from '../../model/bank.js';
 import { structureCall } from '../../model/structure.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
@@ -27,7 +28,7 @@ import { iconEl } from '../../ui/icons.js';
 import { IMPORT_ICON, KIND_ICONS } from '../../ui/icons.js';
 import {
   addTile, detailFooter, detailHead, detailPane, draftKind, itemCard, listDetailPage, listSection,
-  notice, pageList, replaceVaultPage, sentDrafts, setPageFocus, stat, stats,
+  notice, openVaultOp, pageList, replaceVaultPage, sentDrafts, setPageFocus, stat, stats,
 } from '../../ui/page.js';
 import { fieldEditKey, fieldEdits, renderEditField, renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
@@ -103,11 +104,6 @@ const WATCH_TYPES = [
     folder: `${WATCH_HOME}Documents`,
     patterns: ['*.csv'],
   },
-];
-
-// A bank account's kinds (`bank-account.type`), in words.
-const ACCOUNT_TYPES = [
-  ['checking', t('account_type.checking')], ['savings', t('account_type.savings')], ['credit-card', t('account_type.credit_card')],
 ];
 
 let selectedWatch = null; // a watch id, 'new:<type>' for a new watch's pane, or null
@@ -216,6 +212,13 @@ function watchStartDraft(type) {
   accountDraft = newAccountDraft();
   setPageFocus(fieldEditKey(draft, type === 'statements' ? 'title' : 'folder'));
   scheduleRenderFolders();
+}
+
+// The Folders page with a new bank account's pane: the Bank lens's empty
+// state.
+export function addBankAccount() {
+  watchStartDraft('statements');
+  openVaultOp('folders');
 }
 
 // Check and store `folder` for `watch` (an id, or 'new:<type>', which
@@ -681,14 +684,14 @@ function renderAccountName(id, account) {
 // and its newest statement.
 function renderAccountStats(account) {
   const fields = account['bank-account'] ?? {};
-  const statements = [...entities.values()].filter(doc => doc.statement?.account === account.id);
-  const transactions = statements.flatMap(doc => doc.statement.transactions ?? []);
-  const pending = transactions.filter(transaction => transaction.status === 'pending').length;
+  const statements = statementsOf(account.id);
+  const book = ledger(account);
+  const pending = book.pending.length;
   const newest = statements.reduce((a, b) => (a && a.date >= b.date ? a : b), null);
-  const balance = fields.balance != null ? money(fields.balance, fields.currency) : '\u2014';
+  const balance = book.balance != null ? money(book.balance, fields.currency) : '\u2014';
   return stats(
     stat(t('props.balance'), balance, pending ? t('watch.transactions_pending', { n: pending }) : null),
-    stat(t('props.transactions'), String(transactions.length - pending),
+    stat(t('props.transactions'), String(book.entries.length),
       statements.length ? t('watch.from_statements', { n: statements.length }) : t('watch.none_imported')),
     stat(t('watch.newest_statement'), newest?.title || t('watch.none'), newest?.source?.import?.origin ?? null));
 }

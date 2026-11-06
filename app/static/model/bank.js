@@ -1,0 +1,92 @@
+// Bank accounts and their statements (vault.md, Bank Account and
+// Statement): an account's statements (`statementsOf`) and its ledger,
+// the posted transactions with the balance after each (`ledger`). The Bank lens
+// (features/lenses/bank.js) and a statements watch's pane
+// (features/workspace/folders.js) show them.
+
+import { parseDate } from '../core/format.js';
+import { t } from '../core/text.js';
+import { entities } from './entities.js';
+
+// The statements of the bank account `id`: the statement entities
+// naming it.
+export function statementsOf(id) {
+  return [...entities.values()].filter(doc => doc.statement?.account === id);
+}
+
+// A bank account's types (`bank-account.type`), in words.
+export const ACCOUNT_TYPES = [
+  ['checking', t('account_type.checking')], ['savings', t('account_type.savings')], ['credit-card', t('account_type.credit_card')],
+];
+
+// A transaction's types (`import.md#statements`), in words.
+export const TRANSACTION_TYPES = new Map([
+  ['card', t('transaction_type.card')], ['direct-debit', t('transaction_type.direct_debit')], ['transfer', t('transaction_type.transfer')],
+  ['cash', t('transaction_type.cash')], ['fee', t('transaction_type.fee')],
+]);
+
+// Money in cents while it is summed, so the sums don't drift.
+export const cents = amount => Math.round((amount ?? 0) * 100);
+const units = n => (n == null ? null : n / 100);
+
+// The date of the newest transaction of the bank account `id`'s statements,
+// pending ones too: how far its statements go; null without any.
+export function statementsEnd(id) {
+  let end = null;
+  if (!id) return end;
+  for (const statement of statementsOf(id)) {
+    for (const transaction of statement.statement.transactions ?? []) {
+      const date = parseDate(transaction.date);
+      if (date && (!end || date > end)) end = date;
+    }
+  }
+  return end;
+}
+
+// The ledger of the bank account `account` (its entity), from all its
+// statements:
+// - `entries`: its posted transactions, oldest first (by day, then as their
+//   statement lists them), each `{ transaction, statement, time, balance }`,
+//   `time` its day's or instant's ms, `balance` the account's after it
+//   (null while nothing gives one);
+// - `opening`: the balance before the first, `balance` after the last;
+// - `pending`: the pending transactions, newest first, and `pendingSum`.
+// The balances are walked back from the account's `balance`; a statement
+// with a `balance` of its own sets it again at its last transaction, the newest
+// statement's first. Pending transactions have none.
+export function ledger(account) {
+  const posted = [];
+  const pending = [];
+  for (const statement of statementsOf(account.id)) {
+    (statement.statement.transactions ?? []).forEach((transaction, index) => {
+      const entry = { transaction, statement, index, time: parseDate(transaction.date)?.getTime() ?? 0, balance: null };
+      (transaction.status === 'pending' ? pending : posted).push(entry);
+    });
+  }
+  const order = (a, b) => a.time - b.time
+    || (a.statement.date?.getTime() ?? 0) - (b.statement.date?.getTime() ?? 0)
+    || a.index - b.index;
+  posted.sort(order);
+  pending.sort((a, b) => order(b, a));
+
+  const own = account['bank-account']?.balance;
+  let balance = own == null ? null : cents(own);
+  const anchored = new Set();
+  for (let i = posted.length - 1; i >= 0; i--) {
+    const { statement } = posted[i];
+    if (statement.statement.balance != null && !anchored.has(statement)) {
+      anchored.add(statement);
+      balance = cents(statement.statement.balance);
+    }
+    posted[i].balance = units(balance);
+    if (balance != null) balance -= cents(posted[i].transaction.amount);
+  }
+
+  return {
+    entries: posted,
+    opening: posted.length ? units(balance) : null,
+    balance: posted.length ? posted.at(-1).balance : own ?? null,
+    pending,
+    pendingSum: units(pending.reduce((sum, entry) => sum + cents(entry.transaction.amount), 0)),
+  };
+}

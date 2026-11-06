@@ -28,6 +28,7 @@
   "bank.choose_type": "Wählen Sie die Art des Kontos.",
   "bank.enter_name": "Geben Sie den Namen des Kontos ein.",
   "bank.enter_number": "Geben Sie die Nummer des Kontos ein.",
+  "bank.no_accounts_text": "Buchungen kommen aus den Kontoauszügen Ihrer Bank. Fügen Sie ein Bankkonto hinzu, exportieren Sie seine Kontoauszüge als CSV-Dateien in einen Ordner, und jeder wird in das Konto eingelesen.",
   "chat.ask_anything": "Fragen Sie irgendwas …",
   "chat.guide.pick": "Wählen Sie das Modell, mit dem Unterhaltungen beantwortet werden.",
   "chat.guide.tick": "Haken Sie unter Konten ein Modell an und wählen Sie es dann für Unterhaltungen.",

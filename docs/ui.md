@@ -117,7 +117,7 @@ switched off at its rows' end (`ui.md#documents`).
 
 ## Lenses <a id="lenses"></a>
 
-The main view's tabs are Dashboard, Documents, Timeline and Calendar; each
+The main view's tabs are Dashboard, Documents, Timeline, Calendar and Bank; each
 lens registers itself (`registerLens`, `features/lenses/registry.js`), a
 tab selects it (`selectLens`), and the visible lens is rendered again if
 it is stale. The lens shown last comes back on the next start
@@ -222,7 +222,7 @@ so is the Timeline's.
   Email, Notes (the type `note`), Conversations, Bank (bank accounts and
   statements), Lists, Records, Contacts, Tasks and Events (with
   calendars), each a toggle with its count in the vault panel's filter,
-  faint at none. Every type but Events, which have a lens of
+  faint at none. Every type but Events and Bank, which have lenses of
   their own, is shown at first. The lens head says how many entities are
   shown and hidden ("62 entries · 34 hidden"), and its Types button
   folds the bar, which shows whatever its fold while the words filter,
@@ -301,6 +301,40 @@ events hidden.
   (`markSelection`, `features/selection.js`, as on the Dashboard's Week
   card).
 - The side panel shows the selected day (`panel.md#the-day-view`).
+
+### Bank <a id="bank"></a>
+
+`features/lenses/bank.js`: the transactions of the bank accounts
+(`vault.md`, Bank Account and Statement), as statements watches bring
+them (`import.md#statements`). The scope is the vault panel's filter on
+the statements (`matchesFilter`); with nothing narrowing it, every bank
+account shows, one without statements too, else the accounts of the
+statements in it and the account of a statements watch picked as the
+source.
+
+- **The accounts** as tiles: type and bank, name and balance, number, what
+  is pending and how far the statements go ("statement to 13 Nov"). A
+  click makes the account's watch's source the filter, a second click
+  shows every source again; an account without a watch shows its card.
+  With several accounts, their total ends the strip, with what is
+  pending, while they share a currency.
+- **The cut**: In and Out, a toggle each with its count, for the session.
+- **The transactions** by month, newest first, a pending one before the posted
+  ones of its day: the day; who paid or was paid (the sender of money in,
+  the receiver of money out, else the title), "Pending", then the memo
+  (else the title, else the kind in words), after the account's name while
+  the scope holds several; the amount, signed; and the account's balance
+  after it (`ledger`, `model/bank.js`). A month's head counts its transactions
+  and the pending ones, sums the posted ones and gives the accounts'
+  balance at its end. Under the transactions, the day the first statements
+  start and each account's balance then.
+- **Balances** are walked back from the newest statement's balance, else
+  the account's; a statement with a balance of its own sets it again at
+  its last transaction. A pending transaction has none and counts in no sum.
+- A transaction's click selects its statement, whose card the panel shows.
+- **Empty**: without a bank account, the lens says where transactions come from
+  and offers Add a bank account, the Folders page with a new bank
+  account's pane (`addBankAccount`, `features/workspace/folders.js`).
 
 ## Status bar <a id="status-bar"></a>
 
@@ -512,3 +546,4 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |
 | F8 | Timeline | a drag or click across the scrubber's track (`pointerdown` … `pointerup`, `features/lenses/timeline.js`); Clear; Today; a type toggle, Show all types, Types; a row → `selectDocument`; a card's head dropped on the lens → `leaveThreadLocal` | `set_prefs {prefs}` (`tl_hidden`, `tl_types_bar`); `leave_thread` | the feed kept to the weeks picked, or to all; scrolled to today; the types and the bar kept across restarts; the entity in the panel; the card out of its thread |
 | F2 | Calendar month and day | prev/next/today (`features/lenses/calendar.js`); day click → `selectDay`; event or task click → `selectDay(day, id)`; today's overdue count → `selectDay(today)`, `scrollToOverdue` | — | the day's events as cards, then its tasks due (today: also the overdue ones) as rows; the clicked one focused, a task opened into its card |
+| F9 | Bank | the Bank tab; an account's tile → `selectFilter({selected_source})` (again: every source); In, Out (`features/lenses/bank.js`); a transaction → `selectDocument(statement)`; the empty state's Add a bank account → `addBankAccount` | — | the transactions in the scope and the cut; the statement's card; the Folders page with a new bank account's pane |
