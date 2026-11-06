@@ -303,3 +303,10 @@
   display: inline-block;
   flex: none;
 }
+
+/* a booking's card (features/panel/booking.js): the amount atop the props */
+.card-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}

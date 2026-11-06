@@ -14,7 +14,8 @@ import {
 } from '../model/entities.js';
 import { setLinkLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
-import { selectById } from './selection.js';
+import { showMenu } from '../ui/menu.js';
+import { selectBooking, selectById } from './selection.js';
 import {
   contextTarget, registerContextTab, shownContextTab,
 } from './context.js';
@@ -104,7 +105,10 @@ function renderLinkedLists() {
   linkedShown.els.to.replaceChildren(to ? linkedRow(to, { onRemove: unlink(target) }) : none());
   const rows = [
     ...from.map(id => linkedRow(id, { onRemove: unlink(id) })),
-    ...items.map(item => linkedRow(item.doc_id, { label: item.title || null })),
+    ...items.map(item => linkedRow(item.doc_id, {
+      label: item.title || null,
+      onPick: item.booking ? () => selectBooking(item.doc_id, item.booking) : null,
+    })),
   ];
   linkedShown.els.from.replaceChildren(...(rows.length ? rows : [none()]));
   renderLinkedResults();
@@ -124,10 +128,10 @@ function renderLinkedResults() {
 // The entities and threads in the vault panel's filter (project, source,
 // labels: `matchesFilter`; a thread while one of its members is) whose
 // title holds `query` (any case), newest first, at most LINKED_RESULTS --
-// but `target` and what it links to.
-function linkedResults(target, query) {
+// but `target` and what it links to (`current`, the target's own link by
+// default; a booking's card passes its booking's, features/panel/booking.js).
+export function linkedResults(target, query, current = (entities.get(target) ?? threads.get(target))?.linked_to) {
   const q = query.trim().toLowerCase();
-  const current = (entities.get(target) ?? threads.get(target))?.linked_to;
   const time = id => linkTarget(id)?.date?.getTime() ?? 0;
   const state = store.getState();
   return [
@@ -139,6 +143,26 @@ function linkedResults(target, query) {
     .filter(id => !q || (linkTarget(id)?.title ?? '').toLowerCase().includes(q))
     .sort((a, b) => time(b) - time(a))
     .slice(0, LINKED_RESULTS);
+}
+
+// A "+" chip titled `title` whose menu offers what to link to: `before()`'s
+// items, then the newest entities and threads in the vault panel's filter,
+// the search finding older ones (`linkedResults`, but `target` and
+// `current`). A pick calls `onPick(id)`. A booking's link
+// (features/panel/booking.js).
+export function linkMenuChip(title, { target = null, current = null, before = () => [], onPick }) {
+  const add = accEl('button', 'chip chip--action', '+');
+  add.type = 'button';
+  add.title = title;
+  add.addEventListener('click', () => {
+    const item = id => ({ label: linkTarget(id)?.title || 'Untitled', icon: linkTarget(id)?.icon ?? '', run: () => onPick(id) });
+    const newest = linkedResults(target, '', current);
+    const listed = new Set(newest);
+    const found = text => linkedResults(target, text, current).filter(id => !listed.has(id)).map(item);
+    showMenu(add, [...before(), { head: 'Newest' }, ...newest.map(item)],
+      { filter: { placeholder: 'Search the titles', extra: found } });
+  });
+  return add;
 }
 
 // One row: the icon, the title -- `label` instead, for a transaction item --

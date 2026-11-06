@@ -1,11 +1,13 @@
 // Bank accounts and their statements (vault.md, Bank Account and
 // Transactions): an account's statements (`statementsOf`) and its ledger,
-// the booked bookings with the balance after each (`ledger`). The Bank lens
-// (features/lenses/bank.js) and a statements watch's pane
+// the booked bookings with the balance after each (`ledger`); a booking's
+// party (`partyOf`) and its projects through its link (`linkProjects`).
+// The Bank lens (features/lenses/bank.js), a booking's card
+// (features/panel/booking.js) and a statements watch's pane
 // (features/workspace/folders.js) show them.
 
 import { parseDate } from '../core/format.js';
-import { entities } from './entities.js';
+import { entities, projects, projectsOf, threadProjects, threads } from './entities.js';
 
 // The statements of the bank account `id`: the transactions entities
 // naming it.
@@ -21,6 +23,34 @@ export const BOOKING_KINDS = new Map([
   ['card', 'Card payment'], ['direct-debit', 'Direct debit'], ['transfer', 'Transfer'],
   ['cash', 'Cash'], ['fee', 'Fee'],
 ]);
+
+// The booking `id` of the statement `statement` (its entity), if it has it.
+export function bookingOf(statement, id) {
+  return statement?.transactions?.transactions?.find(booking => booking.id === id) ?? null;
+}
+
+// The other side of `booking` as the vault keeps it (a contact reference):
+// who was paid for money out, who paid for money in, as the import writes
+// them.
+export function partyRef(booking) {
+  return booking.amount < 0 ? booking.receiver : booking.sender;
+}
+
+// Who paid or was paid: the other side, else the booking's title.
+export function partyOf(booking) {
+  return partyRef(booking) || booking.title || 'Booking';
+}
+
+// The projects of `booking` through its link: the project it links to, or
+// the projects of the entity or thread it links to; none without a link.
+export function linkProjects(booking) {
+  const to = booking?.['linked-to'];
+  if (!to) return [];
+  if (projects.has(to)) return [to];
+  if (threads.has(to)) return threadProjects(to);
+  const doc = entities.get(to);
+  return doc ? projectsOf(doc) : [];
+}
 
 // Money in cents while it is summed, so the sums don't drift.
 export const cents = amount => Math.round((amount ?? 0) * 100);

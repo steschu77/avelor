@@ -86,6 +86,7 @@ enum Command {
     SetArchived(Archive),
     SetTags(Retag),
     SetLink(Relink),
+    SetBookingLink(BookingLink),
     EditEntities(EditEntities),
     DeleteEntity(Target),
     ReloadEntity(Target),
@@ -237,6 +238,15 @@ struct Relink {
     to: Option<Id>,
 }
 
+/// `{id, booking, to}`: the booking `booking` of the statement `id`; `to`
+/// null removes its link.
+#[derive(Deserialize)]
+struct BookingLink {
+    id: Id,
+    booking: Id,
+    to: Option<Id>,
+}
+
 /// `{ids, change}`: one change to every entity named.
 #[derive(Deserialize)]
 struct EditEntities {
@@ -346,6 +356,7 @@ impl Command {
             "set_archived" => Command::SetArchived(from_value(args)?),
             "set_tags" => Command::SetTags(from_value(args)?),
             "set_link" => Command::SetLink(from_value(args)?),
+            "set_booking_link" => Command::SetBookingLink(from_value(args)?),
             "edit_entities" => Command::EditEntities(from_value(args)?),
             "delete_entity" => Command::DeleteEntity(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
@@ -444,6 +455,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetArchived(a) => structure::set_archived(app, req, a.id, a.archived),
         Command::SetTags(a) => structure::set_tags(app, req, a.id, a.tags),
         Command::SetLink(a) => structure::set_link(app, req, a.id, a.to),
+        Command::SetBookingLink(a) => structure::set_booking_link(app, req, a.id, a.booking, a.to),
         Command::EditEntities(a) => structure::edit_entities(app, req, a.ids, a.change),
         Command::DeleteEntity(a) => structure::delete_entity(app, req, a.id),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),

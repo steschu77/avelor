@@ -29,12 +29,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* a sum of money or a balance: large serif numerals that line up */
+/* a sum of money or a balance: large serif numerals that line up; --lg
+   for the amount atop a booking's card */
 .figure {
   font: 500 var(--fs-pane-title)/1 var(--f-serif);
   font-variant-numeric: tabular-nums;
   color: var(--c-ink);
   white-space: nowrap;
+}
+
+.figure--lg {
+  font-size: var(--fs-page-title);
 }
 
 /* a short serif hint */

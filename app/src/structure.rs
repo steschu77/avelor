@@ -158,6 +158,15 @@ pub fn set_link(app: &mut App, req: Req, id: Id, to: Option<Id>) {
 }
 
 // ----------------------------------------------------------------------------
+/// `set_booking_link`: link the booking `booking` of the statement `id` to
+/// `to`, another entity in the vault (`Index::set_booking_link`); none
+/// removes the booking's link. Answered as the statement's change.
+pub fn set_booking_link(app: &mut App, req: Req, id: Id, booking: Id, to: Option<Id>) {
+    let result = app.edit(|index, changes| index.set_booking_link(&id, &booking, to, changes));
+    answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
 /// `set_starred`: star or unstar `id`, any entity; unstarring removes the
 /// key.
 pub fn set_starred(app: &mut App, req: Req, id: Id, starred: bool) {
@@ -497,6 +506,66 @@ mod tests {
         let (mut h, ids) = notes("set-link-refused", 1);
         for to in [ids[0], Id::generate()] {
             let sent = h.call("set_link", json!({ "id": ids[0], "to": to }));
+            assert_eq!(shape(&sent), ["reply"], "nothing written, nothing pushed");
+            assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_bookings_link_is_written_pushed_and_removed() {
+        let (statement, booking, note) = (Id::generate(), Id::generate(), Id::generate());
+        let files = [
+            (
+                "Accounts/s.txs.yaml".to_string(),
+                format!(
+                    "id: {statement}
+title: Statement
+transactions:
+  transactions:
+  - id: {booking}
+    title: Rent
+    amount: -1150.0
+"
+                ),
+            ),
+            (
+                "Notes/n.md".to_string(),
+                format!(
+                    "---
+id: {note}
+title: Lease
+document: {{}}
+---
+Body
+"
+                ),
+            ),
+        ];
+        let mut h = crate::testing::Harness::with_vault("set-booking-link", &files);
+        let args = json!({ "id": statement, "booking": booking, "to": note });
+        let sent = h.call("set_booking_link", args);
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        let items = &sent[0]["data"]["transactions"]["transactions"];
+        assert_eq!(items[0]["linked-to"], note.to_string());
+        assert_eq!(sent[1], json!({ "re": 1, "ok": { "id": statement } }));
+        let path = h.vault().join("Accounts/s.txs.yaml");
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains(&format!("linked-to: {note}")), "{text}");
+
+        let args = json!({ "id": statement, "booking": booking, "to": null });
+        let sent = h.call("set_booking_link", args);
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert!(!fs::read_to_string(&path).unwrap().contains("linked-to"));
+
+        for (id, item, to) in [
+            (statement, Id::generate(), note),
+            (note, booking, statement),
+            (statement, booking, statement),
+            (statement, booking, Id::generate()),
+        ] {
+            let args = json!({ "id": id, "booking": item, "to": to });
+            let sent = h.call("set_booking_link", args);
             assert_eq!(shape(&sent), ["reply"], "nothing written, nothing pushed");
             assert_eq!(sent[0]["err"]["code"], "invalid_argument");
         }

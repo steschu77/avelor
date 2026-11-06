@@ -25,6 +25,7 @@ use crate::envelope::Conversation;
 use crate::envelope::DocumentType;
 use crate::envelope::Original;
 use crate::envelope::Thread;
+use crate::envelope::Transaction;
 use crate::envelope::{Empty, Project, Roles, Source};
 use crate::filename;
 use crate::schema::layout;
@@ -790,6 +791,37 @@ impl Index {
         self.check_link(id, to.as_ref())?;
         self.check_writable(id)?;
         self.update(id, changes, |d| d.set_link(to))
+    }
+
+    /// Link the booking `booking` of the statement `id` to `to`, an entity
+    /// in the vault other than the statement, replacing an older link;
+    /// `None` removes the booking's `linked-to` key. A booking is an item of
+    /// its statement's file, so the statement is written.
+    pub fn set_booking_link(
+        &mut self,
+        id: &Id,
+        booking: &Id,
+        to: Option<Id>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_link(id, to.as_ref())?;
+        self.check_writable(id)?;
+        let is_it = |item: &Transaction| item.id.as_ref() == Some(booking);
+        let mut transactions = self
+            .get(id)
+            .and_then(|doc| doc.roles().transactions.clone())
+            .filter(|t| t.transactions.iter().any(is_it))
+            .ok_or_else(|| Error::InvalidArgument {
+                arg: "booking".into(),
+            })?;
+        for item in transactions
+            .transactions
+            .iter_mut()
+            .filter(|item| is_it(item))
+        {
+            item.linked_to = to;
+        }
+        self.update(id, changes, |d| d.set_transactions(Some(transactions)))
     }
 
     /// Star or unstar `id`, which may be any entity; unstarring removes the
@@ -3210,6 +3242,69 @@ mod tests {
         let refused = index.set_link(&ids[1], Some(ids[0]), &mut changes);
         assert!(matches!(refused, Err(Error::NotWritable { .. })));
 
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_bookings_link_is_set_and_removed_in_its_statement() {
+        let (root, ids) = thread_vault();
+        let statement = Id::generate();
+        let booking = Id::generate();
+        let path = root.join("Accounts/s.txs.yaml");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            format!(
+                "id: {statement}
+title: Statement
+transactions:
+  transactions:
+  - id: {booking}
+    title: Rent
+    amount: -1150.0
+  - title: Fee
+    amount: -4.9
+"
+            ),
+        )
+        .unwrap();
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        let set = index.set_booking_link(&statement, &booking, Some(ids[0]), &mut changes);
+        assert_eq!(set.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [statement]);
+        let rescanned = Index::scan(&root);
+        let items = rescanned
+            .get(&statement)
+            .unwrap()
+            .roles()
+            .transactions
+            .clone()
+            .unwrap();
+        let links: Vec<_> = items
+            .transactions
+            .iter()
+            .map(|item| item.linked_to)
+            .collect();
+        assert_eq!(links, [Some(ids[0]), None], "only that booking");
+
+        let set = index.set_booking_link(&statement, &booking, None, &mut changes);
+        assert_eq!(set.unwrap(), SaveOutcome::Saved);
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("linked-to"), "{text}");
+
+        for (on, item, to, arg) in [
+            (statement, Id::generate(), Some(ids[0]), "booking"),
+            (ids[1], booking, Some(ids[0]), "booking"),
+            (statement, booking, Some(statement), "to"),
+            (statement, booking, Some(Id::generate()), "to"),
+        ] {
+            let refused = index.set_booking_link(&on, &item, to, &mut changes);
+            assert!(
+                matches!(refused, Err(Error::InvalidArgument { arg: ref a }) if a == arg),
+                "{arg}: {refused:?}"
+            );
+        }
         fs::remove_dir_all(&root).ok();
     }
 

@@ -1,12 +1,13 @@
 // The selection (panel.md#selection): what the panel shows -- an entity, a
-// thread, the calendar's day -- and the vault panel's filter, all in the
-// store; every feature selects through it.
+// thread, a booking of a statement, the calendar's day -- and the vault
+// panel's filter, all in the store; every feature selects through it.
 
 import { setAria } from '../core/dom.js';
 import { rpcCall } from '../core/rpc.js';
 import { savePrefs, store } from '../model/state.js';
 import { showError } from '../model/state.js';
 import { entities, threadOf, threads } from '../model/entities.js';
+import { bookingOf } from '../model/bank.js';
 import { projects } from '../model/entities.js';
 import { calendarDayOf } from '../model/calendar.js';
 import { closeVaultArea } from '../ui/page.js';
@@ -38,12 +39,21 @@ export function selectDocument(doc_id, thread_id = null) {
   store.setState(selection);
 }
 
-// The selection of the entity `selected_entity`, see `selectDocument`.
+// The selection of the entity `selected_entity`, see `selectDocument`; a
+// booking selected before isn't any more.
 function selectionOf(selected_entity, thread_id = null) {
   const current = thread_id ?? store.getState().selected_thread;
   const threadsOfDoc = entities.get(selected_entity)?.threads ?? [];
   const selected_thread = threadsOfDoc.includes(current) ? current : (threadOf(selected_entity) ?? null);
-  return { selected_entity, selected_thread };
+  return { selected_entity, selected_thread, selected_booking: null };
+}
+
+// Selects the booking `booking` of the statement `statement`: the panel
+// shows its card (features/panel/booking.js). A booking is an item of its
+// statement's file, not an entity (vault.md#transactions).
+export function selectBooking(statement, booking) {
+  openPanel();
+  store.setState({ selected_entity: statement, selected_thread: null, selected_booking: booking });
 }
 
 // Selects the day `selected_day` in the calendar; with `doc_id` also that
@@ -113,7 +123,7 @@ export function selectById(id) {
     selectDocument(id);
   } else if (threads.has(id)) {
     openPanel();
-    store.setState({ ...documentsIfCalendar(), selected_entity: null, selected_thread: id });
+    store.setState({ ...documentsIfCalendar(), selected_entity: null, selected_thread: id, selected_booking: null });
   } else if (projects.has(id)) {
     selectFilter({ selected_project: id });
   } else {
@@ -170,12 +180,16 @@ export function expandPanel() {
 // - 'day': the calendar lens is active: `selected_day`'s events,
 // - 'thread': `selected_thread` exists and `selected_entity` (if any) is one
 //   of its members,
+// - 'booking': `selected_booking` is a booking of `selected_entity`,
 // - 'document': `selected_entity` is a known entity, shown standalone,
 // - 'none': nothing selected (or the selection was deleted): the empty
 //   preview.
-export function panelMode({ selected_lens, selected_entity, selected_thread }) {
+export function panelMode({ selected_lens, selected_entity, selected_thread, selected_booking }) {
   if (selected_lens === 'calendar') {
     return 'day';
+  }
+  if (selected_booking && bookingOf(entities.get(selected_entity), selected_booking)) {
+    return 'booking';
   }
   if (selected_thread && threads.has(selected_thread)
     && (!selected_entity || entities.get(selected_entity)?.threads?.includes(selected_thread))) {

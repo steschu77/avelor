@@ -84,9 +84,10 @@
   --h-scrub: 30px;
   --w-tl-date: 112px;
   --w-tl-date-narrow: 64px;
-  /* the Bank lens's columns: the day, the amount, the account's balance
-     after it */
+  /* the Bank lens's columns: the day, the link, the amount, the account's
+     balance after it */
   --w-bank-date: 40px;
+  --w-bank-link: 200px;
   --w-bank-amount: 88px;
   --w-bank-balance: 80px;
 

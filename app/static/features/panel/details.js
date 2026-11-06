@@ -353,8 +353,8 @@ function ordinal(n) {
 
 // ----------------------------------------------------------------------------
 // A contact as a chip by its name: the vault's selects it on a click, an
-// email is the tooltip.
-function contactChip(ref) {
+// email is the tooltip. The card's and a booking's (features/panel/booking.js).
+export function contactChip(ref) {
     const { id, name, email } = parseContact(ref);
     if (id) return entityChip(id, name);
     const chip = accEl('span', 'chip', name);
@@ -364,7 +364,7 @@ function contactChip(ref) {
 
 // ----------------------------------------------------------------------------
 // The entity `id` as a chip titled `title`; a click selects it.
-function entityChip(id, title) {
+export function entityChip(id, title) {
     const chip = accEl('span', 'chip');
     const name = accEl('button', 'chip__name', title);
     name.type = 'button';

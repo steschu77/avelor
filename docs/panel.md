@@ -36,8 +36,9 @@ sequenceDiagram
 ```
 
 What the panel shows is state, not a sequence of render calls: the store
-holds `selected_entity`, `selected_thread` and `threads_rev`, and
-`renderPanel` derives everything else from them (`panel.md#panel-state`).
+holds `selected_entity`, `selected_thread`, `selected_booking` and
+`threads_rev`, and `renderPanel` derives everything else from them
+(`panel.md#panel-state`).
 
 ## Cards <a id="cards"></a>
 
@@ -119,10 +120,12 @@ template itself:
 
 ## Panel state <a id="panel-state"></a>
 
-Three store keys decide what the panel shows:
+Four store keys decide what the panel shows:
 
 - `selected_entity` — the selected entity,
 - `selected_thread` — the thread it's shown in, or `null`,
+- `selected_booking` — a booking of the selected statement, or `null`
+  (`selectBooking`; any other selection clears it),
 - `threads_rev` — bumped by every thread/membership change, so the cards
   are rebuilt even when neither selection changes (e.g. a member was
   added).
@@ -136,10 +139,11 @@ Three store keys decide what the panel shows:
 |---|---|---|
 | `day` | `selected_lens === 'calendar'` | `#panel-day-view`, its events, tasks |
 | `thread` | `selected_thread` exists and `selected_entity` (if any) is one of its members | `#panel-thread-view`, all members |
+| `booking` | `selected_booking` is a booking of `selected_entity`, a statement | `#panel-booking-view`, the booking's card (`#a-bookings-card`) |
 | `document` | `selected_entity` is a known entity | `#panel-doc-view`, one standalone card |
 | `none` | nothing selected, or the selected entity was deleted | `#panel-doc-view`, empty preview |
 
-`renderPanel` sets the three panels' `hidden` **first** and only then
+`renderPanel` sets the four panels' `hidden` **first** and only then
 renders, so a panel is never still `hidden` (`display: none`) when a
 scroll call runs against it — scrolling inside a hidden ancestor is a
 silent no-op with no layout box to scroll against. It is idempotent: it
@@ -350,9 +354,41 @@ other side is derived.
   filter narrows what is offered. Picking a result (a click or Enter)
   links the card to it, replacing an older link. With only a thread shown,
   the tab is about the thread.
+- A booking that links here shows as an incoming chip, under its title, and
+  as a row of "Linked from"; a click selects the booking
+  (`selectBooking`), its card in the panel (`#a-bookings-card`).
 - A link in a document's body to `id:<uuid>` (`vault.md#links-in-content`)
   selects that entity, thread or project when clicked in the preview
   (`editor.md#links`).
+
+## A booking's card <a id="a-bookings-card"></a>
+
+A booking is an item of its statement's file (`vault.md#transactions`),
+not an entity: selecting it (`selectBooking`, a row of the Bank lens,
+`ui.md#bank`, or a chip linking from it) keeps the statement as
+`selected_entity` and the booking's id as `selected_booking`, and the
+panel's `booking` mode shows its card in `#panel-booking-view`
+(`features/panel/booking.js`). The card renders itself, again on every
+entity, project or thread change; it has no editor, and nothing on it is
+renamed or deleted.
+
+- The head: who paid or was paid (`partyOf`, `model/bank.js`), the day,
+  and the statement's file.
+- The amount, signed in the account's currency, booked or pending and its
+  kind.
+- The account (a chip, then its bank and number), From or To, the purpose
+  and the bank's reference, the statement (a chip that selects it), and
+  the account's balance after it (`ledger`); a pending booking has none
+  yet.
+- The projects it is in through its link (`linkProjects`), without ×, and
+  "through" what it links to.
+- The link: a chip with × while the statement can be written, then "+",
+  a menu with a filter of the active projects and the newest entities and
+  threads in the vault panel's filter (`linkedResults`,
+  `features/linked.js`), the search finding older ones, but the statement
+  and the current link. A pick or × sends `set_booking_link`
+  (`setBookingLinkLocal`, `model/structure.js`), and the statement's
+  `entity` brings it back.
 
 ## Labels <a id="labels"></a>
 
@@ -612,6 +648,7 @@ and save their bodies at once.
 | D12 | Rename | the pen in a card's head or the thread header → `renameEntity` → `editTextInPlace`; Enter or blur | `set_title` → `entity` | the card's head, the thread header, chips and links follow; the file keeps its name |
 | D13 | A task's field | a Status button; the Due input or the Assignee typed in, Enter or blur; the Due × → `editEntityLocal(id, {task: {…}})` | `edit_entities {ids: [id], change}` → `Index::edit_entities` (done also writes `task.done`) → `entity`, `ok {changed, skipped}` | the card, the lenses and the dashboard follow; the field keeps the focus; a skip as `changed_outside` opens the conflict dialog |
 | D14 | Genre | the Genre typed in, Enter or blur → `editEntityLocal(id, {genre})` | `edit_entities` → `entity` | the card's icon and the rows' follow |
+| D15 | A booking's link | a booking's row in the Bank lens → `selectBooking`; its card's "+" → a pick, or × → `setBookingLinkLocal` | `set_booking_link {id, booking, to}` → `Index::set_booking_link` → `entity` (the statement) | the card's link and projects, the lens's Linked to |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |
 | E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |
