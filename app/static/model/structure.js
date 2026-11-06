@@ -170,6 +170,13 @@ export function setLinkLocal(id, to) {
   structureCall('set_link', { id, to }, () => store.getState());
 }
 
+// Link the transaction `transaction` of the statement `statement` to `to`, null to
+// remove its link; the host writes the statement and pushes it back. The
+// selection stays.
+export function setTransactionLinkLocal(statement, transaction, to) {
+  structureCall('set_transaction_link', { id: statement, transaction, to }, () => store.getState());
+}
+
 // Write `change` to the entity `id` (`edit_entities`, api.md#structure): a
 // document's `{type}`, or a task's `{task: {status | due | assignee}}`,
 // null removing it. The host pushes the entity back, which the cards, the

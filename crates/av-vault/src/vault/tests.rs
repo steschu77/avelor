@@ -1489,6 +1489,69 @@ fn a_link_is_set_replaced_and_removed_on_any_entity() {
 }
 
 #[test]
+fn a_transactions_link_is_set_and_removed_in_its_statement() {
+    let (root, ids) = thread_vault();
+    let statement = Id::generate();
+    let transaction = Id::generate();
+    let path = root.join("Accounts/s.txs.yaml");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        format!(
+            "id: {statement}
+title: Statement
+statement:
+  transactions:
+  - id: {transaction}
+    title: Rent
+    amount: -1150.0
+  - title: Fee
+    amount: -4.9
+"
+        ),
+    )
+    .unwrap();
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    let set = index.set_transaction_link(&statement, &transaction, Some(ids[0]), &mut changes);
+    assert_eq!(set.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [statement]);
+    let reindexed = Index::build(&root);
+    let items = reindexed
+        .get(&statement)
+        .unwrap()
+        .roles()
+        .statement
+        .clone()
+        .unwrap();
+    let links: Vec<_> = items
+        .transactions
+        .iter()
+        .map(|item| item.linked_to)
+        .collect();
+    assert_eq!(links, [Some(ids[0]), None], "only that transaction");
+
+    let set = index.set_transaction_link(&statement, &transaction, None, &mut changes);
+    assert_eq!(set.unwrap(), SaveOutcome::Saved);
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("linked-to"), "{text}");
+
+    for (on, item, to, arg) in [
+        (statement, Id::generate(), Some(ids[0]), "transaction"),
+        (ids[1], transaction, Some(ids[0]), "transaction"),
+        (statement, transaction, Some(statement), "to"),
+        (statement, transaction, Some(Id::generate()), "to"),
+    ] {
+        let refused = index.set_transaction_link(&on, &item, to, &mut changes);
+        assert!(
+            matches!(refused, Err(Error::InvalidArgument { arg: ref a }) if a == arg),
+            "{arg}: {refused:?}"
+        );
+    }
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_write_keeps_the_byte_order_mark_and_the_line_endings() {
     let (root, ids) = thread_vault();
     let path = root.join("Notes/n0.md");

@@ -305,3 +305,10 @@
   display: inline-block;
   flex: none;
 }
+
+/* a transaction's card (features/panel/transaction.js): the amount atop the props */
+.card-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}

@@ -5,6 +5,7 @@ use super::{Changes, Index, SaveOutcome};
 use crate::change::Change;
 use crate::document::Document;
 use crate::envelope::Conversation;
+use crate::envelope::Transaction;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -53,6 +54,33 @@ impl Index {
         self.check_link(id, to.as_ref())?;
         self.check_writable(id)?;
         self.update(id, changes, |d| d.set_link(to))
+    }
+
+    /// Link the transaction `transaction` of the statement `id` to `to`, an entity
+    /// in the vault other than the statement, replacing an older link;
+    /// `None` removes the transaction's `linked-to` key. A transaction is an item of
+    /// its statement's file, so the statement is written.
+    pub fn set_transaction_link(
+        &mut self,
+        id: &Id,
+        transaction: &Id,
+        to: Option<Id>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_link(id, to.as_ref())?;
+        self.check_writable(id)?;
+        let is_it = |item: &Transaction| item.id.as_ref() == Some(transaction);
+        let mut statement = self
+            .get(id)
+            .and_then(|doc| doc.roles().statement.clone())
+            .filter(|t| t.transactions.iter().any(is_it))
+            .ok_or_else(|| Error::InvalidArgument {
+                arg: "transaction".into(),
+            })?;
+        for item in statement.transactions.iter_mut().filter(|item| is_it(item)) {
+            item.linked_to = to;
+        }
+        self.update(id, changes, |d| d.set_statement(Some(statement)))
     }
 
     /// Star or unstar `id`, which may be any entity; unstarring removes the

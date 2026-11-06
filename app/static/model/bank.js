@@ -1,12 +1,14 @@
 // Bank accounts and their statements (vault.md, Bank Account and
 // Statement): an account's statements (`statementsOf`) and its ledger,
-// the posted transactions with the balance after each (`ledger`). The Bank lens
-// (features/lenses/bank.js) and a statements watch's pane
+// the posted transactions with the balance after each (`ledger`); a transaction's
+// party (`partyOf`) and its projects through its link (`linkProjects`).
+// The Bank lens (features/lenses/bank.js), a transaction's card
+// (features/panel/transaction.js) and a statements watch's pane
 // (features/workspace/folders.js) show them.
 
 import { parseDate } from '../core/format.js';
 import { t } from '../core/text.js';
-import { entities } from './entities.js';
+import { entities, projects, projectsOf, threadProjects, threads } from './entities.js';
 
 // The statements of the bank account `id`: the statement entities
 // naming it.
@@ -24,6 +26,34 @@ export const TRANSACTION_TYPES = new Map([
   ['card', t('transaction_type.card')], ['direct-debit', t('transaction_type.direct_debit')], ['transfer', t('transaction_type.transfer')],
   ['cash', t('transaction_type.cash')], ['fee', t('transaction_type.fee')],
 ]);
+
+// The transaction `id` of the statement `statement` (its entity), if it has it.
+export function transactionOf(statement, id) {
+  return statement?.statement?.transactions?.find(transaction => transaction.id === id) ?? null;
+}
+
+// The other side of `transaction` as the vault keeps it (a contact reference):
+// who was paid for money out, who paid for money in, as the import writes
+// them.
+export function partyRef(transaction) {
+  return transaction.amount < 0 ? transaction.receiver : transaction.sender;
+}
+
+// Who paid or was paid: the other side, else the transaction's title.
+export function partyOf(transaction) {
+  return partyRef(transaction) || transaction.title || t('bank.transaction');
+}
+
+// The projects of `transaction` through its link: the project it links to, or
+// the projects of the entity or thread it links to; none without a link.
+export function linkProjects(transaction) {
+  const to = transaction?.['linked-to'];
+  if (!to) return [];
+  if (projects.has(to)) return [to];
+  if (threads.has(to)) return threadProjects(to);
+  const doc = entities.get(to);
+  return doc ? projectsOf(doc) : [];
+}
 
 // Money in cents while it is summed, so the sums don't drift.
 export const cents = amount => Math.round((amount ?? 0) * 100);

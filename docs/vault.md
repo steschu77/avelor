@@ -590,7 +590,10 @@ It carries the following additional fields:
     twice,
   * `iban`, `bic`: string, the other side's account number or IBAN and its
     bank, on a transfer out,
-  * `linked-to`: Entity ID, e.g. the bill or task a payment belongs to. Optional.
+  * `linked-to`: Entity ID, e.g. the bill or task a payment belongs to, or
+    a project. Optional; set with `set_transaction_link` (`api.md#structure`).
+    The transaction is in the projects of what it links to: the project
+    itself, a thread's, or an entity's.
 
 ## Kind derivation <a id="kind-derivation"></a>
 

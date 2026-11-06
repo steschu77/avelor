@@ -201,6 +201,18 @@ pub fn set_link(app: &mut App, req: Req, id: Id, to: Option<Id>) {
 }
 
 // ----------------------------------------------------------------------------
+/// `set_transaction_link`: link the transaction `transaction` of the statement `id` to
+/// `to`, another entity in the vault (`Index::set_transaction_link`); none
+/// removes the transaction's link. Answered as the statement's change.
+pub fn set_transaction_link(app: &mut App, req: Req, id: Id, transaction: Id, to: Option<Id>) {
+    let step = Text::new("undo.set_transaction_link").arg("title", named(app, &id, ""));
+    let result = app.step(&req, step, |index, changes| {
+        index.set_transaction_link(&id, &transaction, to, changes)
+    });
+    answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
 /// `set_starred`: star or unstar `id`, any entity; unstarring removes the
 /// key.
 pub fn set_starred(app: &mut App, req: Req, id: Id, starred: bool) {
@@ -656,6 +668,66 @@ mod tests {
         let (mut h, ids) = notes("set-link-refused", 1);
         for to in [ids[0], Id::generate()] {
             let sent = h.call("set_link", json!({ "id": ids[0], "to": to }));
+            assert_eq!(shape(&sent), ["reply"], "nothing written, nothing pushed");
+            assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_transactions_link_is_written_pushed_and_removed() {
+        let (statement, transaction, note) = (Id::generate(), Id::generate(), Id::generate());
+        let files = [
+            (
+                "Accounts/s.txs.yaml".to_string(),
+                format!(
+                    "id: {statement}
+title: Statement
+statement:
+  transactions:
+  - id: {transaction}
+    title: Rent
+    amount: -1150.0
+"
+                ),
+            ),
+            (
+                "Notes/n.md".to_string(),
+                format!(
+                    "---
+id: {note}
+title: Lease
+document: {{}}
+---
+Body
+"
+                ),
+            ),
+        ];
+        let mut h = crate::testing::Harness::with_vault("set-transaction-link", &files);
+        let args = json!({ "id": statement, "transaction": transaction, "to": note });
+        let sent = undoes(&mut h, "set_transaction_link", args);
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        let items = &sent[0]["data"]["statement"]["transactions"];
+        assert_eq!(items[0]["linked-to"], note.to_string());
+        assert_eq!(sent[1], json!({ "re": 1, "ok": { "id": statement } }));
+        let path = h.vault().join("Accounts/s.txs.yaml");
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains(&format!("linked-to: {note}")), "{text}");
+
+        let args = json!({ "id": statement, "transaction": transaction, "to": null });
+        let sent = h.call("set_transaction_link", args);
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert!(!fs::read_to_string(&path).unwrap().contains("linked-to"));
+
+        for (id, item, to) in [
+            (statement, Id::generate(), note),
+            (note, transaction, statement),
+            (statement, transaction, statement),
+            (statement, transaction, Id::generate()),
+        ] {
+            let args = json!({ "id": id, "transaction": item, "to": to });
+            let sent = h.call("set_transaction_link", args);
             assert_eq!(shape(&sent), ["reply"], "nothing written, nothing pushed");
             assert_eq!(sent[0]["err"]["code"], "invalid_argument");
         }
