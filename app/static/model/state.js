@@ -47,6 +47,9 @@ export const store = createStore({
   word_filter: null,
   selected_entity: null,
   selected_thread: null, // the thread shown in the panel, see renderPanel
+  // a booking of `selected_entity`, a statement: its card in the panel
+  // (`selectBooking`, features/selection.js)
+  selected_booking: null,
   selected_day: dayStart(new Date()), // the day the calendar's panel shows (features/lenses/calendar.js)
   selected_lens: 'dashboard', // the lens shown; the one shown last comes back on start (`restoreLens`)
   files_total: 0,

@@ -1,34 +1,43 @@
 // The Bank lens (ui.md#bank): the bank accounts in the scope as tiles, with
-// their total; the cut, money in and money out; then the bookings by month,
-// newest first, each with its account's balance after it (`ledger`,
-// model/bank.js). The scope is the vault panel's filter on the statements
-// (`matchesFilter`): with nothing narrowing it, every bank account shows,
-// one without statements too. A tile makes its account's source the
-// filter; a booking selects its statement, whose card the panel shows.
-// Without a bank account, the lens says where bookings come from and
-// offers Add a bank account (the Folders page, `addBankAccount`).
+// their total; the cut, money in and money out, and Linked or Not linked;
+// then the bookings by month, newest first, each with what it is linked to
+// and its account's balance after it (`ledger`, model/bank.js). The scope
+// is the vault panel's filter on the statements (`matchesFilter`): with
+// nothing narrowing it, every bank account shows, one without statements
+// too. Under a project, a booking is in it through what it is linked to
+// (`linkProjects`), and the project's In, Out and Net take the accounts'
+// place. A tile makes its account's source the filter; a booking selects
+// itself, its card in the panel (features/panel/booking.js). Without a bank
+// account, the lens says where bookings come from and offers Add a bank
+// account (the Folders page, `addBankAccount`).
 
-import { $, accEl } from '../../core/dom.js';
+import { $, accEl, setAria } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
-import { DAY_MONTH, DAY_MONTH_YEAR, DAY_SHORT_MONTH, MONTH_YEAR } from '../../core/format.js';
+import { DAY_MONTH, DAY_MONTH_YEAR, DAY_SHORT_MONTH, MONTH_YEAR, SHORT_MONTH_YEAR } from '../../core/format.js';
 import { amountText, money, signedAmount } from '../../core/format.js';
 import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
-import { accountWatch, entities, matchesFilter, watchSourceKey, watches } from '../../model/entities.js';
-import { ACCOUNT_KINDS, BOOKING_KINDS, cents, ledger, statementsEnd } from '../../model/bank.js';
+import { NO_PROJECT, accountWatch, entities, matchesFilter, watchSourceKey, watches } from '../../model/entities.js';
+import { ACCOUNT_KINDS, BOOKING_KINDS, cents, ledger, linkProjects, partyOf, statementsEnd } from '../../model/bank.js';
 import { KIND_ICONS, iconEl } from '../../ui/icons.js';
-import { selectDocument, selectFilter } from '../selection.js';
+import { stat, stats } from '../../ui/page.js';
+import { accSeg } from '../../ui/segmented.js';
+import { linkChip, linkTarget } from '../panel/panel.js';
+import { selectBooking, selectDocument, selectFilter } from '../selection.js';
 import { addBankAccount } from '../workspace/folders.js';
 import { registerLens } from './registry.js';
 
 const lensEl = $('lens-bank');
 const countEl = $('bank-count');
 
-// The cut: whether money in and money out show, each switched by its
-// toggle, for the session.
-const cut = { in: true, out: true };
+// The cut, for the session: whether money in and money out show, each
+// switched by its toggle; and which of them by their link ('all', 'linked',
+// 'unlinked').
+const cut = { in: true, out: true, link: 'all' };
 
 const KINDS = new Map(ACCOUNT_KINDS);
+const isIn = entry => entry.booking.amount > 0;
+const isLinked = entry => !!entry.booking['linked-to'];
 
 // ----------------------------------------------------------------------------
 // The head's count, while the lens is shown.
@@ -36,23 +45,40 @@ store.subscribe(state => state.selected_lens, lens => {
   countEl.hidden = lens !== 'bank';
 });
 
-// A booking selects its statement, by click, Enter or Space.
+// A booking selects itself, by click, Enter or Space; its link chip
+// selects what it links to instead.
 function onRow(e) {
+  if (e.target.closest('.chip')) return;
   const row = e.target.closest('.bank__row');
-  if (row) selectDocument(row.dataset.statement);
+  if (!row) return;
+  if (row.dataset.booking) selectBooking(row.dataset.statement, row.dataset.booking);
+  else selectDocument(row.dataset.statement);
 }
 lensEl.addEventListener('click', onRow);
 
+// The selected booking's row is marked, without a render.
+function markBooking() {
+  const { selected_entity, selected_booking } = store.getState();
+  for (const row of lensEl.querySelectorAll('.bank__row')) {
+    setAria(row, 'aria-selected', !!selected_booking && row.dataset.booking === selected_booking
+      && row.dataset.statement === selected_entity);
+  }
+}
+store.subscribe([state => state.selected_entity, state => state.selected_booking], markBooking);
+
 // ----------------------------------------------------------------------------
-// The accounts and statements in the scope: with nothing narrowing it,
-// every bank account; else the accounts of the statements in it, and the
-// account of a statements watch picked as the source.
+// The accounts and statements in the scope. Under a project, or No project,
+// the statements are filtered without it: their bookings are in it through
+// their links (`inProject`). With nothing narrowing the scope, every bank
+// account; else the accounts of the statements in it, and the account of a
+// statements watch picked as the source.
 function scopeOf(state) {
+  const filter = state.selected_project ? { ...state, selected_project: null } : state;
   const statements = new Set();
   const all = [];
   for (const doc of entities.values()) {
     if (doc.kind === 'bank-account') all.push(doc);
-    else if (doc.statement && matchesFilter(doc, state)) statements.add(doc);
+    else if (doc.statement && matchesFilter(doc, filter)) statements.add(doc);
   }
   const narrowed = state.selected_project || state.selected_source || state.selected_labels.length
     || state.word_filter;
@@ -64,6 +90,14 @@ function scopeOf(state) {
   return { accounts: all.filter(doc => ids.has(doc.id)), statements };
 }
 
+// Whether `entry`'s booking is in the project selected, through its link:
+// for No project, it has none that way; without a project, every booking.
+function inProject(entry, selected_project) {
+  if (!selected_project) return true;
+  const ids = linkProjects(entry.booking);
+  return selected_project === NO_PROJECT ? !ids.length : ids.includes(selected_project);
+}
+
 // The one currency of `accounts`, or null if they have several.
 function currencyOf(accounts) {
   const currencies = new Set(accounts.map(doc => doc['bank-account']?.currency));
@@ -72,12 +106,12 @@ function currencyOf(accounts) {
 
 function renderBankLens() {
   const state = store.getState();
-  const accounts = [...entities.values()].filter(doc => doc.kind === 'bank-account');
-  if (!accounts.length) {
+  if (![...entities.values()].some(doc => doc.kind === 'bank-account')) {
     countEl.textContent = '';
     lensEl.replaceChildren(renderEmpty());
     return;
   }
+  const project = state.selected_project && state.selected_project !== NO_PROJECT ? state.selected_project : null;
   const scope = scopeOf(state);
   const ledgers = new Map(scope.accounts.map(doc => [doc.id, ledger(doc)]));
 
@@ -86,29 +120,36 @@ function renderBankLens() {
   const bookings = [];
   for (const account of scope.accounts) {
     const { entries, pending } = ledgers.get(account.id);
-    entries.forEach((entry, seq) => {
-      if (scope.statements.has(entry.statement)) bookings.push({ ...entry, account, seq, pending: false });
-    });
-    pending.forEach((entry, i) => {
-      if (scope.statements.has(entry.statement)) bookings.push({ ...entry, account, seq: 1e9 - i, pending: true });
-    });
+    const take = (entry, seq, isPending) => {
+      if (scope.statements.has(entry.statement) && inProject(entry, state.selected_project)) {
+        bookings.push({ ...entry, account, seq, pending: isPending });
+      }
+    };
+    entries.forEach((entry, seq) => take(entry, seq, false));
+    pending.forEach((entry, i) => take(entry, 1e9 - i, true));
   }
   bookings.sort((a, b) => b.time - a.time || b.seq - a.seq);
-  const isIn = entry => entry.booking.amount > 0;
   const counts = { in: bookings.filter(isIn).length, out: bookings.filter(entry => !isIn(entry)).length };
-  const shown = bookings.filter(entry => (isIn(entry) ? cut.in : cut.out));
+  const cutIn = bookings.filter(entry => (isIn(entry) ? cut.in : cut.out));
+  const linked = cutIn.filter(isLinked).length;
+  const links = { linked, unlinked: cutIn.length - linked };
+  const shown = cutIn.filter(entry => cut.link === 'all' || isLinked(entry) === (cut.link === 'linked'));
 
-  countEl.textContent = `${t('bank.count.bookings', { n: shown.length })} \u00b7 ${t('bank.count.accounts', { n: scope.accounts.length })}`;
+  const accounts = project ? [...new Set(bookings.map(entry => entry.account))] : scope.accounts;
+  countEl.textContent = `${t('bank.count.bookings', { n: shown.length })} \u00b7 ${t('bank.count.accounts', { n: accounts.length })}`;
   const parts = [];
-  if (scope.accounts.length) parts.push(renderAccounts(scope.accounts, ledgers, state));
-  parts.push(renderCut(counts));
+  if (project) parts.push(renderProjectSums(bookings, accounts));
+  else if (accounts.length) parts.push(renderAccounts(accounts, ledgers, state));
+  parts.push(renderCut(counts, links));
   if (shown.length) {
-    parts.push(renderBookings(shown, scope.accounts, ledgers));
+    parts.push(renderBookings(shown, accounts, ledgers, project));
   } else {
-    const text = scope.accounts.length ? t('bank.none_here') : t('bank.no_account');
+    const text = project ? t('bank.none_project')
+      : accounts.length ? t('bank.none_here') : t('bank.no_account');
     parts.push(accEl('p', 'note bank__none', text));
   }
   lensEl.replaceChildren(...parts);
+  markBooking();
 }
 
 // ----------------------------------------------------------------------------
@@ -167,9 +208,38 @@ function renderAccount(account, book, state) {
   return tile;
 }
 
+// Under a project, in the accounts' place: what came in and went out, the
+// net (each without and with what is pending), and the accounts and months
+// the bookings come from.
+function renderProjectSums(bookings, accounts) {
+  const sum = list => list.reduce((n, entry) => n + cents(entry.booking.amount), 0) / 100;
+  const booked = bookings.filter(entry => !entry.pending);
+  const pending = bookings.filter(entry => entry.pending);
+  const side = (label, take, sign) => {
+    const own = booked.filter(take);
+    const waiting = pending.filter(take);
+    const note = waiting.length ? t('bank.amount_pending', { amount: signedAmount(sum(waiting)) })
+      : t('bank.count.bookings', { n: own.length });
+    return stat(label, accEl('span', 'figure', amountText(sign * sum(own))), note);
+  };
+  const net = sum(booked);
+  const withPending = sum(bookings);
+  const times = bookings.map(entry => entry.time);
+  const [from, to] = times.length
+    ? [Math.min(...times), Math.max(...times)].map(time => SHORT_MONTH_YEAR.format(new Date(time))) : [];
+  return stats(
+    side(t('bank.in'), isIn, 1),
+    side(t('bank.out'), entry => !isIn(entry), -1),
+    stat(t('bank.net'), accEl('span', 'figure', signedAmount(net)),
+      withPending !== net ? t('bank.with_pending', { amount: signedAmount(withPending) }) : null),
+    stat(t('props.from'), accounts.map(doc => doc.title || t('untitled')).join(', ') || '\u2014',
+      from ? (from === to ? from : `${from} \u2013 ${to}`) : null));
+}
+
 // ----------------------------------------------------------------------------
-// The cut: a toggle for money in and one for money out, with their counts.
-function renderCut(counts) {
+// The cut: a toggle for money in and one for money out, with their counts;
+// then All, Linked and Not linked, counted within them.
+function renderCut(counts, links) {
   const bar = accEl('div', 'filter-bar');
   for (const [key, label, what] of [
     ['in', t('bank.in'), { show: t('bank.show_money_in'), hide: t('bank.hide_money_in') }],
@@ -187,23 +257,36 @@ function renderCut(counts) {
     });
     bar.append(toggle);
   }
+  const options = [['all', t('bank.all')], ['linked', t('bank.linked_n', { n: links.linked })], ['unlinked', t('bank.unlinked_n', { n: links.unlinked })]];
+  const link = accSeg(options, cut.link, value => {
+    cut.link = value;
+    renderBankLens();
+  });
+  link.classList.add('push');
+  bar.append(link);
   return bar;
 }
 
 // ----------------------------------------------------------------------------
-// The bookings under their months, then where the statements start.
-function renderBookings(shown, accounts, ledgers) {
-  const table = accEl('div', 'table bank');
+// The bookings under their months, then a note: where the statements start,
+// or, under a project, how a booking is in it. Under a project there is no
+// balance: balances belong to accounts.
+function renderBookings(shown, accounts, ledgers, project) {
+  const table = accEl('div', project ? 'table bank bank--project' : 'table bank');
   const head = accEl('div', 'list-row table__head');
   head.append(accEl('span', 'label', t('docs.date')), accEl('span', 'label', t('bank.booking')),
-    accEl('span', 'label bank__head-end', t('props.amount')), accEl('span', 'label bank__head-end', t('props.balance')));
+    accEl('span', 'label', t('bank.linked_to')), accEl('span', 'label bank__head-end', t('props.amount')));
+  if (!project) head.append(accEl('span', 'label bank__head-end', t('props.balance')));
   const body = accEl('div', 'table__body');
   const several = accounts.length > 1;
-  const currency = currencyOf(accounts);
+  const currency = project ? null : currencyOf(accounts);
   let month = null;
   let group = [];
   const flush = () => {
-    if (group.length) body.append(renderMonth(group, accounts, ledgers, currency), ...group.map(entry => renderRow(entry, several)));
+    if (group.length) {
+      body.append(renderMonth(group, accounts, ledgers, currency, project),
+        ...group.map(entry => renderRow(entry, several, project)));
+    }
     group = [];
   };
   for (const entry of shown) {
@@ -217,63 +300,79 @@ function renderBookings(shown, accounts, ledgers) {
   }
   flush();
   table.append(head, body);
-  const starts = accounts.map(doc => [doc, ledgers.get(doc.id)]).filter(([, book]) => book.entries.length);
-  if (starts.length) {
-    const first = Math.min(...starts.map(([, book]) => book.entries[0].time));
-    const at = starts.filter(([, book]) => book.opening != null)
-      .map(([doc, book]) => t('bank.opening_at', { name: doc.title || t('untitled'), amount: amountText(book.opening) }));
-    const note = accEl('div', 'lens-hidden');
-    note.append(accEl('span', 'note',
-      at.length ? t('bank.first_statements_at', { day: DAY_MONTH_YEAR.format(new Date(first)), at: at.join(', ') })
-        : t('bank.first_statements', { day: DAY_MONTH_YEAR.format(new Date(first)) })));
-    table.append(note);
+  const note = project
+    ? t('bank.project_note')
+    : startsNote(accounts, ledgers);
+  if (note) {
+    const foot = accEl('div', 'lens-hidden');
+    foot.append(accEl('span', 'note', note));
+    table.append(foot);
   }
   return table;
 }
 
+// Where the statements start: the day of the first booking, and each
+// account's balance then.
+function startsNote(accounts, ledgers) {
+  const starts = accounts.map(doc => [doc, ledgers.get(doc.id)]).filter(([, book]) => book.entries.length);
+  if (!starts.length) return null;
+  const first = Math.min(...starts.map(([, book]) => book.entries[0].time));
+  const at = starts.filter(([, book]) => book.opening != null)
+    .map(([doc, book]) => t('bank.opening_at', { name: doc.title || t('untitled'), amount: amountText(book.opening) }));
+  const day = DAY_MONTH_YEAR.format(new Date(first));
+  return at.length ? t('bank.first_statements_at', { day, at: at.join(', ') }) : t('bank.first_statements', { day });
+}
+
 // A month's head: its name, its bookings and what is pending of them, the
-// sum of the booked ones, and the accounts' balance at its end (while they
-// share a currency).
-function renderMonth(group, accounts, ledgers, currency) {
+// sum of the booked ones, and (but under a project) the accounts' balance
+// at its end, while they share a currency.
+function renderMonth(group, accounts, ledgers, currency, project) {
   const first = new Date(group[0].time);
   const end = new Date(first.getFullYear(), first.getMonth() + 1, 1).getTime();
   const pending = group.filter(entry => entry.pending).length;
   const net = group.filter(entry => !entry.pending).reduce((n, entry) => n + cents(entry.booking.amount), 0) / 100;
-  let balance = null;
-  if (currency !== null) {
-    for (const account of accounts) {
-      const before = ledgers.get(account.id).entries.filter(entry => entry.time < end && entry.balance != null);
-      if (before.length) balance = (balance ?? 0) + before.at(-1).balance;
-    }
-  }
   const row = accEl('div', 'list-row group-row');
   const name = accEl('span', 'bank__group-name');
   name.append(accEl('span', 'group-row__name', MONTH_YEAR.format(first)),
     accEl('span', 'meta', [t('bank.count.bookings', { n: group.length }), pending ? t('bank.count.pending', { n: pending }) : null].filter(Boolean).join(' \u00b7 ')));
-  row.append(name, accEl('span', 'bank__net', signedAmount(net)), accEl('span', 'meta bank__balance', amountText(balance)));
+  row.append(name, accEl('span'), accEl('span', 'bank__net', signedAmount(net)));
+  if (!project) {
+    let balance = null;
+    if (currency !== null) {
+      for (const account of accounts) {
+        const before = ledgers.get(account.id).entries.filter(entry => entry.time < end && entry.balance != null);
+        if (before.length) balance = (balance ?? 0) + before.at(-1).balance;
+      }
+    }
+    row.append(accEl('span', 'meta bank__balance', amountText(balance)));
+  }
   return row;
 }
 
 // A booking: its day; who paid or was paid, "Pending", then what for (and
-// the account, while the scope holds several); the amount and the
-// account's balance after it.
-function renderRow(entry, several) {
+// the account, while the scope holds several); what it is linked to; the
+// amount and (but under a project) the account's balance after it.
+function renderRow(entry, several, project) {
   const { booking, account } = entry;
   const amount = booking.amount ?? 0;
-  const who = (amount > 0 ? booking.sender : booking.receiver) || booking.title || t('bank.booking');
+  const who = partyOf(booking);
   const what = booking.purpose
     || (booking.title && booking.title !== who ? booking.title : BOOKING_KINDS.get(booking.kind) ?? '');
   const row = pressable(accEl('div', `list-row table__row bank__row${entry.pending ? ' bank__row--pending' : ''}`));
   row.dataset.statement = entry.statement.doc_id;
-  row.title = t('open.named', { name: entry.statement.title || t('untitled') });
+  if (booking.id) row.dataset.booking = booking.id;
+  row.title = t('open.named', { name: who });
   const cell = accEl('span', 'bank__cell');
   cell.append(iconEl(KIND_ICONS.statement.icon, 'table__icon'), accEl('span', 'row-title', who));
   if (entry.pending) cell.append(accEl('span', 'chip chip--pending', t('bank.pending_chip')));
   const detail = [several ? account.title || t('untitled') : null, what].filter(Boolean).join(' \u00b7 ');
   if (detail) cell.append(accEl('span', 'meta bank__detail', detail));
-  row.append(accEl('span', 'meta', DAY_MONTH.format(new Date(entry.time))), cell,
-    accEl('span', `bank__amount${amount > 0 ? ' bank__amount--in' : ''}`, signedAmount(amount)),
-    accEl('span', 'meta bank__balance', entry.pending ? '' : amountText(entry.balance)));
+  const link = accEl('span', 'bank__link');
+  const to = booking['linked-to'];
+  if (to) link.append(linkTarget(to) ? linkChip(to) : accEl('span', 'meta', '\u2014'));
+  row.append(accEl('span', 'meta', DAY_MONTH.format(new Date(entry.time))), cell, link,
+    accEl('span', `bank__amount${amount > 0 ? ' bank__amount--in' : ''}`, signedAmount(amount)));
+  if (!project) row.append(accEl('span', 'meta bank__balance', entry.pending ? '' : amountText(entry.balance)));
   return row;
 }
 

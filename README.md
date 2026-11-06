@@ -32,7 +32,7 @@ It is a personal project, not a commercial product or a claim to have solved per
 
 - **A vault of plain files.** Documents, emails, notes, tasks, events, contacts, lists, and records are Markdown and YAML files in a folder you own. Edits are saved straight to the file; deleted entities move to a trash folder inside the vault.
 - **Lenses on your data.** A dashboard of cards (the week, tasks, upcoming events, recent files), a document list, a timeline, a calendar, and a bank view, each following one filter by project, source, or words.
-- **Projects, threads, and links.** Documents are grouped into projects and threads, linked to each other (a task to its letter), and labeled.
+- **Projects, threads, and links.** Documents are grouped into projects and threads, linked to each other (a task to its letter, a payment to its bill), and labeled.
 - **A WYSIWYG editor.** Lists, tables, code blocks, links, and images, written back to Markdown; a change made to a file outside the app is taken in without losing yours.
 - **Google account sync.** Gmail and Google Calendar sync into the vault: email fetched by a filter or kept in sync automatically, its attachments saved and new email announced; calendars two-way with full access, an event changed on both sides kept as a copy, never overwritten.
 - **Imports.** Scans and PDFs are imported from folders on your PC, scanned pages arranged into documents, and an email's attachments are read with it. A PDF with a text layer is read on your PC without a model; images and image-based PDFs are read by an AI model's OCR. The original file can stay beside its document.

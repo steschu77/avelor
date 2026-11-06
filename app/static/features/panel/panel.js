@@ -50,7 +50,7 @@ import { editTextInPlace } from '../../ui/field.js';
 import {
   MEMBER_DRAG, attachDropZone, endDragPreview, startDragPreview,
 } from '../../ui/dropzone.js';
-import { openLink, openOriginal, panelMode, selectDocument } from '../selection.js';
+import { openLink, openOriginal, panelMode, selectBooking, selectDocument } from '../selection.js';
 import { selectById } from '../selection.js';
 import { documentsIfCalendar, setDayListed } from '../selection.js';
 import { openLinkedTab } from '../context.js';
@@ -84,6 +84,7 @@ const dayCardsEl = $('day-cards');
 const panelDocViewEl = $('panel-doc-view');
 const panelDayViewEl = $('panel-day-view');
 const panelThreadViewEl = $('panel-thread-view');
+const panelBookingViewEl = $('panel-booking-view');
 let dayEmptyEl = null; // the day view's note for a day without anything, built once
 let dayDueHeadEl = null; // the heads of its tasks due, and of today's overdue ones
 let dayOverdueHeadEl = null;
@@ -251,8 +252,8 @@ export function linkTarget(id) {
 
 // The links of `id`: `to`, the one it links to (null if none, or not in the
 // vault); `from`, the ids of the entities and threads that link to it,
-// newest first; `items`, the transaction items that do, as `{ doc_id,
-// title }` of their transactions entity and the item.
+// newest first; `items`, the bookings that do, as `{ doc_id, booking,
+// title }`: their statement, the booking's id and title.
 export function linksOf(id) {
   const holder = entities.get(id) ?? threads.get(id);
   const to = holder?.linked_to && linkTarget(holder.linked_to) ? holder.linked_to : null;
@@ -261,7 +262,7 @@ export function linksOf(id) {
   for (const doc of [...entities.values(), ...threads.values()]) {
     if (doc.linked_to === id) from.push(doc.id);
     for (const item of doc.statement?.bookings ?? []) {
-      if (item['linked-to'] === id) items.push({ doc_id: doc.id, title: item.title ?? '' });
+      if (item['linked-to'] === id) items.push({ doc_id: doc.id, booking: item.id ?? null, title: item.title ?? '' });
     }
   }
   const time = id => entities.get(id)?.date?.getTime() ?? 0;
@@ -271,16 +272,17 @@ export function linksOf(id) {
 
 // A link to `id` as a chip: an arrow for its direction (`incoming`: `id`
 // links here), its icon and title -- `label` instead of the title, for a
-// transaction item -- which select it, and an x that calls `onRemove` (none
-// without it). The card's and the New form's (features/new.js).
-export function linkChip(id, { incoming = false, label = null, onRemove = null } = {}) {
+// booking -- which select it (`onSelect` instead, a booking's), and an x
+// that calls `onRemove` (none without it). The card's, a booking's, the
+// Bank lens's and the New form's (features/new.js).
+export function linkChip(id, { incoming = false, label = null, onSelect = null, onRemove = null } = {}) {
   const target = linkTarget(id);
   const title = label ?? (target?.title || t('untitled'));
   const chip = accEl('span', 'chip chip--link');
   chip.title = incoming ? t('panel.linked_from', { title }) : t('panel.links_to', { title });
   const name = accEl('button', 'chip__name', title);
   name.type = 'button';
-  name.addEventListener('click', () => selectById(id));
+  name.addEventListener('click', onSelect ?? (() => selectById(id)));
   const icon = iconEl(target?.icon ?? '');
   chip.append(incoming ? '\u2190' : '\u2192', icon, name);
   if (onRemove) {
@@ -297,8 +299,8 @@ export function linkChip(id, { incoming = false, label = null, onRemove = null }
 // it links to, then those linking to it -- but the conversations about it, which
 // the Conversation tab lists, and its attachments, which have a block of
 // their own (`renderCardAttachments`). An x where the entity holding the
-// link can be written; none on a transaction item. The row is hidden while
-// empty.
+// link can be written; none on a booking, whose chip selects it. The row is
+// hidden while empty.
 function renderCardLinks(doc_id, row) {
   const { to, from, items } = linksOf(doc_id);
   const writable = id => (entities.get(id) ?? threads.get(id))?.writable;
@@ -312,7 +314,11 @@ function renderCardLinks(doc_id, row) {
     chips.push(linkChip(id, { incoming: true, onRemove: writable(id) ? () => setLinkLocal(id, null) : null }));
   }
   for (const item of items) {
-    chips.push(linkChip(item.doc_id, { incoming: true, label: item.title || linkTarget(item.doc_id)?.title }));
+    chips.push(linkChip(item.doc_id, {
+      incoming: true,
+      label: item.title || linkTarget(item.doc_id)?.title,
+      onSelect: item.booking ? () => selectBooking(item.doc_id, item.booking) : null,
+    }));
   }
   row.replaceChildren(...chips);
   row.hidden = !chips.length;
@@ -450,7 +456,7 @@ function threadChip(doc_id, thread_id) {
 // for that thread, with the card focused and scrolled to -- in the
 // Documents lens, if the calendar showed it in its day.
 function switchThread(doc_id, thread_id) {
-  store.setState({ ...documentsIfCalendar(), selected_entity: doc_id, selected_thread: thread_id });
+  store.setState({ ...documentsIfCalendar(), selected_entity: doc_id, selected_thread: thread_id, selected_booking: null });
 }
 
 // ----------------------------------------------------------------------------
@@ -460,12 +466,14 @@ function switchThread(doc_id, thread_id) {
 // no-op. Cards are only rebuilt when the shown day/thread/entity or
 // `threads_rev` changed; otherwise a new `selected_entity` within the shown
 // thread or day just moves the focus, keeping editors and scroll position.
-// The day's cards are re-keyed rather than rebuilt (`refreshDay`).
+// The day's cards are re-keyed rather than rebuilt (`refreshDay`). A
+// booking's card renders itself (features/panel/booking.js).
 function renderPanel(state) {
   const mode = panelMode(state);
   panelDayViewEl.hidden = mode !== 'day';
   panelThreadViewEl.hidden = mode !== 'thread';
-  panelDocViewEl.hidden = mode === 'day' || mode === 'thread';
+  panelBookingViewEl.hidden = mode !== 'booking';
+  panelDocViewEl.hidden = mode === 'day' || mode === 'thread' || mode === 'booking';
 
   const stale = state.threads_rev !== renderedRev;
 
@@ -935,7 +943,7 @@ export function leaveCardEditMode() {
 // subscription over everything it depends on.
 store.subscribe([
   state => state.selected_lens, state => state.selected_day?.getTime(), state => state.selected_entity,
-  state => state.selected_thread, state => state.threads_rev,
+  state => state.selected_thread, state => state.selected_booking, state => state.threads_rev,
 ], (_values, state) => renderPanel(state));
 
 // The cards' heads, event details, links, attachments and threads lines

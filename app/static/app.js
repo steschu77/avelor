@@ -45,6 +45,7 @@ import { restoreSelection } from './features/selection.js';
 import './features/lenses/timeline.js';
 import { initCalendarLens } from './features/lenses/calendar.js';
 import './features/lenses/bank.js';
+import './features/panel/booking.js';
 
 initDocumentsLens();
 initCalendarLens();
@@ -54,14 +55,17 @@ restoreSelection(revealInDocuments);
 // The lenses and the sidebar follow the model (model/events.js): the
 // entities as they are now, the projects, accounts and folder watches the
 // sidebar lists, the threads and projects the Documents lens groups by
-// (`commitThreadChange`), and the projects the Timeline lens's rows name.
+// (`commitThreadChange`), the projects the Timeline lens's rows name, and
+// those the Bank lens's bookings are in through their links; the Bank lens
+// also follows the watches (an account's source).
 store.subscribe(state => state.entities_rev, () => {
   invalidateLenses();
   scheduleRenderSidebar();
 });
 store.subscribe([state => state.projects_rev, state => state.accounts_rev, state => state.watches_rev],
   () => scheduleRenderSidebar());
-store.subscribe([state => state.threads_rev, state => state.projects_rev], () => invalidateLenses('documents', 'timeline'));
+store.subscribe([state => state.threads_rev, state => state.projects_rev],
+  () => invalidateLenses('documents', 'timeline', 'bank'));
 store.subscribe(state => state.watches_rev, () => invalidateLenses('bank'));
 
 function updateDirtyIndicator(doc_id) {

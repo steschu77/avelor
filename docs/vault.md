@@ -584,7 +584,10 @@ It carries the following additional fields:
     twice,
   * `iban`, `bic`: string, the other side's account number or IBAN and its
     bank, on a transfer out,
-  * `linked-to`: Entity ID, e.g. the bill or task a payment belongs to. Optional.
+  * `linked-to`: Entity ID, e.g. the bill or task a payment belongs to, or
+    a project. Optional; set with `set_booking_link` (`api.md#structure`).
+    The booking is in the projects of what it links to: the project
+    itself, a thread's, or an entity's.
 
 ## Type Derivation <a id="type-derivation"></a>
 

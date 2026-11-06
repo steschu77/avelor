@@ -4,6 +4,7 @@
 use super::{Changes, Index, SaveOutcome};
 use crate::change::Change;
 use crate::document::Document;
+use crate::envelope::Booking;
 use crate::envelope::Conversation;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
@@ -53,6 +54,33 @@ impl Index {
         self.check_link(id, to.as_ref())?;
         self.check_writable(id)?;
         self.update(id, changes, |d| d.set_link(to))
+    }
+
+    /// Link the booking `booking` of the statement `id` to `to`, an entity
+    /// in the vault other than the statement, replacing an older link;
+    /// `None` removes the booking's `linked-to` key. A booking is an item of
+    /// its statement's file, so the statement is written.
+    pub fn set_booking_link(
+        &mut self,
+        id: &Id,
+        booking: &Id,
+        to: Option<Id>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_link(id, to.as_ref())?;
+        self.check_writable(id)?;
+        let is_it = |item: &Booking| item.id.as_ref() == Some(booking);
+        let mut statement = self
+            .get(id)
+            .and_then(|doc| doc.roles().statement.clone())
+            .filter(|t| t.bookings.iter().any(is_it))
+            .ok_or_else(|| Error::InvalidArgument {
+                arg: "booking".into(),
+            })?;
+        for item in statement.bookings.iter_mut().filter(|item| is_it(item)) {
+            item.linked_to = to;
+        }
+        self.update(id, changes, |d| d.set_statement(Some(statement)))
     }
 
     /// Star or unstar `id`, which may be any entity; unstarring removes the

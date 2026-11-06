@@ -58,7 +58,20 @@
 
 /* the bookings: a row each, newest first, under its month's group row */
 .bank {
-  --cols: var(--w-bank-date) minmax(0, 1fr) var(--w-bank-amount) var(--w-bank-balance);
+  --cols: var(--w-bank-date) minmax(0, 1fr) var(--w-bank-link) var(--w-bank-amount) var(--w-bank-balance);
+}
+
+/* under a project there is no balance column: balances belong to
+   accounts */
+.bank--project {
+  --cols: var(--w-bank-date) minmax(0, 1fr) var(--w-bank-link) var(--w-bank-amount);
+}
+
+/* under a project: its bookings' sums (.stats) in the accounts' place */
+.bank-lens>.stats {
+  flex: none;
+  padding-inline: var(--p-gutter);
+  border-bottom: none;
 }
 
 .bank__head-end,
@@ -102,6 +115,12 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* what the booking is linked to: one chip, cut to the column */
+.bank__link {
+  min-width: 0;
+  display: flex;
 }
 
 .bank__amount,
