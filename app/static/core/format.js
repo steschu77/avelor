@@ -14,6 +14,9 @@ export function parseDate(text) {
 // The start of `d`'s local day.
 export const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
+// How many days `b`'s local day is after `a`'s, negative before it.
+export const daysBetween = (a, b) => Math.round((dayStart(b) - dayStart(a)) / 864e5);
+
 // ----------------------------------------------------------------------------
 // Run `fn` just after every local midnight, from now on: what shows today
 // moves on (the calendar's grid, the dashboard).
@@ -43,7 +46,7 @@ export function isoInstant(date) {
 // "yesterday", "3 days ago"; empty without a date.
 export function relativeDay(date) {
   if (!date || isNaN(date)) return '';
-  const n = Math.round((dayStart(date) - dayStart(new Date())) / 864e5);
+  const n = daysBetween(new Date(), date);
   if (n === 0) return 'today';
   if (n === 1) return 'tomorrow';
   if (n === -1) return 'yesterday';

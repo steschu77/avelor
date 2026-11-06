@@ -511,7 +511,7 @@ nothing imports `app.js`.
 
 | File | Role |
 |---|---|
-| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page (`TIME_FORMAT`, `MONTH_YEAR`, …, `shortDate`, `pageDate`), and counts with their noun (`plural`) |
+| `core/dom.js`, `core/store.js`, `core/cache.js`, `core/format.js` | `$`, the element factory `accEl` (every element `features/` and `ui/` make), `oncePerFrame`, `placeChildren`; observable store (`setState`/`subscribe` with `Object.is`, one selector or an array of them); per-id content cache; the date helpers (`parseDate`, `isoInstant`, `dayStart`, `daysBetween`, `localDay`, `everyMidnight`, `relativeDay`), every date format of the page (`TIME_FORMAT`, `MONTH_YEAR`, …, `shortDate`, `pageDate`), and counts with their noun (`plural`) |
 | `core/rpc.js` | the protocol: `rpcCall`, `rpcOn`, `RpcError` (`api.md#the-page-side`) |
 | `core/actions.js` | the action registry and the one global key handler |
 | `editor/editor.js`, `editor/markdown.js` | `createEditor`; `serializeMarkdown` |
@@ -531,6 +531,7 @@ nothing imports `app.js`.
 | `features/dashboard/dashboard.js`, `features/dashboard/cards.js` | the Dashboard lens: its cards' order and the closed ones, the Cards menu, dragging a card; the cards Week, Tasks (a task dragged to another column), Upcoming, Recent files and Recent chats |
 | `features/lenses/documents.js`, `features/lenses/timeline.js`, `features/lenses/calendar.js`, `features/lenses/bank.js` | lenses; Documents groups its rows by project and thread, takes entities dropped on those rows, and shows an entity on request (`showInDocuments`, `revealInDocuments`); Timeline has the scrubber with its range and the feed of day blocks; Bank has the accounts in the scope as tiles and the bookings by month (`ui.md#bank`) |
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
+| `features/lenses/scrub.js` | the scrubber of a lens (`scrubber`), the Timeline's: its head with the range picked, Clear and Today, a track of a bar per week the lens draws, a dashed line at today and the labels under it, the range dragged across it; the weeks (`weeksBetween`, `weekOf`) |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`), `aiMissingHint`; its way to the Accounts page is the `accounts.open` action |
 | `features/workspace/folders.js`, `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the folder watches with their types; the accounts, Google and AI; the trash |
 | `features/import/scans.js`, `features/import/mail.js` | Import scans; Fetch mail, and an account's mail auto-sync |
@@ -609,7 +610,7 @@ order into the page's one `<style>`. The order stands in one place, as
 | `css/tokens.css` | the colors, fonts, sizes, insets, heights, radii, shadows and layers |
 | `css/base.css` | the box model, the page's ground, links, the global states (`[hidden]`, `.is-resizing`), controls |
 | `css/type.css` | the type roles (`label`, `meta`, `row-title`, `page-title`, …) and the utilities (`mono`, `icon`, `truncate-start`, `push`, `stack`) |
-| `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `check`, `input`, `menu`, `tile`, `list-row`, `section-head`, the words marked (`mark`, `::highlight`), the forms, `pane-head`, the dialogs, the vault area's `page`, the list + detail page (`ui/page.js`), … |
+| `css/components.css` | what several areas share: `btn`, `tool`, `seg`, `chip`, `check`, `input`, `menu`, `tile`, `list-row`, `section-head`, the lenses' scrubber (`scrub`), the words marked (`mark`, `::highlight`), the forms, `pane-head`, the dialogs, the vault area's `page`, the list + detail page (`ui/page.js`), … |
 | `css/areas/*.css` | one file per area, in this order: shell, sidebar (with the jobs), dashboard, documents, timeline, calendar, bank, panel, editor, assistant (with the context column), workspace (the vault area's pages and New), import (Import scans, Fetch mail), header (the lens header, the titles edited in place) |
 
 Conventions the page keeps:

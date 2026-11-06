@@ -1,48 +1,10 @@
-/* The Timeline lens (features/lenses/timeline.js): the scrubber and the
-   feed. */
+/* The Timeline lens (features/lenses/timeline.js): the scrubber's bars and
+   the feed. */
 
-/* features/lenses/timeline.js: the bar of type toggles, the scrubber (a bar
-   per week over last year and this one, a range dragged across it), then
-   the feed of day blocks, the newest first, a line at today. */
-.scrub {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 8px var(--p-gutter) 6px;
-  border-bottom: 1px solid var(--c-line);
-}
-
-.scrub__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-}
-
-.scrub__head>* {
-  flex: none;
-  white-space: nowrap;
-}
-
-/* the range picked */
-.scrub__range {
-  padding: 3px 8px;
-  border: 1px solid var(--c-ink);
-  color: var(--c-ink);
-}
-
-.scrub__track {
-  position: relative;
-  height: var(--h-scrub);
-  display: flex;
-  align-items: flex-end;
-  gap: 1px;
-  cursor: crosshair;
-  touch-action: none;
-  user-select: none;
-}
-
+/* features/lenses/timeline.js: the bar of type toggles, the scrubber
+   (components.css) with a bar per week over last year and this one, as
+   high as its entries, then the feed of day blocks, the newest first, a
+   line at today. */
 .scrub__bar {
   flex: 1 1 0;
   min-width: 0;
@@ -64,27 +26,6 @@
 
 .scrub__track.has-range .scrub__bar.is-in {
   background: var(--c-ink);
-}
-
-.scrub__today {
-  position: absolute;
-  top: -4px;
-  bottom: -1px;
-  border-left: 1px dashed var(--c-ink);
-  pointer-events: none;
-}
-
-.scrub__years {
-  position: relative;
-  height: 15px;
-  border-top: 1px solid var(--c-line);
-}
-
-.scrub__year {
-  position: absolute;
-  top: 0;
-  padding: 3px 0 0 4px;
-  border-left: 1px solid var(--c-line);
 }
 
 /* the feed; positioned, so a part's offsetTop is its place in it */
