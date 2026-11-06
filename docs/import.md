@@ -1,9 +1,9 @@
 # Avelor — Import from folder watches
 
 > Folder watches and importing from them: the watch files, the Folders
-> page, Import scans and PDFs, reading a PDF. The commands are
-> `api.md#watches` and `api.md#scans`; the `scan:` source,
-> `vault.md#scan`.
+> page, Import scans and PDFs, reading a PDF, account statements. The
+> commands are `api.md#watches`, `api.md#scans` and `api.md#statements`;
+> the `scan:` source, `vault.md#scan`; a statement, `vault.md#transactions`.
 
 ## Overview
 
@@ -23,7 +23,8 @@ Importing turns those files into vault entities:
 
 Nothing is imported without the user pressing Import; reading may cost money
 (an AI provider) or time (a local model), so it only runs on the files the
-user chose.
+user chose. An account statements watch reads its files as they are, each
+into the watch's bank account (`#statements`).
 
 ## Folder watches <a id="folder-watches"></a>
 
@@ -31,9 +32,12 @@ Watches belong to a vault, like accounts: the documents a watch imported
 name it by its `id` (`scan.watch`). Opening another vault switches to its
 watches (`folders::open`, on every vault open), and without an open vault
 there are none. Each enabled watch is listed in the vault panel's Sources
-under its name; the source counts and filters the documents imported from
-it. Its Import button, like the one on the watch's pane, opens Import
-scans for an images watch.
+under its name, a statements watch under its account's; the source counts
+and filters the entities imported from it, a statements watch's its
+account's statements, whichever watch imported them. Its Import button,
+like the one on the watch's pane, opens Import scans for an images watch,
+and imports a statements watch's new files into its account
+(`#statements`).
 
 ### Watch files <a id="watch-files"></a>
 
@@ -44,13 +48,17 @@ account file is (`accounts.md#vault-accounts`). The file contains:
 * `id`: UUIDv7, unique identifier for the watch
 * `folder-watch`:
   * `type`: what the watch takes, chosen when it is added: `images` (scanned
-    pages, OCR; several images can be one document) or `pdf` (one document
-    per PDF, read as `#reading-pdfs` says)
-  * `name`: shown in the sidebar; absent: the folder's name
+    pages, OCR; several images can be one document), `pdf` (one document
+    per PDF, read as `#reading-pdfs` says) or `statements` (a bank
+    account's CSV statements, `#statements`)
+  * `name`: shown in the sidebar; absent: the folder's name. A statements
+    watch shows its account's title instead
   * `folder`: as entered; `%VAR%`s such as `%USERPROFILE%` are expanded
     where it is used (on Linux a leading `~` and `$NAME`s). A folder
     picked with Browse under the user's profile is written as
-    `%USERPROFILE%\…` (on Linux `~/…`; `sys::collapse_env`).
+    `%USERPROFILE%\…` (on Linux `~/…`; `sys::collapse_env`). Absent: not
+    chosen yet, which only a `statements` watch may be; it imports nothing
+    until it is
   * `subfolders`: `true` if files in subfolders are taken too (absent:
     only the folder's own files)
   * `patterns`: file name patterns (`*.jpg`); a file matching any of them
@@ -58,6 +66,8 @@ account file is (`accounts.md#vault-accounts`). The file contains:
   * `collect`: an `images` watch's only: `together` (images taken within 2
     minutes of each other are the pages of one document) or `single` (one
     document per image)
+  * `account`: a `statements` watch's only: the id of the bank account
+    (`vault.md`, Bank Account) its files go into; no other watch has it
   * `models`: the model each step that sends a file to an AI picked,
     `{account, model}` (`accounts.md#model-choice`), by step: `read` for
     reading images and scanned pages (`watches::READ_STEP`). A step without
@@ -106,6 +116,14 @@ vault), following the Accounts page:
   Browse (`pick_folder`). The folder is looked for before the watch is
   saved; the new watch takes its type's file types (and Collect: taken
   within 2 min, for images).
+- "Add a bank account" adds a bank account with its statements watch, the
+  two listed under Bank accounts. Its pane asks for the account: a new
+  one, whose name, number and kind (nothing picked at first) it needs and
+  whose bank it may have; or one of the vault's no watch has. Then for the
+  folder of its statements, typed or picked with Browse, which can wait:
+  without one the watch is saved anyway, its folder field stays open and
+  Import waits for it, on the pane and its source. Add account saves both,
+  the watch with `*.csv`.
 - A watch's pane changes its name, folder, subfolders, file types, whether
   it is a source, and its import process: the reading step, which always
   runs, then Analysis and Keep original, each switched on or off by its
@@ -117,7 +135,14 @@ vault), following the Accounts page:
   without a pick shows "Pick a model".
   What keeps a picked model from working shows under its step, with a
   button to Accounts where the fix is there.
-- Removing a watch deletes its file; what it imported stays in the vault.
+- A statements watch's pane shows its account instead of a name: its
+  balance (and what is pending), its bookings and its newest statement;
+  its name, which is the watch's (`set_title`), its bank, number and kind
+  (`set_bank_account`), its currency, owner and file as they are. Then its
+  folder, as any watch's, and the three steps a file takes, which always
+  run: Read the rows, Skip what is there, Check the balance.
+- Removing a watch deletes its file; what it imported stays in the vault,
+  a statements watch's account too.
 
 ## Import scans <a id="import-scans"></a>
 
@@ -242,6 +267,54 @@ A PDF, a mail's attachment (`mail.md#attachments`) or a PDF watch's file
   marked (`encrypted: true`, `vault.md#document`), its body stays empty,
   and its card's File row says "encrypted".
 
+## Account statements <a id="statements"></a>
+
+A statements watch imports the CSV exports of one bank account
+(`bank.rs`). Import, on the watch's source or pane, lists the watch's files
+that aren't in the vault and reads them on a worker, then writes each into
+the account, the oldest first, as a job "Importing statements ·
+<account>"; its note counts the statements and bookings that came in, and
+names each file left out and each balance that doesn't add up. A file
+counts as in the vault by its account and origin: the `import.origin` of a
+statement of the account (`vault.md#import`), whichever watch imported it.
+
+- **The format** is comdirect's export of an account's bookings
+  ("Umsätze"): UTF-8 or Windows-1252; quoted cells, each followed by `;`;
+  the balance before and after the bookings ("Alter Kontostand", "Neuer
+  Kontostand", with the currency); the rows after the header row
+  (Buchungstag, Wertstellung (Valuta), Vorgang, Buchungstext, Umsatz in …)
+  up to a blank line, newest first; days as `dd.mm.yyyy`, `offen` for a
+  pending card payment; amounts as `-1.927,35`. A file without the header
+  row, or with a row that can't be read, is left out.
+- **A row** is a booking. Its Buchungstext names who (`Auftraggeber:`, or
+  `Empfänger:` with their `Kto/IBAN:` and `BLZ/BIC:`), the purpose after
+  `Buchungstext:`, and the bank's reference (`Ref.`). A card payment's
+  purpose is its merchant line, followed by the time the card was used
+  (and, once booked, `KFN` and `VJ`); a pending row names the account's
+  own number. A transfer's or direct debit's purpose comes cut into lines
+  of 35 characters joined by a space; they are joined again. The kind
+  follows the Vorgang and the card's text: `card`, `direct-debit`,
+  `transfer`, `cash` (Auszahlung GAA), `fee` (Kontoführungsentgelt).
+- **Another account's** file, whose pending rows name another number than
+  the account's (compared by their digits; one may end with the other, as
+  an IBAN ends with the account number), is left out.
+- **What is there** is left out: a booked row whose reference the account
+  has, or without one, a row of the same day, amount and purpose; a file
+  with nothing else writes no statement. The statement whose last booking
+  is the account's newest replaces the account's pending bookings: they
+  leave the older statements, and a new booking of a removed one's card
+  day and amount takes its `id` and `linked-to`. An older statement
+  brings no pending bookings.
+- **The balances**: the balance before plus the booked rows is the balance
+  after; and the balance before is the one the statement before it ends
+  with, if that one ends before this one starts. Otherwise the job's note
+  names the file.
+- **Written**: a transactions entity per file in `Accounts/`
+  (`vault.md#transactions`), titled "<account>, December 2026" (across
+  months "Nov – Dec 2026"), dated by its first booking, its bookings oldest
+  first, the pending ones last. The account takes the balance of its
+  newest statement, and the file's currency while it has none.
+
 ## Flows
 
 | # | Flow | Trigger → page | Host → events | Result |
@@ -249,19 +322,28 @@ A PDF, a mail's attachment (`mail.md#attachments`) or a PDF watch's file
 | J1 | Add a watch | "Watch a folder" → type (Images, PDF) → folder typed or Browse (`pick_folder` → `ok {path}`) → `watchSaveFolder` | `create_watch {type, folder, …}` → folder checked → `.avelor/watches/watch_<type>[_n].yaml` → `watch`, `ok {id}` | watch card and source |
 | J2 | Edit | name, folder, subfolders, patterns, source on/off, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
 | J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |
+| J4 | Add a bank account | "Add a bank account" → a new account's name, number, kind, bank, or a vault's account picked (`renderNewAccountPane`) → folder typed, Browse or none → Add account (`addAccount`) | `create_watch {type: statements, folder?, patterns, account \| new_account}` → folder checked if given → the new account's fields checked, it is written (`entity`) → `.avelor/watches/watch_statements[_n].yaml` → `watch`, `ok {id}` | the account's card and source |
 | K1 | Open Import scans | the watch source's Import or the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files, job}`; `scan_previews` → `scan_preview` per file | file list, large preview |
 | K2 | Read | per file or Read all → `scanRead` | `scan_read {watch, files, again}` → the host checks the watch's model (a PDF watch reads on without one) → `ok {job}`; one file after another on workers through `reader::read` → `scan_page` queued / reading (words) / read (words, title, encrypted) / failed; job events; `account` | text per page |
 | K3 | Stop reading | Stop (or the job card's Stop) | `cancel_job {id: job}` → remaining pages `stopped`, job ends | — |
 | K4 | Arrange | drag pages, merge with previous/next, split, edit titles, tick | page only (`scanPlace`, `features/import/scans.js`) | documents as arranged |
 | K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}`; with the watch's analysis on, the job "Analysing scans" or "Analysing PDFs" (G5's steps) → `entity`, `job`, `account` | documents in `Scans/`, analysed; one file kept beside its document |
 | K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
+| M1 | Import statements | a statements watch's source or pane, once its folder is chosen: Import → `importWatch` (`features/workspace/folders.js`) | `statements_import {watch}` → `ok {job}` (`invalid_argument` without a folder); the files listed and read on the job's worker → per file `entity` (the statement, the older ones it took pending bookings from, the account) → `job` with the note | statements in `Accounts/`, the account's balance |
+| M2 | Change the account | the pane's name, Bank, Number, Kind | `set_title {id, title}`; `set_bank_account {entity, institution?, number?, type?}` → `entity`, `ok` | the account, the watch's name |
 
 ## Design <a id="design"></a>
 
 - **Listing**: `watches.rs` matches a watch's files (patterns,
   subfolders, globbing); `scan_list` lists on a worker.
-  A file counts as in the vault by its watch and origin (`scan.watch` +
-  `scan.origin` in the index).
+  A scan counts as in the vault by its watch and origin (`scan.watch` +
+  `scan.origin`, `Index::scan_origins`), a statement by its account and
+  origin (`import.origin`, `bank::account_origins`).
+- **Statements**: the reader (`bank::read`) and what a statement adds to
+  its account (`bank::plan`) are pure functions with tests, the reader's
+  on the December statement in `data/statements`; the files
+  are listed and read on the job's worker, and written on the UI thread,
+  one vault edit per entity.
 - **Previews**: the host renders a preview per file with WIC (Windows
   Imaging Component, through the `windows` crate: no new dependency,
   `sys/win32/images.rs`; on Linux gdk-pixbuf, which comes with GTK,

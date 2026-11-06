@@ -9,9 +9,9 @@
 // round trips (`structureCall`, model/structure.js) that end in a published
 // selection, never in a direct render call; the requests (`joinThreadLocal`,
 // ...) are model/structure.js's. What a card shows of an event, a task or a
-// mail is features/panel/details.js's (`renderCardDetails`, `taskTag`,
-// `parseContact`). app.js reaches into `msgControllers` for the cards' dirty
-// dots, and features/header.js leaves edit mode; autosave lives in
+// mail is features/panel/details.js's (`renderCardDetails`, `taskTag`).
+// app.js reaches into `msgControllers` for the cards' dirty dots, and
+// features/header.js leaves edit mode; autosave lives in
 // model/documents.js and covers every editor in edit mode.
 
 import { $, accEl, oncePerFrame } from '../../core/dom.js';
@@ -25,7 +25,7 @@ import { store } from '../../model/state.js';
 import { entities, knownThreads, threadMembers, threads } from '../../model/entities.js';
 import { projects, projectsInOrder, threadProjects } from '../../model/entities.js';
 import { getMeta } from '../../model/entities.js';
-import { assistantChats, isAiConversation } from '../../model/entities.js';
+import { assistantChats, isAiConversation, parseContact } from '../../model/entities.js';
 import { dayOccurrences, dayTasks } from '../../model/calendar.js';
 import { bindDocContent } from '../../model/documents.js';
 import { editorRoots, isDirty, onEdited, trySave } from '../../model/documents.js';
@@ -53,7 +53,7 @@ import { documentsIfCalendar, setDayListed } from '../selection.js';
 import { openLinkedTab } from '../context.js';
 import { openTaskTab } from '../context.js';
 import { toggleCardChat } from '../context.js';
-import { parseContact, taskTag } from './details.js';
+import { taskTag } from './details.js';
 import { renderCardDetails } from './details.js';
 
 export const msgControllers = new Map(); // doc_id -> controller

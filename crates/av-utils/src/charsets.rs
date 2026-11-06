@@ -9,6 +9,16 @@ pub fn from_windows1252(bytes: &[u8]) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// A text file's bytes: UTF-8 if they are, else Windows-1252, the code page
+/// of older Windows programs' files.
+pub fn from_utf8_or_windows1252(bytes: &[u8]) -> String {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
+        Err(_) => from_windows1252(bytes),
+    }
+}
+
+// ----------------------------------------------------------------------------
 pub fn windows1252_char(b: u8) -> char {
     const HIGH: [char; 32] = [
         '\u{20AC}', '\u{81}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}',
@@ -56,5 +66,15 @@ mod tests {
             "A\u{20AC}\u{E4}\u{153}"
         );
         assert_eq!(from_windows1252(&[0x80, 0xE4]), "\u{20AC}\u{E4}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_text_is_utf8_if_it_can_be() {
+        assert_eq!(
+            from_utf8_or_windows1252("Ums\u{e4}tze".as_bytes()),
+            "Ums\u{e4}tze"
+        );
+        assert_eq!(from_utf8_or_windows1252(b"Ums\xe4tze"), "Ums\u{e4}tze");
     }
 }

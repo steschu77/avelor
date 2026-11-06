@@ -109,6 +109,17 @@ export function plural(n, one, many = `${one}s`) {
 }
 
 // ----------------------------------------------------------------------------
+// A sum of money in `currency`, an ISO code ("$1,234.56"); with two decimals
+// if it names none.
+export function money(amount, currency) {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
+  } catch {
+    return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  }
+}
+
+// ----------------------------------------------------------------------------
 // A file's size: "812 KB", "2.4 MB".
 export function fileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;

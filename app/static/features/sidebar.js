@@ -24,8 +24,7 @@ import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
-import { watchType } from './workspace/folders.js';
-import { openScanImport } from './import/scans.js';
+import { importWatch, watchName, watchType } from './workspace/folders.js';
 import { openMailFetch } from './import/mail.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
@@ -189,18 +188,20 @@ function renderSidebar() {
   updateNavItem(createdRow, sourceCounts.get('created') ?? 0, selected_source === 'created');
   sourceRows.push(createdRow);
 
-  // Per enabled folder watch, under its name: what it imported. Its button
-  // opens the import page of its type.
+  // Per enabled folder watch, under its name (a statements watch's is its
+  // bank account's): what it imported. Its button imports (`importWatch`);
+  // a bank account whose folder isn't chosen yet has none.
   for (const watch of watches.values()) {
     if (!watch.enabled) continue;
     const key = watchSourceKey(watch.id);
-    const action = {
+    const name = watchName(watch);
+    const action = watch.folder ? {
       icon: IMPORT_ICON,
-      title: `Import from ${watch.name}`,
-      onClick: () => openScanImport(watch.id),
-    };
-    const row = rowFor(`source:${key}`, watch.name, () =>
-      sidebarNavItem('nav-item nav-item--compact', watch.name, 'nav-item__icon', watchType(watch.type).icon,
+      title: watch.type === 'statements' ? `Import statements into ${name}` : `Import from ${name}`,
+      onClick: () => importWatch(watch.id),
+    } : null;
+    const row = rowFor(`source:${key}${action ? '' : ':no-folder'}`, name, () =>
+      sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', watchType(watch.type).icon,
         () => selectSource(key), action));
     updateNavItem(row, sourceCounts.get(key) ?? 0, key === selected_source);
     sourceRows.push(row);

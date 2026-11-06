@@ -337,6 +337,15 @@ fn refuse(req: Req, error: Error, message: impl Into<String>) {
 }
 
 // ----------------------------------------------------------------------------
+/// Refuse to read or import a statements watch's files as scans: they go
+/// into their account (`bank::statements_import`).
+fn refuse_statements(req: Req) {
+    let what = "reading statements as scans".to_string();
+    let message = "A statements watch imports its files into its account.";
+    refuse(req, Error::Unsupported { what }, message);
+}
+
+// ----------------------------------------------------------------------------
 /// Whether the analysis of the watch of `settings` can run, if it is on;
 /// else the refused pick: a watch neither reads nor imports while its
 /// analysis waits for a model that works, as Fetch mail doesn't fetch.
@@ -453,9 +462,10 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         let message = "Another folder is still being read; stop it or wait for it.";
         return refuse(req, Error::Unsupported { what }, message);
     }
-    let what = match kind {
-        WatchKind::Images => "OCR",
-        WatchKind::Pdf => "the scanned pages",
+    let (what, reading) = match kind {
+        WatchKind::Images => ("OCR", "Reading scans"),
+        WatchKind::Pdf => ("the scanned pages", "Reading PDFs"),
+        WatchKind::Statements => return refuse_statements(req),
     };
     // A PDF watch reads text layers without a model.
     let (engine, account) = match app.ai.choose(picked.as_ref(), what, DateTime::now()) {
@@ -510,10 +520,7 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         read.queue.extend(queue);
         post_progress(app);
     } else {
-        let label = match kind {
-            WatchKind::Images => format!("Reading scans · {watch_name}"),
-            WatchKind::Pdf => format!("Reading PDFs · {watch_name}"),
-        };
+        let label = format!("{reading} · {watch_name}");
         let job = app.start_job(JobKind::ScanRead, label, total);
         log::info!("Scan read {job}: reading {total} files of {watch_name}");
         app.scans.read = Some(ScanRead {
@@ -590,6 +597,7 @@ fn readable(kind: WatchKind, name: &str) -> Result<Kind, &'static str> {
         (WatchKind::Images, _) => Err("Only JPEG, PNG, GIF and WebP images can be read."),
         (WatchKind::Pdf, Some(Kind::Pdf)) => Ok(Kind::Pdf),
         (WatchKind::Pdf, _) => Err("Only PDF files can be read."),
+        (WatchKind::Statements, _) => Err("A statements watch's files are imported as they are."),
     }
 }
 
@@ -755,6 +763,9 @@ pub fn scan_import(app: &mut App, req: Req, request: ImportRequest) {
     let (watch, root, name, kind, keep, analysis) = match app.watches.get(request.watch) {
         Ok(watch) => {
             let settings = watch.settings();
+            if settings.kind == WatchKind::Statements {
+                return refuse_statements(req);
+            }
             if let Err((error, message)) = analysis_works(app, settings) {
                 return refuse(req, error, message);
             }

@@ -3,8 +3,8 @@
 //! watch says which folder on this PC to read, which files to take from it
 //! and how to read them. The open vault's watches are a `Watches`. Also
 //! lists the files a watch takes (`list_files`); importing them is up to the
-//! importer of the watch's type (`scans` for images). The commands:
-//! `folders`.
+//! importer of the watch's type (`scans` for images and PDFs, `bank` for
+//! account statements). The commands: `folders`.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -36,6 +36,9 @@ pub enum WatchKind {
     /// PDFs, one document each, read from their text layer and their scans
     /// (import.md#reading-pdfs).
     Pdf,
+    /// A bank account's CSV statements, each imported into the account
+    /// (import.md#statements).
+    Statements,
 }
 
 impl WatchKind {
@@ -45,6 +48,7 @@ impl WatchKind {
         match self {
             WatchKind::Images => "images",
             WatchKind::Pdf => "pdf",
+            WatchKind::Statements => "statements",
         }
     }
 }
@@ -72,7 +76,9 @@ pub struct WatchSettings {
     /// Empty: the folder's name is shown.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
-    /// As entered; `%VAR%`s are expanded where the folder is used.
+    /// As entered; `%VAR%`s are expanded where the folder is used. Empty:
+    /// none is chosen yet, which only a statements watch may be.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub folder: String,
     /// Whether files in subfolders are taken too.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -83,6 +89,10 @@ pub struct WatchSettings {
     /// An images watch's only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collect: Option<Collect>,
+    /// A statements watch's only: the bank account its files are imported
+    /// into, whose title is the watch's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<Id>,
     /// The model each step that sends a file to an AI picked, by step:
     /// `READ_STEP` for reading images and scanned pages
     /// (accounts.md#model-choice).
@@ -124,6 +134,7 @@ impl WatchSettings {
             subfolders: false,
             patterns: Vec::new(),
             collect: None,
+            account: None,
             models: BTreeMap::new(),
             analysis: None,
             keep_original: false,
@@ -190,6 +201,7 @@ pub struct WatchMeta<'a> {
     pub subfolders: bool,
     pub patterns: &'a [String],
     pub collect: Option<Collect>,
+    pub account: Option<Id>,
     pub models: &'a BTreeMap<String, ModelChoice>,
     pub analysis: Option<&'a Analysis>,
     pub keep_original: bool,
@@ -241,6 +253,7 @@ impl Watch {
             subfolders: settings.subfolders,
             patterns: &settings.patterns,
             collect: settings.collect,
+            account: settings.account,
             models: &settings.models,
             analysis: settings.analysis.as_ref(),
             keep_original: settings.keep_original,

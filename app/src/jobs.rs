@@ -29,21 +29,23 @@ pub enum JobKind {
     ScanRead,
     MailAnalysis,
     AttachmentRead,
+    StatementImport,
 }
 
 impl JobKind {
     // ------------------------------------------------------------------------
     /// Whether `cancel_job` can stop it: all but the vault scan, as a
-    /// half-scanned vault helps nobody.
+    /// half-scanned vault helps nobody, and a statements import, which reads
+    /// a few small files and is done.
     fn stoppable(self) -> bool {
-        self != JobKind::VaultScan
+        !matches!(self, JobKind::VaultScan | JobKind::StatementImport)
     }
 
     // ------------------------------------------------------------------------
     /// Whether it belongs to the open vault, so a vault switch stops it
     /// first: it writes into the vault (mail fetch, calendar sync, mail
-    /// analysis, attachment read), or reads for one of its watches with one
-    /// of its AI accounts (scan read).
+    /// analysis, attachment read, statements import), or reads for one of
+    /// its watches with one of its AI accounts (scan read).
     fn vault_bound(self) -> bool {
         matches!(
             self,
@@ -52,6 +54,7 @@ impl JobKind {
                 | JobKind::ScanRead
                 | JobKind::MailAnalysis
                 | JobKind::AttachmentRead
+                | JobKind::StatementImport
         )
     }
 }
@@ -309,7 +312,7 @@ pub fn stop(app: &mut App, id: Id) {
         JobKind::ScanRead => scans::stop_read(app),
         JobKind::MailAnalysis => enrich::stop(app, id),
         JobKind::AttachmentRead => attachments::stop(app, id),
-        JobKind::CalendarSync | JobKind::VaultScan => {}
+        JobKind::CalendarSync | JobKind::VaultScan | JobKind::StatementImport => {}
     }
 }
 

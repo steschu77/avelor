@@ -940,7 +940,10 @@ impl Batch {
     /// `kind`, those in `titled` with the title the user gave.
     pub fn scans(kind: WatchKind, watch: &str, documents: Vec<Id>, titled: Vec<Id>) -> Self {
         let (label, notices, what) = match kind {
-            WatchKind::Images => ("Analysing scans", "Scan analysis", scan_analysis(kind)),
+            // A statements watch imports no documents to analyse.
+            WatchKind::Images | WatchKind::Statements => {
+                ("Analysing scans", "Scan analysis", scan_analysis(kind))
+            }
             WatchKind::Pdf => ("Analysing PDFs", "PDF analysis", scan_analysis(kind)),
         };
         Self {
@@ -959,7 +962,7 @@ impl Batch {
 /// pick's words (`AiAccounts::choose`).
 pub fn scan_analysis(kind: WatchKind) -> &'static str {
     match kind {
-        WatchKind::Images => SCAN_ANALYSIS,
+        WatchKind::Images | WatchKind::Statements => SCAN_ANALYSIS,
         WatchKind::Pdf => PDF_ANALYSIS,
     }
 }

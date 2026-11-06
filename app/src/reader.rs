@@ -10,7 +10,7 @@ use std::path::Path;
 use av_llm::{ChatRequest, ChatResponse, Client, FileData, Message, Part, Provider, StopReason};
 use av_pdf::Document;
 use av_utils::cancel::Cancel;
-use av_utils::charsets::from_windows1252;
+use av_utils::charsets::from_utf8_or_windows1252;
 use av_utils::error::Error;
 use av_utils::mime::type_for;
 use av_utils::text::normalize;
@@ -359,11 +359,7 @@ fn text_of(kind: Kind, bytes: &[u8]) -> String {
     if kind == Kind::Mail {
         return email::parse(bytes).to_markdown();
     }
-    let text = match std::str::from_utf8(bytes) {
-        Ok(text) => text.to_string(),
-        Err(_) => from_windows1252(bytes),
-    };
-    let (_, _, text) = normalize(text);
+    let (_, _, text) = normalize(from_utf8_or_windows1252(bytes));
     match kind {
         Kind::Plain => md_writer::plain_to_markdown(&text),
         Kind::Html => html::to_markdown(&text),

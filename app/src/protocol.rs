@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::api;
 use crate::app::Prefs;
 use crate::app::{App, UiQueue};
+use crate::bank;
 use crate::calendar;
 use crate::close;
 use crate::documents;
@@ -116,6 +117,9 @@ enum Command {
     ScanPreviews(scans::PreviewRequest),
     ScanOpen(scans::OpenRequest),
     ScanImport(scans::ImportRequest),
+    // Account statements (`bank`).
+    StatementsImport(OfWatch),
+    SetBankAccount(bank::AccountChange),
     // Fetch mail (`mail`).
     MailLabels(OfAccount),
     MailSearch(mail::SearchRequest),
@@ -367,6 +371,8 @@ impl Command {
             "scan_previews" => Command::ScanPreviews(from_value(args)?),
             "scan_open" => Command::ScanOpen(from_value(args)?),
             "scan_import" => Command::ScanImport(from_value(args)?),
+            "statements_import" => Command::StatementsImport(from_value(args)?),
+            "set_bank_account" => Command::SetBankAccount(from_value(args)?),
             "mail_labels" => Command::MailLabels(from_value(args)?),
             "mail_search" => Command::MailSearch(from_value(args)?),
             "mail_headers" => Command::MailHeaders(from_value(args)?),
@@ -465,6 +471,8 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::ScanPreviews(a) => scans::scan_previews(app, req, a),
         Command::ScanOpen(a) => scans::scan_open(app, req, a),
         Command::ScanImport(a) => scans::scan_import(app, req, a),
+        Command::StatementsImport(a) => bank::statements_import(app, req, a.watch),
+        Command::SetBankAccount(a) => bank::set_bank_account(app, req, a),
         Command::MailLabels(a) => mail::mail_labels(app, req, a.account),
         Command::MailSearch(a) => mail::mail_search(app, req, a),
         Command::MailHeaders(a) => mail::mail_headers(app, req, a),

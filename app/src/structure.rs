@@ -65,7 +65,7 @@ impl Conflict {
 /// Answer the edit's `result`: `id` if it was written (or had nothing to
 /// write), the conflict if a file changed outside the app, else the error,
 /// in the host's words.
-fn answer(app: &App, req: Req, result: Result<SaveOutcome>, id: Option<Id>) {
+pub(crate) fn answer(app: &App, req: Req, result: Result<SaveOutcome>, id: Option<Id>) {
     match result {
         Ok(SaveOutcome::Conflict(changed)) => {
             log::info!("Structural edit: {changed} changed outside the app");

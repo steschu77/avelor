@@ -14,13 +14,13 @@ import {
   everyMidnight, localDay, plural, shortDate,
 } from '../../core/format.js';
 import { store } from '../../model/state.js';
-import { entities, matchesFilter, projectNames } from '../../model/entities.js';
+import { entities, matchesFilter, parseContact, projectNames } from '../../model/entities.js';
 import { leaveThreadLocal } from '../../model/structure.js';
 import { addDays, weekStartOf } from '../../model/calendar.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { excerptNodes, markedNodes } from '../../ui/marks.js';
 import { endDragPreview, startDragPreview, takeMemberDrops } from '../../ui/dropzone.js';
-import { TASK_STATUSES, parseContact, repeatsText } from '../panel/details.js';
+import { TASK_STATUSES, repeatsText } from '../panel/details.js';
 import { markSelection, selectDocument } from '../selection.js';
 import { invalidateLenses, registerLens } from './registry.js';
 import { hiddenText, typeBar, typeOf } from './types.js';

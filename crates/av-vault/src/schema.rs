@@ -54,6 +54,8 @@ pub mod layout {
     pub const SCANS: &str = "Scans";
     /// A mail's attachments: a document per file, with the file beside it.
     pub const ATTACHMENTS: &str = "Attachments";
+    /// Bank accounts, and the statements imported into them.
+    pub const BANK_ACCOUNTS: &str = "Accounts";
     /// Deleted entities, kept at their vault-relative path; the scan skips
     /// it like every dot-folder.
     pub const TRASH: &str = ".trash";

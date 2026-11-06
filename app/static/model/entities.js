@@ -167,13 +167,18 @@ function sourceKind(source) {
 
 // ----------------------------------------------------------------------------
 // The source `doc` came from, as the sidebar keys it: `created` for an
-// entity made in the app; a scan by its folder watch (`watchSourceKey`,
-// from `scan.watch`); as `accountSources` keys them, mail
-// by their account, events by their calendar entity, whose remote block
-// names the Google calendar (`calendar-id`, vault.md#remote).
+// entity made in the app; a statement by the statements watch of its
+// account, whichever watch imported it, else like a scan by the folder
+// watch it came from (`watchSourceKey`, from `import.watch` or
+// `scan.watch`); as `accountSources` keys them, mail by their account,
+// events by their calendar entity, whose remote block names the Google
+// calendar (`calendar-id`, vault.md#remote).
 export function sourceKeyOf(doc) {
   if (sourceKind(doc.source) === 'created') return 'created';
-  if (doc.source?.scan?.watch) return watchSourceKey(doc.source.scan.watch);
+  const own = doc.transactions?.account ? accountWatch(doc.transactions.account) : null;
+  if (own) return watchSourceKey(own.id);
+  const watch = doc.source?.scan?.watch ?? doc.source?.import?.watch;
+  if (watch) return watchSourceKey(watch);
   const account = doc.source?.remote?.account;
   if (doc.kind === 'email' && account) return `${account}\nemail`;
   if (doc.kind === 'event') {
@@ -191,6 +196,12 @@ export function watchSourceKey(id) {
   return `watch:${id}`;
 }
 
+// The statements watch of the bank account `id`, if it has one; no other
+// watch imports into it.
+export function accountWatch(id) {
+  return [...watches.values()].find(watch => watch.type === 'statements' && watch.account === id) ?? null;
+}
+
 // ----------------------------------------------------------------------------
 // Whether `doc` is a chat with an AI: a conversation from the `ai` source.
 export function isAiConversation(doc) {
@@ -204,4 +215,15 @@ export function assistantChats(item) {
     if (isAiConversation(doc) && (doc.linked_to ?? null) === item) chats.push(doc);
   }
   return chats.sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || (a.doc_id < b.doc_id ? 1 : -1));
+}
+
+// ----------------------------------------------------------------------------
+// A contact as the vault keeps it (a guest, an assignee): a contact of the
+// vault (`@id`) as its id and title, "Name <email>" as the name and the
+// email, else as written.
+export function parseContact(ref) {
+  const id = /^@(.+)$/.exec(ref)?.[1];
+  if (id && entities.has(id)) return { id, name: entities.get(id).title || 'Untitled' };
+  const named = /^(.+?)\s*<([^<>]+)>$/.exec(ref);
+  return named ? { name: named[1], email: named[2] } : { name: ref };
 }

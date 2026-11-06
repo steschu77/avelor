@@ -19,7 +19,7 @@ use crate::sqlite::{self, Db};
 /// The version of what a row holds, part of the file's name: another
 /// version is another file, read afresh, never migrated. The app makes the
 /// words (`search::words_of`), so a change to how is another version too.
-pub const FORMAT: u32 = 2;
+pub const FORMAT: u32 = 3;
 
 /// A file read sooner than this after its last change keeps no stamp: a
 /// second change within the same clock tick and of the same size keeps the

@@ -192,6 +192,20 @@ pub struct Transaction {
     pub sender: Option<ContactRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receiver: Option<ContactRef>,
+    /// What the booking is for, in the bank's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
+    /// `card`, `direct-debit`, `transfer`, `cash` or `fee`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// The bank's reference, which tells a booking imported twice.
+    #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    /// The other side's account number or IBAN, and its BIC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iban: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bic: Option<String>,
     #[serde(rename = "linked-to", default, skip_serializing_if = "Option::is_none")]
     pub linked_to: Option<Id>,
 }
@@ -203,6 +217,10 @@ pub struct Transactions {
     pub account: Option<Id>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<f64>,
+    /// The account's balance at the statement's end, its booked bookings
+    /// counted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balance: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transactions: Vec<Transaction>,
 }
@@ -462,6 +480,12 @@ pub struct Empty {}
 // ----------------------------------------------------------------------------
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Import {
+    /// The folder watch the file was imported from (`import.md#folder-watches`);
+    /// absent for a file that came another way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watch: Option<Id>,
+    /// The file's name: relative to the watch's folder when `watch` is
+    /// given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
 }
@@ -607,6 +631,7 @@ impl Envelope {
         if let Some(transactions) = &roles.transactions {
             for transaction in &transactions.transactions {
                 out.extend(transaction.title.as_deref());
+                out.extend(transaction.purpose.as_deref());
                 names(
                     &mut out,
                     transaction.sender.iter().chain(&transaction.receiver),
