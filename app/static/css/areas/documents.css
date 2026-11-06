@@ -11,6 +11,7 @@
 }
 
 .table__body {
+  flex: none;
   min-height: 0;
 }
 
@@ -19,8 +20,12 @@
 }
 
 .table__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   height: var(--h-table-head);
   flex: none;
+  background: var(--c-paper);
 }
 
 .table__sort {
@@ -82,17 +87,6 @@
 
 .docs {
   --cols: minmax(0, 1fr) 84px;
-}
-
-.docs .table__head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--c-paper);
-}
-
-.docs .table__body {
-  flex: none;
 }
 
 /* a row scrolled to stays clear of the sticky head, and in a project of

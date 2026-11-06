@@ -18,6 +18,7 @@ import { money, pageDate, plural } from '../../core/format.js';
 import { runAction } from '../../core/actions.js';
 import { store } from '../../model/state.js';
 import { entities, parseContact, watches } from '../../model/entities.js';
+import { ACCOUNT_KINDS, ledger, statementsOf } from '../../model/bank.js';
 import { structureCall } from '../../model/structure.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
@@ -25,7 +26,7 @@ import { iconEl } from '../../ui/icons.js';
 import { IMPORT_ICON, KIND_ICONS } from '../../ui/icons.js';
 import {
   addTile, detailFooter, detailHead, detailPane, draftKind, itemCard, listDetailPage, listSection,
-  notice, pageList, replaceVaultPage, sentDrafts, setPageFocus, stat, stats,
+  notice, openVaultOp, pageList, replaceVaultPage, sentDrafts, setPageFocus, stat, stats,
 } from '../../ui/page.js';
 import { fieldEditKey, fieldEdits, renderEditField, renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
@@ -90,9 +91,6 @@ const WATCH_TYPES = [
     patterns: ['*.csv'],
   },
 ];
-
-// A bank account's kinds (`bank-account.type`), in words.
-const ACCOUNT_KINDS = [['checking', 'Checking'], ['savings', 'Savings'], ['credit-card', 'Credit card']];
 
 let selectedWatch = null; // a watch id, 'new:<type>' for a new watch's pane, or null
 const watchDrafts = sentDrafts(); // watch id -> the changes sent, shown until done
@@ -191,6 +189,13 @@ function watchStartDraft(type) {
   accountDraft = newAccountDraft();
   setPageFocus(fieldEditKey(draft, type === 'statements' ? 'title' : 'folder'));
   scheduleRenderFolders();
+}
+
+// The Folders page with a new bank account's pane: the Bank lens's empty
+// state.
+export function addBankAccount() {
+  watchStartDraft('statements');
+  openVaultOp('folders');
 }
 
 // Check and store `folder` for `watch` (an id, or 'new:<type>', which
@@ -661,14 +666,14 @@ function renderAccountName(id, account) {
 // and its newest statement.
 function renderAccountStats(account) {
   const fields = account['bank-account'] ?? {};
-  const statements = [...entities.values()].filter(doc => doc.transactions?.account === account.id);
-  const bookings = statements.flatMap(doc => doc.transactions.transactions ?? []);
-  const pending = bookings.filter(booking => booking.status === 'pending').length;
+  const statements = statementsOf(account.id);
+  const book = ledger(account);
+  const pending = book.pending.length;
   const newest = statements.reduce((a, b) => (a && a.date >= b.date ? a : b), null);
-  const balance = fields.balance != null ? money(fields.balance, fields.currency) : '\u2014';
+  const balance = book.balance != null ? money(book.balance, fields.currency) : '\u2014';
   return stats(
     stat('Balance', balance, pending ? `${plural(pending, 'booking')} pending` : null),
-    stat('Bookings', String(bookings.length - pending),
+    stat('Bookings', String(book.entries.length),
       statements.length ? `from ${plural(statements.length, 'statement')}` : 'none imported yet'),
     stat('Newest statement', newest?.title || 'None', newest?.source?.import?.origin ?? null));
 }

@@ -29,6 +29,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* a sum of money or a balance: large serif numerals that line up */
+.figure {
+  font: 500 var(--fs-pane-title)/1 var(--f-serif);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-ink);
+  white-space: nowrap;
+}
+
 /* a short serif hint */
 .note {
   font: 400 var(--fs-ui)/1.4 var(--f-serif);

@@ -222,6 +222,14 @@ mark {
   min-width: 0;
 }
 
+/* "Pending" (features/lenses/bank.js): dashed, like a type toggle that is
+   off -- not there yet */
+.chip--pending {
+  border-style: dashed;
+  background: transparent;
+  color: var(--c-ink-mute);
+}
+
 /* buttons drawn as text: a link's title, which selects what it names (a
    chip's, a Linked tab row's, a card's threads line's), and a chip's x that
    removes a label, a project or a link (features/panel/panel.js,

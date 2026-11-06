@@ -115,9 +115,17 @@ export function money(amount, currency) {
   try {
     return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
   } catch {
-    return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+    return DECIMAL.format(amount);
   }
 }
+
+// An amount in a column of them, two decimals without the currency
+// ("1,234.56"; '' for none); `signedAmount` with its sign and a true minus
+// ("+1,234.56", "\u22129.99"). The Bank lens's.
+const DECIMAL = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const sign = n => (n < 0 ? '\u2212' : '+');
+export const amountText = n => (n == null ? '' : DECIMAL.format(n));
+export const signedAmount = n => `${sign(n)}${DECIMAL.format(Math.abs(n))}`;
 
 // ----------------------------------------------------------------------------
 // A file's size: "812 KB", "2.4 MB".

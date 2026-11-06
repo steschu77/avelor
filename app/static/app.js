@@ -44,6 +44,7 @@ import { getDocRows } from './features/lenses/documents.js';
 import { restoreSelection } from './features/selection.js';
 import './features/lenses/timeline.js';
 import { initCalendarLens } from './features/lenses/calendar.js';
+import './features/lenses/bank.js';
 
 initDocumentsLens();
 initCalendarLens();
@@ -61,6 +62,7 @@ store.subscribe(state => state.entities_rev, () => {
 store.subscribe([state => state.projects_rev, state => state.accounts_rev, state => state.watches_rev],
   () => scheduleRenderSidebar());
 store.subscribe([state => state.threads_rev, state => state.projects_rev], () => invalidateLenses('documents', 'timeline'));
+store.subscribe(state => state.watches_rev, () => invalidateLenses('bank'));
 
 function updateDirtyIndicator(doc_id) {
   for (const row of getDocRows(doc_id)) row.querySelector('.dirty-dot').hidden = !isDirty(doc_id);

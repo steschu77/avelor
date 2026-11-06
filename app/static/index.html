@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="css/areas/documents.css">
   <link rel="stylesheet" href="css/areas/timeline.css">
   <link rel="stylesheet" href="css/areas/calendar.css">
+  <link rel="stylesheet" href="css/areas/bank.css">
   <link rel="stylesheet" href="css/areas/panel.css">
   <link rel="stylesheet" href="css/areas/editor.css">
   <link rel="stylesheet" href="css/areas/assistant.css">
@@ -79,6 +80,7 @@
         <span data-lens="documents" aria-selected="false">Documents</span>
         <span data-lens="timeline" aria-selected="false">Timeline</span>
         <span data-lens="calendar" aria-selected="false">Calendar</span>
+        <span data-lens="bank" aria-selected="false">Bank</span>
       </nav>
     </header>
 
@@ -155,6 +157,7 @@
         <button type="button" class="chip chip--action" id="label-add-btn" title="Filter by a label"
           aria-haspopup="menu" hidden>+</button>
         <span class="meta docs-count" id="doc-count" hidden></span>
+        <span class="meta docs-count" id="bank-count" hidden></span>
         <button type="button" class="tool lens-types" id="types-btn" title="Show or hide the types"
           hidden><span>Types</span><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
         <span class="meta" id="dash-today" hidden></span>
@@ -230,6 +233,9 @@
           <div class="cal__weeks" id="calendar-weeks"></div>
         </div>
       </div>
+
+      <!-- Bank (features/lenses/bank.js) -->
+      <div class="stack bank-lens" id="lens-bank" hidden></div>
 
     </main>
 
