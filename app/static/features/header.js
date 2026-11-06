@@ -29,6 +29,7 @@ import { openLink } from './selection.js';
 import { selectFilter } from './selection.js';
 import { leaveCardEditMode } from './panel/panel.js';
 import { labelChips } from './panel/panel.js';
+import { vaultSources } from './sources.js';
 
 const projectNameEl = $('project-name');
 const projectDescEl = $('project-desc');
@@ -45,18 +46,29 @@ store.subscribe(
     else projectNameEl.textContent = t('sidebar.all_projects');
   });
 
-// After the name, the header names the words filtering and the active
-// labels, each with an x that takes it out of the filter, and a "+" that
-// adds a label, while any label is in use: looked at once per frame, not
-// once per entity of an indexing.
+// After the name, the header names the words filtering, the source and the
+// active labels, each with an x that takes it out of the filter, and a "+"
+// that adds a label, while any label is in use: looked at once per frame,
+// not once per entity of an indexing. After more than one, Clear filters
+// ends them all; the project, the head's name, stays.
 const labelFilterEl = $('label-filter');
 const labelAddBtn = $('label-add-btn');
-store.subscribe([state => state.selected_labels, state => state.word_filter],
-  ([selected_labels, word_filter]) => labelFilterEl.replaceChildren(
-    ...(word_filter ? [wordsChip(word_filter.text)] : []),
-    ...labelChips(selected_labels,
-      next => selectFilter({ selected_labels: next }),
-      label => t('header.stop_label', { label }))));
+const clearFiltersBtn = $('clear-filters-btn');
+store.subscribe(
+  [state => state.selected_labels, state => state.word_filter, state => state.selected_source,
+    state => state.watches_rev, state => state.accounts_rev],
+  ([selected_labels, word_filter, selected_source]) => {
+    const chips = [
+      ...(word_filter ? [wordsChip(word_filter.text)] : []),
+      ...sourceChips(selected_source),
+      ...labelChips(selected_labels,
+        next => selectFilter({ selected_labels: next }),
+        label => t('header.stop_label', { label })),
+    ];
+    labelFilterEl.replaceChildren(...chips);
+    clearFiltersBtn.hidden = chips.length < 2;
+  });
+clearFiltersBtn.addEventListener('click', () => selectFilter({ selected_source: null, selected_labels: [], ...NO_WORDS }));
 
 // The words' chip: the words searched, and an x that empties the box.
 function wordsChip(text) {
@@ -68,6 +80,20 @@ function wordsChip(text) {
   remove.addEventListener('click', () => selectFilter({ ...NO_WORDS }));
   chip.append(iconEl('#i-search'), accEl('span', '', text.trim()), remove);
   return chip;
+}
+
+// The source's chip: its icon and name, and an x that ends the filter; none
+// while the source isn't listed yet.
+function sourceChips(selected_source) {
+  const source = selected_source && vaultSources().find(s => s.key === selected_source);
+  if (!source) return [];
+  const chip = accEl('span', 'chip chip--source');
+  const remove = accEl('button', 'chip__remove', '\u00d7');
+  remove.type = 'button';
+  titled(remove, t('header.stop_source', { source: source.name }));
+  remove.addEventListener('click', () => selectFilter({ selected_source: null }));
+  chip.append(iconEl(source.icon), accEl('span', '', source.name), remove);
+  return [chip];
 }
 const scheduleLabelAdd = oncePerFrame(() => {
   labelAddBtn.hidden = ![...entities.values()].some(doc => doc.labels?.length);

@@ -26,8 +26,9 @@
   flex: none;
 }
 
-/* the words filtering, as a chip before the labels */
-.chip--words>.icon {
+/* the words filtering and the source, as chips before the labels */
+.chip--words>.icon,
+.chip--source>.icon {
   width: 10px;
   height: 10px;
   color: var(--c-ink-mute);

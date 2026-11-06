@@ -17,7 +17,6 @@ import { showError } from '../model/state.js';
 import { NO_PROJECT, entities, projectsInOrder, projectsOf } from '../model/entities.js';
 import { projects } from '../model/entities.js';
 import { accounts, sourceKeyOf } from '../model/entities.js';
-import { watchSourceKey, watches } from '../model/entities.js';
 import { structureCall } from '../model/structure.js';
 import { joinProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
@@ -27,7 +26,8 @@ import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
-import { importWatch, watchName, watchType } from './workspace/folders.js';
+import { accountSources, vaultSources } from './sources.js';
+import { importWatch } from './workspace/folders.js';
 import { openEmailFetch } from './import/email.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
@@ -291,20 +291,6 @@ function toggleArchived() {
   scheduleRenderSidebar();
 }
 
-// The sources as the vault panel lists them: what was made in the app; each
-// enabled folder watch's, under its name (a statements watch's is its bank
-// account's), what it imported; each connected account's.
-function vaultSources() {
-  return [
-    { key: 'created', name: t('sidebar.created_here'), icon: '#i-home' },
-    ...[...watches.values()].filter(watch => watch.enabled).map(watch => {
-      const { icon, also } = watchType(watch.type);
-      return { key: watchSourceKey(watch.id), name: watchName(watch), icon, also, watch };
-    }),
-    ...[...accounts.values()].flatMap(accountSources),
-  ];
-}
-
 // A source's button: Created Here's opens the New menu; a watch's imports
 // (`importWatch`), a bank account's whose folder isn't chosen yet has none; an
 // account's syncs.
@@ -343,33 +329,6 @@ registerActions(() => [
     run: () => selectFilter({ selected_source: key }),
   })),
 ].map(place => ({ ...place, when: vaultOpen })));
-
-// Sources: what a connected account feeds into the vault. Email follows the
-// granted access; calendars are the ones checked on the Accounts page
-// (`account.calendars`). `autoSync`: the host syncs it on its own.
-function accountSources(account) {
-  if (account.kind !== 'google' || account.status !== 'connected') return [];
-  const { id, scope = {}, email = t('sidebar.email') } = account;
-  const sources = [];
-  if (scope.email && scope.email !== 'off') {
-    sources.push({
-      key: `${id}\nemail`, kind: 'email', account: id, name: email, icon: KIND_ICONS.email.icon,
-      also: t('sidebar.fetch_also'),
-      autoSync: !!account.fetch_email?.auto_sync?.enabled,
-    });
-  }
-  if (scope.calendar && scope.calendar !== 'off') {
-    for (const calendar of account.calendars ?? []) {
-      sources.push({
-        key: `${id}\ncalendar\n${calendar.id}`, kind: 'calendar', account: id,
-        calendar: calendar.id, name: calendar.name, icon: KIND_ICONS.calendar.icon,
-        also: t('sidebar.sync_also'),
-        autoSync: !!calendar.auto_sync,
-      });
-    }
-  }
-  return sources;
-}
 
 // The sync button of a source: Email opens the Fetch email page
 // (features/import/email.js); a calendar syncs right away, its progress and

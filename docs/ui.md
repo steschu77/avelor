@@ -63,7 +63,8 @@ the Vault page alone.
   Import button (`import.md#folder-watches`); per
   connected Google account an Email source (unless its access is off), one
   source per checked calendar. A source
-  counts and filters the entities that came through it (`sourceKeyOf`);
+  counts and filters the entities that came through it (`sourceKeyOf`),
+  until its row goes (`features/sources.js`);
   its sync button syncs it: a calendar right away (`calendar.md`), Email
   opens Fetch email (`email.md`). While auto-sync
   is on, the sync button stays shown, pressed, in the count's place
@@ -79,7 +80,10 @@ is in use (`#label-add-btn`, `features/header.js`). Its menu lists the
 labels in use but the active ones, with a filter box, each with the
 entities in the filter carrying it; one with none is dim. Selecting
 several shows the entities carrying all of them. The words filtering come
-first, as a chip with the words and a × that empties the box.
+first, as a chip with the words and a × that empties the box, then the
+source filtering, as a chip with its icon and name and a × that ends it.
+After more than one chip, Clear filters (`#clear-filters-btn`) ends the
+words, the source and the labels; the project, the head's name, stays.
 
 ### Filter by words <a id="words"></a>
 
@@ -495,7 +499,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | A10 | Theme | Settings → System, Light, Dark → `setTheme` | `set_theme {theme}` → `config.yaml` `theme`, the title bar (`UiSignal::theme`) | the page in the theme (`data-theme`) |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `watch:<id>`, `<account>\nemail`, `<account>\ncalendar\n<id>` |
-| B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them |
+| B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them, and the words and the source too, Clear filters after more than one |
 | B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | B6 | Filter by words | typing in the box (`features/words.js`) → `selectFilter({words})`, at most every 120 ms `search` on the channel `search`; the chip's ×, the box's × or Esc → `NO_WORDS` | `search {text}` → `ok {terms, hits}` | the lenses keep what holds every word, its words marked, an excerpt where the title lacks some; the chip in the lens head; the find strip in the panel |
