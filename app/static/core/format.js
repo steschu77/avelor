@@ -16,6 +16,9 @@ export function parseDate(text) {
 // The start of `d`'s local day.
 export const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
+// How many days `b`'s local day is after `a`'s, negative before it.
+export const daysBetween = (a, b) => Math.round((dayStart(b) - dayStart(a)) / 864e5);
+
 // Local-time date helpers
 export const sameDay = (a, b) =>
   a.getFullYear() === b.getFullYear() &&
@@ -57,7 +60,7 @@ export function isoInstant(date) {
 const RELATIVE_DAY = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
 export function relativeDay(date) {
   if (!date || isNaN(date)) return '';
-  return RELATIVE_DAY.format(Math.round((dayStart(date) - dayStart(new Date())) / 864e5), 'day');
+  return RELATIVE_DAY.format(daysBetween(new Date(), date), 'day');
 }
 
 // ----------------------------------------------------------------------------
