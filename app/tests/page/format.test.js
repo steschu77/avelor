@@ -1,7 +1,7 @@
 import { equal, test } from './harness.js';
 import {
-  addDays, amountText, dayStart, fileSize, isoInstant, localDay, monthEndOf, monthStartOf, pageDate, parseDate, relativeDay,
-  sameDay, signedAmount, weekStartOf,
+  addDays, amountText, dayStart, daysBetween, fileSize, isoInstant, localDay, monthEndOf, monthStartOf, pageDate, parseDate,
+  relativeDay, sameDay, signedAmount, weekStartOf,
 } from '../../static/core/format.js';
 
 test("a day is the local day's start, not UTC's", () => {
@@ -12,6 +12,19 @@ test("a day is the local day's start, not UTC's", () => {
 test('a date-time is the instant it names, nothing is none', () => {
   equal(parseDate('2027-07-08T23:05:00Z').getTime(), Date.UTC(2027, 6, 8, 23, 5));
   equal([parseDate(''), parseDate(null)], [undefined, undefined]);
+});
+
+test('each day of the year is a day after the one before', () => {
+  const first = new Date(2027, 0, 1);
+  for (let n = 0; n < 366; n++) {
+    const day = addDays(first, n);
+    equal([daysBetween(first, day), day.getHours(), daysBetween(addDays(day, 1), day)], [n, 0, -1]);
+  }
+});
+
+test('the days between two times are those between their days', () => {
+  equal(daysBetween(new Date(2027, 2, 27, 23, 59), new Date(2027, 2, 28, 0, 1)), 1);
+  equal(daysBetween(new Date(2027, 2, 28, 0, 1), new Date(2027, 2, 28, 23, 59)), 0);
 });
 
 test('where a day, a week and a month start and end', () => {
