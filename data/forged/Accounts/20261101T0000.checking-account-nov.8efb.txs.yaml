@@ -2,6 +2,7 @@ id: 01a19467-e800-78d8-aabc-0ef81abf8efb
 title: Checking account, November 2026
 date: 2026-11-01T00:00:00Z
 import:
+  watch: 01a064c7-a280-7fdd-bebf-5675dac62ac2
   origin: statement_2026-11.csv
 transactions:
   account: 01955b3b-ca80-7fef-afbe-46d15556d9a1

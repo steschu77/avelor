@@ -2,6 +2,7 @@ id: 01a0f4c2-c400-7e22-b6a2-e8c1c412f372
 title: House fund, October 2026
 date: 2026-10-01T00:00:00Z
 import:
+  watch: 01a132c6-0280-79c6-83be-92a12c77802c
   origin: housefund_2026-10.csv
 transactions:
   account: 018572ff-1d80-78ca-9bbc-6ffd7edc2636

@@ -2,6 +2,7 @@ id: 01a0f61a-16a0-7a60-a0cd-3c68045b675b
 title: Checking account, September 2026
 date: 2026-09-01T00:00:00Z
 import:
+  watch: 01a064c7-a280-7fdd-bebf-5675dac62ac2
   origin: statement_2026-09.csv
 transactions:
   account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
