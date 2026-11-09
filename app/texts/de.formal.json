@@ -28,7 +28,10 @@
   "bank.choose_type": "Wählen Sie die Art des Kontos.",
   "bank.enter_name": "Geben Sie den Namen des Kontos ein.",
   "bank.enter_number": "Geben Sie die Nummer des Kontos ein.",
+  "bank.hide_transfers": "Umbuchungen zwischen Ihren Konten ausblenden",
   "bank.no_accounts_text": "Buchungen kommen aus den Kontoauszügen Ihrer Bank. Fügen Sie ein Bankkonto hinzu, exportieren Sie seine Kontoauszüge als CSV-Dateien in einen Ordner, und jeder wird in das Konto eingelesen.",
+  "bank.show_transfers": "Umbuchungen zwischen Ihren Konten zeigen",
+  "bank.transfers_note": "Umbuchungen zwischen Ihren Konten zählen weder bei Ein noch bei Aus.",
   "chat.ask_anything": "Fragen Sie irgendwas …",
   "chat.guide.pick": "Wählen Sie das Modell, mit dem Unterhaltungen beantwortet werden.",
   "chat.guide.tick": "Haken Sie unter Konten ein Modell an und wählen Sie es dann für Unterhaltungen.",
@@ -71,5 +74,7 @@
   "watch.enter_folder": "Geben Sie einen Ordner an.",
   "watch.no_vault": "Ordnerüberwachungen werden im Tresor aufbewahrt: Öffnen Sie einen Tresor, um sie zu sehen.",
   "watch.none_yet": "Noch wird kein Ordner überwacht. Wählen Sie Ordner überwachen und dann die Art der Dateien darin, oder Bankkonto hinzufügen.",
-  "watch.open_vault_first": "Öffnen Sie zuerst einen Tresor: Ordnerüberwachungen werden darin gespeichert."
+  "watch.open_vault_first": "Öffnen Sie zuerst einen Tresor: Ordnerüberwachungen werden darin gespeichert.",
+  "watch.step.pair_off": "Buchungen von und zu Ihren anderen Konten zählen bei Ein und Aus. Früher gepaarte Umbuchungen bleiben gepaart.",
+  "watch.step.pair_on": "Eine Buchung aus diesem Konto auf ein anderes Ihrer Konten, genannt durch seine IBAN, und derselbe Betrag auf jenes Konto innerhalb von 3 Tagen werden eine Umbuchung. Sie zählt weder bei Ein noch bei Aus."
 }

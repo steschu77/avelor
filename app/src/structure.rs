@@ -213,6 +213,18 @@ pub fn set_transaction_link(app: &mut App, req: Req, id: Id, transaction: Id, to
 }
 
 // ----------------------------------------------------------------------------
+/// `unpair_transfer`: the transaction `transaction` of the statement `id` and its
+/// other half are no transfer any more (`Index::unpair_transfer`); both
+/// statements are written. Answered as the statement's change.
+pub fn unpair_transfer(app: &mut App, req: Req, id: Id, transaction: Id) {
+    let step = Text::new("undo.unpair_transfer").arg("title", named(app, &id, ""));
+    let result = app.step(&req, step, |index, changes| {
+        index.unpair_transfer(&id, &transaction, changes)
+    });
+    answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
 /// `set_starred`: star or unstar `id`, any entity; unstarring removes the
 /// key.
 pub fn set_starred(app: &mut App, req: Req, id: Id, starred: bool) {

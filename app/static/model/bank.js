@@ -1,7 +1,8 @@
 // Bank accounts and their statements (vault.md, Bank Account and
 // Statement): an account's statements (`statementsOf`) and its ledger,
 // the posted transactions with the balance after each (`ledger`); a transaction's
-// party (`partyOf`) and its projects through its link (`linkProjects`).
+// party (`partyOf`), the other half of a transfer (`pairOf`), its name
+// (`transactionName`) and its projects through its link (`linkProjects`).
 // The Bank lens (features/lenses/bank.js), a transaction's card
 // (features/panel/transaction.js) and a statements watch's pane
 // (features/workspace/folders.js) show them.
@@ -40,8 +41,31 @@ export function partyRef(transaction) {
 }
 
 // Who paid or was paid: the other side, else the transaction's title.
-export function partyOf(transaction) {
+function partyOf(transaction) {
   return partyRef(transaction) || transaction.title || t('bank.transaction');
+}
+
+// The other half of `transaction`, a transfer between two of the vault's
+// accounts (its `transfer`, import.md#statements): `{ statement, transaction,
+// account }`, or null while no transaction names it back.
+export function pairOf(transaction) {
+  const id = transaction?.transfer;
+  if (!id) return null;
+  for (const statement of entities.values()) {
+    const other = statement.statement?.transactions?.find(item => item.id === id);
+    if (!other) continue;
+    if (other.transfer !== transaction.id) return null;
+    return { statement, transaction: other, account: entities.get(statement.statement.account) ?? null };
+  }
+  return null;
+}
+
+// What a transaction is called: a transfer after its other half's account, `pair`
+// ("To House fund", "From Checking"), else who paid or was paid.
+export function transactionName(transaction, pair) {
+  if (!pair) return partyOf(transaction);
+  const name = pair.account?.title || t('untitled');
+  return transaction.amount > 0 ? t('transaction.from_account', { name }) : t('transaction.to_account', { name });
 }
 
 // The projects of `transaction` through its link: the project it links to, or

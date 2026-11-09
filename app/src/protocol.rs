@@ -99,6 +99,7 @@ enum Command {
     SetLabels(Relabel),
     SetLink(Relink),
     SetTransactionLink(TransactionLink),
+    UnpairTransfer(TransactionRef),
     EditEntities(EditEntities),
     DeleteEntity(Target),
     ReloadEntity(Target),
@@ -268,6 +269,13 @@ struct TransactionLink {
     to: Option<Id>,
 }
 
+/// `{id, transaction}`: the transaction `transaction` of the statement `id`.
+#[derive(Deserialize)]
+struct TransactionRef {
+    id: Id,
+    transaction: Id,
+}
+
 /// `{ids, change}`: one change to every entity named.
 #[derive(Deserialize)]
 struct EditEntities {
@@ -381,6 +389,7 @@ impl Command {
             "set_labels" => Command::SetLabels(from_value(args)?),
             "set_link" => Command::SetLink(from_value(args)?),
             "set_transaction_link" => Command::SetTransactionLink(from_value(args)?),
+            "unpair_transfer" => Command::UnpairTransfer(from_value(args)?),
             "edit_entities" => Command::EditEntities(from_value(args)?),
             "delete_entity" => Command::DeleteEntity(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
@@ -514,6 +523,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetTransactionLink(a) => {
             structure::set_transaction_link(app, req, a.id, a.transaction, a.to)
         }
+        Command::UnpairTransfer(a) => structure::unpair_transfer(app, req, a.id, a.transaction),
         Command::EditEntities(a) => structure::edit_entities(app, req, a.ids, a.change),
         Command::DeleteEntity(a) => structure::delete_entity(app, req, a.id),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),

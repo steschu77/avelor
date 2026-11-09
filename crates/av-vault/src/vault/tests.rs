@@ -1552,6 +1552,73 @@ statement:
 }
 
 #[test]
+fn a_transfer_is_unpaired_in_both_statements() {
+    let (root, _) = thread_vault();
+    let (checking, savings) = (Id::generate(), Id::generate());
+    let (out, into, fee) = (Id::generate(), Id::generate(), Id::generate());
+    let write = |name: &str, text: String| {
+        let path = root.join("Accounts").join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    };
+    write(
+        "c.txs.yaml",
+        format!(
+            "id: {checking}
+title: Checking
+statement:
+  transactions:
+  - id: {out}
+    amount: -100.0
+    transfer: {into}
+  - id: {fee}
+    amount: -4.9
+"
+        ),
+    );
+    write(
+        "s.txs.yaml",
+        format!(
+            "id: {savings}
+title: Savings
+statement:
+  transactions:
+  - id: {into}
+    amount: 100.0
+    transfer: {out}
+"
+        ),
+    );
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+
+    let left = index.unpair_transfer(&checking, &fee, &mut changes);
+    assert_eq!(left.unwrap(), SaveOutcome::Unchanged, "no transfer's half");
+    let refused = index.unpair_transfer(&checking, &Id::generate(), &mut changes);
+    assert!(
+        matches!(refused, Err(Error::InvalidArgument { ref arg }) if arg == "transaction"),
+        "{refused:?}"
+    );
+    index.documents[index.by_id[&savings]].readonly = true;
+    let refused = index.unpair_transfer(&checking, &out, &mut changes);
+    assert!(
+        matches!(refused, Err(Error::NotWritable { .. })),
+        "{refused:?}"
+    );
+    assert!(changes.saved.is_empty(), "nothing written");
+    index.documents[index.by_id[&savings]].readonly = false;
+
+    let unpaired = index.unpair_transfer(&checking, &out, &mut changes);
+    assert_eq!(unpaired.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [checking, savings]);
+    for name in ["c.txs.yaml", "s.txs.yaml"] {
+        let text = fs::read_to_string(root.join("Accounts").join(name)).unwrap();
+        assert!(!text.contains("transfer"), "{name}: {text}");
+    }
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_write_keeps_the_byte_order_mark_and_the_line_endings() {
     let (root, ids) = thread_vault();
     let path = root.join("Notes/n0.md");

@@ -8,7 +8,12 @@ use av_vault::envelope::{Statement, Transaction};
 use av_vault::shared::ContactRef;
 
 use super::comdirect::{Export, Row, transaction_of};
+use super::same_number;
 use crate::texts::{self, Text};
+
+/// How many days apart a transfer's two halves may be posted: another bank
+/// books it a day, or a weekend, later.
+const PAIR_DAYS: i32 = 3;
 
 // ----------------------------------------------------------------------------
 /// A statement of the account in the vault, as an import sees it.
@@ -170,6 +175,81 @@ pub(crate) fn plan(holder: Option<&ContactRef>, known: &[Known], statement: &Exp
         skipped,
         problems,
     }
+}
+
+// ----------------------------------------------------------------------------
+/// Another bank account of the vault, as pairing transfers sees it.
+pub(crate) struct OtherAccount {
+    pub number: Option<String>,
+    pub statements: Vec<Known>,
+}
+
+// ----------------------------------------------------------------------------
+/// A transfer paired: a new transaction, by its index, and its other half, a
+/// transaction of another account's statement.
+#[derive(Debug, PartialEq)]
+pub(crate) struct Pair {
+    pub transaction: usize,
+    pub statement: Id,
+    pub other: Id,
+}
+
+// ----------------------------------------------------------------------------
+/// The transfers between `transactions`, new transactions of the account numbered
+/// `number`, and the transactions of `others`, the vault's other accounts: money
+/// out whose `iban` names the account it goes to (`same_number`), and the
+/// same amount into that account, at most `PAIR_DAYS` apart, the nearest
+/// first. Only posted transactions without a pair pair, each once.
+pub(crate) fn pairs(
+    number: Option<&str>,
+    transactions: &[Transaction],
+    others: &[OtherAccount],
+) -> Vec<Pair> {
+    let names = |iban: Option<&str>, number: Option<&str>| {
+        iban.zip(number)
+            .is_some_and(|(iban, number)| same_number(iban, number))
+    };
+    let open = |item: &Transaction| !item.is_pending() && item.transfer.is_none();
+    let mut pairs: Vec<Pair> = Vec::new();
+    for (i, transaction) in transactions.iter().enumerate() {
+        let (Some(day), Some(cents)) = (transaction.day(), transaction.cents()) else {
+            continue;
+        };
+        if cents == 0 || !open(transaction) {
+            continue;
+        }
+        let apart = |item: &Transaction| item.day().map(|d| (d.days() - day.days()).abs());
+        let half = |other: &OtherAccount, item: &Transaction| {
+            let named = if cents < 0 {
+                names(transaction.iban.as_deref(), other.number.as_deref())
+            } else {
+                names(item.iban.as_deref(), number)
+            };
+            named
+                && open(item)
+                && item.cents() == Some(-cents)
+                && item
+                    .id
+                    .is_some_and(|id| !pairs.iter().any(|pair| pair.other == id))
+                && apart(item).is_some_and(|days| days <= PAIR_DAYS)
+        };
+        let nearest = others
+            .iter()
+            .flat_map(|other| {
+                let items = other.statements.iter();
+                items.flat_map(move |s| s.items.iter().map(move |item| (other, s.id, item)))
+            })
+            .filter(|(other, _, item)| half(other, item))
+            .min_by_key(|(_, _, item)| apart(item));
+        if let Some((_, statement, Some(other))) = nearest.map(|(o, s, item)| (o, s, item.id)) {
+            pairs.push(Pair {
+                transaction: i,
+                statement,
+                other,
+            });
+        }
+    }
+    pairs
 }
 
 // ----------------------------------------------------------------------------

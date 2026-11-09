@@ -274,20 +274,22 @@ export function linksOf(id) {
 }
 
 // A link to `id` as a chip: an arrow for its direction (`incoming`: `id`
-// links here), its icon and title -- `label` instead of the title, for a
-// transaction -- which select it (`onSelect` instead, a transaction's), and an x
-// that calls `onRemove` (none without it). The card's, a transaction's, the
-// Bank lens's and the New form's (features/new.js).
-export function linkChip(id, { incoming = false, label = null, onSelect = null, onRemove = null } = {}) {
+// links here; `pair`: a transfer's other half, `id` its account), its icon
+// and title -- `label` instead of the title, for a transaction -- which select
+// it (`onSelect` instead, a transaction's), and an x that calls `onRemove` (none
+// without it). The card's, a transaction's, the Bank lens's and the New form's
+// (features/new.js).
+export function linkChip(id, { incoming = false, pair = false, label = null, onSelect = null, onRemove = null } = {}) {
   const target = linkTarget(id);
   const title = label ?? (target?.title || t('untitled'));
   const chip = accEl('span', 'chip chip--link');
-  chip.title = incoming ? t('panel.linked_from', { title }) : t('panel.links_to', { title });
+  chip.title = pair ? t('panel.transfer_half')
+    : incoming ? t('panel.linked_from', { title }) : t('panel.links_to', { title });
   const name = accEl('button', 'chip__name', title);
   name.type = 'button';
   name.addEventListener('click', onSelect ?? (() => selectById(id)));
   const icon = iconEl(target?.icon ?? '');
-  chip.append(incoming ? '\u2190' : '\u2192', icon, name);
+  chip.append(pair ? '\u21c4' : incoming ? '\u2190' : '\u2192', icon, name);
   if (onRemove) {
     const remove = accEl('button', 'chip__remove', '\u00d7');
     remove.type = 'button';
@@ -296,6 +298,16 @@ export function linkChip(id, { incoming = false, label = null, onSelect = null, 
     chip.append(remove);
   }
   return chip;
+}
+
+// The other half of a transfer, `pair` (`pairOf`, model/bank.js), as a chip
+// of its account that selects that half. The Bank lens's and a transaction's.
+export function pairChip(pair) {
+  return linkChip(pair.account?.id ?? null, {
+    pair: true,
+    label: pair.account?.title || t('untitled'),
+    onSelect: () => selectTransaction(pair.statement.doc_id, pair.transaction.id),
+  });
 }
 
 // Fill `row` with the links of the card `doc_id`, as `linkChip`s: the one

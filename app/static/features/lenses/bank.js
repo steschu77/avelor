@@ -1,9 +1,10 @@
 // The Bank lens (ui.md#bank): the bank accounts in the scope as tiles, with
-// their total; the cut, money in and money out, and Linked or Not linked;
-// the cash flow, a scrubber (features/lenses/scrub.js) whose range of weeks
-// the transactions keep to; then the transactions by month, newest first, each with
-// what it is linked to and its account's balance after it (`ledger`,
-// model/bank.js). The scope is the vault panel's filter on the statements
+// their total; the cut, money in, money out and transfers between the
+// vault's accounts (`pairOf`, in neither In nor Out), and Linked or Not
+// linked; the cash flow, a scrubber (features/lenses/scrub.js) whose range
+// of weeks the transactions keep to; then the transactions by month, newest first,
+// each with what it is linked to (a transfer: its other half) and its
+// account's balance after it (`ledger`, model/bank.js). The scope is the vault panel's filter on the statements
 // (`matchesFilter`): with nothing narrowing it, every bank account shows,
 // one without statements too. Under a project, a transaction is in it through
 // what it is linked to (`linkProjects`), and the project's In, Out and Net
@@ -20,11 +21,11 @@ import { registerAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
 import { store, vaultOpen } from '../../model/state.js';
 import { NO_PROJECT, accountWatch, entities, matchesFilter, watchSourceKey, watches } from '../../model/entities.js';
-import { ACCOUNT_TYPES, TRANSACTION_TYPES, cents, ledger, linkProjects, partyOf, statementsEnd } from '../../model/bank.js';
-import { KIND_ICONS, iconEl } from '../../ui/icons.js';
+import { ACCOUNT_TYPES, TRANSACTION_TYPES, transactionName, cents, ledger, linkProjects, pairOf, statementsEnd } from '../../model/bank.js';
+import { KIND_ICONS, TRANSFER_ICON, iconEl } from '../../ui/icons.js';
 import { stat, stats } from '../../ui/page.js';
 import { accSeg } from '../../ui/segmented.js';
-import { linkChip, linkTarget } from '../panel/panel.js';
+import { linkChip, linkTarget, pairChip } from '../panel/panel.js';
 import { selectTransaction, selectDocument, selectFilter } from '../selection.js';
 import { addBankAccount } from '../workspace/folders.js';
 import { invalidateLenses, registerLens } from './registry.js';
@@ -38,14 +39,17 @@ registerAction({
   when: vaultOpen, run: addBankAccount,
 });
 
-// The cut, for the session: whether money in and money out show, each
-// switched by its toggle; and which of them by their link ('all', 'linked',
-// 'unlinked').
-const cut = { in: true, out: true, link: 'all' };
+// The cut, for the session: whether money in, money out and transfers
+// show, each switched by its toggle; and which of them by their link
+// ('all', 'linked', 'unlinked').
+const cut = { in: true, out: true, transfers: true, link: 'all' };
 
 const TYPES = new Map(ACCOUNT_TYPES);
 const isIn = entry => entry.transaction.amount > 0;
-const isLinked = entry => !!entry.transaction['linked-to'];
+// A transaction's side of the cut: a transfer is neither money in nor out.
+const sideOf = entry => (entry.pair ? 'transfers' : isIn(entry) ? 'in' : 'out');
+// A transfer is linked by its other half.
+const isLinked = entry => !!entry.transaction['linked-to'] || !!entry.pair;
 
 // ----------------------------------------------------------------------------
 // The head's count, while the lens is shown.
@@ -130,17 +134,18 @@ function renderBankLens() {
     const { entries, pending } = ledgers.get(account.id);
     const take = (entry, seq, isPending) => {
       if (scope.statements.has(entry.statement) && inProject(entry, state.selected_project)) {
-        transactions.push({ ...entry, account, seq, pending: isPending });
+        transactions.push({ ...entry, account, seq, pending: isPending, pair: pairOf(entry.transaction) });
       }
     };
     entries.forEach((entry, seq) => take(entry, seq, false));
     pending.forEach((entry, i) => take(entry, 1e9 - i, true));
   }
   transactions.sort((a, b) => b.time - a.time || b.seq - a.seq);
-  const sideCut = entry => (isIn(entry) ? cut.in : cut.out);
+  const sideCut = entry => cut[sideOf(entry)];
   const linkCut = entry => cut.link === 'all' || isLinked(entry) === (cut.link === 'linked');
   const picked = transactions.filter(entry => flow.holds(new Date(entry.time)));
-  const counts = { in: picked.filter(isIn).length, out: picked.filter(entry => !isIn(entry)).length };
+  const counts = { in: 0, out: 0, transfers: 0 };
+  for (const entry of picked) counts[sideOf(entry)]++;
   const cutIn = picked.filter(sideCut);
   const linked = cutIn.filter(isLinked).length;
   const links = { linked, unlinked: cutIn.length - linked };
@@ -223,12 +228,13 @@ function renderAccount(account, book, state) {
 }
 
 // Under a project, in the accounts' place: what came in and went out, the
-// net (each without and with what is pending), and the accounts and months
-// the transactions come from.
+// net (each without and with what is pending; transfers in none of them),
+// and the accounts and months the transactions come from.
 function renderProjectSums(transactions, accounts) {
   const sum = list => list.reduce((n, entry) => n + cents(entry.transaction.amount), 0) / 100;
-  const posted = transactions.filter(entry => !entry.pending);
-  const pending = transactions.filter(entry => entry.pending);
+  const counted = transactions.filter(entry => !entry.pair);
+  const posted = counted.filter(entry => !entry.pending);
+  const pending = counted.filter(entry => entry.pending);
   const side = (label, take, sign) => {
     const own = posted.filter(take);
     const waiting = pending.filter(take);
@@ -237,7 +243,7 @@ function renderProjectSums(transactions, accounts) {
     return stat(label, accEl('span', 'figure', amountText(sign * sum(own))), note);
   };
   const net = sum(posted);
-  const withPending = sum(transactions);
+  const withPending = sum(counted);
   const times = transactions.map(entry => entry.time);
   const [from, to] = times.length
     ? [Math.min(...times), Math.max(...times)].map(time => SHORT_MONTH_YEAR.format(new Date(time))) : [];
@@ -251,14 +257,17 @@ function renderProjectSums(transactions, accounts) {
 }
 
 // ----------------------------------------------------------------------------
-// The cut: a toggle for money in and one for money out, with their counts;
-// then All, Linked and Not linked, counted within them.
+// The cut: a toggle each for money in, money out and transfers, with their
+// counts; then All, Linked and Not linked, counted within them.
+const SIDES = [
+  ['in', t('bank.in'), { show: t('bank.show_money_in'), hide: t('bank.hide_money_in') }],
+  ['out', t('bank.out'), { show: t('bank.show_money_out'), hide: t('bank.hide_money_out') }],
+  ['transfers', t('bank.transfers'), { show: t('bank.show_transfers'), hide: t('bank.hide_transfers') }],
+];
+
 function renderCut(counts, links) {
   const bar = accEl('div', 'filter-bar');
-  for (const [key, label, what] of [
-    ['in', t('bank.in'), { show: t('bank.show_money_in'), hide: t('bank.hide_money_in') }],
-    ['out', t('bank.out'), { show: t('bank.show_money_out'), hide: t('bank.hide_money_out') }],
-  ]) {
+  for (const [key, label, what] of SIDES) {
     const toggle = accEl('button', 'type-toggle', label);
     toggle.type = 'button';
     toggle.setAttribute('aria-pressed', String(cut[key]));
@@ -286,9 +295,9 @@ function renderCut(counts, links) {
 // the later of today's and the last transaction's, at most two years; money in
 // above the line, out below, each as high as the square root of its sum
 // against the largest week's, so one large transaction doesn't flatten the
-// paydays. The bars count the posted transactions of the cut, in every week
-// shown; its range keeps the transactions, the cut's counts and a project's
-// sums to the weeks picked.
+// paydays. The bars count the posted transactions of the cut but transfers, in
+// every week shown; its range keeps the transactions, the cut's counts and a
+// project's sums to the weeks picked.
 const FLOW_WEEKS = 104;
 const flow = scrubber({ lens: 'bank', meta: t('bank.flow_meta'), track: 'scrub__track--flow' });
 
@@ -299,7 +308,7 @@ function renderFlow(transactions, inCut) {
     .slice(-FLOW_WEEKS);
   const sums = weeks.map(() => ({ in: 0, out: 0 }));
   for (const entry of inCut) {
-    const week = entry.pending ? -1 : weekOf(weeks, new Date(entry.time));
+    const week = entry.pending || entry.pair ? -1 : weekOf(weeks, new Date(entry.time));
     if (week < 0) continue;
     const amount = cents(entry.transaction.amount);
     if (amount > 0) sums[week].in += amount;
@@ -338,7 +347,8 @@ function flowWeek() {
 
 // ----------------------------------------------------------------------------
 // The transactions under their months, then a note: where the statements start,
-// or, under a project, how a transaction is in it. Under a project there is no
+// or, under a project, how a transaction is in it; and, while transfers show,
+// that they count in neither In nor Out. Under a project there is no
 // balance: balances belong to accounts.
 function renderTransactions(shown, accounts, ledgers, project) {
   const table = accEl('div', project ? 'table bank bank--project' : 'table bank');
@@ -369,9 +379,12 @@ function renderTransactions(shown, accounts, ledgers, project) {
   }
   flush();
   table.append(head, body);
-  const note = project
-    ? t('bank.project_note')
-    : startsNote(accounts, ledgers);
+  const note = [
+    project
+      ? t('bank.project_note')
+      : startsNote(accounts, ledgers),
+    shown.some(entry => entry.pair) ? t('bank.transfers_note') : null,
+  ].filter(Boolean).join(' ');
   if (note) {
     const foot = accEl('div', 'lens-hidden');
     foot.append(accEl('span', 'note', note));
@@ -392,18 +405,22 @@ function startsNote(accounts, ledgers) {
   return at.length ? t('bank.first_statements_at', { day, at: at.join(', ') }) : t('bank.first_statements', { day });
 }
 
-// A month's head: its name, its transactions and what is pending of them, the
-// sum of the posted ones, and (but under a project) the accounts' balance
-// at its end, while they share a currency.
+// A month's head: its name, its transactions and the transfers and what is
+// pending of them, the sum of the posted ones (transfers too, so it agrees
+// with the balances), and (but under a project) the accounts' balance at
+// its end, while they share a currency.
 function renderMonth(group, accounts, ledgers, currency, project) {
   const first = new Date(group[0].time);
   const end = new Date(first.getFullYear(), first.getMonth() + 1, 1).getTime();
   const pending = group.filter(entry => entry.pending).length;
+  const transfers = group.filter(entry => entry.pair).length;
   const net = group.filter(entry => !entry.pending).reduce((n, entry) => n + cents(entry.transaction.amount), 0) / 100;
   const row = accEl('div', 'list-row group-row');
   const name = accEl('span', 'bank__group-name');
+  const counts = [t('bank.count.transactions', { n: group.length }), transfers ? t('count.transfers', { n: transfers }) : null,
+    pending ? t('statement.pending', { n: pending }) : null];
   name.append(accEl('span', 'group-row__name', MONTH_YEAR.format(first)),
-    accEl('span', 'meta', [t('bank.count.transactions', { n: group.length }), pending ? t('bank.count.pending', { n: pending }) : null].filter(Boolean).join(' \u00b7 ')));
+    accEl('span', 'meta', counts.filter(Boolean).join(' \u00b7 ')));
   row.append(name, accEl('span'), accEl('span', 'bank__net', signedAmount(net)));
   if (!project) {
     let balance = null;
@@ -418,29 +435,32 @@ function renderMonth(group, accounts, ledgers, currency, project) {
   return row;
 }
 
-// A transaction: its day; who paid or was paid, "Pending", then what for (and
-// the account, while the scope holds several); what it is linked to; the
-// amount and (but under a project) the account's balance after it.
+// A transaction: its day; who paid or was paid (a transfer: its other
+// account, with the transfer's arrows), "Pending", then what for (and the
+// account, while the scope holds several); what it is linked to (a
+// transfer: its other half); the amount, a transfer's not marked as money
+// in, and (but under a project) the account's balance after it.
 function renderRow(entry, several, project) {
-  const { transaction, account } = entry;
+  const { transaction, account, pair } = entry;
   const amount = transaction.amount ?? 0;
-  const who = partyOf(transaction);
-  const what = transaction.memo
-    || (transaction.title && transaction.title !== who ? transaction.title : TRANSACTION_TYPES.get(transaction.type) ?? '');
+  const who = transactionName(transaction, pair);
+  const kind = TRANSACTION_TYPES.get(pair ? 'transfer' : transaction.type) ?? '';
+  const what = transaction.memo || (!pair && transaction.title && transaction.title !== who ? transaction.title : kind);
   const row = pressable(accEl('div', `list-row table__row bank__row${entry.pending ? ' bank__row--pending' : ''}`));
   row.dataset.statement = entry.statement.doc_id;
   if (transaction.id) row.dataset.transaction = transaction.id;
   row.title = t('open.named', { name: who });
   const cell = accEl('span', 'bank__cell');
-  cell.append(iconEl(KIND_ICONS.statement.icon, 'table__icon'), accEl('span', 'row-title', who));
+  cell.append(iconEl(pair ? TRANSFER_ICON : KIND_ICONS.statement.icon, 'table__icon'), accEl('span', 'row-title', who));
   if (entry.pending) cell.append(accEl('span', 'chip chip--pending', t('bank.pending_chip')));
   const detail = [several ? account.title || t('untitled') : null, what].filter(Boolean).join(' \u00b7 ');
   if (detail) cell.append(accEl('span', 'meta bank__detail', detail));
   const link = accEl('span', 'bank__link');
   const to = transaction['linked-to'];
-  if (to) link.append(linkTarget(to) ? linkChip(to) : accEl('span', 'meta', '\u2014'));
+  if (pair) link.append(pairChip(pair));
+  else if (to) link.append(linkTarget(to) ? linkChip(to) : accEl('span', 'meta', '\u2014'));
   row.append(accEl('span', 'meta', DAY_MONTH.format(new Date(entry.time))), cell, link,
-    accEl('span', `bank__amount${amount > 0 ? ' bank__amount--in' : ''}`, signedAmount(amount)));
+    accEl('span', `bank__amount${amount > 0 && !pair ? ' bank__amount--in' : ''}`, signedAmount(amount)));
   if (!project) row.append(accEl('span', 'meta bank__balance', entry.pending ? '' : amountText(entry.balance)));
   return row;
 }

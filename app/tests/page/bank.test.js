@@ -1,6 +1,8 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
-import { transactionOf, ledger, linkProjects, partyRef, statementsEnd, statementsOf } from '../../static/model/bank.js';
+import {
+  transactionName, transactionOf, ledger, linkProjects, pairOf, partyRef, statementsEnd, statementsOf,
+} from '../../static/model/bank.js';
 import { entities, threads } from '../../static/model/entities.js';
 
 const account = (id, balance) => ({ id, kind: 'bank-account', title: id, 'bank-account': { balance } });
@@ -62,6 +64,23 @@ test('a transaction of a statement', () => {
 test('the other side is who was paid, or who paid', () => {
   const sides = { sender: 'Maya', receiver: 'Shop' };
   equal([partyRef({ ...sides, amount: -5 }), partyRef({ ...sides, amount: 5 })], ['Shop', 'Maya']);
+});
+
+test("a transfer's halves name each other", () => {
+  vault(
+    account('checking'), account('savings'),
+    statement('s1', 'checking', [transaction('out', '2027-01-02', -20, { transfer: 'in' }), transaction('lone', '2027-01-03', -5, { transfer: 'in' }), transaction('none', '2027-01-04', -1)]),
+    statement('s2', 'savings', [transaction('in', '2027-01-03', 20, { transfer: 'out' })]),
+  );
+  const half = id => pairOf(transactionOf(of('s1'), id));
+  equal([half('out').transaction.id, half('out').account.id, half('out').statement.id], ['in', 'savings', 's2']);
+  equal([half('lone'), half('none'), pairOf(null)], [null, null, null]);
+});
+
+test("a transfer is called after the other half's account, else the other side", () => {
+  const pair = { account: { title: 'House fund' } };
+  equal([transactionName({ amount: -5 }, pair), transactionName({ amount: 5 }, pair)], ['transaction.to_account', 'transaction.from_account']);
+  equal([transactionName({ amount: -5, receiver: 'Shop' }), transactionName({ amount: -5, title: 'Lunch' }), transactionName({ amount: -5 })], ['Shop', 'Lunch', 'bank.transaction']);
 });
 
 // Two projects, a bill in the one, a thread and a rent in the other.
