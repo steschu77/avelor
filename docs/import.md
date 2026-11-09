@@ -79,6 +79,8 @@ account file is (`accounts.md#vault-accounts`). The file contains:
   * `keep-original`: `true` if a document keeps its file beside it (one
     of several images a PDF of them, `vault.md#document`); absent: it
     doesn't, but an encrypted PDF always does
+  * `pair-transfers`: a `statements` watch's only: `false` if its imports
+    don't pair transfers (`#statements`); absent: they do
   * `enabled`: `false` while the watch is off; it isn't listed under
     Sources then
   * `added`: when the watch was added
@@ -139,8 +141,9 @@ vault), following the Accounts page:
   balance (and what is pending), its bookings and its newest statement;
   its name, which is the watch's (`set_title`), its bank, number and kind
   (`set_bank_account`), its currency, owner and file as they are. Then its
-  folder, as any watch's, and the three steps a file takes, which always
-  run: Read the rows, Skip what is there, Check the balance.
+  folder, as any watch's, and the steps a file takes: Read the rows, Skip
+  what is there and Check the balance, which always run, and Pair
+  transfers, switched by its check (`pair_transfers`).
 - Removing a watch deletes its file; what it imported stays in the vault,
   a statements watch's account too.
 
@@ -273,10 +276,11 @@ A statements watch imports the CSV exports of one bank account
 (`bank.rs`). Import, on the watch's source or pane, lists the watch's files
 that aren't in the vault and reads them on a worker, then writes each into
 the account, the oldest first, as a job "Importing statements ·
-<account>"; its note counts the statements and bookings that came in, and
-names each file left out and each balance that doesn't add up. A file
-counts as in the vault by its account and origin: the `import.origin` of a
-statement of the account (`vault.md#import`), whichever watch imported it.
+<account>"; its note counts the statements and bookings that came in and
+the transfers paired, and names each file left out and each balance that
+doesn't add up. A file counts as in the vault by its account and origin:
+the `import.origin` of a statement of the account (`vault.md#import`),
+whichever watch imported it.
 
 - **The format** is comdirect's export of an account's bookings
   ("Umsätze"): UTF-8 or Windows-1252; quoted cells, each followed by `;`;
@@ -305,6 +309,14 @@ statement of the account (`vault.md#import`), whichever watch imported it.
   leave the older statements, and a new booking of a removed one's card
   day and amount takes its `id` and `linked-to`. An older statement
   brings no pending bookings.
+- **Transfers**: a booked booking out whose `iban` names another bank
+  account of the vault (by the number's digits, as an IBAN ends with it)
+  and a booked booking of the same amount into that account, at most 3
+  days apart, are the two halves of a transfer: each names the other
+  (`transfer`, `vault.md#transactions`), the nearest day first, each half
+  once. Whichever statement comes second pairs them, and the other
+  account's statement is written too. The watch's Pair transfers step
+  turns this off; the pairs made stay.
 - **The balances**: the balance before plus the booked rows is the balance
   after; and the balance before is the one the statement before it ends
   with, if that one ends before this one starts. Otherwise the job's note
@@ -329,7 +341,7 @@ statement of the account (`vault.md#import`), whichever watch imported it.
 | K4 | Arrange | drag pages, merge with previous/next, split, edit titles, tick | page only (`scanPlace`, `features/import/scans.js`) | documents as arranged |
 | K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}`; with the watch's analysis on, the job "Analysing scans" or "Analysing PDFs" (G5's steps) → `entity`, `job`, `account` | documents in `Scans/`, analysed; one file kept beside its document |
 | K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
-| M1 | Import statements | a statements watch's source or pane, once its folder is chosen: Import → `importWatch` (`features/workspace/folders.js`) | `statements_import {watch}` → `ok {job}` (`invalid_argument` without a folder); the files listed and read on the job's worker → per file `entity` (the statement, the older ones it took pending bookings from, the account) → `job` with the note | statements in `Accounts/`, the account's balance |
+| M1 | Import statements | a statements watch's source or pane, once its folder is chosen: Import → `importWatch` (`features/workspace/folders.js`) | `statements_import {watch}` → `ok {job}` (`invalid_argument` without a folder); the files listed and read on the job's worker → per file `entity` (the statement, the older ones it took pending bookings from, the other accounts' statements holding a transfer's other half, the account) → `job` with the note | statements in `Accounts/`, the account's balance, its transfers paired |
 | M2 | Change the account | the pane's name, Bank, Number, Kind | `set_title {id, title}`; `set_bank_account {entity, institution?, number?, type?}` → `entity`, `ok` | the account, the watch's name |
 
 ## Design <a id="design"></a>
@@ -339,8 +351,9 @@ statement of the account (`vault.md#import`), whichever watch imported it.
   A scan counts as in the vault by its watch and origin (`scan.watch` +
   `scan.origin`, `Index::scan_origins`), a statement by its account and
   origin (`import.origin`, `bank::account_origins`).
-- **Statements**: the reader (`bank::read`) and what a statement adds to
-  its account (`bank::plan`) are pure functions with tests, the reader's
+- **Statements**: the reader (`bank::read`), what a statement adds to its
+  account (`bank::plan`) and the transfers it pairs (`bank::pairs`) are
+  pure functions with tests, the reader's
   on the December statement in `data/statements`; the files
   are listed and read on the job's worker, and written on the UI thread,
   one vault edit per entity.

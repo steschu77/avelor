@@ -600,7 +600,7 @@ function renderWatchPane(watch) {
     { icon: type.icon, button }));
   pane.append(...(statements ? renderStatementsParts(id, watch) : renderWatchName(id, settings)),
     renderWatchFolderPart(id, settings),
-    statements ? renderStatementSteps() : renderWatchSteps(id, type, settings));
+    statements ? renderStatementSteps(id, settings) : renderWatchSteps(id, type, settings));
   if (watchError?.watch === id) {
     pane.append(notice('error', watchError.message));
   }
@@ -718,8 +718,10 @@ function renderAccountPart(id, account) {
   return part;
 }
 
-// The steps a statement takes, each always (import.md#statements).
-function renderStatementSteps() {
+// The steps a statement takes (import.md#statements), each always but
+// Pair transfers, switched by its check (`pair_transfers`).
+function renderStatementSteps(id, settings) {
+  const pair = settings.pair_transfers !== false;
   const part = accEl('div', 'watch__part');
   const head = accEl('div', 'section-head', 'Import process');
   head.append(accEl('span', 'section-head__note', 'for each file'));
@@ -732,6 +734,13 @@ function renderStatementSteps() {
     renderWatchStep({
       name: 'Skip what is there', label: 'Rule',
       note: 'A booking the account has (the same reference, or the same day, amount and purpose) is left out, so exports may overlap. The newest statement replaces the pending bookings.',
+    }),
+    renderWatchStep({
+      name: 'Pair transfers', label: 'Rule', on: pair,
+      onToggle: () => watchSet(id, { pair_transfers: !pair }),
+      note: pair
+        ? 'A booking out of this account to another of yours, named by its IBAN, and the same amount into that account within 3 days become one transfer. It counts in neither In nor Out.'
+        : 'Bookings to and from your other accounts count in In and Out. Transfers paired before stay paired.',
     }),
     renderWatchStep({
       name: 'Check the balance', label: 'Rule',

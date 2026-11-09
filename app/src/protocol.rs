@@ -87,6 +87,7 @@ enum Command {
     SetTags(Retag),
     SetLink(Relink),
     SetBookingLink(BookingLink),
+    UnpairTransfer(Booking),
     EditEntities(EditEntities),
     DeleteEntity(Target),
     ReloadEntity(Target),
@@ -247,6 +248,13 @@ struct BookingLink {
     to: Option<Id>,
 }
 
+/// `{id, booking}`: the booking `booking` of the statement `id`.
+#[derive(Deserialize)]
+struct Booking {
+    id: Id,
+    booking: Id,
+}
+
 /// `{ids, change}`: one change to every entity named.
 #[derive(Deserialize)]
 struct EditEntities {
@@ -357,6 +365,7 @@ impl Command {
             "set_tags" => Command::SetTags(from_value(args)?),
             "set_link" => Command::SetLink(from_value(args)?),
             "set_booking_link" => Command::SetBookingLink(from_value(args)?),
+            "unpair_transfer" => Command::UnpairTransfer(from_value(args)?),
             "edit_entities" => Command::EditEntities(from_value(args)?),
             "delete_entity" => Command::DeleteEntity(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
@@ -456,6 +465,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetTags(a) => structure::set_tags(app, req, a.id, a.tags),
         Command::SetLink(a) => structure::set_link(app, req, a.id, a.to),
         Command::SetBookingLink(a) => structure::set_booking_link(app, req, a.id, a.booking, a.to),
+        Command::UnpairTransfer(a) => structure::unpair_transfer(app, req, a.id, a.booking),
         Command::EditEntities(a) => structure::edit_entities(app, req, a.ids, a.change),
         Command::DeleteEntity(a) => structure::delete_entity(app, req, a.id),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),

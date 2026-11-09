@@ -1,7 +1,8 @@
 // Bank accounts and their statements (vault.md, Bank Account and
 // Transactions): an account's statements (`statementsOf`) and its ledger,
 // the booked bookings with the balance after each (`ledger`); a booking's
-// party (`partyOf`) and its projects through its link (`linkProjects`).
+// party (`partyOf`), the other half of a transfer (`pairOf`), its name
+// (`bookingName`) and its projects through its link (`linkProjects`).
 // The Bank lens (features/lenses/bank.js), a booking's card
 // (features/panel/booking.js) and a statements watch's pane
 // (features/workspace/folders.js) show them.
@@ -37,8 +38,30 @@ export function partyRef(booking) {
 }
 
 // Who paid or was paid: the other side, else the booking's title.
-export function partyOf(booking) {
+function partyOf(booking) {
   return partyRef(booking) || booking.title || 'Booking';
+}
+
+// The other half of `booking`, a transfer between two of the vault's
+// accounts (its `transfer`, import.md#statements): `{ statement, booking,
+// account }`, or null while no booking names it back.
+export function pairOf(booking) {
+  const id = booking?.transfer;
+  if (!id) return null;
+  for (const statement of entities.values()) {
+    const other = statement.transactions?.transactions?.find(item => item.id === id);
+    if (!other) continue;
+    if (other.transfer !== booking.id) return null;
+    return { statement, booking: other, account: entities.get(statement.transactions.account) ?? null };
+  }
+  return null;
+}
+
+// What a booking is called: a transfer after its other half's account, `pair`
+// ("To House fund", "From Checking"), else who paid or was paid.
+export function bookingName(booking, pair) {
+  if (!pair) return partyOf(booking);
+  return `${booking.amount > 0 ? 'From' : 'To'} ${pair.account?.title || 'Untitled'}`;
 }
 
 // The projects of `booking` through its link: the project it links to, or

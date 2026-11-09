@@ -372,14 +372,18 @@ panel's `booking` mode shows its card in `#panel-booking-view`
 entity, project or thread change; it has no editor, and nothing on it is
 renamed or deleted.
 
-- The head: who paid or was paid (`partyOf`, `model/bank.js`), the day,
-  and the statement's file.
+- The head: who paid or was paid (`bookingName`, `model/bank.js`: a
+  transfer's other account, with the swap arrows), the day, and the
+  statement's file.
 - The amount, signed in the account's currency, booked or pending and its
-  kind.
-- The account (a chip, then its bank and number), From or To, the purpose
-  and the bank's reference, the statement (a chip that selects it), and
-  the account's balance after it (`ledger`); a pending booking has none
-  yet.
+  kind (a transfer: transfer).
+- The account (a chip, then its bank and number), From or To, a
+  transfer's other half (Transfer: a ⇄ chip of its account that selects
+  it, its amount and day, and Not a transfer, two clicks, while both
+  statements can be written: `unpair_transfer` through
+  `unpairTransferLocal`, `model/structure.js`), the purpose and the bank's
+  reference, the statement (a chip that selects it), and the account's
+  balance after it (`ledger`); a pending booking has none yet.
 - The projects it is in through its link (`linkProjects`), without ×, and
   "through" what it links to.
 - The link: a chip with × while the statement can be written, then "+",
@@ -649,6 +653,7 @@ and save their bodies at once.
 | D13 | A task's field | a Status button; the Due input or the Assignee typed in, Enter or blur; the Due × → `editEntityLocal(id, {task: {…}})` | `edit_entities {ids: [id], change}` → `Index::edit_entities` (done also writes `task.done`) → `entity`, `ok {changed, skipped}` | the card, the lenses and the dashboard follow; the field keeps the focus; a skip as `changed_outside` opens the conflict dialog |
 | D14 | Genre | the Genre typed in, Enter or blur → `editEntityLocal(id, {genre})` | `edit_entities` → `entity` | the card's icon and the rows' follow |
 | D15 | A booking's link | a booking's row in the Bank lens → `selectBooking`; its card's "+" → a pick, or × → `setBookingLinkLocal` | `set_booking_link {id, booking, to}` → `Index::set_booking_link` → `entity` (the statement) | the card's link and projects, the lens's Linked to |
+| D16 | Not a transfer | a transfer's card → Not a transfer, twice (`armedButton`) → `unpairTransferLocal` | `unpair_transfer {id, booking}` → `Index::unpair_transfer` → `entity` (both statements) | both halves in In and Out again |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |
 | E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |

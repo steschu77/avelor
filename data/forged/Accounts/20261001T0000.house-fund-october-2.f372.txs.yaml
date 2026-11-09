@@ -14,6 +14,8 @@ transactions:
     amount: 25300.0
     sender: Checking 0042-7318-5520
     receiver: Alexander Yahnek
+    kind: transfer
+    transfer: 01a130d7-a000-7afd-8227-81cbcd16c31d
   - id: 01a14038-6480-7c00-ab7d-3ce47b15d077
     title: Down payment, 1313 Mockingbird Lane
     date: 2026-10-15T15:40:00Z

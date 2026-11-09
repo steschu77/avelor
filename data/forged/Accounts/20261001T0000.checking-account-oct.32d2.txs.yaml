@@ -43,6 +43,9 @@ transactions:
     amount: -25300.0
     sender: Alexander Yahnek
     receiver: House fund 0042-7318-5539
+    kind: transfer
+    iban: 0042-7318-5539
+    transfer: 01a130d7-a000-7e1e-8a27-8e195caa6f64
   - id: 01a1308e-6200-7eb7-8cc6-a4ee49f6c515
     title: Title transfer fee
     date: 2026-10-12T14:40:00Z

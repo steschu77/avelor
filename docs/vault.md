@@ -588,6 +588,10 @@ It carries the following additional fields:
     a project. Optional; set with `set_booking_link` (`api.md#structure`).
     The booking is in the projects of what it links to: the project
     itself, a thread's, or an entity's.
+  * `transfer`: UUIDv7, the other half's `id`, on a transfer between two
+    of the vault's accounts. Optional; set by the import
+    (`import.md#statements`), removed with `unpair_transfer`
+    (`api.md#structure`). Each half names the other.
 
 ## Type Derivation <a id="type-derivation"></a>
 

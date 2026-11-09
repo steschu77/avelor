@@ -295,36 +295,42 @@ entity or thread of it; the statements are filtered without the project.
   pending, while they share a currency.
 - **Under a project** the project's sums take the accounts' place: In and
   Out (with what is pending, else their count), Net (with what is
-  pending), and the accounts and months they come from, in the weeks
-  picked on the cash flow. The bookings show no balance, which belongs to
+  pending), transfers in none of them, and the accounts and months they
+  come from, in the weeks picked on the cash flow. The bookings show no balance, which belongs to
   an account; the note under them says how a booking is in a project.
-- **The cut**, for the session: In and Out, a toggle each with its count
-  in the weeks picked; then All, Linked and Not linked, counted within
-  them.
+- **The cut**, for the session: In, Out and Transfers (between the
+  vault's accounts, `pairOf`, `model/bank.js`, in neither In nor Out), a
+  toggle each with its count in the weeks picked; then All, Linked and Not
+  linked, counted within them, a transfer linked by its other half.
 - **The cash flow**, the Timeline's scrubber (`scrubber`,
   `features/lenses/scrub.js`): "Cash flow · 15 weeks", a pair of bars per
   week from the first booking's week to the later of today's and the last
   booking's, at most two years (older bookings are in the list, not on
   it); money in above the line, out below, each as high as the square
   root of its sum against the largest week's, so one large booking doesn't
-  flatten the paydays. The bars count the booked bookings of the cut; a
-  pending one counts in no sum. The months are under it, the years over a
-  year of weeks. A drag across it picks the weeks it passes, a click one
-  week: the bookings, the cut's counts, the head's count and a project's
+  flatten the paydays. The bars count the booked bookings of the cut but
+  transfers. The months are under it, the years over a year of weeks. A
+  drag across it picks the weeks it passes, a click one week: the
+  bookings, the cut's counts, the head's count and a project's
   sums keep to them ("No bookings in these weeks." while none is), the
   accounts' tiles don't. The range is named with
   Clear and lasts while the app runs; Today drops a range without today.
   At midnight, today moves on.
 - **The bookings** by month, newest first, a pending one before the booked
   ones of its day: the day; who paid or was paid (the sender of money in,
-  the receiver of money out, else the title), "Pending", then the purpose
-  (else the title, else the kind in words), after the account's name while
-  the scope holds several; what it is linked to, a chip that selects it;
-  the amount, signed; and the account's balance after it (`ledger`,
-  `model/bank.js`). A month's head counts its bookings
-  and the pending ones, sums the booked ones and gives the accounts'
-  balance at its end. Under the bookings, the day the first statements
-  start and each account's balance then.
+  the receiver of money out, else the title; a transfer after its other
+  half's account, "To House fund", `bookingName`, its icon the swap
+  arrows, `TRANSFER_ICON`), "Pending", then the
+  purpose (else the title, else the kind in words; a transfer's:
+  Transfer), after the account's name while the scope holds several; what
+  it is linked to, a chip that selects it (a transfer: ⇄ and the other
+  account, selecting the other half, `pairChip`); the amount, signed (a
+  transfer's not marked as money in); and the account's balance after it
+  (`ledger`, `model/bank.js`). A month's head counts its bookings, the
+  transfers and the pending ones, sums the booked ones and gives the
+  accounts' balance at its end. Under the bookings, the day the first
+  statements start and each account's balance then; while transfers show,
+  that they count in neither In nor Out.
 - **Balances** are walked back from the newest statement's balance, else
   the account's; a statement with a balance of its own sets it again at
   its last booking. A pending booking has none and counts in no sum.
@@ -448,4 +454,4 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |
 | F8 | Timeline | a drag or click across the scrubber's track (`pointerdown` … `pointerup`, `features/lenses/scrub.js`); Clear; Today; a type toggle, Show all types, Types; a row → `selectDocument`; a card's head dropped on the lens → `leaveThreadLocal` | `set_prefs {prefs}` (`tl_types`, `tl_types_bar`); `leave_thread` | the feed kept to the weeks picked, or to all; scrolled to today; the types and the bar kept across restarts; the entity in the panel; the card out of its thread |
 | F2 | Calendar month and day | prev/next/today (`features/lenses/calendar.js`); day click → `selectDay`; event or task click → `selectDay(day, id)`; today's overdue count → `selectDay(today)`, `scrollToOverdue` | — | the day's events as cards, then its tasks due (today: also the overdue ones) as rows; the clicked one focused, a task opened into its card |
-| F9 | Bank | the Bank tab; an account's tile → `selectFilter({selected_source})` (again: every source); In, Out, All, Linked, Not linked (`features/lenses/bank.js`); a drag or click across the cash flow's track (`features/lenses/scrub.js`); Clear; Today; a booking → `selectBooking(statement, booking)`; its Linked to chip → `selectById`; the empty state's Add a bank account → `addBankAccount` | — | the bookings in the scope and the cut, a project's through their links, kept to the weeks picked, or to all; the booking's card; the Folders page with a new bank account's pane |
+| F9 | Bank | the Bank tab; an account's tile → `selectFilter({selected_source})` (again: every source); In, Out, Transfers, All, Linked, Not linked (`features/lenses/bank.js`); a drag or click across the cash flow's track (`features/lenses/scrub.js`); Clear; Today; a booking → `selectBooking(statement, booking)`; its Linked to chip → `selectById`, a transfer's ⇄ chip → `selectBooking` (the other half); the empty state's Add a bank account → `addBankAccount` | — | the bookings in the scope and the cut, a project's through their links, kept to the weeks picked, or to all; the booking's card; the Folders page with a new bank account's pane |

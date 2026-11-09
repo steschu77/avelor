@@ -146,6 +146,12 @@ impl Date {
     }
 
     // ------------------------------------------------------------------------
+    /// The days since 1970-01-01, as `new` takes them.
+    pub const fn days(self) -> i32 {
+        self.0
+    }
+
+    // ------------------------------------------------------------------------
     pub const fn to_ymd(self) -> (i32, Month, i32) {
         gregorian_from_days(self.0)
     }
@@ -454,7 +460,8 @@ mod tests {
     #[test]
     fn test_date_conversion() {
         for (days, year, month, day, weekday) in TEST_DATES.iter() {
-            let date = Date(*days);
+            let date = Date::new(*days);
+            assert_eq!(date.days(), *days);
             let (y, m, d) = date.to_ymd();
             assert_eq!((*year, *month, *day), (y, m.into(), d));
 

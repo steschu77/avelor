@@ -99,6 +99,7 @@ pub(crate) struct WatchChange {
     /// Stored whole: its model kept while it is off.
     analysis: Option<Analysis>,
     keep_original: Option<bool>,
+    pair_transfers: Option<bool>,
     enabled: Option<bool>,
 }
 
@@ -216,10 +217,10 @@ fn take_account(
 
 // ----------------------------------------------------------------------------
 /// `set_watch {watch, name?, folder?, subfolders?, patterns?, collect?,
-/// models?, enabled?}`: change the fields given (`models` sets
-/// the picks of the steps it names; a model is checked when it is used); a
-/// new folder is checked
-/// like a new watch's. Answered after the `watch` event; nothing changes if
+/// models?, analysis?, keep_original?, pair_transfers?, enabled?}`: change
+/// the fields given (`models` sets the picks of the steps it names; a model
+/// is checked when it is used); a new folder is checked like a new watch's.
+/// Answered after the `watch` event; nothing changes if
 /// the check or saving fails.
 pub fn set_watch(app: &mut App, req: Req, change: WatchChange) {
     let id = change.watch;
@@ -254,6 +255,9 @@ pub fn set_watch(app: &mut App, req: Req, change: WatchChange) {
         }
         if let Some(keep_original) = change.keep_original {
             settings.keep_original = keep_original;
+        }
+        if let Some(pair_transfers) = change.pair_transfers {
+            settings.pair_transfers = pair_transfers;
         }
         if let Some(enabled) = change.enabled {
             settings.enabled = enabled;

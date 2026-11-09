@@ -806,20 +806,85 @@ impl Index {
     ) -> Result<SaveOutcome> {
         self.check_link(id, to.as_ref())?;
         self.check_writable(id)?;
+        self.edit_booking(id, booking, changes, |item| item.linked_to = to)
+    }
+
+    /// Unpair the transfer whose half is the booking `booking` of the
+    /// statement `id`: its `transfer` key is removed, and so is the other
+    /// half's, in whichever statement of the vault holds it, while it names
+    /// this booking back. Both statements are written; a booking that is no
+    /// transfer's half is left as it is.
+    pub fn unpair_transfer(
+        &mut self,
+        id: &Id,
+        booking: &Id,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        let Some(other) = self.booking(id, booking)?.transfer else {
+            return Ok(SaveOutcome::Unchanged);
+        };
+        let names_back =
+            |item: &Transaction| item.id == Some(other) && item.transfer == Some(*booking);
+        let holder = self.documents.iter().map(|e| &e.doc).find(|doc| {
+            let transactions = doc.roles().transactions.as_ref();
+            transactions.is_some_and(|t| t.transactions.iter().any(names_back))
+        });
+        let holder = holder.map(Document::id);
+        if let Some(holder) = &holder {
+            self.check_writable(holder)?;
+        }
+        let rewritten: Vec<Id> = std::iter::once(*id).chain(holder).collect();
+        if let Some(changed) = self.first_changed(&rewritten)? {
+            return Ok(SaveOutcome::Conflict(changed));
+        }
+
+        let outcome = self.edit_booking(id, booking, changes, |item| item.transfer = None)?;
+        match holder {
+            Some(holder) if !matches!(outcome, SaveOutcome::Conflict(_)) => {
+                let unpaired = |item: &mut Transaction| item.transfer = None;
+                Ok(outcome.and(self.edit_booking(&holder, &other, changes, unpaired)?))
+            }
+            _ => Ok(outcome),
+        }
+    }
+
+    /// The booking `booking` of the statement `id`; `invalid_argument` if
+    /// the statement has none of that id.
+    fn booking(&self, id: &Id, booking: &Id) -> Result<&Transaction> {
+        let transactions = self
+            .get(id)
+            .and_then(|doc| doc.roles().transactions.as_ref());
+        let items = transactions
+            .map(|t| t.transactions.as_slice())
+            .unwrap_or_default();
+        let found = items.iter().find(|item| item.id.as_ref() == Some(booking));
+        found.ok_or_else(|| Error::InvalidArgument {
+            arg: "booking".into(),
+        })
+    }
+
+    /// Apply `change` to the booking `booking` of the statement `id`, and
+    /// write the statement: a booking is an item of its statement's file.
+    fn edit_booking(
+        &mut self,
+        id: &Id,
+        booking: &Id,
+        changes: &mut Changes,
+        mut change: impl FnMut(&mut Transaction),
+    ) -> Result<SaveOutcome> {
+        self.booking(id, booking)?;
         let is_it = |item: &Transaction| item.id.as_ref() == Some(booking);
         let mut transactions = self
             .get(id)
             .and_then(|doc| doc.roles().transactions.clone())
-            .filter(|t| t.transactions.iter().any(is_it))
-            .ok_or_else(|| Error::InvalidArgument {
-                arg: "booking".into(),
-            })?;
+            .unwrap_or_default();
         for item in transactions
             .transactions
             .iter_mut()
             .filter(|item| is_it(item))
         {
-            item.linked_to = to;
+            change(item);
         }
         self.update(id, changes, |d| d.set_transactions(Some(transactions)))
     }
@@ -3304,6 +3369,73 @@ transactions:
                 matches!(refused, Err(Error::InvalidArgument { arg: ref a }) if a == arg),
                 "{arg}: {refused:?}"
             );
+        }
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_transfer_is_unpaired_in_both_statements() {
+        let (root, _) = thread_vault();
+        let (checking, savings) = (Id::generate(), Id::generate());
+        let (out, into, fee) = (Id::generate(), Id::generate(), Id::generate());
+        let write = |name: &str, text: String| {
+            let path = root.join("Accounts").join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        };
+        write(
+            "c.txs.yaml",
+            format!(
+                "id: {checking}
+title: Checking
+transactions:
+  transactions:
+  - id: {out}
+    amount: -100.0
+    transfer: {into}
+  - id: {fee}
+    amount: -4.9
+"
+            ),
+        );
+        write(
+            "s.txs.yaml",
+            format!(
+                "id: {savings}
+title: Savings
+transactions:
+  transactions:
+  - id: {into}
+    amount: 100.0
+    transfer: {out}
+"
+            ),
+        );
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+
+        let left = index.unpair_transfer(&checking, &fee, &mut changes);
+        assert_eq!(left.unwrap(), SaveOutcome::Unchanged, "no transfer's half");
+        let refused = index.unpair_transfer(&checking, &Id::generate(), &mut changes);
+        assert!(
+            matches!(refused, Err(Error::InvalidArgument { ref arg }) if arg == "booking"),
+            "{refused:?}"
+        );
+        index.documents[index.by_id[&savings]].readonly = true;
+        let refused = index.unpair_transfer(&checking, &out, &mut changes);
+        assert!(
+            matches!(refused, Err(Error::NotWritable { .. })),
+            "{refused:?}"
+        );
+        assert!(changes.saved.is_empty(), "nothing written");
+        index.documents[index.by_id[&savings]].readonly = false;
+
+        let unpaired = index.unpair_transfer(&checking, &out, &mut changes);
+        assert_eq!(unpaired.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [checking, savings]);
+        for name in ["c.txs.yaml", "s.txs.yaml"] {
+            let text = fs::read_to_string(root.join("Accounts").join(name)).unwrap();
+            assert!(!text.contains("transfer"), "{name}: {text}");
         }
         fs::remove_dir_all(&root).ok();
     }

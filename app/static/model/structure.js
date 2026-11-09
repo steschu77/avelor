@@ -176,6 +176,13 @@ export function setBookingLinkLocal(statement, booking, to) {
   structureCall('set_booking_link', { id: statement, booking, to }, () => store.getState());
 }
 
+// Unpair the transfer whose half is the booking `booking` of the statement
+// `statement`: both halves count in In and Out again. The host writes both
+// statements and pushes them back. The selection stays.
+export function unpairTransferLocal(statement, booking) {
+  structureCall('unpair_transfer', { id: statement, booking }, () => store.getState());
+}
+
 // Write `change` to the entity `id` (`edit_entities`, api.md#structure): a
 // document's `{genre}`, or a task's `{task: {status | due | assignee}}`,
 // null removing it. The host pushes the entity back, which the cards, the

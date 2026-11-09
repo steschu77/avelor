@@ -2,8 +2,9 @@
 //! CSV exports of its bank account, each new file a statement of the account
 //! in `Accounts/` (`statements_import`, a job). One bank's format is read
 //! (`read`: comdirect's export of an account's bookings); `plan` decides what
-//! a statement adds to its account. The account is a bank-account entity
-//! (`new_account`, `set_bank_account`).
+//! a statement adds to its account, and `pairs` which of its bookings are
+//! transfers to or from the vault's other accounts. The account is a
+//! bank-account entity (`new_account`, `set_bank_account`).
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -35,6 +36,9 @@ const HEADER: [&str; 4] = [
 /// A transfer's or direct debit's purpose comes cut into lines of this many
 /// characters, joined by a space.
 const PURPOSE_LINE: usize = 35;
+/// How many days apart a transfer's two halves may be booked: another bank
+/// books it a day, or a weekend, later.
+const PAIR_DAYS: i32 = 3;
 /// A bank account's kinds (`bank-account.type`).
 const ACCOUNT_KINDS: [&str; 3] = ["checking", "savings", "credit-card"];
 const MONTHS: [&str; 12] = [
@@ -512,6 +516,81 @@ pub(crate) fn plan(owner: Option<&ContactRef>, known: &[Known], statement: &Stat
 }
 
 // ----------------------------------------------------------------------------
+/// Another bank account of the vault, as pairing transfers sees it.
+pub(crate) struct OtherAccount {
+    pub number: Option<String>,
+    pub statements: Vec<Known>,
+}
+
+// ----------------------------------------------------------------------------
+/// A transfer paired: a new booking, by its index, and its other half, a
+/// booking of another account's statement.
+#[derive(Debug, PartialEq)]
+pub(crate) struct Pair {
+    pub booking: usize,
+    pub statement: Id,
+    pub other: Id,
+}
+
+// ----------------------------------------------------------------------------
+/// The transfers between `bookings`, new bookings of the account numbered
+/// `number`, and the bookings of `others`, the vault's other accounts: money
+/// out whose `iban` names the account it goes to (`same_number`), and the
+/// same amount into that account, at most `PAIR_DAYS` apart, the nearest
+/// first. Only booked bookings without a pair pair, each once.
+pub(crate) fn pairs(
+    number: Option<&str>,
+    bookings: &[Transaction],
+    others: &[OtherAccount],
+) -> Vec<Pair> {
+    let names = |iban: Option<&str>, number: Option<&str>| {
+        iban.zip(number)
+            .is_some_and(|(iban, number)| same_number(iban, number))
+    };
+    let open = |item: &Transaction| !is_pending(item) && item.transfer.is_none();
+    let mut pairs: Vec<Pair> = Vec::new();
+    for (i, booking) in bookings.iter().enumerate() {
+        let (Some(day), Some(cents)) = (day_of(booking), booking.amount.map(to_cents)) else {
+            continue;
+        };
+        if cents == 0 || !open(booking) {
+            continue;
+        }
+        let apart = |item: &Transaction| day_of(item).map(|d| (d.days() - day.days()).abs());
+        let half = |other: &OtherAccount, item: &Transaction| {
+            let named = if cents < 0 {
+                names(booking.iban.as_deref(), other.number.as_deref())
+            } else {
+                names(item.iban.as_deref(), number)
+            };
+            named
+                && open(item)
+                && item.amount.map(to_cents) == Some(-cents)
+                && item
+                    .id
+                    .is_some_and(|id| !pairs.iter().any(|pair| pair.other == id))
+                && apart(item).is_some_and(|days| days <= PAIR_DAYS)
+        };
+        let nearest = others
+            .iter()
+            .flat_map(|other| {
+                let items = other.statements.iter();
+                items.flat_map(move |s| s.items.iter().map(move |item| (other, s.id, item)))
+            })
+            .filter(|(other, _, item)| half(other, item))
+            .min_by_key(|(_, _, item)| apart(item));
+        if let Some((_, statement, Some(other))) = nearest.map(|(o, s, item)| (o, s, item.id)) {
+            pairs.push(Pair {
+                booking: i,
+                statement,
+                other,
+            });
+        }
+    }
+    pairs
+}
+
+// ----------------------------------------------------------------------------
 /// The booking of `row`, the account's `owner` on its side.
 fn transaction(row: &Row, owner: Option<&ContactRef>) -> Transaction {
     let other = row.party.clone().or_else(|| row.merchant.clone());
@@ -643,24 +722,105 @@ fn account_origins(app: &App, account: Id) -> HashSet<String> {
 }
 
 // ----------------------------------------------------------------------------
+/// The vault's bank accounts but `account`, with their statements.
+fn others_of(app: &App, account: Id) -> Vec<OtherAccount> {
+    let index = app.vault.index();
+    let others = index.all().iter().filter(|entry| entry.doc.id() != account);
+    let other = |doc: &Document| {
+        let fields = doc.roles().bank_account.as_ref()?;
+        Some(OtherAccount {
+            number: fields.number.clone(),
+            statements: known(app, doc.id()),
+        })
+    };
+    others.filter_map(|entry| other(&entry.doc)).collect()
+}
+
+// ----------------------------------------------------------------------------
+/// Pair the transfers among `bookings`, new bookings of `account`, with the
+/// vault's other accounts (`pairs`): each new half names its other half.
+/// The other halves to write: each its statement, its id and the new half's.
+fn pair_transfers(app: &App, account: &Account, bookings: &mut [Transaction]) -> Vec<(Id, Id, Id)> {
+    let found = pairs(
+        account.number.as_deref(),
+        bookings,
+        &others_of(app, account.id),
+    );
+    let half = |pair: Pair| {
+        let booking = &mut bookings[pair.booking];
+        booking.transfer = Some(pair.other);
+        Some((pair.statement, pair.other, booking.id?))
+    };
+    found.into_iter().filter_map(half).collect()
+}
+
+// ----------------------------------------------------------------------------
+/// Write the other halves of new transfers (`pair_transfers`), each
+/// statement once, each half naming its new one; how many were written.
+fn write_halves(app: &mut App, halves: &[(Id, Id, Id)]) -> usize {
+    let mut statements: Vec<Id> = Vec::new();
+    for (statement, ..) in halves {
+        if !statements.contains(statement) {
+            statements.push(*statement);
+        }
+    }
+    let mut written = 0;
+    for statement in statements {
+        let own: Vec<(Id, Id)> = halves
+            .iter()
+            .filter(|(s, ..)| *s == statement)
+            .map(|(_, other, new)| (*other, *new))
+            .collect();
+        let outcome = app.edit(|index, changes| {
+            index.edit(&statement, changes, |d| {
+                if let Some(mut transactions) = d.roles().transactions.clone() {
+                    for item in &mut transactions.transactions {
+                        let new = own.iter().find(|(other, _)| item.id == Some(*other));
+                        if let Some((_, new)) = new {
+                            item.transfer = Some(*new);
+                        }
+                    }
+                    d.set_transactions(Some(transactions));
+                }
+            })
+        });
+        match outcome.and_then(|outcome| app.vault.require_written(outcome)) {
+            Ok(_) => written += own.len(),
+            Err(e) => {
+                log::warn!("Statement import: could not pair the transfers of {statement}: {e}")
+            }
+        }
+    }
+    written
+}
+
+// ----------------------------------------------------------------------------
 /// The own account number of a pending row of `statement` that isn't
-/// `number`, compared by their digits (one may end the other, as an IBAN
-/// ends with the account's number).
+/// `number` (`same_number`).
 fn other_account<'a>(statement: &'a Statement, number: Option<&str>) -> Option<&'a str> {
+    let number = number.filter(|number| has_digits(number))?;
+    let rows = statement.rows.iter();
+    rows.filter_map(|row| row.own.as_deref())
+        .find(|own| has_digits(own) && !same_number(own, number))
+}
+
+// ----------------------------------------------------------------------------
+/// Whether `a` and `b` name the same account, compared by their digits: one
+/// may end the other, as an IBAN ends with the account's number.
+fn same_number(a: &str, b: &str) -> bool {
     let digits = |text: &str| {
         text.chars()
             .filter(char::is_ascii_digit)
             .collect::<String>()
     };
-    let number = digits(number?);
-    if number.is_empty() {
-        return None;
-    }
-    let rows = statement.rows.iter();
-    rows.filter_map(|row| row.own.as_deref()).find(|own| {
-        let own = digits(own);
-        !own.ends_with(&number) && !number.ends_with(&own)
-    })
+    let (a, b) = (digits(a), digits(b));
+    !a.is_empty() && !b.is_empty() && (a.ends_with(&b) || b.ends_with(&a))
+}
+
+// ----------------------------------------------------------------------------
+/// Whether `text` has digits, which an account's number is compared by.
+fn has_digits(text: &str) -> bool {
+    text.chars().any(|c| c.is_ascii_digit())
 }
 
 // ----------------------------------------------------------------------------
@@ -775,6 +935,7 @@ struct Counts {
     statements: usize,
     booked: usize,
     pending: usize,
+    transfers: usize,
     skipped: usize,
 }
 
@@ -892,14 +1053,22 @@ fn import_files(app: &mut App, watch: Id, mut files: Vec<NewFile>) -> String {
             problems.push(named(&format!("the statement of another account, {other}")));
             continue;
         }
-        let plan = plan(account.owner.as_ref(), &known(app, account.id), statement);
+        let mut plan = plan(account.owner.as_ref(), &known(app, account.id), statement);
         problems.extend(plan.problems.iter().map(|problem| named(problem)));
         if plan.transactions.transactions.is_empty() {
             counts.skipped += plan.skipped;
             continue;
         }
+        let halves = if settings.pair_transfers {
+            pair_transfers(app, &account, &mut plan.transactions.transactions)
+        } else {
+            Vec::new()
+        };
         match write_statement(app, watch, &account, file, statement, plan, &mut counts) {
-            Ok(()) => counts.statements += 1,
+            Ok(()) => {
+                counts.statements += 1;
+                counts.transfers += write_halves(app, &halves);
+            }
             Err(why) => problems.push(named(&why)),
         }
     }
@@ -908,6 +1077,7 @@ fn import_files(app: &mut App, watch: Id, mut files: Vec<NewFile>) -> String {
             (counts.statements, "statement", "statements"),
             (counts.booked, "booking", "bookings"),
             (counts.pending, "pending", "pending"),
+            (counts.transfers, "transfer paired", "transfers paired"),
             (
                 counts.skipped,
                 "in the vault already",
@@ -1354,10 +1524,110 @@ mod tests {
     }
 
     // ------------------------------------------------------------------------
+    /// A booked booking of `cents` on `day`, to `iban` if given.
+    fn half(day: &str, cents: i64, iban: Option<&str>) -> Transaction {
+        Transaction {
+            id: Some(Id::generate()),
+            date: Some(DateTime::from_iso8601(day).unwrap()),
+            status: Some("booked".into()),
+            amount: Some(cents as f64 / 100.0),
+            iban: iban.map(str::to_string),
+            ..Transaction::default()
+        }
+    }
+
+    /// An account numbered `number`, with a statement of `items`.
+    fn other(number: &str, items: Vec<Transaction>) -> OtherAccount {
+        let statement = Known {
+            id: Id::generate(),
+            items,
+            balance: None,
+        };
+        OtherAccount {
+            number: Some(number.into()),
+            statements: vec![statement],
+        }
+    }
+
+    const SAVINGS_IBAN: Option<&str> = Some("DE12 5001 0517 0042 7318 5539");
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_transfer_pairs_with_the_account_its_iban_names() {
+        let nearest = half("2026-12-12", 50_000, None);
+        let savings = other(
+            "0042-7318-5539",
+            vec![
+                half("2026-12-14", 50_000, None),
+                nearest.clone(),
+                half("2026-12-12", 49_900, None),
+            ],
+        );
+        let unnamed = other("0042-7318-5547", vec![half("2026-12-11", 50_000, None)]);
+        let others = [unnamed, savings];
+        let out = [half("2026-12-11", -50_000, SAVINGS_IBAN)];
+        let pair = Pair {
+            booking: 0,
+            statement: others[1].statements[0].id,
+            other: nearest.id.unwrap(),
+        };
+        assert_eq!(pairs(Some("0042-7318-5520"), &out, &others), [pair]);
+
+        let sent = half("2026-12-11", -50_000, SAVINGS_IBAN);
+        let checking = [other("0042-7318-5520", vec![sent.clone()])];
+        let into = [half("2026-12-12", 50_000, None)];
+        let found = pairs(Some("0042-7318-5539"), &into, &checking);
+        assert_eq!(found.len(), 1, "money in, from a booking naming it");
+        assert_eq!(found[0].other, sent.id.unwrap());
+        assert!(pairs(Some("0042-7318-5547"), &into, &checking).is_empty());
+        assert!(pairs(None, &into, &checking).is_empty(), "no number");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_transfer_pairs_once_within_its_days() {
+        let savings = |items: Vec<Transaction>| [other("0042-7318-5539", items)];
+        let none = |bookings: &[Transaction], items: Vec<Transaction>| {
+            pairs(None, bookings, &savings(items)).is_empty()
+        };
+        let into = |day: &str| half(day, 50_000, None);
+        let out = [half("2026-12-11", -50_000, SAVINGS_IBAN)];
+        let pending = |t: Transaction| Transaction {
+            status: Some("pending".into()),
+            ..t
+        };
+        let paired = Transaction {
+            transfer: Some(Id::generate()),
+            ..into("2026-12-11")
+        };
+        assert!(!none(&out, vec![into("2026-12-08")]), "3 days");
+        assert!(none(&out, vec![into("2026-12-15")]), "4 days");
+        assert!(none(&out, vec![pending(into("2026-12-11"))]));
+        assert!(none(&[pending(out[0].clone())], vec![into("2026-12-11")]));
+        assert!(none(&out, vec![paired]), "paired already");
+        let unnamed = half("2026-12-11", -50_000, None);
+        assert!(none(&[unnamed], vec![into("2026-12-11")]), "no IBAN");
+        let two = [out[0].clone(), half("2026-12-11", -50_000, SAVINGS_IBAN)];
+        let found = pairs(None, &two, &savings(vec![into("2026-12-11")]));
+        assert_eq!(found.len(), 1, "each half once");
+    }
+
+    // ------------------------------------------------------------------------
     /// A harness whose vault has the bank account `ACCOUNT` (number
     /// `number`) and a statements watch on the folder `bank` beside the
     /// vault, holding `files`; and that folder.
     fn with_statements(name: &str, number: &str, files: &[(&str, &[u8])]) -> (Harness, PathBuf) {
+        with_vault(name, number, files, &[])
+    }
+
+    /// As `with_statements`, the vault holding `more` too, each a file's path
+    /// in it and its text.
+    fn with_vault(
+        name: &str,
+        number: &str,
+        files: &[(&str, &[u8])],
+        more: &[(&str, String)],
+    ) -> (Harness, PathBuf) {
         let mut h = Harness::new(name);
         let root = h.vault();
         let folder = root.with_file_name("bank");
@@ -1372,10 +1642,11 @@ mod tests {
             "id: {WATCH}\nfolder-watch:\n  type: statements\n  folder: '{}'\n  patterns: ['*.csv']\n  account: {ACCOUNT}\n",
             folder.display()
         );
-        for (path, text) in [
+        let own = [
             ("Accounts/checking.bnk.yaml", account),
             (".avelor/watches/watch_statements.yaml", watch),
-        ] {
+        ];
+        for (path, text) in own.iter().chain(more) {
             let path = root.join(path);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, text).unwrap();
@@ -1495,6 +1766,95 @@ mod tests {
         );
         assert!(statements(&h).is_empty());
         assert_eq!(account(&h).balance, None);
+    }
+
+    // ------------------------------------------------------------------------
+    const SAVINGS: &str = "018572ff-1d80-78ca-9bbc-6ffd7edc2636";
+
+    /// A harness as `with_statements` makes it with the December statement,
+    /// and the House fund beside the account: numbered as December's
+    /// transfer to it names it, a statement of it holding that transfer's
+    /// other half; and that statement's id and the half's.
+    fn with_house_fund(name: &str) -> (Harness, Id, Id) {
+        let (statement, half) = (Id::generate(), Id::generate());
+        let fund = format!(
+            "id: {SAVINGS}\ntitle: House fund\ncreated: {{}}\nbank-account:\n  type: savings\n  number: 0042-7318-5539\n"
+        );
+        let december = format!(
+            "id: {statement}\ntitle: House fund, December 2026\ntransactions:\n  account: {SAVINGS}\n  transactions:\n  - id: {half}\n    title: Transfer from checking\n    date: 2026-12-12\n    status: booked\n    amount: 500.0\n"
+        );
+        let more = [
+            ("Accounts/house-fund.bnk.yaml", fund),
+            ("Accounts/house-fund-dec.txs.yaml", december),
+        ];
+        let files = [("statement_2026-12.csv", DECEMBER)];
+        let (h, _) = with_vault(name, "0042-7318-5520", &files, &more);
+        (h, statement, half)
+    }
+
+    /// The transfers of the statement `id`: each half's id, and the id of
+    /// the half it names.
+    fn transfers(h: &Harness, id: Id) -> Vec<(Id, Id)> {
+        let doc = h.app.vault.index().get(&id).unwrap();
+        let items = &doc.roles().transactions.as_ref().unwrap().transactions;
+        let half = |item: &Transaction| Some((item.id?, item.transfer?));
+        items.iter().filter_map(half).collect()
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_transfer_is_paired_with_the_other_accounts_half() {
+        let (mut h, fund, half) = with_house_fund("statements-pair");
+        assert_eq!(
+            import(&mut h),
+            "1 statement \u{b7} 28 bookings \u{b7} 2 pending \u{b7} 1 transfer paired"
+        );
+        let checking = statements(&h)[0].id;
+        let paired = transfers(&h, checking);
+        assert_eq!(paired.len(), 1);
+        let (sent, named) = paired[0];
+        assert_eq!(named, half);
+        assert_eq!(transfers(&h, fund), [(half, sent)]);
+        let path = h.app.vault.index().entry(&fund).unwrap().path.clone();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains(&format!("transfer: {sent}")), "{text}");
+
+        let unpaired = h.call(
+            "unpair_transfer",
+            json!({ "id": checking, "booking": sent }),
+        );
+        assert_eq!(shape(&unpaired), ["entity", "entity", "reply"]);
+        assert!(transfers(&h, checking).is_empty());
+        assert!(transfers(&h, fund).is_empty());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_watch_may_leave_transfers_unpaired() {
+        let (mut h, fund, _) = with_house_fund("statements-no-pair");
+        let off = json!({ "watch": WATCH, "pair_transfers": false });
+        let sent = h.call("set_watch", off);
+        assert_eq!(shape(&sent), ["watch", "reply"]);
+        assert_eq!(sent[0]["data"]["pair_transfers"], false);
+        let file = h.vault().join(".avelor/watches/watch_statements.yaml");
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.contains("pair-transfers: false"), "{text}");
+
+        assert_eq!(
+            import(&mut h),
+            "1 statement \u{b7} 28 bookings \u{b7} 2 pending"
+        );
+        assert!(transfers(&h, statements(&h)[0].id).is_empty());
+        assert!(transfers(&h, fund).is_empty());
+        h.call(
+            "set_watch",
+            json!({ "watch": WATCH, "pair_transfers": true }),
+        );
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(
+            !text.contains("pair-transfers"),
+            "written only when off: {text}"
+        );
     }
 
     // ------------------------------------------------------------------------

@@ -208,6 +208,10 @@ pub struct Transaction {
     pub bic: Option<String>,
     #[serde(rename = "linked-to", default, skip_serializing_if = "Option::is_none")]
     pub linked_to: Option<Id>,
+    /// The other half of a transfer between two of the vault's accounts:
+    /// its booking's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transfer: Option<Id>,
 }
 
 // ----------------------------------------------------------------------------

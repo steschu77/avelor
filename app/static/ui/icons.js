@@ -48,6 +48,10 @@ export function getDocIcon(kind, genre) {
 
 export const IMPORT_ICON = '#i-arrow-import';
 
+// A booking that is a transfer between two of the vault's accounts
+// (`pairOf`, model/bank.js): its row and card.
+export const TRANSFER_ICON = '#i-arrow-swap';
+
 // ----------------------------------------------------------------------------
 const IMAGE_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'bmp', 'tif', 'tiff'];
 

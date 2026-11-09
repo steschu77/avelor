@@ -1,24 +1,26 @@
 // A booking's card (panel.md#a-bookings-card): a booking of a statement,
 // shown in the panel's booking view while it is selected (`selectBooking`,
-// `panelMode`). Its head is who paid or was paid, the day and the
-// statement's file; then the amount, the account, the other side, the
-// purpose and reference, the statement and the balance after it; the
-// projects it is in through its link (no x: they are the linked entity's),
-// and the link, set or removed with `set_booking_link`. A booking is an
-// item of its statement's file: nothing of it is renamed, edited or
-// deleted here.
+// `panelMode`). Its head is who paid or was paid (a transfer's other
+// account), the day and the statement's file; then the amount, the
+// account, the other side, a transfer's other half with Not a transfer
+// (`unpair_transfer`), the purpose and reference, the statement and the
+// balance after it; the projects it is in through its link (no x: they are
+// the linked entity's), and the link, set or removed with
+// `set_booking_link`. A booking is an item of its statement's file: nothing
+// of it is renamed, edited or deleted here.
 
 import { $, accEl } from '../../core/dom.js';
-import { DATE_FORMAT, amountText, parseDate, signedMoney } from '../../core/format.js';
+import { DATE_FORMAT, DAY_MONTH_YEAR, amountText, parseDate, signedAmount, signedMoney } from '../../core/format.js';
 import { store } from '../../model/state.js';
 import { entities, projects, projectsInOrder } from '../../model/entities.js';
-import { BOOKING_KINDS, bookingOf, ledger, linkProjects, partyOf, partyRef } from '../../model/bank.js';
-import { setBookingLinkLocal } from '../../model/structure.js';
-import { KIND_ICONS, iconEl } from '../../ui/icons.js';
+import { BOOKING_KINDS, bookingName, bookingOf, ledger, linkProjects, pairOf, partyRef } from '../../model/bank.js';
+import { setBookingLinkLocal, unpairTransferLocal } from '../../model/structure.js';
+import { armedButton } from '../../ui/confirm.js';
+import { KIND_ICONS, TRANSFER_ICON, iconEl } from '../../ui/icons.js';
 import { linkMenuChip } from '../linked.js';
 import { panelMode } from '../selection.js';
 import { contactChip, entityChip } from './details.js';
-import { linkChip, linkTarget, projectChips } from './panel.js';
+import { linkChip, linkTarget, pairChip, projectChips } from './panel.js';
 
 const cardEl = $('booking-card');
 
@@ -32,11 +34,12 @@ function renderBookingCard(state) {
   const fields = account?.['bank-account'] ?? {};
   const amount = booking.amount ?? 0;
   const pending = booking.status === 'pending';
+  const pair = pairOf(booking);
   const card = accEl('div', 'msg');
 
   const head = accEl('div', 'pane-section pane-section--ruled doc-head');
   const title = accEl('div', 'doc-head__title');
-  title.append(iconEl(KIND_ICONS.transactions.icon), accEl('span', 'doc-title', partyOf(booking)));
+  title.append(iconEl(pair ? TRANSFER_ICON : KIND_ICONS.transactions.icon), accEl('span', 'doc-title', bookingName(booking, pair)));
   const sub = accEl('div', 'doc-head__sub');
   const date = parseDate(booking.date);
   const path = accEl('span', 'meta truncate-start', statement.path ?? '');
@@ -45,10 +48,10 @@ function renderBookingCard(state) {
   head.append(title, sub);
 
   const sum = accEl('div', 'pane-section pane-section--ruled card-amount');
-  const status = [pending ? 'pending' : 'booked', BOOKING_KINDS.get(booking.kind)?.toLowerCase()];
+  const status = [pending ? 'pending' : 'booked', pair ? 'transfer' : BOOKING_KINDS.get(booking.kind)?.toLowerCase()];
   sum.append(accEl('span', 'figure figure--lg', signedMoney(amount, fields.currency)),
     accEl('span', 'meta', status.filter(Boolean).join(' \u00b7 ')));
-  card.append(head, sum, renderProps(statement, booking, account));
+  card.append(head, sum, renderProps(statement, booking, account, pair));
 
   const to = booking['linked-to'] ?? null;
   const through = linkProjects(booking);
@@ -66,10 +69,10 @@ function renderBookingCard(state) {
   cardEl.replaceChildren(card);
 }
 
-// The booking's facts: its account, the other side, the purpose and the
-// bank's reference, its statement, and the account's balance after it (a
-// pending booking has none yet).
-function renderProps(statement, booking, account) {
+// The booking's facts: its account, the other side, a transfer's other
+// half (`pair`), the purpose and the bank's reference, its statement, and
+// the account's balance after it (a pending booking has none yet).
+function renderProps(statement, booking, account, pair) {
   const props = accEl('dl', 'pane-section props');
   const add = (label, ...content) => {
     const dd = accEl('dd');
@@ -84,6 +87,7 @@ function renderProps(statement, booking, account) {
   }
   const other = partyRef(booking);
   if (other) add(amount < 0 ? 'To' : 'From', contactChip(other));
+  if (pair) add('Transfer', ...renderPair(statement, booking, pair));
   if (booking.purpose) add('Purpose', accEl('span', 'mono mono--small', booking.purpose));
   if (booking.ref) add('Reference', accEl('span', 'mono mono--small', booking.ref));
   add('Statement', linkChip(statement.doc_id));
@@ -94,6 +98,24 @@ function renderProps(statement, booking, account) {
     add('Balance', balance != null ? amountText(balance) : '\u2014', ' ', accEl('span', 'meta', 'after this booking'));
   }
   return props;
+}
+
+// A transfer's other half: a chip of its account that selects it, its
+// amount and day, and Not a transfer, armed by a first click, while both
+// statements can be written.
+function renderPair(statement, booking, pair) {
+  const other = pair.booking;
+  const chip = pairChip(pair);
+  const day = parseDate(other.date);
+  const when = accEl('span', 'meta', [signedAmount(other.amount ?? 0), day ? `on ${DAY_MONTH_YEAR.format(day)}` : null]
+    .filter(Boolean).join(' '));
+  if (!statement.writable || !pair.statement.writable) return [chip, when];
+  const unpair = accEl('button', 'tool label', 'Not a transfer');
+  unpair.type = 'button';
+  unpair.title = 'Count both halves in In and Out again';
+  armedButton(unpair, 'Click again to unpair', () => unpairTransferLocal(statement.doc_id, booking.id),
+    `unpair_transfer ${booking.id}`);
+  return [chip, when, ' ', unpair];
 }
 
 // The "+" after the link: a menu with a filter of what the booking can be
