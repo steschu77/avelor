@@ -70,9 +70,10 @@ function renderTransactionCard(state) {
   cardEl.replaceChildren(card);
 }
 
-// The transaction's facts: its account, the other side, a transfer's other
-// half (`pair`), the memo and the bank's reference, its statement, and
-// the account's balance after it (a pending transaction has none yet).
+// The transaction's facts: its account, the other side with its IBAN and BIC
+// as the bank gave them, a transfer's other half (`pair`), the memo and
+// the bank's reference, its statement, and the account's balance after it
+// (a pending transaction has none yet).
 function renderProps(statement, transaction, account, pair) {
   const props = accEl('dl', 'pane-section props');
   const add = (label, ...content) => {
@@ -88,6 +89,8 @@ function renderProps(statement, transaction, account, pair) {
   }
   const other = partyRef(transaction);
   if (other) add(amount < 0 ? t('props.to') : t('props.from'), contactChip(other));
+  if (transaction.iban) add(t('props.iban'), accEl('span', 'mono mono--small', transaction.iban));
+  if (transaction.bic) add(t('props.bic'), accEl('span', 'mono mono--small', transaction.bic));
   if (pair) add(t('props.transfer'), ...renderPair(statement, transaction, pair));
   if (transaction.memo) add(t('props.memo'), accEl('span', 'mono mono--small', transaction.memo));
   if (transaction.ref) add(t('props.reference'), accEl('span', 'mono mono--small', transaction.ref));

@@ -381,7 +381,8 @@ renamed or deleted.
   statement's file.
 - The amount, signed in the account's currency, posted or pending and its
   type (a transfer: transfer).
-- The account (a chip, then its bank and number), From or To, a
+- The account (a chip, then its bank and number), From or To, the other
+  side's IBAN and BIC where the bank gave them (`vault.md#statement`), a
   transfer's other half (Transfer: a ⇄ chip of its account that selects
   it, its amount and day, and Not a transfer, two clicks, while both
   statements can be written: `unpair_transfer` through
