@@ -1,7 +1,7 @@
 /* The Bank lens (features/lenses/bank.js). */
 
-/* the lens, top to bottom: the accounts in the scope, the cut, the
-   bookings */
+/* the lens, top to bottom: the accounts in the scope (under a project: its
+   sums), the cut, the cash flow, the bookings */
 .bank-accounts {
   flex: none;
   display: flex;
@@ -72,6 +72,54 @@
   flex: none;
   padding-inline: var(--p-gutter);
   border-bottom: none;
+}
+
+/* the cash flow: the scrubber (components.css) with a pair of bars per
+   week, in above the line, out below */
+.scrub__track--flow {
+  height: var(--h-flow);
+  align-items: stretch;
+  gap: 4px;
+}
+
+.scrub__track--flow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid var(--c-line);
+}
+
+.scrub__week {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+}
+
+.scrub__in,
+.scrub__out {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.scrub__in {
+  justify-content: flex-end;
+}
+
+.scrub__in>i {
+  background: var(--c-ink-mute);
+}
+
+.scrub__out>i {
+  background: var(--c-ink-faint);
+}
+
+/* while a range is picked, the weeks outside it step back */
+.scrub__track--flow.has-range .scrub__week:not(.is-in) {
+  opacity: 0.35;
 }
 
 .bank__head-end,

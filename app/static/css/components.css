@@ -672,7 +672,7 @@ mark {
 }
 
 /* The scrubber of a lens (features/lenses/scrub.js; the Timeline's bars in
-   timeline.css): its head, the range
+   timeline.css, the Bank's cash flow in bank.css): its head, the range
    picked, the track of a bar per week with a dashed line at today, the
    labels under it. */
 .scrub {

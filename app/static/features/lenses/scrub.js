@@ -1,4 +1,4 @@
-// The scrubber of a lens (ui.md#timeline): a head -- what the
+// The scrubber of a lens (ui.md#timeline, ui.md#bank): a head -- what the
 // lens counts, the range picked with Clear, Today -- over a track of a bar
 // per week with a dashed line at today, and labels under it. A drag across
 // the track picks the weeks it passes as the range, a click alone the week
@@ -41,14 +41,15 @@ function labelsOf(weeks, by) {
 }
 
 // The scrubber of the lens `lens`, its element `el` placed by the lens;
-// `meta` says how to read its bars, `onToday` what Today does besides
-// dropping a range without today. `render` draws it: its `title`, the
+// `meta` says how to read its bars, `track` is a class of its track's
+// besides `scrub__track`, `onToday` what Today does besides dropping a
+// range without today. `render` draws it: its `title`, the
 // `weeks` (their first days), `today`, each week's bar from `bar(i, kept)`
 // (the element it had, kept by its day, or none yet) and the `labels`,
 // 'years' or 'months'. `range()` is the range picked, its first week's
 // first day and the day after its last week, or null; `holds(date)` whether
 // `date` is in it, or there is none.
-export function scrubber({ lens, meta = null, onToday = null }) {
+export function scrubber({ lens, meta = null, track = null, onToday = null }) {
   const titleEl = accEl('span', 'label');
   const rangeEl = accEl('span', 'label scrub__range');
   const clearBtn = accEl('button', 'tool label', 'Clear');
@@ -57,7 +58,7 @@ export function scrubber({ lens, meta = null, onToday = null }) {
   rangeEl.hidden = clearBtn.hidden = true;
   const head = accEl('div', 'scrub__head');
   head.append(titleEl, ...(meta ? [accEl('span', 'meta', meta)] : []), rangeEl, clearBtn, todayBtn);
-  const trackEl = accEl('div', 'scrub__track');
+  const trackEl = accEl('div', track ? `scrub__track ${track}` : 'scrub__track');
   trackEl.title = 'Drag to pick a range of weeks';
   const labelsEl = accEl('div', 'scrub__years');
   const todayEl = accEl('span', 'scrub__today');
