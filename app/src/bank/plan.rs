@@ -8,7 +8,12 @@ use av_vault::envelope::{Booking, Statement};
 use av_vault::shared::ContactRef;
 
 use super::comdirect::{Export, Row, booking_of};
+use super::same_number;
 use crate::texts::{self, Text};
+
+/// How many days apart a transfer's two halves may be booked: another bank
+/// books it a day, or a weekend, later.
+const PAIR_DAYS: i32 = 3;
 
 // ----------------------------------------------------------------------------
 /// A statement of the account in the vault, as an import sees it.
@@ -163,6 +168,81 @@ pub(crate) fn plan(owner: Option<&ContactRef>, known: &[Known], statement: &Expo
         skipped,
         problems,
     }
+}
+
+// ----------------------------------------------------------------------------
+/// Another bank account of the vault, as pairing transfers sees it.
+pub(crate) struct OtherAccount {
+    pub number: Option<String>,
+    pub statements: Vec<Known>,
+}
+
+// ----------------------------------------------------------------------------
+/// A transfer paired: a new booking, by its index, and its other half, a
+/// booking of another account's statement.
+#[derive(Debug, PartialEq)]
+pub(crate) struct Pair {
+    pub booking: usize,
+    pub statement: Id,
+    pub other: Id,
+}
+
+// ----------------------------------------------------------------------------
+/// The transfers between `bookings`, new bookings of the account numbered
+/// `number`, and the bookings of `others`, the vault's other accounts: money
+/// out whose `iban` names the account it goes to (`same_number`), and the
+/// same amount into that account, at most `PAIR_DAYS` apart, the nearest
+/// first. Only booked bookings without a pair pair, each once.
+pub(crate) fn pairs(
+    number: Option<&str>,
+    bookings: &[Booking],
+    others: &[OtherAccount],
+) -> Vec<Pair> {
+    let names = |iban: Option<&str>, number: Option<&str>| {
+        iban.zip(number)
+            .is_some_and(|(iban, number)| same_number(iban, number))
+    };
+    let open = |item: &Booking| !item.is_pending() && item.transfer.is_none();
+    let mut pairs: Vec<Pair> = Vec::new();
+    for (i, booking) in bookings.iter().enumerate() {
+        let (Some(day), Some(cents)) = (booking.day(), booking.cents()) else {
+            continue;
+        };
+        if cents == 0 || !open(booking) {
+            continue;
+        }
+        let apart = |item: &Booking| item.day().map(|d| (d.days() - day.days()).abs());
+        let half = |other: &OtherAccount, item: &Booking| {
+            let named = if cents < 0 {
+                names(booking.iban.as_deref(), other.number.as_deref())
+            } else {
+                names(item.iban.as_deref(), number)
+            };
+            named
+                && open(item)
+                && item.cents() == Some(-cents)
+                && item
+                    .id
+                    .is_some_and(|id| !pairs.iter().any(|pair| pair.other == id))
+                && apart(item).is_some_and(|days| days <= PAIR_DAYS)
+        };
+        let nearest = others
+            .iter()
+            .flat_map(|other| {
+                let items = other.statements.iter();
+                items.flat_map(move |s| s.items.iter().map(move |item| (other, s.id, item)))
+            })
+            .filter(|(other, _, item)| half(other, item))
+            .min_by_key(|(_, _, item)| apart(item));
+        if let Some((_, statement, Some(other))) = nearest.map(|(o, s, item)| (o, s, item.id)) {
+            pairs.push(Pair {
+                booking: i,
+                statement,
+                other,
+            });
+        }
+    }
+    pairs
 }
 
 // ----------------------------------------------------------------------------

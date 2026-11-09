@@ -600,7 +600,7 @@ function renderWatchPane(watch) {
     { icon: type.icon, button }));
   pane.append(...(statements ? renderStatementsParts(id, watch) : renderWatchName(id, settings)),
     renderWatchFolderPart(id, settings),
-    statements ? renderStatementSteps() : renderWatchSteps(id, type, settings));
+    statements ? renderStatementSteps(id, settings) : renderWatchSteps(id, type, settings));
   if (watchError?.watch === id) {
     pane.append(notice('error', watchError.message));
   }
@@ -717,8 +717,10 @@ function renderAccountPart(id, account) {
   return part;
 }
 
-// The steps a statement takes, each always (import.md#statements).
-function renderStatementSteps() {
+// The steps a statement takes (import.md#statements), each always but
+// Pair transfers, switched by its check (`pair_transfers`).
+function renderStatementSteps(id, settings) {
+  const pair = settings.pair_transfers !== false;
   const part = accEl('div', 'watch__part');
   const head = accEl('div', 'section-head', t('watch.import_process'));
   head.append(accEl('span', 'section-head__note', t('watch.for_each_file')));
@@ -731,6 +733,11 @@ function renderStatementSteps() {
     renderWatchStep({
       name: t('watch.step.skip'), label: t('watch.label.rule'),
       note: t('watch.step.skip_note'),
+    }),
+    renderWatchStep({
+      name: t('watch.step.pair'), label: t('watch.label.rule'), on: pair,
+      onToggle: () => watchSet(id, { pair_transfers: !pair }),
+      note: pair ? t('watch.step.pair_on') : t('watch.step.pair_off'),
     }),
     renderWatchStep({
       name: t('watch.step.balance'), label: t('watch.label.rule'),

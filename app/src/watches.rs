@@ -95,6 +95,10 @@ pub struct WatchSettings {
     /// into, whose title is the watch's name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<Id>,
+    /// A statements watch's only: whether its imports pair transfers with
+    /// the vault's other accounts (import.md#statements).
+    #[serde(default = "on_by_default", skip_serializing_if = "is_on")]
+    pub pair_transfers: bool,
     /// The model each step that sends a file to an AI picked, by step:
     /// `READ_STEP` for reading images and scanned pages
     /// (accounts.md#model-choice).
@@ -109,7 +113,7 @@ pub struct WatchSettings {
     #[serde(default, skip_serializing_if = "is_false")]
     pub keep_original: bool,
     /// Off: the watch isn't listed under Sources.
-    #[serde(default = "enabled_default", skip_serializing_if = "is_enabled")]
+    #[serde(default = "on_by_default", skip_serializing_if = "is_on")]
     pub enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub added: Option<DateTime>,
@@ -117,12 +121,12 @@ pub struct WatchSettings {
     rest: BTreeMap<String, Value>,
 }
 
-fn enabled_default() -> bool {
+fn on_by_default() -> bool {
     true
 }
 
-fn is_enabled(enabled: &bool) -> bool {
-    *enabled
+fn is_on(on: &bool) -> bool {
+    *on
 }
 
 impl WatchSettings {
@@ -137,6 +141,7 @@ impl WatchSettings {
             patterns: Vec::new(),
             collect: None,
             account: None,
+            pair_transfers: true,
             models: BTreeMap::new(),
             analysis: None,
             keep_original: false,
@@ -204,6 +209,7 @@ pub struct WatchMeta<'a> {
     pub patterns: &'a [String],
     pub collect: Option<Collect>,
     pub account: Option<Id>,
+    pub pair_transfers: bool,
     pub models: &'a BTreeMap<String, ModelChoice>,
     pub analysis: Option<&'a Analysis>,
     pub keep_original: bool,
@@ -256,6 +262,7 @@ impl Watch {
             patterns: &settings.patterns,
             collect: settings.collect,
             account: settings.account,
+            pair_transfers: settings.pair_transfers,
             models: &settings.models,
             analysis: settings.analysis.as_ref(),
             keep_original: settings.keep_original,

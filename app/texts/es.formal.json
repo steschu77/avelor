@@ -29,7 +29,11 @@
   "bank.choose_kind": "Elija el tipo de cuenta.",
   "bank.enter_name": "Introduzca el nombre de la cuenta.",
   "bank.enter_number": "Introduzca el número de la cuenta.",
+  "bank.hide_transfers": "Ocultar las transferencias entre sus cuentas",
   "bank.no_accounts_text": "Los movimientos vienen de los extractos de su banco. Añada una cuenta bancaria, exporte sus extractos como archivos CSV a una carpeta y cada uno se lee en la cuenta.",
+  "bank.show_transfers": "Mostrar las transferencias entre sus cuentas",
+  "bank.transfers_note": "Las transferencias entre sus cuentas no cuentan ni en Entradas ni en Salidas.",
+  "booking.unpair_armed": "Haga clic otra vez para separar",
   "calendar.reconnect": "vuelva a conectar la cuenta",
   "chat.ask_anything": "Pregunte lo que quiera…",
   "chat.click_to_edit": "Haga clic para editar y volver a enviar",
@@ -92,5 +96,7 @@
   "watch.no_vault": "Las vigilancias de carpeta se guardan en la bóveda: abra una bóveda para verlas.",
   "watch.none_yet": "Aún no se vigila ninguna carpeta. Elija Vigilar una carpeta y luego el tipo de archivos que contiene, o Añadir una cuenta bancaria.",
   "watch.open_vault_first": "Abra primero una bóveda: las carpetas vigiladas se guardan en ella.",
-  "watch.remove_again": "Haga clic de nuevo para quitar"
+  "watch.remove_again": "Haga clic de nuevo para quitar",
+  "watch.step.pair_off": "Los movimientos hacia y desde sus otras cuentas cuentan en Entradas y Salidas. Las transferencias emparejadas antes siguen emparejadas.",
+  "watch.step.pair_on": "Un movimiento de salida de esta cuenta a otra suya, nombrada por su IBAN, y el mismo importe de entrada en esa cuenta en 3 días se convierten en una transferencia. No cuenta ni en Entradas ni en Salidas."
 }

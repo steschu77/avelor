@@ -69,16 +69,76 @@ impl Index {
     ) -> Result<SaveOutcome> {
         self.check_link(id, to.as_ref())?;
         self.check_writable(id)?;
+        self.edit_booking(id, booking, changes, |item| item.linked_to = to)
+    }
+
+    /// Unpair the transfer whose half is the booking `booking` of the
+    /// statement `id`: its `transfer` key is removed, and so is the other
+    /// half's, in whichever statement of the vault holds it, while it names
+    /// this booking back. Both statements are written; a booking that is no
+    /// transfer's half is left as it is.
+    pub fn unpair_transfer(
+        &mut self,
+        id: &Id,
+        booking: &Id,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        let Some(other) = self.booking(id, booking)?.transfer else {
+            return Ok(SaveOutcome::Unchanged);
+        };
+        let names_back = |item: &Booking| item.id == Some(other) && item.transfer == Some(*booking);
+        let holder = self.documents.iter().map(|e| &e.doc).find(|doc| {
+            let statement = doc.roles().statement.as_ref();
+            statement.is_some_and(|t| t.bookings.iter().any(names_back))
+        });
+        let holder = holder.map(Document::id);
+        if let Some(holder) = &holder {
+            self.check_writable(holder)?;
+        }
+        let rewritten: Vec<Id> = std::iter::once(*id).chain(holder).collect();
+        if let Some(changed) = self.first_changed(&rewritten)? {
+            return Ok(SaveOutcome::Conflict(changed));
+        }
+
+        let outcome = self.edit_booking(id, booking, changes, |item| item.transfer = None)?;
+        match holder {
+            Some(holder) if !matches!(outcome, SaveOutcome::Conflict(_)) => {
+                let unpaired = |item: &mut Booking| item.transfer = None;
+                Ok(outcome.and(self.edit_booking(&holder, &other, changes, unpaired)?))
+            }
+            _ => Ok(outcome),
+        }
+    }
+
+    /// The booking `booking` of the statement `id`; `invalid_argument` if
+    /// the statement has none of that id.
+    fn booking(&self, id: &Id, booking: &Id) -> Result<&Booking> {
+        let statement = self.get(id).and_then(|doc| doc.roles().statement.as_ref());
+        let items = statement.map(|t| t.bookings.as_slice()).unwrap_or_default();
+        let found = items.iter().find(|item| item.id.as_ref() == Some(booking));
+        found.ok_or_else(|| Error::InvalidArgument {
+            arg: "booking".into(),
+        })
+    }
+
+    /// Apply `change` to the booking `booking` of the statement `id`, and
+    /// write the statement: a booking is an item of its statement's file.
+    fn edit_booking(
+        &mut self,
+        id: &Id,
+        booking: &Id,
+        changes: &mut Changes,
+        mut change: impl FnMut(&mut Booking),
+    ) -> Result<SaveOutcome> {
+        self.booking(id, booking)?;
         let is_it = |item: &Booking| item.id.as_ref() == Some(booking);
         let mut statement = self
             .get(id)
             .and_then(|doc| doc.roles().statement.clone())
-            .filter(|t| t.bookings.iter().any(is_it))
-            .ok_or_else(|| Error::InvalidArgument {
-                arg: "booking".into(),
-            })?;
+            .unwrap_or_default();
         for item in statement.bookings.iter_mut().filter(|item| is_it(item)) {
-            item.linked_to = to;
+            change(item);
         }
         self.update(id, changes, |d| d.set_statement(Some(statement)))
     }
