@@ -206,6 +206,10 @@
   "bank.all": "Todos",
   "bank.amount_pending": "{amount} pendiente",
   "bank.booking": "Movimiento",
+  "bank.cash_flow": {
+    "one": "Flujo de caja · {n} semana",
+    "other": "Flujo de caja · {n} semanas"
+  },
   "bank.choose_folder": "Elige primero la carpeta de los extractos de la cuenta.",
   "bank.choose_kind": "Elige el tipo de cuenta.",
   "bank.count.accounts": {
@@ -232,6 +236,7 @@
   "bank.file_unread": "No se puede leer.",
   "bank.first_statements": "Los primeros extractos empiezan el {day}.",
   "bank.first_statements_at": "Los primeros extractos empiezan el {day}: {at}.",
+  "bank.flow_meta": "entradas sobre la línea, salidas debajo",
   "bank.hide_money_in": "Ocultar el dinero que entra",
   "bank.hide_money_out": "Ocultar el dinero que sale",
   "bank.importing": "Importando extractos · {account}",
@@ -244,10 +249,12 @@
   "bank.no_account": "No hay ninguna cuenta bancaria en este ámbito.",
   "bank.no_accounts": "Aún no hay cuentas bancarias",
   "bank.no_accounts_text": "Los movimientos vienen de los extractos de tu banco. Añade una cuenta bancaria, exporta sus extractos como archivos CSV a una carpeta y cada uno se lee en la cuenta.",
+  "bank.no_bookings": "sin movimientos",
   "bank.no_new_statements": "No hay extractos nuevos",
   "bank.no_statement": "aún sin extracto",
   "bank.none_here": "No hay movimientos aquí.",
   "bank.none_project": "Aún no hay ningún movimiento enlazado con este proyecto.",
+  "bank.none_weeks": "No hay movimientos en estas semanas.",
   "bank.not_a_statement": "No es un extracto que lea esta carpeta vigilada.",
   "bank.not_a_statements_watch": "Solo una carpeta vigilada de extractos importa extractos.",
   "bank.not_adding_up": "sus movimientos no cuadran con sus saldos",

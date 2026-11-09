@@ -206,6 +206,10 @@
   "bank.all": "Alle",
   "bank.amount_pending": "{amount} vorgemerkt",
   "bank.booking": "Buchung",
+  "bank.cash_flow": {
+    "one": "Geldfluss · {n} Woche",
+    "other": "Geldfluss · {n} Wochen"
+  },
   "bank.choose_folder": "Wähle zuerst den Ordner mit den Kontoauszügen des Kontos.",
   "bank.choose_kind": "Wähle die Art des Kontos.",
   "bank.count.accounts": {
@@ -229,6 +233,7 @@
   "bank.file_unread": "Sie kann nicht gelesen werden.",
   "bank.first_statements": "Die ersten Kontoauszüge beginnen am {day}.",
   "bank.first_statements_at": "Die ersten Kontoauszüge beginnen am {day}: {at}.",
+  "bank.flow_meta": "Ein über der Linie, Aus darunter",
   "bank.hide_money_in": "Geldeingänge ausblenden",
   "bank.hide_money_out": "Geldausgänge ausblenden",
   "bank.importing": "Kontoauszüge werden importiert · {account}",
@@ -241,10 +246,12 @@
   "bank.no_account": "Kein Bankkonto in diesem Bereich.",
   "bank.no_accounts": "Noch keine Bankkonten",
   "bank.no_accounts_text": "Buchungen kommen aus den Kontoauszügen deiner Bank. Füge ein Bankkonto hinzu, exportiere seine Kontoauszüge als CSV-Dateien in einen Ordner, und jeder wird in das Konto eingelesen.",
+  "bank.no_bookings": "keine Buchungen",
   "bank.no_new_statements": "Keine neuen Kontoauszüge",
   "bank.no_statement": "noch kein Kontoauszug",
   "bank.none_here": "Hier gibt es keine Buchungen.",
   "bank.none_project": "Mit diesem Projekt ist noch keine Buchung verknüpft.",
+  "bank.none_weeks": "Keine Buchungen in diesen Wochen.",
   "bank.not_a_statement": "Das ist kein Kontoauszug, den diese Überwachung liest.",
   "bank.not_a_statements_watch": "Nur eine Kontoauszugs-Überwachung importiert Kontoauszüge.",
   "bank.not_adding_up": "seine Buchungen ergeben nicht seine Salden",

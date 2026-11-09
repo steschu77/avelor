@@ -1,20 +1,21 @@
 // The Bank lens (ui.md#bank): the bank accounts in the scope as tiles, with
 // their total; the cut, money in and money out, and Linked or Not linked;
-// then the bookings by month, newest first, each with what it is linked to
-// and its account's balance after it (`ledger`, model/bank.js). The scope
-// is the vault panel's filter on the statements (`matchesFilter`): with
-// nothing narrowing it, every bank account shows, one without statements
-// too. Under a project, a booking is in it through what it is linked to
-// (`linkProjects`), and the project's In, Out and Net take the accounts'
-// place. A tile makes its account's source the filter; a booking selects
-// itself, its card in the panel (features/panel/booking.js). Without a bank
-// account, the lens says where bookings come from and offers Add a bank
-// account (the Folders page, `addBankAccount`).
+// the cash flow, a scrubber (features/lenses/scrub.js) whose range of weeks
+// the bookings keep to; then the bookings by month, newest first, each with
+// what it is linked to and its account's balance after it (`ledger`,
+// model/bank.js). The scope is the vault panel's filter on the statements
+// (`matchesFilter`): with nothing narrowing it, every bank account shows,
+// one without statements too. Under a project, a booking is in it through
+// what it is linked to (`linkProjects`), and the project's In, Out and Net
+// take the accounts' place. A tile makes its account's source the filter; a
+// booking selects itself, its card in the panel (features/panel/booking.js).
+// Without a bank account, the lens says where bookings come from and offers
+// Add a bank account (the Folders page, `addBankAccount`).
 
 import { $, accEl, setAria } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
 import { DAY_MONTH, DAY_MONTH_YEAR, DAY_SHORT_MONTH, MONTH_YEAR, SHORT_MONTH_YEAR } from '../../core/format.js';
-import { amountText, money, signedAmount } from '../../core/format.js';
+import { amountText, dayStart, everyMidnight, money, signedAmount } from '../../core/format.js';
 import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { NO_PROJECT, accountWatch, entities, matchesFilter, watchSourceKey, watches } from '../../model/entities.js';
@@ -25,7 +26,8 @@ import { accSeg } from '../../ui/segmented.js';
 import { linkChip, linkTarget } from '../panel/panel.js';
 import { selectBooking, selectDocument, selectFilter } from '../selection.js';
 import { addBankAccount } from '../workspace/folders.js';
-import { registerLens } from './registry.js';
+import { invalidateLenses, registerLens } from './registry.js';
+import { scrubber, weekOf, weeksBetween } from './scrub.js';
 
 const lensEl = $('lens-bank');
 const countEl = $('bank-count');
@@ -129,23 +131,29 @@ function renderBankLens() {
     pending.forEach((entry, i) => take(entry, 1e9 - i, true));
   }
   bookings.sort((a, b) => b.time - a.time || b.seq - a.seq);
-  const counts = { in: bookings.filter(isIn).length, out: bookings.filter(entry => !isIn(entry)).length };
-  const cutIn = bookings.filter(entry => (isIn(entry) ? cut.in : cut.out));
+  const sideCut = entry => (isIn(entry) ? cut.in : cut.out);
+  const linkCut = entry => cut.link === 'all' || isLinked(entry) === (cut.link === 'linked');
+  const picked = bookings.filter(entry => flow.holds(new Date(entry.time)));
+  const counts = { in: picked.filter(isIn).length, out: picked.filter(entry => !isIn(entry)).length };
+  const cutIn = picked.filter(sideCut);
   const linked = cutIn.filter(isLinked).length;
   const links = { linked, unlinked: cutIn.length - linked };
-  const shown = cutIn.filter(entry => cut.link === 'all' || isLinked(entry) === (cut.link === 'linked'));
+  const shown = cutIn.filter(linkCut);
 
   const accounts = project ? [...new Set(bookings.map(entry => entry.account))] : scope.accounts;
   countEl.textContent = `${t('bank.count.bookings', { n: shown.length })} \u00b7 ${t('bank.count.accounts', { n: accounts.length })}`;
   const parts = [];
-  if (project) parts.push(renderProjectSums(bookings, accounts));
+  if (project) parts.push(renderProjectSums(picked, accounts));
   else if (accounts.length) parts.push(renderAccounts(accounts, ledgers, state));
   parts.push(renderCut(counts, links));
+  if (bookings.length) parts.push(renderFlow(bookings, bookings.filter(entry => sideCut(entry) && linkCut(entry))));
   if (shown.length) {
     parts.push(renderBookings(shown, accounts, ledgers, project));
   } else {
-    const text = project ? t('bank.none_project')
-      : accounts.length ? t('bank.none_here') : t('bank.no_account');
+    const text = !bookings.length
+      ? (project ? t('bank.none_project')
+        : accounts.length ? t('bank.none_here') : t('bank.no_account'))
+      : picked.length ? t('bank.none_here') : t('bank.none_weeks');
     parts.push(accEl('p', 'note bank__none', text));
   }
   lensEl.replaceChildren(...parts);
@@ -265,6 +273,61 @@ function renderCut(counts, links) {
   link.classList.add('push');
   bar.append(link);
   return bar;
+}
+
+// ----------------------------------------------------------------------------
+// The cash flow: a pair of bars per week, from the first booking's week to
+// the later of today's and the last booking's, at most two years; money in
+// above the line, out below, each as high as the square root of its sum
+// against the largest week's, so one large booking doesn't flatten the
+// paydays. The bars count the booked bookings of the cut, in every week
+// shown; its range keeps the bookings, the cut's counts and a project's
+// sums to the weeks picked.
+const FLOW_WEEKS = 104;
+const flow = scrubber({ lens: 'bank', meta: t('bank.flow_meta'), track: 'scrub__track--flow' });
+
+function renderFlow(bookings, inCut) {
+  const today = dayStart(new Date());
+  const times = bookings.map(entry => entry.time);
+  const weeks = weeksBetween(new Date(Math.min(...times)), new Date(Math.max(today.getTime(), ...times)))
+    .slice(-FLOW_WEEKS);
+  const sums = weeks.map(() => ({ in: 0, out: 0 }));
+  for (const entry of inCut) {
+    const week = entry.pending ? -1 : weekOf(weeks, new Date(entry.time));
+    if (week < 0) continue;
+    const amount = cents(entry.booking.amount);
+    if (amount > 0) sums[week].in += amount;
+    else sums[week].out -= amount;
+  }
+  const largest = Math.max(1, ...sums.flatMap(sum => [sum.in, sum.out]));
+  const height = sum => `${Math.sqrt(sum / largest) * 100}%`;
+  flow.render({
+    title: t('bank.cash_flow', { n: weeks.length }),
+    weeks,
+    today,
+    labels: weeks.length > 53 ? 'years' : 'months',
+    bar(i, kept) {
+      const week = kept ?? flowWeek();
+      const { in: moneyIn, out } = sums[i];
+      week.firstChild.firstChild.style.height = height(moneyIn);
+      week.lastChild.firstChild.style.height = height(out);
+      const what = [moneyIn ? `in ${amountText(moneyIn / 100)}` : null, out ? `out ${amountText(out / 100)}` : null];
+      week.title = t('week.of', { day: DAY_MONTH_YEAR.format(weeks[i]), what: what.filter(Boolean).join(' \u00b7 ') || t('bank.no_bookings') });
+      return week;
+    },
+  });
+  return flow.el;
+}
+
+// A week of the cash flow: its bar of money in over its bar of money out.
+function flowWeek() {
+  const week = accEl('span', 'scrub__week');
+  const moneyIn = accEl('span', 'scrub__in');
+  const out = accEl('span', 'scrub__out');
+  moneyIn.append(accEl('i'));
+  out.append(accEl('i'));
+  week.append(moneyIn, out);
+  return week;
 }
 
 // ----------------------------------------------------------------------------
@@ -390,5 +453,8 @@ function renderEmpty() {
     add);
   return empty;
 }
+
+// At midnight, today moves on along the cash flow.
+everyMidnight(() => invalidateLenses('bank'));
 
 registerLens('bank', lensEl, renderBankLens);

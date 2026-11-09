@@ -206,6 +206,10 @@
   "bank.all": "All",
   "bank.amount_pending": "{amount} pending",
   "bank.booking": "Booking",
+  "bank.cash_flow": {
+    "one": "Cash flow · {n} week",
+    "other": "Cash flow · {n} weeks"
+  },
   "bank.choose_folder": "Choose the folder of the account's statements first.",
   "bank.choose_kind": "Choose the account's kind.",
   "bank.count.accounts": {
@@ -229,6 +233,7 @@
   "bank.file_unread": "It can't be read.",
   "bank.first_statements": "The first statements start on {day}.",
   "bank.first_statements_at": "The first statements start on {day}: {at}.",
+  "bank.flow_meta": "in above the line, out below",
   "bank.hide_money_in": "Hide money in",
   "bank.hide_money_out": "Hide money out",
   "bank.importing": "Importing statements · {account}",
@@ -241,10 +246,12 @@
   "bank.no_account": "No bank account in this scope.",
   "bank.no_accounts": "No bank accounts yet",
   "bank.no_accounts_text": "Bookings come from your bank’s statements. Add a bank account, export its statements as CSV files into a folder, and each one is read into the account.",
+  "bank.no_bookings": "no bookings",
   "bank.no_new_statements": "No new statements",
   "bank.no_statement": "no statement yet",
   "bank.none_here": "No bookings here.",
   "bank.none_project": "No booking is linked to this project yet.",
+  "bank.none_weeks": "No bookings in these weeks.",
   "bank.not_a_statement": "It isn't a statement this watch reads.",
   "bank.not_a_statements_watch": "Only a statements watch imports statements.",
   "bank.not_adding_up": "its bookings don't add up to its balances",
