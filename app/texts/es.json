@@ -246,6 +246,8 @@
   "bank.first_statements": "Los primeros extractos empiezan el {day}.",
   "bank.first_statements_at": "Los primeros extractos empiezan el {day}: {at}.",
   "bank.flow_meta": "entradas sobre la línea, salidas debajo",
+  "bank.hide_fixed_costs": "Ocultar los gastos fijos",
+  "bank.hide_income": "Ocultar los ingresos",
   "bank.hide_money_in": "Ocultar el dinero que entra",
   "bank.hide_money_out": "Ocultar el dinero que sale",
   "bank.hide_transfers": "Ocultar las transferencias entre tus cuentas",
@@ -277,8 +279,11 @@
   "bank.period.years": "{from} {from_year} – {to} {to_year}",
   "bank.project_note": "Un movimiento está en un proyecto a través de aquello con lo que está enlazado: una factura, un evento, un documento del proyecto o el propio proyecto.",
   "bank.recurring_label": "Recurrente: {name}",
+  "bank.recurring_n": "Recurrentes {n}",
   "bank.several_currencies": "en varias monedas",
   "bank.show_every_source": "Mostrar todas las fuentes",
+  "bank.show_fixed_costs": "Mostrar los gastos fijos",
+  "bank.show_income": "Mostrar los ingresos",
   "bank.show_money_in": "Mostrar el dinero que entra",
   "bank.show_money_out": "Mostrar el dinero que sale",
   "bank.show_only": "Mostrar solo {name}",
@@ -423,6 +428,10 @@
     "one": "{n} cifrado",
     "other": "{n} cifrados"
   },
+  "count.ended": {
+    "one": "{n} terminado",
+    "other": "{n} terminados"
+  },
   "count.entities": {
     "one": "{n} elemento",
     "other": "{n} elementos"
@@ -464,6 +473,10 @@
   "count.read": {
     "one": "{n} leído",
     "other": "{n} leídos"
+  },
+  "count.recurring_payments": {
+    "one": "{n} pago recurrente",
+    "other": "{n} pagos recurrentes"
   },
   "count.replaced": {
     "one": "{n} reemplazado",
@@ -1097,14 +1110,34 @@
   "reader.pdf_unread": "No se pudo leer el PDF.",
   "reader.refused": "El modelo se negó a leer el archivo.",
   "reader.unread": "No se pudo leer el archivo.",
+  "recurring.a_month_head": "Al mes",
   "recurring.a_year": "{amount} al año",
+  "recurring.a_year_head": "Al año",
   "recurring.after_statements": "después de los extractos",
+  "recurring.all_paid": "Todo pagado",
   "recurring.amount_from": "{amount} desde el {day}",
+  "recurring.as_far": "hasta donde llegan los extractos",
   "recurring.before": "antes: {earlier}",
+  "recurring.each": "Cada vez",
+  "recurring.ended": "Terminados",
+  "recurring.ended_on": "terminó el {day}",
+  "recurring.fixed_costs": "Gastos fijos",
   "recurring.from": "desde el {day}",
+  "recurring.income": "Ingresos",
+  "recurring.judged": "Los vencimientos se juzgan hasta donde llegan los extractos.",
+  "recurring.judged_to": "Los vencimientos se juzgan hasta donde llegan los extractos: hasta el {day}.",
+  "recurring.left": "Resto",
+  "recurring.missed_days": "Omitido: {days}",
+  "recurring.month_year": "al mes · {year} al año",
+  "recurring.month_year_count": "al mes · {year} al año · {recurring}",
+  "recurring.none": "Aún no hay pagos recurrentes aquí: crea uno desde la tarjeta de un movimiento, en su fila Pago recurrente.",
+  "recurring.note": "El importe de un pago recurrente al mes y al año, según se repite su periodicidad; uno terminado no cuenta en ninguna suma.",
+  "recurring.off_days": "Importe desviado: {days}",
   "recurring.open_ended": "sin fin",
+  "recurring.other": "Otros",
   "recurring.party_placeholder": "Quién cobra o paga",
   "recurring.since": "desde el {day}",
+  "recurring.to": "Hasta el {day}",
   "recurring.vary_note": "un movimiento dentro de ese margen cuenta tal cual",
   "rp_new.add_it": "Añadirlo",
   "rp_new.amount_note": "cada vez; negativo para el dinero que sale",

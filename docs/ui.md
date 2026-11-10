@@ -331,7 +331,27 @@ entity or thread of it; without a link, through its recurring payment
 - **The cut**, for the session: In, Out and Transfers (between the
   vault's accounts, `pairOf`, `model/bank.js`, in neither In nor Out), a
   toggle each with its count in the weeks picked; then All, Linked and Not
-  linked, counted within them, a transfer linked by its other half.
+  linked, counted within them, a transfer linked by its other half; then
+  the view, Transactions or Recurring with the count of the running recurring payments.
+- **Recurring**, the view of the fixed costs (`features/lenses/recurring.js`):
+  the recurring payments (`vault.md#recurring`) of the accounts in the
+  scope, under a project those in it (by their own projects). In and Out
+  count the running recurring payments, and hide the income or the fixed costs;
+  Transfers, the link and the cash flow step aside, and the head counts
+  the recurring payments, the ended ones and the accounts. Under the cut: Income, Fixed
+  costs and Left, each a month's with a year's and how many recurring payments, and
+  how many occurrences were missed or off as far as the statements go
+  ("To 13 Nov", `occurrences`). Then the recurring payments by category, income first,
+  then the costs, the largest a month first, each category's row with its
+  sums a month and a year; a recurring payment's row has its icon and title, its
+  missed and off occurrences counted (tags whose tooltip names the days),
+  its party, its schedule in words (`scheduleText`, and "from" a day still
+  ahead), its amount each time (as of today), a month's and a year's
+  (`perYear`); where the lens is narrow, the schedule goes first, never the
+  name. The ended recurring payments follow apart, in no sum. A row's click or
+  Enter selects the recurring payment, its card in the panel
+  (`panel.md#a-recurring-card`); its row is marked. Without a recurring payment, a note
+  says to make one from a transaction's card.
 - **The cash flow**, the Timeline's scrubber (`scrubber`,
   `features/lenses/scrub.js`): "Cash flow · 15 weeks", a pair of bars per
   week from the first transaction's week to the later of today's and the last
@@ -584,4 +604,4 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |
 | F8 | Timeline | a drag or click across the scrubber's track (`pointerdown` … `pointerup`, `features/lenses/scrub.js`); Clear; Today; a type toggle, Show all types, Types; a row → `selectDocument`; a card's head dropped on the lens → `leaveThreadLocal` | `set_prefs {prefs}` (`tl_hidden`, `tl_types_bar`); `leave_thread` | the feed kept to the weeks picked, or to all; scrolled to today; the types and the bar kept across restarts; the entity in the panel; the card out of its thread |
 | F2 | Calendar month and day | prev/next/today (`features/lenses/calendar.js`); day click → `selectDay`; event or task click → `selectDay(day, id)`; today's overdue count → `selectDay(today)`, `scrollToOverdue` | — | the day's events as cards, then its tasks due (today: also the overdue ones) as rows; the clicked one focused, a task opened into its card |
-| F9 | Bank | the Bank tab; an account's tile → `selectFilter({selected_source})` (again: every source); In, Out, Transfers, All, Linked, Not linked (`features/lenses/bank.js`); a drag or click across the cash flow's track (`features/lenses/scrub.js`); Clear; Today; a transaction → `selectTransaction(statement, transaction)`; its Linked to chip → `selectById`, a transfer's ⇄ chip → `selectTransaction` (the other half); the empty state's Add a bank account → `addBankAccount` | — | the transactions in the scope and the cut, a project's through their links, kept to the weeks picked, or to all; the transaction's card; the Folders page with a new bank account's pane |
+| F9 | Bank | the Bank tab; an account's tile → `selectFilter({selected_source})` (again: every source; without a watch: `selectDocument`); In, Out, Transfers, All, Linked, Not linked, Transactions, Recurring (`features/lenses/bank.js`); a drag or click across the cash flow's track (`features/lenses/scrub.js`); Clear; Today; a transaction → `selectTransaction(statement, transaction)`; its Linked to chip → `selectById`, a transfer's ⇄ chip → `selectTransaction` (the other half); a recurring payment's row in Recurring → `selectDocument`; the empty state's Add a bank account → `addBankAccount` | — | the transactions in the scope and the cut, a project's through their links, kept to the weeks picked, or to all; the fixed costs (`features/lenses/recurring.js`); the transaction's or the recurring payment's card; the Folders page with a new bank account's pane |
