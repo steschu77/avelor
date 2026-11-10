@@ -1,6 +1,6 @@
-// The dashboard's cards (ui.md#dashboard): Week, Tasks, Upcoming, Recent
-// files and Recent conversations, each drawn from the page's data in the vault
-// panel's filter (`matchesFilter`). A card is `{ id, title, size, render }`:
+// The dashboard's cards (ui.md#dashboard): Week, Tasks, Upcoming, Payments,
+// Recent files and Recent conversations, each drawn from the page's data in the
+// vault panel's filter (`matchesFilter`). A card is `{ id, title, size, render }`:
 // `size` is `full`, `wide` or none (a third of the grid), and
 // `render(ctx)` gives the nodes of its head (after its title) and of its
 // body. `ctx`: `today`, `shown(id)` (whether a card is shown) and
@@ -8,7 +8,8 @@
 // layout are features/dashboard/dashboard.js's.
 //
 // A row, an event or a task selects its entity (`selectDocument`), by click
-// or Enter; it carries `data-id`, so the dashboard marks the selected one. A
+// or Enter; it carries `data-id`, so the dashboard marks the selected one (a
+// transaction's row selects the transaction, and also carries `data-transaction`). A
 // task dragged to another column of the Tasks card takes its status
 // (`editEntityLocal`).
 
@@ -16,27 +17,35 @@ import { accEl } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
 import { runAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
-import { DAY_LONG_MONTH, DAY_MONTH, DAY_SHORT_MONTH, MONTH, TIME_FORMAT, WEEKDAY, addDays, compareText, dayStart, sameDay, shortDate, weekStartOf } from '../../core/format.js';
+import {
+  DAY_LONG_MONTH, DAY_MONTH, DAY_MONTH_YEAR, DAY_SHORT_MONTH, MONTH, TIME_FORMAT, WEEKDAY, addDays, compareText,
+  dayStart, parseDate, sameDay, shortDate, signedAmount, weekStartOf,
+} from '../../core/format.js';
 import { savePrefs, store } from '../../model/state.js';
 import { editEntityLocal } from '../../model/structure.js';
 import {
   entities, isAiConversation, matchesFilter, projectNames,
 } from '../../model/entities.js';
 import { eventsBetween, eventsOnDay, getDueTasks, getEvents, isOverdue } from '../../model/calendar.js';
-import { getDocIcon, iconEl } from '../../ui/icons.js';
+import {
+  amountOn, bankScope, transactionInProject, transactionName, expectedIn, horizonOf, occurrences, pairOf, recurringPaymentEnded,
+  recurringPaymentsIn, recurringPaymentInProject, recurringPaymentOf,
+} from '../../model/bank.js';
+import { KIND_ICONS, transactionIcon, getDocIcon, iconEl } from '../../ui/icons.js';
 import { clearDropMark, dropTarget } from '../../ui/dropzone.js';
 import { showMenu } from '../../ui/menu.js';
-import { selectDocument } from '../selection.js';
+import { selectTransaction, selectDocument } from '../selection.js';
 import { TASK_STATUSES } from '../panel/details.js';
 
 // ----------------------------------------------------------------------------
-// An element that selects the entity `id` on a click, or Enter or Space.
-function entityEl(tag, className, id) {
+// An element that selects the entity `id` on a click, or Enter or Space, or
+// does `open` instead.
+function entityEl(tag, className, id, open = () => selectDocument(id)) {
   const el = accEl(tag, className);
   el.dataset.id = id;
   if (tag === 'button') el.type = 'button';
   else pressable(el);
-  el.addEventListener('click', () => selectDocument(id));
+  el.addEventListener('click', open);
   return el;
 }
 
@@ -296,6 +305,85 @@ function renderUpcoming({ today, shown }) {
 }
 
 // ----------------------------------------------------------------------------
+// Payments: what the recurring payments (vault.md#recurring) of the bank
+// accounts in the filter (`bankScope`; under a project, the recurring payments in it,
+// `recurringPaymentInProject`) are due to pay or bring -- the running ones' missed
+// occurrences first, Overdue, then those no transaction pays yet to the end of
+// next month (`expectedOf`, `horizonOf`), soonest first -- over the newest
+// transactions in the filter, transfers between the accounts left out. A due
+// payment selects its recurring payment, a transaction itself.
+const DUE_SHOWN = 5;
+const POSTED_SHOWN = 4;
+
+function renderPayments({ today }) {
+  const state = store.getState();
+  const scope = bankScope(state);
+  const horizon = horizonOf(scope.accounts, today);
+  const recurringPayments = recurringPaymentsIn(new Set(scope.accounts.map(doc => doc.id)))
+    .filter(doc => recurringPaymentInProject(doc, state.selected_project));
+  const missed = recurringPayments.filter(doc => !recurringPaymentEnded(doc, today))
+    .flatMap(doc => occurrences(doc).filter(entry => entry.state === 'missed')
+      .map(entry => ({ recurringPayment: doc, day: entry.day, amount: amountOn(doc, entry.day) ?? 0 })))
+    .sort((a, b) => a.day - b.day);
+  const due = expectedIn(recurringPayments, horizon);
+  const posted = [];
+  for (const statement of scope.statements) {
+    for (const transaction of statement.statement.transactions ?? []) {
+      const date = parseDate(transaction.date);
+      if (date && !pairOf(transaction) && transactionInProject(transaction, state.selected_project)) {
+        posted.push({ statement, transaction, date });
+      }
+    }
+  }
+  posted.sort((a, b) => b.date - a.date);
+
+  const dueRows = [...missed.map(entry => ({ ...entry, missed: true })), ...due].slice(0, DUE_SHOWN).map(dueRow);
+  const postedRows = posted.slice(0, POSTED_SHOWN).map(postedRow);
+  const rows = [];
+  if (dueRows.length) rows.push(accEl('span', 'label feed__head', t('props.due')), ...dueRows);
+  if (postedRows.length) rows.push(accEl('span', 'label feed__head', t('dash.posted')), ...postedRows);
+  const counts = [missed.length ? t('occurrence.count_missed', { n: missed.length }) : null,
+    due.length ? t('dash.due_to', { n: due.length, day: DAY_SHORT_MONTH.format(horizon) }) : null].filter(Boolean);
+  return {
+    head: counts.length ? [accEl('span', 'meta', counts.join(' \u00b7 '))] : [],
+    body: [feed(rows, t('dash.no_payments'))],
+  };
+}
+
+// A payment due: its day, the recurring payment's icon and title (a missed one tagged
+// Overdue), its amount; not there yet, as a pending transaction.
+function dueRow({ recurringPayment, day, amount, missed = false }) {
+  const row = entityEl('div', 'list-row feed__row feed__row--event feed__row--due', recurringPayment.doc_id);
+  const title = accEl('span', 'row-title', recurringPayment.title || t('untitled'));
+  if (missed) {
+    const tag = accEl('span', 'chip chip--danger', t('occurrence.missed'));
+    tag.title = t('dash.no_transaction_for', { day: DAY_MONTH_YEAR.format(day) });
+    title.append(tag);
+  }
+  row.append(accEl('span', 'meta', `${WEEKDAY.format(day)} ${DAY_MONTH.format(day)}`),
+    iconEl(KIND_ICONS['recurring-payment'].icon, 'table__icon'), title, amountEl(amount));
+  return row;
+}
+
+// A transaction: its day, its icon, who paid or was paid ("Pending" while it
+// is), its amount.
+function postedRow({ statement, transaction, date }) {
+  const open = transaction.id ? () => selectTransaction(statement.doc_id, transaction.id) : () => selectDocument(statement.doc_id);
+  const row = entityEl('div', 'list-row feed__row feed__row--event', statement.doc_id, open);
+  if (transaction.id) row.dataset.transaction = transaction.id;
+  const title = accEl('span', 'row-title', transactionName(transaction, null));
+  if (transaction.status === 'pending') title.append(accEl('span', 'chip chip--pending', t('bank.pending_chip')));
+  row.append(accEl('span', 'meta', `${WEEKDAY.format(date)} ${DAY_MONTH.format(date)}`),
+    iconEl(transactionIcon(null, recurringPaymentOf(transaction)), 'table__icon'), title, amountEl(transaction.amount ?? 0));
+  return row;
+}
+
+// An amount, signed; money in bold, as in the Bank lens.
+function amountEl(amount) {
+  return accEl('span', `feed__amount${amount > 0 ? ' feed__amount--in' : ''}`, signedAmount(amount));
+}
+
+// ----------------------------------------------------------------------------
 // Recent files: the newest dated entities that aren't events, tasks or
 // conversations with an AI, nor a calendar (whose date is when it was connected).
 const FILES_SHOWN = 6;
@@ -359,6 +447,7 @@ export const CARDS = [
   { id: 'week', title: t('dash.card.week'), size: 'full', render: renderWeek },
   { id: 'tasks', title: t('dash.card.tasks'), size: 'wide', render: renderTasks },
   { id: 'upcoming', title: t('dash.card.upcoming'), render: renderUpcoming },
+  { id: 'payments', title: t('dash.card.payments'), render: renderPayments },
   { id: 'files', title: t('dash.card.files'), render: renderFiles },
   { id: 'conversations', title: t('dash.card.conversations'), render: renderConversations },
 ];
