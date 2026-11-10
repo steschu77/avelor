@@ -1581,6 +1581,95 @@ statement:
 }
 
 #[test]
+fn bookings_join_a_recurring_payment_of_their_account() {
+    let (root, _) = thread_vault();
+    let (account, other) = (Id::generate(), Id::generate());
+    let (statement, recurring_payment, elsewhere) =
+        (Id::generate(), Id::generate(), Id::generate());
+    let (rent, again, fee) = (Id::generate(), Id::generate(), Id::generate());
+    let write = |name: &str, text: String| {
+        let path = root.join("Accounts").join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    };
+    write(
+        "s.txs.yaml",
+        format!(
+            "id: {statement}
+title: Checking
+statement:
+  account: {account}
+  bookings:
+  - id: {rent}
+    amount: -1150.0
+  - id: {again}
+    amount: -1150.0
+  - id: {fee}
+    amount: -4.9
+"
+        ),
+    );
+    let recurring_payment_of = |id: Id, account: Id| {
+        format!("id: {id}\ntitle: Rent\nrecurring-payment:\n  account: {account}\n")
+    };
+    write(
+        "rent.rcp.yaml",
+        recurring_payment_of(recurring_payment, account),
+    );
+    write("other.rcp.yaml", recurring_payment_of(elsewhere, other));
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+    assert_eq!(
+        index.get(&recurring_payment).unwrap().kind(),
+        DocumentType::RecurringPayment
+    );
+
+    let joined = index.set_booking_recurring_payment(
+        &statement,
+        &[rent, again],
+        Some(recurring_payment),
+        &mut changes,
+    );
+    assert_eq!(joined.unwrap(), SaveOutcome::Saved);
+    assert_eq!(changes.saved, [statement], "one write");
+    let items = Index::build(&root)
+        .get(&statement)
+        .unwrap()
+        .roles()
+        .statement
+        .clone();
+    let names: Vec<_> = items
+        .unwrap()
+        .bookings
+        .iter()
+        .map(|item| item.recurring_payment)
+        .collect();
+    assert_eq!(
+        names,
+        [Some(recurring_payment), Some(recurring_payment), None]
+    );
+
+    let out = index.set_booking_recurring_payment(&statement, &[again], None, &mut changes);
+    assert_eq!(out.unwrap(), SaveOutcome::Saved);
+    let text = fs::read_to_string(root.join("Accounts/s.txs.yaml")).unwrap();
+    assert_eq!(text.matches("recurring-payment:").count(), 1, "{text}");
+
+    for (bookings, to, arg) in [
+        (vec![Id::generate()], Some(recurring_payment), "booking"),
+        (vec![fee], Some(elsewhere), "to"),
+        (vec![fee], Some(statement), "to"),
+        (vec![fee], Some(Id::generate()), "to"),
+    ] {
+        let refused = index.set_booking_recurring_payment(&statement, &bookings, to, &mut changes);
+        assert!(
+            matches!(refused, Err(Error::InvalidArgument { arg: ref a }) if a == arg),
+            "{arg}: {refused:?}"
+        );
+    }
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_write_keeps_the_byte_order_mark_and_the_line_endings() {
     let (root, ids) = thread_vault();
     let path = root.join("Notes/n0.md");

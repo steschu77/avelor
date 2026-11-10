@@ -72,6 +72,31 @@ impl Index {
         self.edit_booking(id, booking, changes, |item| item.linked_to = to)
     }
 
+    /// Put the bookings `bookings` of the statement `id` into the recurring
+    /// payment `to`, a recurring payment of the statement's account; `None` takes them
+    /// out. The statement is written once.
+    pub fn set_booking_recurring_payment(
+        &mut self,
+        id: &Id,
+        bookings: &[Id],
+        to: Option<Id>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        if let Some(to) = &to {
+            let statement = self
+                .get(id)
+                .and_then(|d| d.roles().statement.as_ref()?.account);
+            let recurring_payment = self
+                .get(to)
+                .and_then(|d| d.roles().recurring_payment.as_ref()?.account);
+            if recurring_payment.is_none() || recurring_payment != statement {
+                return Err(Error::InvalidArgument { arg: "to".into() });
+            }
+        }
+        self.edit_bookings(id, bookings, changes, |item| item.recurring_payment = to)
+    }
+
     /// Unpair the transfer whose half is the booking `booking` of the
     /// statement `id`: its `transfer` key is removed, and so is the other
     /// half's, in whichever statement of the vault holds it, while it names
@@ -129,15 +154,30 @@ impl Index {
         id: &Id,
         booking: &Id,
         changes: &mut Changes,
+        change: impl FnMut(&mut Booking),
+    ) -> Result<SaveOutcome> {
+        self.edit_bookings(id, std::slice::from_ref(booking), changes, change)
+    }
+
+    /// Apply `change` to the bookings `bookings` of the statement `id`, and
+    /// write the statement once; `invalid_argument` if it lacks one of them.
+    pub fn edit_bookings(
+        &mut self,
+        id: &Id,
+        bookings: &[Id],
+        changes: &mut Changes,
         mut change: impl FnMut(&mut Booking),
     ) -> Result<SaveOutcome> {
-        self.booking(id, booking)?;
-        let is_it = |item: &Booking| item.id.as_ref() == Some(booking);
+        self.check_writable(id)?;
+        for booking in bookings {
+            self.booking(id, booking)?;
+        }
+        let is_one = |item: &Booking| item.id.is_some_and(|id| bookings.contains(&id));
         let mut statement = self
             .get(id)
             .and_then(|doc| doc.roles().statement.clone())
             .unwrap_or_default();
-        for item in statement.bookings.iter_mut().filter(|item| is_it(item)) {
+        for item in statement.bookings.iter_mut().filter(|item| is_one(item)) {
             change(item);
         }
         self.update(id, changes, |d| d.set_statement(Some(statement)))

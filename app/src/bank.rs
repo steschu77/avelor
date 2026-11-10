@@ -205,29 +205,14 @@ fn pair_transfers(app: &App, account: &Account, bookings: &mut [Booking]) -> Vec
 /// Write the other halves of new transfers (`pair_transfers`), each
 /// statement once, each half naming its new one; how many were written.
 fn write_halves(app: &mut App, halves: &[(Id, Id, Id)]) -> usize {
-    let mut statements: Vec<Id> = Vec::new();
-    for (statement, ..) in halves {
-        if !statements.contains(statement) {
-            statements.push(*statement);
-        }
-    }
+    let statements = by_statement(halves.iter().map(|(s, other, new)| (*s, (*other, *new))));
     let mut written = 0;
-    for statement in statements {
-        let own: Vec<(Id, Id)> = halves
-            .iter()
-            .filter(|(s, ..)| *s == statement)
-            .map(|(_, other, new)| (*other, *new))
-            .collect();
+    for (statement, own) in statements {
+        let others: Vec<Id> = own.iter().map(|(other, _)| *other).collect();
         let outcome = app.edit_written(|index, changes| {
-            index.edit(&statement, changes, |d| {
-                if let Some(mut statement) = d.roles().statement.clone() {
-                    for item in &mut statement.bookings {
-                        let new = own.iter().find(|(other, _)| item.id == Some(*other));
-                        if let Some((_, new)) = new {
-                            item.transfer = Some(*new);
-                        }
-                    }
-                    d.set_statement(Some(statement));
+            index.edit_bookings(&statement, &others, changes, |item| {
+                if let Some((_, new)) = own.iter().find(|(other, _)| item.id == Some(*other)) {
+                    item.transfer = Some(*new);
                 }
             })
         });
@@ -239,6 +224,20 @@ fn write_halves(app: &mut App, halves: &[(Id, Id, Id)]) -> usize {
         }
     }
     written
+}
+
+// ----------------------------------------------------------------------------
+/// `items` grouped by their statement's id, the statements in the order
+/// they first come.
+pub(crate) fn by_statement<T>(items: impl IntoIterator<Item = (Id, T)>) -> Vec<(Id, Vec<T>)> {
+    let mut statements: Vec<(Id, Vec<T>)> = Vec::new();
+    for (id, item) in items {
+        match statements.iter_mut().find(|(s, _)| *s == id) {
+            Some((_, items)) => items.push(item),
+            None => statements.push((id, vec![item])),
+        }
+    }
+    statements
 }
 
 // ----------------------------------------------------------------------------
