@@ -101,6 +101,7 @@ enum Command {
     SetLink(Relink),
     SetTransactionLink(TransactionLink),
     UnpairTransfer(TransactionRef),
+    PairTransfer(PairRef),
     EditEntities(EditEntities),
     DeleteEntity(Target),
     ReloadEntity(Target),
@@ -281,6 +282,15 @@ pub(crate) struct TransactionRef {
     pub transaction: Id,
 }
 
+/// `{id, transaction, other: {id, transaction}}`: a transaction and the one it pairs
+/// with as a transfer's other half.
+#[derive(Deserialize)]
+pub(crate) struct PairRef {
+    pub id: Id,
+    pub transaction: Id,
+    pub other: TransactionRef,
+}
+
 /// `{ids, change}`: one change to every entity named.
 #[derive(Deserialize)]
 struct EditEntities {
@@ -395,6 +405,7 @@ impl Command {
             "set_link" => Command::SetLink(from_value(args)?),
             "set_transaction_link" => Command::SetTransactionLink(from_value(args)?),
             "unpair_transfer" => Command::UnpairTransfer(from_value(args)?),
+            "pair_transfer" => Command::PairTransfer(from_value(args)?),
             "edit_entities" => Command::EditEntities(from_value(args)?),
             "delete_entity" => Command::DeleteEntity(from_value(args)?),
             "reload_entity" => Command::ReloadEntity(from_value(args)?),
@@ -534,6 +545,14 @@ fn route(app: &mut App, req: Req, command: Command) {
             structure::set_transaction_link(app, req, a.id, a.transaction, a.to)
         }
         Command::UnpairTransfer(a) => structure::unpair_transfer(app, req, a.id, a.transaction),
+        Command::PairTransfer(a) => structure::pair_transfer(
+            app,
+            req,
+            a.id,
+            a.transaction,
+            a.other.id,
+            a.other.transaction,
+        ),
         Command::EditEntities(a) => structure::edit_entities(app, req, a.ids, a.change),
         Command::DeleteEntity(a) => structure::delete_entity(app, req, a.id),
         Command::ReloadEntity(a) => structure::reload_entity(app, req, a.id),

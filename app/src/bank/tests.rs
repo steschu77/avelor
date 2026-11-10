@@ -644,6 +644,13 @@ fn a_transfer_is_paired_with_the_other_accounts_half() {
     assert_eq!(shape(&unpaired), ["entity", "entity", "reply"]);
     assert!(transfers(&h, checking).is_empty());
     assert!(transfers(&h, fund).is_empty());
+
+    let pair = json!({ "id": checking, "transaction": sent, "other": { "id": fund, "transaction": half } });
+    let repaired = undoes(&mut h, "pair_transfer", pair.clone());
+    assert_eq!(shape(&repaired), ["entity", "entity", "reply"]);
+    assert_eq!(transfers(&h, fund), [(half, sent)], "paired by hand again");
+    let again = h.call("pair_transfer", pair);
+    assert_eq!(again[0]["err"]["code"], "invalid_argument");
 }
 
 // ------------------------------------------------------------------------

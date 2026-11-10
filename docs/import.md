@@ -317,7 +317,9 @@ whichever watch imported it.
   (`transfer`, `vault.md#statement`), the nearest day first, each half
   once. Whichever statement comes second pairs them, and the other
   account's statement is written too. The watch's Pair transfers step
-  turns this off; the pairs made stay.
+  turns this off; the pairs made stay. A pair the import doesn't see (no
+  `iban`, more days apart) is made by hand on a transaction's card
+  (`panel.md#transaction-card`).
 - **Recurring payments**: a new transaction without a recurring payment joins the
   account's recurring payment (`vault.md#recurring`) whose party it names
   (the same name, case aside: the recurring payment's `party`, or the party of one of

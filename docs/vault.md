@@ -597,8 +597,8 @@ It carries the following additional fields:
     payment's.
   * `transfer`: UUIDv7, the other half's `id`, on a transfer between two
     of the vault's accounts. Optional; set by the import
-    (`import.md#statements`), removed with `unpair_transfer`
-    (`api.md#structure`). Each half names the other.
+    (`import.md#statements`) or by hand with `pair_transfer`, removed with
+    `unpair_transfer` (`api.md#structure`). Each half names the other.
   * `recurring-payment`: Entity ID, the recurring payment the transaction belongs to
     (`vault.md#recurring`), on the transaction's account. Optional; set by the
     import (`import.md#statements`) or with `set_transaction_recurring_payment`

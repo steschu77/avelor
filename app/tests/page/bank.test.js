@@ -2,9 +2,9 @@ import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import { localDay, parseDate } from '../../static/core/format.js';
 import {
-  amountOn, amountsOf, transactionName, transactionOf, howOften, ledger, linkProjects, nextOccurrence, occurrences, pairOf, partyNames,
-  partyRef, perYear, recurringPaymentEnded, recurringPaymentOf, recurringPaymentsIn, similarNames, statementsEnd, statementsOf,
-  withAmount,
+  amountOn, amountsOf, transactionName, transactionOf, howOften, ledger, linkProjects, nextOccurrence, occurrences, pairCandidates,
+  pairOf, partyNames, partyRef, perYear, recurringPaymentEnded, recurringPaymentOf, recurringPaymentsIn, similarNames,
+  statementsEnd, statementsOf, withAmount,
 } from '../../static/model/bank.js';
 import { entities, threads } from '../../static/model/entities.js';
 
@@ -84,6 +84,28 @@ test("a transfer is called after the other half's account, else the other side",
   const pair = { account: { title: 'House fund' } };
   equal([transactionName({ amount: -5 }, pair), transactionName({ amount: 5 }, pair)], ['transaction.to_account', 'transaction.from_account']);
   equal([transactionName({ amount: -5, receiver: 'Shop' }), transactionName({ amount: -5, title: 'Lunch' }), transactionName({ amount: -5 })], ['Shop', 'Lunch', 'bank.transaction']);
+});
+
+test("a transfer's other half by hand: the opposite amount in another account, near, the nearest first", () => {
+  vault(
+    account('checking'), account('savings'),
+    statement('s1', 'checking', [transaction('out', '2027-01-15', -20), transaction('back', '2027-01-15', 20)]),
+    statement('s2', 'savings', [
+      transaction('far', '2027-01-30', 20), transaction('edge', '2027-01-01', 20), transaction('near', '2027-01-16', 20), transaction('other', '2027-01-16', 21),
+      transaction('taken', '2027-01-16', 20, { transfer: 'x' }), transaction('pending', '2027-01-16', 20, { status: 'pending' }), transaction('wrong', '2027-01-16', -20),
+    ]),
+  );
+  const found = pairCandidates(of('s1'), transactionOf(of('s1'), 'out'));
+  equal(found.map(one => [one.transaction.id, one.account.id]), [['near', 'savings'], ['edge', 'savings']]);
+  equal(pairCandidates(of('s1'), transaction('zero', '2027-01-15', 0)), []);
+});
+
+test("a transfer's other half is so many days away, whatever the clocks do between", () => {
+  vault(
+    account('checking'), account('savings'), statement('s1', 'checking', [transaction('out', '2026-10-20', -20)]),
+    statement('s2', 'savings', [transaction('edge', '2026-11-03', 20), transaction('far', '2026-11-04', 20)]),
+  );
+  equal(pairCandidates(of('s1'), transactionOf(of('s1'), 'out')).map(one => one.transaction.id), ['edge']);
 });
 
 // Two projects, a bill in the one, a thread and a rent in the other.

@@ -1553,6 +1553,68 @@ statement:
 }
 
 #[test]
+fn a_transfer_is_paired_by_hand_in_both_statements() {
+    let (root, _) = thread_vault();
+    let (checking, savings) = (Id::generate(), Id::generate());
+    let (out, into, more, pending) = (
+        Id::generate(),
+        Id::generate(),
+        Id::generate(),
+        Id::generate(),
+    );
+    let write = |name: &str, text: String| {
+        let path = root.join("Accounts").join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    };
+    let (a, b) = (Id::generate(), Id::generate());
+    write(
+        "c.txs.yaml",
+        format!(
+            "id: {checking}\ntitle: Checking\nstatement:\n  account: {a}\n  transactions:\n  - id: {out}\n    status: posted\n    amount: -100.0\n  - id: {more}\n    status: posted\n    amount: 100.0\n"
+        ),
+    );
+    write(
+        "s.txs.yaml",
+        format!(
+            "id: {savings}\ntitle: Savings\nstatement:\n  account: {b}\n  transactions:\n  - id: {into}\n    status: posted\n    amount: 100.0\n  - id: {pending}\n    status: pending\n    amount: 100.0\n"
+        ),
+    );
+    let mut index = Index::build(&root);
+    let mut changes = Changes::default();
+
+    // a pending half, one in the same account, amounts that aren't opposite
+    for (on, with, half, arg) in [
+        (out, savings, pending, "transaction"),
+        (out, checking, more, "other"),
+        (more, savings, into, "other"),
+    ] {
+        let refused = index.pair_transfer(&checking, &on, &with, &half, &mut changes);
+        assert!(
+            matches!(refused, Err(Error::InvalidArgument { arg: ref a }) if a == arg),
+            "{arg}: {refused:?}"
+        );
+    }
+    let paired = index.pair_transfer(&checking, &out, &savings, &into, &mut changes);
+    assert_eq!(paired.unwrap(), SaveOutcome::Saved);
+    let half = |statement: &Id, id: &Id| {
+        let doc = index.get(statement).unwrap();
+        let items = &doc.roles().statement.as_ref().unwrap().transactions;
+        items.iter().find(|b| b.id == Some(*id)).unwrap().transfer
+    };
+    assert_eq!(
+        (half(&checking, &out), half(&savings, &into)),
+        (Some(into), Some(out))
+    );
+    let again = index.pair_transfer(&checking, &out, &savings, &into, &mut changes);
+    assert!(
+        matches!(again, Err(Error::InvalidArgument { .. })),
+        "a half already"
+    );
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_transfer_is_unpaired_in_both_statements() {
     let (root, _) = thread_vault();
     let (checking, savings) = (Id::generate(), Id::generate());

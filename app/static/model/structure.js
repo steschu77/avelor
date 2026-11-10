@@ -184,6 +184,13 @@ export function unpairTransferLocal(statement, transaction) {
   structureCall('unpair_transfer', { id: statement, transaction }, () => store.getState());
 }
 
+// Pair the transaction `transaction` of the statement `statement` with `other`
+// (`{ id: statement, transaction }`) as a transfer's two halves; the host writes
+// both statements and pushes them back. The selection stays.
+export function pairTransferLocal(statement, transaction, other) {
+  structureCall('pair_transfer', { id: statement, transaction, other }, () => store.getState());
+}
+
 // Put the transactions `transactions` (`{ id: statement, transaction }` each) into the
 // recurring payment `to`, null taking them out of theirs; the host writes
 // each statement once and pushes it back. The selection stays. `step`: the

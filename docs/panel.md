@@ -391,7 +391,13 @@ renamed or deleted.
   transfer's other half (Transfer: a ⇄ chip of its account that selects
   it, its amount and day, and Not a transfer, two clicks, while both
   statements can be written: `unpair_transfer` through
-  `unpairTransferLocal`, `model/structure.js`), the memo and the bank's
+  `unpairTransferLocal`, `model/structure.js`; a posted transaction that is no
+  half, its statement writable, has "+" there instead while there are halves
+  it may pair with: the unpaired posted transactions of the vault's other
+  accounts with the opposite amount, within 14 days of its day, nearest
+  first, each its account, amount and day, a pick pairing the two,
+  `pair_transfer` through `pairTransferLocal`, `pairCandidates`,
+  `model/bank.js`), the memo and the bank's
   reference, the statement (a chip that selects it), the account's
   balance after it (`ledger`); a pending transaction has none yet.
 - Its recurring payment (`vault.md#recurring`): a chip that selects it, with × while

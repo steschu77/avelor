@@ -5,7 +5,7 @@ use super::{Changes, Index, SaveOutcome};
 use crate::change::Change;
 use crate::document::Document;
 use crate::envelope::Conversation;
-use crate::envelope::Transaction;
+use crate::envelope::{Transaction, to_cents};
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -138,6 +138,56 @@ impl Index {
             }
             _ => Ok(outcome),
         }
+    }
+
+    /// Pair the transaction `transaction` of the statement `id` with the transaction
+    /// `other` of the statement `with` as a transfer's two halves, each one's
+    /// `transfer` naming the other: both posted and no half yet, in two
+    /// different accounts of the vault, their amounts opposite; else
+    /// `invalid_argument`, nothing written. Both statements are written.
+    pub fn pair_transfer(
+        &mut self,
+        id: &Id,
+        transaction: &Id,
+        with: &Id,
+        other: &Id,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        self.check_writable(with)?;
+        let invalid = |arg: &str| Err(Error::InvalidArgument { arg: arg.into() });
+        let open = |item: &Transaction| {
+            item.transfer.is_none() && item.status.as_deref() != Some("pending")
+        };
+        let cents = |item: &Transaction| to_cents(item.amount.unwrap_or_default());
+        let (half, its) = (
+            self.transaction(id, transaction)?,
+            self.transaction(with, other)?,
+        );
+        if !open(half) || !open(its) {
+            return invalid("transaction");
+        }
+        if cents(half) == 0 || cents(half) != -cents(its) {
+            return invalid("other");
+        }
+        let account = |statement: &Id| {
+            self.get(statement)
+                .and_then(|d| d.roles().statement.as_ref()?.account)
+        };
+        if account(id).is_none() || account(id) == account(with) {
+            return invalid("other");
+        }
+        if let Some(changed) = self.first_changed(&[*id, *with])? {
+            return Ok(SaveOutcome::Conflict(changed));
+        }
+        let outcome = self.edit_transaction(id, transaction, changes, |item| {
+            item.transfer = Some(*other)
+        })?;
+        if matches!(outcome, SaveOutcome::Conflict(_)) {
+            return Ok(outcome);
+        }
+        let paired = |item: &mut Transaction| item.transfer = Some(*transaction);
+        Ok(outcome.and(self.edit_transaction(with, other, changes, paired)?))
     }
 
     /// The transaction `transaction` of the statement `id`; `invalid_argument` if

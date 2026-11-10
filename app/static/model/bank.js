@@ -62,6 +62,30 @@ export function pairOf(transaction) {
   return null;
 }
 
+// The transactions `transaction` of the statement `statement` may pair with by hand
+// as a transfer's other half (`pair_transfer`): posted and no half yet, in
+// another of the vault's accounts, of the opposite amount, within PAIR_DAYS
+// of its day; `{ statement, transaction, account }` each, the nearest first.
+const PAIR_DAYS = 14;
+
+export function pairCandidates(statement, transaction) {
+  const day = transactionDay(transaction);
+  const amount = cents(transaction.amount);
+  const found = [];
+  if (!day || !amount) return found;
+  for (const other of entities.values()) {
+    const account = other.statement?.account;
+    if (!account || account === statement.statement.account) continue;
+    for (const item of other.statement.transactions ?? []) {
+      const at = transactionDay(item);
+      if (item.transfer || item.status === 'pending' || cents(item.amount) !== -amount || !at) continue;
+      const days = Math.abs(daysBetween(day, at));
+      if (days <= PAIR_DAYS) found.push({ statement: other, transaction: item, account: entities.get(account) ?? null, days });
+    }
+  }
+  return found.sort((a, b) => a.days - b.days);
+}
+
 // What a transaction is called: a transfer after its other half's account, `pair`
 // ("To House fund", "From Checking"), else who paid or was paid.
 export function transactionName(transaction, pair) {

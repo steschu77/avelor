@@ -225,6 +225,18 @@ pub fn unpair_transfer(app: &mut App, req: Req, id: Id, transaction: Id) {
 }
 
 // ----------------------------------------------------------------------------
+/// `pair_transfer`: the transaction `transaction` of the statement `id` and the
+/// transaction `other` of the statement `with` are a transfer's two halves
+/// (`Index::pair_transfer`); both statements are written and pushed.
+pub fn pair_transfer(app: &mut App, req: Req, id: Id, transaction: Id, with: Id, other: Id) {
+    let step = Text::new("undo.pair_transfer").arg("title", named(app, &id, ""));
+    let result = app.step(&req, step, |index, changes| {
+        index.pair_transfer(&id, &transaction, &with, &other, changes)
+    });
+    answer(app, req, result, Some(id));
+}
+
+// ----------------------------------------------------------------------------
 /// `set_starred`: star or unstar `id`, any entity; unstarring removes the
 /// key.
 pub fn set_starred(app: &mut App, req: Req, id: Id, starred: bool) {

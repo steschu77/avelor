@@ -16,9 +16,9 @@ import { DATE_FORMAT, DAY_MONTH_YEAR, amountText, parseDate, signedAmount, signe
 import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { entities, projects, projectsInOrder } from '../../model/entities.js';
-import { TRANSACTION_TYPES, transactionName, transactionOf, ledger, linkProjects, pairOf, partyRef } from '../../model/bank.js';
+import { TRANSACTION_TYPES, transactionName, transactionOf, ledger, linkProjects, pairCandidates, pairOf, partyRef } from '../../model/bank.js';
 import { amountOn, transactionDay, howOften, partyName, partyNames, recurringPaymentEnded, recurringPaymentsIn, recurringPaymentOf, similarNames } from '../../model/bank.js';
-import { setTransactionLinkLocal, setTransactionRecurringPaymentLocal, unpairTransferLocal } from '../../model/structure.js';
+import { pairTransferLocal, setTransactionLinkLocal, setTransactionRecurringPaymentLocal, unpairTransferLocal } from '../../model/structure.js';
 import { openNewRecurringPayment } from '../recurring-payment-new.js';
 import { armedButton } from '../../ui/confirm.js';
 import { KIND_ICONS, transactionIcon, iconEl } from '../../ui/icons.js';
@@ -78,7 +78,8 @@ function renderTransactionCard(state) {
 }
 
 // The transaction's facts: its account, the other side with its IBAN and BIC
-// as the bank gave them, a transfer's other half (`pair`), the memo and
+// as the bank gave them, a transfer's other half (`pair`; else, while there
+// are halves it may pair with, their menu), the memo and
 // the bank's reference, its statement, and the account's balance after it
 // (a pending transaction has none yet).
 function renderProps(statement, transaction, account, pair) {
@@ -99,6 +100,10 @@ function renderProps(statement, transaction, account, pair) {
   if (transaction.iban) add(t('props.iban'), accEl('span', 'mono mono--small', transaction.iban));
   if (transaction.bic) add(t('props.bic'), accEl('span', 'mono mono--small', transaction.bic));
   if (pair) add(t('props.transfer'), ...renderPair(statement, transaction, pair));
+  else if (statement.writable && transaction.status !== 'pending') {
+    const halves = pairCandidates(statement, transaction).filter(half => half.statement.writable);
+    if (halves.length) add(t('props.transfer'), addPairChip(statement, transaction, halves));
+  }
   if (transaction.memo) add(t('props.memo'), accEl('span', 'mono mono--small', transaction.memo));
   if (transaction.ref) add(t('props.reference'), accEl('span', 'mono mono--small', transaction.ref));
   add(t('props.statement'), linkChip(statement.doc_id));
@@ -156,6 +161,22 @@ function addRecurringPaymentChip(statement, transaction, current, set) {
     });
     showMenu(add, items);
   });
+  return add;
+}
+
+// The "+" of a transaction that is no transfer's half: a menu of the `halves`
+// it may pair with (`pairCandidates`), each its account, amount and day;
+// a pick pairs them (`pair_transfer`).
+function addPairChip(statement, transaction, halves) {
+  const add = accEl('button', 'chip chip--action', '+');
+  add.type = 'button';
+  titled(add, t('transaction.pair_title'));
+  add.addEventListener('click', () => showMenu(add, halves.map(half => ({
+    label: half.account?.title || t('untitled'),
+    icon: KIND_ICONS['bank-account'].icon,
+    hint: [signedAmount(half.transaction.amount ?? 0), DAY_MONTH_YEAR.format(transactionDay(half.transaction))].join(' \u00b7 '),
+    run: () => pairTransferLocal(statement.doc_id, transaction.id, { id: half.statement.doc_id, transaction: half.transaction.id }),
+  })), { head: t('transaction.pair_head') }));
   return add;
 }
 
