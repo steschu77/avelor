@@ -809,6 +809,31 @@ impl Index {
         self.edit_booking(id, booking, changes, |item| item.linked_to = to)
     }
 
+    /// Put the bookings `bookings` of the statement `id` into the recurring
+    /// payment `to`, a series of the statement's account; `None` takes them
+    /// out. The statement is written once.
+    pub fn set_booking_recurring(
+        &mut self,
+        id: &Id,
+        bookings: &[Id],
+        to: Option<Id>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        if let Some(to) = &to {
+            let statement = self
+                .get(id)
+                .and_then(|d| d.roles().transactions.as_ref()?.account);
+            let series = self
+                .get(to)
+                .and_then(|d| d.roles().recurring.as_ref()?.account);
+            if series.is_none() || series != statement {
+                return Err(Error::InvalidArgument { arg: "to".into() });
+            }
+        }
+        self.edit_bookings(id, bookings, changes, |item| item.recurring = to)
+    }
+
     /// Unpair the transfer whose half is the booking `booking` of the
     /// statement `id`: its `transfer` key is removed, and so is the other
     /// half's, in whichever statement of the vault holds it, while it names
@@ -871,10 +896,24 @@ impl Index {
         id: &Id,
         booking: &Id,
         changes: &mut Changes,
+        change: impl FnMut(&mut Transaction),
+    ) -> Result<SaveOutcome> {
+        self.edit_bookings(id, std::slice::from_ref(booking), changes, change)
+    }
+
+    /// Apply `change` to the bookings `bookings` of the statement `id`, and
+    /// write the statement once.
+    fn edit_bookings(
+        &mut self,
+        id: &Id,
+        bookings: &[Id],
+        changes: &mut Changes,
         mut change: impl FnMut(&mut Transaction),
     ) -> Result<SaveOutcome> {
-        self.booking(id, booking)?;
-        let is_it = |item: &Transaction| item.id.as_ref() == Some(booking);
+        for booking in bookings {
+            self.booking(id, booking)?;
+        }
+        let is_one = |item: &Transaction| item.id.is_some_and(|id| bookings.contains(&id));
         let mut transactions = self
             .get(id)
             .and_then(|doc| doc.roles().transactions.clone())
@@ -882,7 +921,7 @@ impl Index {
         for item in transactions
             .transactions
             .iter_mut()
-            .filter(|item| is_it(item))
+            .filter(|item| is_one(item))
         {
             change(item);
         }
@@ -3436,6 +3475,81 @@ transactions:
         for name in ["c.txs.yaml", "s.txs.yaml"] {
             let text = fs::read_to_string(root.join("Accounts").join(name)).unwrap();
             assert!(!text.contains("transfer"), "{name}: {text}");
+        }
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn bookings_join_a_series_of_their_account() {
+        let (root, _) = thread_vault();
+        let (account, other) = (Id::generate(), Id::generate());
+        let (statement, series, elsewhere) = (Id::generate(), Id::generate(), Id::generate());
+        let (rent, again, fee) = (Id::generate(), Id::generate(), Id::generate());
+        let write = |name: &str, text: String| {
+            let path = root.join("Accounts").join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        };
+        write(
+            "s.txs.yaml",
+            format!(
+                "id: {statement}
+title: Checking
+transactions:
+  account: {account}
+  transactions:
+  - id: {rent}
+    amount: -1150.0
+  - id: {again}
+    amount: -1150.0
+  - id: {fee}
+    amount: -4.9
+"
+            ),
+        );
+        let series_of = |id: Id, account: Id| {
+            format!("id: {id}\ntitle: Rent\nrecurring:\n  account: {account}\n")
+        };
+        write("rent.rcp.yaml", series_of(series, account));
+        write("other.rcp.yaml", series_of(elsewhere, other));
+        let mut index = Index::scan(&root);
+        let mut changes = Changes::default();
+        assert_eq!(index.get(&series).unwrap().kind(), DocumentType::Recurring);
+
+        let joined =
+            index.set_booking_recurring(&statement, &[rent, again], Some(series), &mut changes);
+        assert_eq!(joined.unwrap(), SaveOutcome::Saved);
+        assert_eq!(changes.saved, [statement], "one write");
+        let items = Index::scan(&root)
+            .get(&statement)
+            .unwrap()
+            .roles()
+            .transactions
+            .clone();
+        let names: Vec<_> = items
+            .unwrap()
+            .transactions
+            .iter()
+            .map(|item| item.recurring)
+            .collect();
+        assert_eq!(names, [Some(series), Some(series), None]);
+
+        let out = index.set_booking_recurring(&statement, &[again], None, &mut changes);
+        assert_eq!(out.unwrap(), SaveOutcome::Saved);
+        let text = fs::read_to_string(root.join("Accounts/s.txs.yaml")).unwrap();
+        assert_eq!(text.matches("recurring:").count(), 1, "{text}");
+
+        for (bookings, to, arg) in [
+            (vec![Id::generate()], Some(series), "booking"),
+            (vec![fee], Some(elsewhere), "to"),
+            (vec![fee], Some(statement), "to"),
+            (vec![fee], Some(Id::generate()), "to"),
+        ] {
+            let refused = index.set_booking_recurring(&statement, &bookings, to, &mut changes);
+            assert!(
+                matches!(refused, Err(Error::InvalidArgument { arg: ref a }) if a == arg),
+                "{arg}: {refused:?}"
+            );
         }
         fs::remove_dir_all(&root).ok();
     }

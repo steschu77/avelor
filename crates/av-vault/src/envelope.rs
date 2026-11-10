@@ -37,6 +37,7 @@ pub enum DocumentType {
     List,
     Email,
     Conversation,
+    Recurring,
 }
 
 // ----------------------------------------------------------------------------
@@ -58,6 +59,7 @@ impl DocumentType {
             DocumentType::List => "lst",
             DocumentType::Email => "eml",
             DocumentType::Conversation => "cvn",
+            DocumentType::Recurring => "rcp",
         }
     }
 }
@@ -80,6 +82,7 @@ impl fmt::Display for DocumentType {
             DocumentType::List => write!(f, "list"),
             DocumentType::Email => write!(f, "email"),
             DocumentType::Conversation => write!(f, "conversation"),
+            DocumentType::Recurring => write!(f, "recurring"),
         }
     }
 }
@@ -212,6 +215,9 @@ pub struct Transaction {
     /// its booking's id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transfer: Option<Id>,
+    /// The recurring payment the booking belongs to: its entity's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recurring: Option<Id>,
 }
 
 // ----------------------------------------------------------------------------
@@ -227,6 +233,43 @@ pub struct Transactions {
     pub balance: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transactions: Vec<Transaction>,
+}
+
+// ----------------------------------------------------------------------------
+/// A payment the vault expects on a schedule (vault.md#recurring).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Recurring {
+    /// The bank account it is paid from or into.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<Id>,
+    /// The other side.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub party: Option<ContactRef>,
+    /// RFC 5545 lines (`RRULE:…`), as an event's `recurrence`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub every: Vec<String>,
+    /// The first occurrence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<DateTime>,
+    /// The last day an occurrence may fall on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<DateTime>,
+    /// From each date on, the amount; the last one current.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub amounts: Vec<Amount>,
+    /// How far a booking may differ from the amount and still pay it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vary: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+}
+
+// ----------------------------------------------------------------------------
+/// A recurring payment's amount from a date on; negative for money out.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Amount {
+    pub from: DateTime,
+    pub amount: f64,
 }
 
 // ----------------------------------------------------------------------------
@@ -429,6 +472,8 @@ pub struct Roles {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transactions: Option<Transactions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recurring: Option<Recurring>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<Event>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<Task>,
@@ -470,6 +515,7 @@ impl Roles {
             (self.transactions.is_some(), DocumentType::Transactions),
             (self.record.is_some(), DocumentType::Record),
             (self.document.is_some(), DocumentType::Document),
+            (self.recurring.is_some(), DocumentType::Recurring),
             (self.message.is_some(), DocumentType::Message),
         ];
         rules.into_iter().find(|(has, _)| *has).map(|(_, t)| t)
@@ -641,6 +687,10 @@ impl Envelope {
                     transaction.sender.iter().chain(&transaction.receiver),
                 );
             }
+        }
+        if let Some(recurring) = &roles.recurring {
+            names(&mut out, &recurring.party);
+            out.extend(recurring.category.as_deref());
         }
         if let Some(event) = &roles.event {
             out.extend(event.location.as_deref());
@@ -891,6 +941,14 @@ contact:
             roles("bank-account: {}\n").derived_type(),
             Some(DocumentType::BankAccount)
         );
+        assert_eq!(
+            roles("recurring: {}\n").derived_type(),
+            Some(DocumentType::Recurring)
+        );
+        assert_eq!(
+            roles("document: {}\nrecurring: {}\n").derived_type(),
+            Some(DocumentType::Document)
+        );
         assert_eq!(roles("title: plain\n").derived_type(), None);
         assert!(roles("title: plain\n").is_empty());
     }
@@ -900,6 +958,32 @@ contact:
         assert_eq!(DocumentType::Thread.type_id(), "thd");
         assert_eq!(DocumentType::Conversation.type_id(), "cvn");
         assert_eq!(DocumentType::BankAccount.to_string(), "bank-account");
+        assert_eq!(DocumentType::Recurring.type_id(), "rcp");
+        assert_eq!(DocumentType::Recurring.to_string(), "recurring");
+    }
+
+    #[test]
+    fn a_recurring_payment_and_its_booking_round_trip() {
+        let yaml = format!(
+            "title: StreamFlix\nrecurring:\n  account: {ID}\n  party: StreamFlix Inc.\n  every:\n  - RRULE:FREQ=MONTHLY;BYMONTHDAY=28\n  from: 2026-08-28\n  amounts:\n  - from: 2026-08-28\n    amount: -15.99\n  vary: 0.5\n  category: subscriptions\n"
+        );
+        let env = Envelope::parse(&yaml).unwrap();
+        let recurring = env.roles.recurring.as_ref().unwrap();
+        assert_eq!(recurring.every, ["RRULE:FREQ=MONTHLY;BYMONTHDAY=28"]);
+        assert_eq!(recurring.amounts[0].amount, -15.99);
+        assert!(env.extra.is_empty(), "the role left in extra");
+        assert_eq!(env.text(), ["StreamFlix Inc.", "subscriptions"]);
+        assert_eq!(env.compose().unwrap(), yaml);
+
+        let booking =
+            format!("transactions:\n  transactions:\n  - amount: -15.99\n    recurring: {ID}\n");
+        let env = Envelope::parse(&booking).unwrap();
+        let item = &env.roles.transactions.as_ref().unwrap().transactions[0];
+        assert_eq!(
+            item.recurring.map(|id| id.to_string()),
+            Some(ID.to_string())
+        );
+        assert_eq!(env.compose().unwrap(), booking);
     }
 
     #[test]
