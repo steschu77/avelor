@@ -384,6 +384,40 @@
   padding: 6px 0;
 }
 
+/* Payments: its lists under their labels, Due and Booked; a row's amount
+   as the Bank lens's, money in bold; a payment due, not there yet, as a
+   pending booking there */
+.feed__head {
+  padding: 8px 6px 2px;
+}
+
+.feed__head:first-child {
+  padding-top: 0;
+}
+
+.feed__amount {
+  font: 400 var(--fs-small)/1.3 var(--f-serif);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--c-ink-soft);
+}
+
+.feed__amount--in {
+  font-weight: 700;
+  color: var(--c-ink);
+}
+
+.feed__row--due .row-title,
+.feed__row--due .feed__amount {
+  color: var(--c-ink-mute);
+  font-style: italic;
+}
+
+.feed__row .chip {
+  margin-left: 6px;
+  font-style: normal;
+}
+
 /* narrower: two cards a row, the wide and full ones alone; the week's
    times above their titles; narrower still, one card a row */
 @container (max-width: 960px) {

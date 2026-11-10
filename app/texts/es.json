@@ -545,8 +545,10 @@
     "other": "{n} actualizados"
   },
   "dash.all_closed": "Todas las tarjetas están cerradas.",
+  "dash.booked": "Registrados",
   "dash.card.conversations": "Conversaciones recientes",
   "dash.card.files": "Archivos recientes",
+  "dash.card.payments": "Pagos",
   "dash.card.tasks": "Tareas",
   "dash.card.upcoming": "Próximamente",
   "dash.card.week": "Semana",
@@ -558,10 +560,16 @@
   "dash.done_on": "Hecha el {day}",
   "dash.drag": "Arrastra para mover",
   "dash.due_on": "Vence el {day}",
+  "dash.due_to": {
+    "one": "{n} pendiente hasta el {day}",
+    "other": "{n} pendientes hasta el {day}"
+  },
   "dash.n_more": "{n} más",
   "dash.next_week": "Semana siguiente",
+  "dash.no_booking_for": "Ningún movimiento para el {day}",
   "dash.no_conversations": "Aún no hay conversaciones.",
   "dash.no_files": "Aún no hay archivos.",
+  "dash.no_payments": "Aún no hay pagos.",
   "dash.no_tasks": "No hay tareas",
   "dash.nothing_planned": "Nada previsto.",
   "dash.open_n": {
