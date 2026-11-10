@@ -852,6 +852,7 @@ The forged vault (`data/forged`) shows the model in use:
 | `Conversations/…65ed.cvn.yaml` | conversation | `conversation`, `ai` | branched message tree, `active` leaf, `linked-to` a mail |
 | `Accounts/…d9a1.bnk.yaml` | bank account | `bank-account`, `created` | |
 | `Accounts/…675b.txs.yaml` | transactions | `transactions`, `import` | bookings `linked-to` the task they paid for |
+| `Accounts/…b6e7.rcp.yaml` | recurring payment | `recurring`, `created` | the statements' bookings name it in `recurring` |
 | `Projects/…489b.prj.md` | project | `project`, `created` | body = project description (The Money Pit, starred) |
 
 These are the ID card thread's entities; the whole vault has every type.

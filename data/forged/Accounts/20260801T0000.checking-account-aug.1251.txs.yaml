@@ -15,6 +15,7 @@ transactions:
     amount: 3120.0
     sender: Springfield Power Station
     receiver: Alexander Yahnek
+    recurring: 019fba9e-d800-70ec-8c70-1405b484333f
   - id: 019fbd4d-7d40-7961-856a-4d2e9d399f0c
     title: Rent August
     date: 2026-08-01T12:30:00Z
@@ -22,6 +23,7 @@ transactions:
     amount: -1150.0
     sender: Alexander Yahnek
     receiver: Shady Pines Properties
+    recurring: 019fba9e-d800-7b2d-898e-447f0c5ade1e
   - id: 01a00581-fc80-71ab-bbab-f260ba280a75
     title: Springfield Power & Light
     date: 2026-08-15T13:00:00Z
@@ -29,6 +31,7 @@ transactions:
     amount: -61.9
     sender: Alexander Yahnek
     receiver: Springfield Power & Light
+    recurring: 01a002b7-e000-77e5-9ca1-cf22cd9ab6e7
   - id: 01a02139-52c0-7bf7-a2ae-8c9e79d0f3bb
     title: Home inspection, 1313 Mockingbird Lane
     date: 2026-08-20T22:10:00Z

@@ -1,0 +1,15 @@
+id: 01a002b7-e000-77e5-9ca1-cf22cd9ab6e7
+title: Springfield Power & Light
+date: 2026-08-15T00:00:00Z
+created: {}
+recurring:
+  account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
+  party: Springfield Power & Light
+  every:
+  - RRULE:FREQ=MONTHLY;BYMONTHDAY=15
+  from: 2026-08-15
+  amounts:
+  - from: 2026-08-15
+    amount: -60.0
+  vary: 5.0
+  category: utilities

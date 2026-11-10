@@ -1,0 +1,17 @@
+id: 01a22ee6-b000-769d-aa0e-cadbb0b660d0
+title: Mortgage
+date: 2026-12-01T00:00:00Z
+projects:
+- 01a0029c-68c0-79cd-804f-54d54c96489b
+linked-to: 01a14066-2b40-75a3-9141-a831abc53eee
+created: {}
+recurring:
+  account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
+  party: First Bank of Springfield
+  every:
+  - RRULE:FREQ=MONTHLY;BYMONTHDAY=1;COUNT=360
+  from: 2026-12-01
+  amounts:
+  - from: 2026-12-01
+    amount: -1927.35
+  category: housing

@@ -4147,6 +4147,40 @@ transactions:
         fs::remove_dir_all(&root).ok();
     }
 
+    #[test]
+    fn the_forged_series_hold_their_bookings() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/forged");
+        let index = Index::scan(&root);
+        let bookings: Vec<&Transaction> = index
+            .all()
+            .iter()
+            .filter_map(|e| e.doc.roles().transactions.as_ref())
+            .flat_map(|t| &t.transactions)
+            .collect();
+        let mut found: Vec<(String, usize, bool)> = index
+            .all()
+            .iter()
+            .filter(|e| e.doc.kind() == DocumentType::Recurring)
+            .map(|e| {
+                let id = Some(e.doc.id());
+                let paid = bookings.iter().filter(|b| b.recurring == id).count();
+                let linked = e.doc.linked_to().is_some();
+                (e.doc.title().to_string(), paid, linked)
+            })
+            .collect();
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                ("Mortgage".to_string(), 0, true),
+                ("Rent, Unit 4B".to_string(), 3, false),
+                ("Salary, Cogsworth".to_string(), 0, true),
+                ("Salary, Springfield Power Station".to_string(), 4, false),
+                ("Springfield Power & Light".to_string(), 4, false),
+            ]
+        );
+    }
+
     /// The sample vault under `data/forged` follows vault.md; every
     /// file must load cleanly and derive its intended type.
     #[test]

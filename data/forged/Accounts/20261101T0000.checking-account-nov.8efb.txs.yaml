@@ -15,6 +15,7 @@ transactions:
     amount: 3120.0
     sender: Springfield Power Station
     receiver: Alexander Yahnek
+    recurring: 019fba9e-d800-70ec-8c70-1405b484333f
   - id: 01a19ceb-c6e0-74e7-8639-7cbfc851921b
     title: Speedy Mart
     date: 2026-11-02T15:41:00Z
@@ -43,6 +44,7 @@ transactions:
     amount: -72.15
     sender: Alexander Yahnek
     receiver: Springfield Power & Light
+    recurring: 01a002b7-e000-77e5-9ca1-cf22cd9ab6e7
   - id: 01a1d053-9120-70ed-8f06-0a6cf5a1acaa
     title: Critter Busters
     date: 2026-11-12T15:15:00Z

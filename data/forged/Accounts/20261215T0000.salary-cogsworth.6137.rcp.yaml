@@ -1,0 +1,15 @@
+id: 01a276ff-b800-73b6-b301-1d4d1f436137
+title: Salary, Cogsworth
+date: 2026-12-15T00:00:00Z
+linked-to: 01a159a7-9f80-7d0b-ae2e-6c5830290cd9
+created: {}
+recurring:
+  account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
+  party: Cogsworth Classic Restoration
+  every:
+  - RRULE:FREQ=MONTHLY;BYMONTHDAY=15,-1
+  from: 2026-12-15
+  amounts:
+  - from: 2026-12-15
+    amount: 1872.46
+  category: income

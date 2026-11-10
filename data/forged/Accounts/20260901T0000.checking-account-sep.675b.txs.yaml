@@ -15,6 +15,7 @@ transactions:
     amount: 3120.0
     sender: Springfield Power Station
     receiver: Alexander Yahnek
+    recurring: 019fba9e-d800-70ec-8c70-1405b484333f
   - id: 01a05bdf-f8c0-72e2-9833-76b178de839f
     title: Rent September
     date: 2026-09-01T12:30:00Z
@@ -22,6 +23,7 @@ transactions:
     amount: -1150.0
     sender: Alexander Yahnek
     receiver: Shady Pines Properties
+    recurring: 019fba9e-d800-7b2d-898e-447f0c5ade1e
   - id: 01a072a9-b640-7110-9d7a-5bcc198eb23d
     title: Speedy Mart
     date: 2026-09-05T22:42:00Z
@@ -36,6 +38,7 @@ transactions:
     amount: -64.2
     sender: Alexander Yahnek
     receiver: Springfield Power & Light
+    recurring: 01a002b7-e000-77e5-9ca1-cf22cd9ab6e7
   - id: 01a0c9dd-03e0-720d-b003-d648f0ef5a3d
     title: Photo booth, passport photos
     date: 2026-09-22T21:05:00Z

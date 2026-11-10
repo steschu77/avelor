@@ -1,0 +1,15 @@
+id: 019fba9e-d800-7b2d-898e-447f0c5ade1e
+title: Rent, Unit 4B
+date: 2026-08-01T00:00:00Z
+created: {}
+recurring:
+  account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
+  party: Shady Pines Properties
+  every:
+  - RRULE:FREQ=MONTHLY;BYMONTHDAY=1
+  from: 2026-08-01
+  until: 2026-10-31
+  amounts:
+  - from: 2026-08-01
+    amount: -1150.0
+  category: housing
