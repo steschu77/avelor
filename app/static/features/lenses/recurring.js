@@ -13,8 +13,7 @@ import { accEl } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
 import { DATE_FORMAT, DAY_SHORT_MONTH, parseDate, signedAmount } from '../../core/format.js';
 import { t } from '../../core/text.js';
-import { NO_PROJECT, projectsOf } from '../../model/entities.js';
-import { amountOn, cents, occurrences, perYear, recurringPaymentEnded, recurringPaymentsIn, statementsEnd } from '../../model/bank.js';
+import { amountOn, cents, occurrences, perYear, recurringPaymentEnded, recurringPaymentsIn, recurringPaymentInProject, statementsEnd } from '../../model/bank.js';
 import { KIND_ICONS, iconEl } from '../../ui/icons.js';
 import { stat, stats } from '../../ui/page.js';
 import { scheduleText } from '../panel/details.js';
@@ -27,12 +26,10 @@ import { scheduleText } from '../panel/details.js';
 export function recurringOf(accounts, selected_project) {
   const today = new Date();
   const ids = new Set(accounts.map(doc => doc.id));
-  const inProject = recurringPayment => !selected_project
-    || (selected_project === NO_PROJECT ? !projectsOf(recurringPayment).length : projectsOf(recurringPayment).includes(selected_project));
   const current = [];
   const ended = [];
   for (const recurringPayment of recurringPaymentsIn(ids)) {
-    if (!inProject(recurringPayment)) continue;
+    if (!recurringPaymentInProject(recurringPayment, selected_project)) continue;
     const amount = amountOn(recurringPayment, today) ?? 0;
     const times = perYear(recurringPayment);
     const entry = { recurringPayment, amount, year: times == null ? null : amount * times, month: times == null ? null : (amount * times) / 12 };

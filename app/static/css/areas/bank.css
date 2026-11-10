@@ -12,8 +12,8 @@
   border-top: 1px solid var(--c-line);
 }
 
-/* an account (a .tile): kind and bank, name and balance, number and what
-   is pending */
+/* an account (a .tile): kind and bank, name and balance (under it, the
+   balance on the horizon), number and what is pending */
 .bank-account {
   flex: 0 1 280px;
   min-width: 210px;
@@ -44,6 +44,11 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   font: 400 var(--fs-sub)/1.3 var(--f-serif);
+}
+
+.bank-account__ahead {
+  grid-column: 2;
+  justify-self: end;
 }
 
 /* the accounts' sum, at the strip's end */
@@ -96,7 +101,8 @@
 }
 
 /* the cash flow: the scrubber (components.css) with a pair of bars per
-   week, in above the line, out below */
+   week, in above the line, out below; beyond each, faint, what is pending
+   and expected */
 .scrub__track--flow {
   height: var(--h-flow);
   align-items: stretch;
@@ -136,6 +142,10 @@
 
 .scrub__out>i {
   background: var(--c-ink-faint);
+}
+
+.scrub__week i.scrub__ahead {
+  opacity: 0.4;
 }
 
 /* while a range is picked, the weeks outside it step back */
