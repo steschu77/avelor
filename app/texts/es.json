@@ -207,6 +207,7 @@
   "bank.a_month_in_out": "al mes: {plus} de entrada, {minus} de salida · {recurring}",
   "bank.add_account": "Añadir una cuenta bancaria",
   "bank.add_account_title": "Carpetas: una cuenta bancaria nueva y la carpeta de sus extractos",
+  "bank.add_tile": "+ Cuenta bancaria",
   "bank.all": "Todos",
   "bank.amount_pending": "{amount} pendiente",
   "bank.cash_flow": {

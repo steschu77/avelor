@@ -207,6 +207,7 @@
   "bank.a_month_in_out": "im Monat: {plus} ein, {minus} aus · {recurring}",
   "bank.add_account": "Bankkonto hinzufügen",
   "bank.add_account_title": "Ordner: ein neues Bankkonto und der Ordner seiner Kontoauszüge",
+  "bank.add_tile": "+ Bankkonto",
   "bank.all": "Alle",
   "bank.amount_pending": "{amount} vorgemerkt",
   "bank.cash_flow": {

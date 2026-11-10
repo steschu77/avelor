@@ -16,7 +16,8 @@
 // filter; a transaction selects itself, its card in the panel
 // (features/panel/transaction.js).
 // Without a bank account, the lens says where transactions come from and offers
-// Add a bank account (the Folders page, `addBankAccount`).
+// Add a bank account (the Folders page, `addBankAccount`); with accounts,
+// + Bank account after their tiles does the same.
 
 import { $, accEl, setAria } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
@@ -31,7 +32,7 @@ import {
   ledger, pairOf, recurringPaymentsIn, recurringPaymentInProject, recurringPaymentOf, statementsEnd,
 } from '../../model/bank.js';
 import { KIND_ICONS, transactionIcon, iconEl } from '../../ui/icons.js';
-import { stat, stats } from '../../ui/page.js';
+import { addTile, stat, stats } from '../../ui/page.js';
 import { accSeg } from '../../ui/segmented.js';
 import { linkChip, linkTarget, pairChip } from '../panel/panel.js';
 import { selectTransaction, selectDocument, selectFilter } from '../selection.js';
@@ -193,15 +194,16 @@ function renderRecurringView(recurring, accounts, tiles, project) {
 }
 
 // ----------------------------------------------------------------------------
-// The accounts as tiles, then their total while there are several; each
-// with its balance on `horizon` while payments are `expected` (`tiles`:
-// also the accounts' `ledgers` and the `state`).
+// The accounts as tiles, + Bank account, then their total while there are
+// several; each with its balance on `horizon` while payments are
+// `expected` (`tiles`: also the accounts' `ledgers` and the `state`).
 function renderAccounts(accounts, { ledgers, state, expected, horizon }) {
   const strip = accEl('div', 'bank-accounts');
   for (const account of accounts) {
     const mine = expected.filter(entry => entry.recurringPayment['recurring-payment'].account === account.id);
     strip.append(renderAccount(account, ledgers.get(account.id), state, mine, horizon));
   }
+  strip.append(addTile({ label: t('bank.add_tile'), hint: 'CSV', onClick: () => addBankAccount() }));
   if (accounts.length > 1) {
     const currency = currencyOf(accounts);
     const sum = accounts.reduce((n, doc) => n + cents(ledgers.get(doc.id).balance), 0) / 100;

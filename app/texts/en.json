@@ -207,6 +207,7 @@
   "bank.a_month_in_out": "a month: {plus} in, {minus} out · {recurring}",
   "bank.add_account": "Add a bank account",
   "bank.add_account_title": "Folders: a new bank account and the folder of its statements",
+  "bank.add_tile": "+ Bank account",
   "bank.all": "All",
   "bank.amount_pending": "{amount} pending",
   "bank.cash_flow": {
