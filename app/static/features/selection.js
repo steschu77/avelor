@@ -65,18 +65,20 @@ export function selectDay(selected_day, doc_id = null) {
 }
 
 // Mark what shows the selected entity in `containerEl` -- its elements
-// with that `data-id`, every occurrence of a series -- as `aria-selected`:
-// now, whenever the selection changes, and through the function returned,
-// which a render calls once it has drawn (the dashboard, the calendar's
-// grid).
+// with that `data-id`, every occurrence of a series; one that also has a
+// `data-booking` (a booking of a statement) only while that booking is
+// selected -- as `aria-selected`: now, whenever the selection changes, and
+// through the function returned, which a render calls once it has drawn
+// (the dashboard, the calendar's grid).
 export function markSelection(containerEl) {
   const mark = () => {
-    const { selected_entity } = store.getState();
+    const { selected_entity, selected_booking } = store.getState();
     for (const el of containerEl.querySelectorAll('[data-id]')) {
-      setAria(el, 'aria-selected', el.dataset.id === selected_entity);
+      const { id, booking } = el.dataset;
+      setAria(el, 'aria-selected', id === selected_entity && (booking === undefined || booking === selected_booking));
     }
   };
-  store.subscribe(state => state.selected_entity, mark);
+  store.subscribe([state => state.selected_entity, state => state.selected_booking], mark);
   return mark;
 }
 

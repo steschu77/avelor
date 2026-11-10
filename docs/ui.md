@@ -139,6 +139,15 @@ selected one is marked, every occurrence of a series (`markSelection`).
   the Documents lens.
 - **Upcoming**: the next six events and open tasks due after the Week's
   seven days (from today while the Week card is closed), within a year.
+- **Payments**: what the recurring payments of the bank accounts in the
+  filter (`vault.md#recurring`; under a project, those in it) are due to
+  pay or bring: the running ones' missed occurrences first, tagged
+  Overdue, then those expected to the horizon (`#bank`), soonest first,
+  muted as a pending booking, five in all; then the four newest bookings,
+  transfers between the accounts left out, money in bold. The head counts
+  the overdue and the due ones ("2 overdue · 3 due to 31 Dec"). A payment
+  due selects its series; a booking selects itself (`selectBooking`), only
+  its row marked.
 - **Recent files**: the six newest dated entities that aren't events,
   tasks, calendars or chats with an AI.
 - **Recent chats**: the four newest chats with an AI, with their
@@ -485,7 +494,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | B6 | Filter by words | typing in the box (`features/words.js`) → `selectFilter({words})`, at most every 120 ms `search` on the channel `search`; the chip's ×, the box's × or Esc → `NO_WORDS` | `search {text}` → `ok {terms, hits}` | the lenses keep what holds every word, its words marked, an excerpt where the title lacks some; the chip in the lens head; the find strip in the panel |
 | D7 | New | New item, the "+" of "Created Here" or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
-| F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Recent files or Recent chats → `selectDocument` | — | the entity in the panel, its rows marked on the dashboard |
+| F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Payments, Recent files or Recent chats → `selectDocument`; a booking of Payments → `selectBooking` | — | the entity (or the booking) in the panel, its rows marked on the dashboard |
 | F4 | Dashboard layout | a card's ×, the Cards menu, Show all cards, a card's head dropped on another, Reset layout; the Week card's gear | `set_prefs {prefs}` (`dashboard_cards`, `dashboard_closed`, `week_start`) | the cards in their order, the closed ones hidden and counted on the Cards button; kept across restarts |
 | F5 | Task dropped on a column | a task card of the Tasks card dragged onto another column (`dragTask`, `dropColumn`, `features/dashboard/cards.js`) → `editEntityLocal(id, {task: {status}})` | `edit_entities` → `entity` (with `task.done` for Done), `ok {changed, skipped}` | the task in its new column, Done first; the panel's card follows |
 | F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selectFilter`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_types`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |

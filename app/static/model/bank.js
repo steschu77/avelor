@@ -8,7 +8,8 @@
 // and what they are expected to pay or bring (`expectedOf`) by the end of
 // next month (`horizonOf`). The Bank lens (features/lenses/bank.js), a
 // booking's card (features/panel/booking.js), a series' card
-// (features/panel/series.js) and a statements watch's pane
+// (features/panel/series.js), the dashboard's Payments card
+// (features/dashboard/cards.js) and a statements watch's pane
 // (features/workspace/folders.js) show them.
 
 import { dayStart, daysBetween, localDay, parseDate } from '../core/format.js';
