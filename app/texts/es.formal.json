@@ -69,6 +69,7 @@
   "new.pick_start": "Elija primero una fecha de inicio",
   "panel.delete_armed": "Haga clic otra vez para eliminar",
   "panel.select_hint": "Seleccione un documento de la lista.",
+  "recurring.none": "Aún no hay pagos recurrentes aquí: cree uno desde la tarjeta de un movimiento, en su fila Pago recurrente.",
   "rp_new.choose_first_day": "Elija el primer día",
   "rp_new.choose_month_day": "Elija un día del mes, del 1 al 31",
   "rp_new.enter_amount": "Escriba el importe",
