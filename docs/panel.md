@@ -448,7 +448,9 @@ is its link, so the contract's card shows the recurring payment as an incoming l
   that amount from the occurrence's day on; missed, once the statements go
   7 days past it without a transaction; and the recurring payment's transactions that pay none
   as extras, on their own day. Their head counts them, "to 13 Nov · 3 paid
-  · 1 off".
+  · 1 off". An occurrence no transaction pays yet, pending ones included, that
+  isn't missed yet is expected (`expectedIn`, `model/bank.js`): on the Bank
+  lens's cash flow and tiles (`ui.md#bank`).
 
 ## A new recurring payment <a id="a-new-recurring"></a>
 

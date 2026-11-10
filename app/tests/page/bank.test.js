@@ -1,12 +1,12 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
-import { localDay, parseDate } from '../../static/core/format.js';
+import { addDays, dayStart, localDay, parseDate } from '../../static/core/format.js';
 import {
-  amountOn, amountsOf, transactionName, transactionOf, howOften, ledger, linkProjects, nextOccurrence, occurrences, pairCandidates,
-  pairOf, partyNames, partyRef, perYear, recurringPaymentEnded, recurringPaymentOf, recurringPaymentsIn, similarNames,
-  statementsEnd, statementsOf, withAmount,
+  amountOn, amountsOf, balanceOn, bankScope, transactionInProject, transactionName, transactionOf, expectedIn, horizonOf, howOften, ledger,
+  linkProjects, nextOccurrence, occurrences, pairCandidates, pairOf, partyNames, partyRef, perYear, recurringPaymentEnded,
+  recurringPaymentInProject, recurringPaymentOf, recurringPaymentsIn, similarNames, statementsEnd, statementsOf, withAmount,
 } from '../../static/model/bank.js';
-import { entities, threads } from '../../static/model/entities.js';
+import { NO_PROJECT, entities, threads, watches } from '../../static/model/entities.js';
 
 const account = (id, balance) => ({ id, kind: 'bank-account', title: id, 'bank-account': { balance } });
 const statement = (id, of, transactions, more = {}) => ({ id, kind: 'statement', title: id, date: '2027-01-01', statement: { account: of, transactions, ...more } });
@@ -15,7 +15,7 @@ const recurring = (id, more = {}) => ({
   id, kind: 'recurring-payment', title: id, 'recurring-payment': { account: 'checking', schedule: ['RRULE:FREQ=MONTHLY;BYMONTHDAY=1'], from: '2027-01-01', ...more },
 });
 const of = id => entities.get(id);
-
+const FILTER = { selected_project: null, selected_source: null, selected_labels: [], word_filter: null };
 const titles = entries => entries.map(entry => [entry.transaction.id, entry.balance]);
 
 test("the balances are walked back from the account's", () => {
@@ -51,6 +51,11 @@ test('what is pending stands apart, the newest first', () => {
   vault(account('checking', 100), statement('s', 'checking', [transaction('a', '2027-01-02', -20), pending('p', '2027-01-03', -5), pending('q', '2027-01-04', -7.5)]));
   const book = ledger(of('checking'));
   equal([titles(book.entries), book.pending.map(entry => entry.transaction.id), book.pendingSum, book.balance], [[['a', 100]], ['q', 'p'], -12.5, 100]);
+});
+
+test("a balance once what is pending and expected is through", () => {
+  equal(balanceOn({ balance: 100, pendingSum: -12.5 }, [{ amount: -50.25 }, { amount: 20 }]), 57.25);
+  equal(balanceOn({ balance: null, pendingSum: 0 }, []), null);
 });
 
 test('how far the statements go, what is pending too', () => {
@@ -128,6 +133,34 @@ test("a transaction without a link is in its recurring payment's projects", () =
   equal([linkProjects({ 'recurring-payment': 'rent' }), linkProjects({ 'recurring-payment': 'rent', 'linked-to': 'bill' })], [['q'], ['p']]);
 });
 
+test('a transaction is in a project through its link', () => {
+  linked();
+  equal(['p', 'q', null, NO_PROJECT].map(id => transactionInProject({ 'linked-to': 'bill' }, id)), [true, false, true, false]);
+  equal(transactionInProject({}, NO_PROJECT), true);
+});
+
+test('a recurring payment is in its own projects', () => {
+  linked();
+  equal(['q', 'p', NO_PROJECT, null].map(id => recurringPaymentInProject(of('rent'), id)), [true, false, false, true]);
+});
+
+test('the accounts and statements in the filter', () => {
+  watches.clear();
+  watches.set('w', { id: 'w', type: 'statements', account: 'empty' });
+  vault(
+    { id: 'p', kind: 'project', title: 'P' }, account('checking'), account('savings'), account('empty'),
+    { ...statement('s1', 'checking', []), labels: ['x'] }, statement('s2', 'savings', []),
+  );
+  const scope = filter => {
+    const { accounts, statements } = bankScope({ ...FILTER, ...filter });
+    return [accounts.map(one => one.id), [...statements].map(one => one.id)];
+  };
+  equal(scope({}), [['checking', 'savings', 'empty'], ['s1', 's2']]);
+  equal(scope({ selected_labels: ['x'] }), [['checking'], ['s1']]);
+  equal(scope({ selected_project: 'p' }), [['checking', 'savings'], ['s1', 's2']]);
+  equal(scope({ selected_source: 'watch:w' }), [['empty'], []]);
+});
+
 // A recurring payment of `checking` on the first of the month, its transactions
 // and how far the statements go.
 function rent(transactions, end, more = {}) {
@@ -196,11 +229,45 @@ test('an amount from a day on takes the place of the one from that day', () => {
   equal(amountsOf(undefined), []);
 });
 
+test('what is expected starts where the statements end, without what is paid', () => {
+  const amounts = [{ from: '2027-01-01', amount: -1150 }, { from: '2027-04-01', amount: -1200 }];
+  const payment = rent([['jan', '2027-01-02', -1150], ['feb', '2027-02-02', -1150]], '2027-02-03', { amounts });
+  equal(expectedIn([payment], parseDate('2027-04-01')).map(entry => [localDay(entry.day), entry.amount]), [['2027-03-01', -1150], ['2027-04-01', -1200]]);
+  equal(localDay(nextOccurrence(payment)), '2027-03-01');
+});
+
+test('one due while the statements are not a week past it is still expected', () => {
+  const payment = rent([['jan', '2027-01-02', -1150]], '2027-02-05');
+  equal(expectedIn([payment], parseDate('2027-02-28')).map(entry => localDay(entry.day)), ['2027-02-01']);
+  equal(localDay(nextOccurrence(payment)), '2027-03-01');
+});
+
+test('what is expected of several comes by its day', () => {
+  vault(
+    account('checking'), recurring('late', { schedule: ['RRULE:FREQ=MONTHLY;BYMONTHDAY=20'], from: '2027-01-20' }), recurring('early'),
+    statement('s', 'checking', [transaction('end', '2027-01-31', -1)]),
+  );
+  equal(expectedIn([of('late'), of('early')], parseDate('2027-02-28')).map(entry => entry.recurringPayment.id), ['early', 'late']);
+});
+
 test('a recurring payment has ended after its last day', () => {
   const payment = recurring('rent', { until: '2027-02-01' });
   equal([recurringPaymentEnded(payment, new Date(2027, 1, 1)), recurringPaymentEnded(payment, new Date(2027, 1, 2)), recurringPaymentEnded(recurring('rent'), new Date())],
     [false, true, false]);
   equal(nextOccurrence(rent([], '2027-06-01', { until: '2027-02-01' })), null);
+});
+
+test('the payments expected are counted to the end of next month', () => {
+  vault(account('checking'), account('savings'), statement('s', 'checking', [transaction('end', '2027-04-30', -1)]));
+  equal(horizonOf([], new Date(2027, 2, 15)), new Date(2027, 3, 30));
+  equal(horizonOf([of('checking'), of('savings')], new Date(2027, 2, 15)), new Date(2027, 5, 30));
+  equal(horizonOf([of('savings')], new Date(2027, 11, 31)), new Date(2028, 0, 31));
+});
+
+test('without statements what is expected starts today', () => {
+  const today = dayStart(new Date());
+  vault(account('checking'), recurring('daily', { schedule: ['RRULE:FREQ=DAILY'], from: localDay(addDays(today, -3)) }));
+  equal(expectedIn([of('daily')], addDays(today, 1)).map(entry => localDay(entry.day)), [localDay(today), localDay(addDays(today, 1))]);
 });
 
 test('how often a recurring payment repeats', () => {

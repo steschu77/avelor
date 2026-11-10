@@ -6,11 +6,15 @@
 // of weeks the transactions keep to; then the transactions by month, newest first,
 // each with what it is linked to (a transfer: its other half) and its
 // account's balance after it (`ledger`, model/bank.js). The scope is the vault panel's filter on the statements
-// (`matchesFilter`): with nothing narrowing it, every bank account shows,
+// (`bankScope`): with nothing narrowing it, every bank account shows,
 // one without statements too. Under a project, a transaction is in it through
-// what it is linked to (`linkProjects`), and the project's In, Out and Net
-// take the accounts' place. A tile makes its account's source the filter; a
-// transaction selects itself, its card in the panel (features/panel/transaction.js).
+// what it is linked to (`transactionInProject`), and the project's In, Out and
+// Net take the accounts' place, with what its recurring payments are expected to pay
+// or bring a month. What is pending and the payments expected to the end of
+// next month (`expectedOf`, `horizonOf`) are faint on the cash flow and
+// continue each account's balance. A tile makes its account's source the
+// filter; a transaction selects itself, its card in the panel
+// (features/panel/transaction.js).
 // Without a bank account, the lens says where transactions come from and offers
 // Add a bank account (the Folders page, `addBankAccount`).
 
@@ -21,8 +25,11 @@ import { amountText, dayStart, everyMidnight, money, signedAmount } from '../../
 import { registerAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
 import { store, vaultOpen } from '../../model/state.js';
-import { NO_PROJECT, accountWatch, entities, matchesFilter, watchSourceKey, watches } from '../../model/entities.js';
-import { ACCOUNT_TYPES, TRANSACTION_TYPES, transactionName, cents, ledger, linkProjects, pairOf, recurringPaymentOf, statementsEnd } from '../../model/bank.js';
+import { NO_PROJECT, accountWatch, entities, watchSourceKey } from '../../model/entities.js';
+import {
+  ACCOUNT_TYPES, TRANSACTION_TYPES, balanceOn, bankScope, transactionInProject, transactionName, cents, expectedIn, horizonOf,
+  ledger, pairOf, recurringPaymentsIn, recurringPaymentInProject, recurringPaymentOf, statementsEnd,
+} from '../../model/bank.js';
 import { KIND_ICONS, transactionIcon, iconEl } from '../../ui/icons.js';
 import { stat, stats } from '../../ui/page.js';
 import { accSeg } from '../../ui/segmented.js';
@@ -84,37 +91,6 @@ function markTransaction() {
 store.subscribe([state => state.selected_entity, state => state.selected_transaction], markTransaction);
 
 // ----------------------------------------------------------------------------
-// The accounts and statements in the scope. Under a project, or No project,
-// the statements are filtered without it: their transactions are in it through
-// their links (`inProject`). With nothing narrowing the scope, every bank
-// account; else the accounts of the statements in it, and the account of a
-// statements watch picked as the source.
-function scopeOf(state) {
-  const filter = state.selected_project ? { ...state, selected_project: null } : state;
-  const statements = new Set();
-  const all = [];
-  for (const doc of entities.values()) {
-    if (doc.kind === 'bank-account') all.push(doc);
-    else if (doc.statement && matchesFilter(doc, filter)) statements.add(doc);
-  }
-  const narrowed = state.selected_project || state.selected_source || state.selected_labels.length
-    || state.word_filter;
-  if (!narrowed) return { accounts: all, statements };
-  const ids = new Set([...statements].map(doc => doc.statement.account));
-  for (const watch of watches.values()) {
-    if (watch.account && watchSourceKey(watch.id) === state.selected_source) ids.add(watch.account);
-  }
-  return { accounts: all.filter(doc => ids.has(doc.id)), statements };
-}
-
-// Whether `entry`'s transaction is in the project selected, through its link:
-// for No project, it has none that way; without a project, every transaction.
-function inProject(entry, selected_project) {
-  if (!selected_project) return true;
-  const ids = linkProjects(entry.transaction);
-  return selected_project === NO_PROJECT ? !ids.length : ids.includes(selected_project);
-}
-
 // The one currency of `accounts`, or null if they have several.
 function currencyOf(accounts) {
   const currencies = new Set(accounts.map(doc => doc['bank-account']?.currency));
@@ -129,11 +105,16 @@ function renderBankLens() {
     return;
   }
   const project = state.selected_project && state.selected_project !== NO_PROJECT ? state.selected_project : null;
-  const scope = scopeOf(state);
+  const scope = bankScope(state);
   const ledgers = new Map(scope.accounts.map(doc => [doc.id, ledger(doc)]));
   const recurring = recurringOf(scope.accounts, state.selected_project);
+  // What the accounts' recurring payments are expected to pay or bring to the horizon,
+  // which continues the tiles' balances.
+  const horizon = horizonOf(scope.accounts);
+  const expected = expectedIn(recurringPaymentsIn(new Set(scope.accounts.map(doc => doc.id))), horizon);
+  const tiles = { ledgers, state, expected, horizon };
   if (cut.view === 'recurring') {
-    renderRecurringView(recurring, scope.accounts, ledgers, project, state);
+    renderRecurringView(recurring, scope.accounts, tiles, project);
     return;
   }
 
@@ -143,7 +124,7 @@ function renderBankLens() {
   for (const account of scope.accounts) {
     const { entries, pending } = ledgers.get(account.id);
     const take = (entry, seq, isPending) => {
-      if (scope.statements.has(entry.statement) && inProject(entry, state.selected_project)) {
+      if (scope.statements.has(entry.statement) && transactionInProject(entry.transaction, state.selected_project)) {
         transactions.push({ ...entry, account, seq, pending: isPending, pair: pairOf(entry.transaction) });
       }
     };
@@ -161,20 +142,31 @@ function renderBankLens() {
   const links = { linked, unlinked: cutIn.length - linked };
   const shown = cutIn.filter(linkCut);
 
+  // The cash flow takes the payments expected of the recurring payments in the project,
+  // money in or out as the cut shows it.
+  const expectedHere = expected.filter(entry => recurringPaymentInProject(entry.recurringPayment, state.selected_project));
+  const ahead = expectedHere.filter(entry => cut[entry.amount > 0 ? 'in' : 'out']);
+  const aheadPicked = flow.range() ? ahead.filter(entry => flow.holds(entry.day)).length : 0;
+  const aheadNote = aheadPicked ? t('bank.payments_expected', { n: aheadPicked }) : null;
+
   const accounts = project ? [...new Set(transactions.map(entry => entry.account))] : scope.accounts;
   countEl.textContent = `${t('bank.count.transactions', { n: shown.length })} \u00b7 ${t('bank.count.accounts', { n: accounts.length })}`;
   const parts = [];
-  if (project) parts.push(renderProjectSums(picked, accounts));
-  else if (accounts.length) parts.push(renderAccounts(accounts, ledgers, state));
+  if (project) parts.push(renderProjectSums(picked, accounts, recurring.current));
+  else if (accounts.length) parts.push(renderAccounts(accounts, tiles));
   parts.push(renderCut(counts, links, recurring.current.length));
-  if (transactions.length) parts.push(renderFlow(transactions, transactions.filter(entry => sideCut(entry) && linkCut(entry))));
+  if (transactions.length || expectedHere.length) {
+    const inCut = transactions.filter(entry => sideCut(entry) && linkCut(entry));
+    parts.push(renderFlow(transactions, inCut, ahead, expectedHere.length ? horizon : null));
+  }
   if (shown.length) {
-    parts.push(renderTransactions(shown, accounts, ledgers, project));
+    parts.push(renderTransactions(shown, accounts, ledgers, project, aheadNote));
   } else {
     const text = !transactions.length
       ? (project ? t('bank.none_project')
         : accounts.length ? t('bank.none_here') : t('bank.no_account'))
-      : picked.length ? t('bank.none_here') : t('bank.none_weeks');
+      : picked.length ? t('bank.none_here')
+        : aheadPicked ? t('bank.none_weeks_expected', { n: aheadPicked }) : t('bank.none_weeks');
     parts.push(accEl('p', 'note bank__none', text));
   }
   lensEl.replaceChildren(...parts);
@@ -184,7 +176,7 @@ function renderBankLens() {
 // The Recurring view: the accounts (not under a project), the cut -- In and
 // Out counting the running recurring payments, the view -- then the fixed costs
 // (`renderRecurring`); the cash flow steps aside, its weeks pick transactions.
-function renderRecurringView(recurring, accounts, ledgers, project, state) {
+function renderRecurringView(recurring, accounts, tiles, project) {
   const side = entry => (entry.amount > 0 ? 'in' : 'out');
   const counts = { in: 0, out: 0 };
   for (const entry of recurring.current) counts[side(entry)]++;
@@ -194,17 +186,22 @@ function renderRecurringView(recurring, accounts, ledgers, project, state) {
     shown.ended.length ? t('count.ended', { n: shown.ended.length }) : null,
     t('bank.count.accounts', { n: accounts.length })].filter(Boolean).join(' \u00b7 ');
   const parts = [];
-  if (!project && accounts.length) parts.push(renderAccounts(accounts, ledgers, state));
+  if (!project && accounts.length) parts.push(renderAccounts(accounts, tiles));
   parts.push(renderCut(counts, null, recurring.current.length), ...renderRecurring(shown, accounts));
   lensEl.replaceChildren(...parts);
   markTransaction();
 }
 
 // ----------------------------------------------------------------------------
-// The accounts as tiles, then their total while there are several.
-function renderAccounts(accounts, ledgers, state) {
+// The accounts as tiles, then their total while there are several; each
+// with its balance on `horizon` while payments are `expected` (`tiles`:
+// also the accounts' `ledgers` and the `state`).
+function renderAccounts(accounts, { ledgers, state, expected, horizon }) {
   const strip = accEl('div', 'bank-accounts');
-  for (const account of accounts) strip.append(renderAccount(account, ledgers.get(account.id), state));
+  for (const account of accounts) {
+    const mine = expected.filter(entry => entry.recurringPayment['recurring-payment'].account === account.id);
+    strip.append(renderAccount(account, ledgers.get(account.id), state, mine, horizon));
+  }
   if (accounts.length > 1) {
     const currency = currencyOf(accounts);
     const sum = accounts.reduce((n, doc) => n + cents(ledgers.get(doc.id).balance), 0) / 100;
@@ -214,6 +211,11 @@ function renderAccounts(accounts, ledgers, state) {
     if (currency !== null) {
       total.append(accEl('span', 'figure', money(sum, currency)));
       if (pending) total.append(accEl('span', 'meta', t('bank.with_pending', { amount: money(sum + pending, currency) })));
+      if (expected.length) {
+        const ahead = expected.reduce((n, entry) => n + cents(entry.amount), 0) / 100;
+        const amount = money(sum + pending + ahead, currency);
+        total.append(accEl('span', 'meta', t('bank.on_day', { amount, day: DAY_SHORT_MONTH.format(horizon) })));
+      }
     } else {
       total.append(accEl('span', 'meta', t('bank.several_currencies')));
     }
@@ -222,11 +224,12 @@ function renderAccounts(accounts, ledgers, state) {
   return strip;
 }
 
-// An account: its type and bank, its name and balance, its number, what is
-// pending and how far its statements go. A click makes its watch's source
-// the filter, or the whole vault again; an account without a watch shows
-// its card.
-function renderAccount(account, book, state) {
+// An account: its type and bank, its name and balance (and under it, while
+// its recurring payments are `expected` to pay or bring anything, the balance on
+// `horizon`, `balanceOn`), its number, what is pending and how far its
+// statements go. A click makes its watch's source the filter, or the whole
+// vault again; an account without a watch shows its card.
+function renderAccount(account, book, state, expected, horizon) {
   const fields = account['bank-account'] ?? {};
   const name = account.title || t('untitled');
   const watch = accountWatch(account.id);
@@ -250,16 +253,20 @@ function renderAccount(account, book, state) {
     book.pending.length ? t('bank.amount_pending', { amount: signedAmount(book.pendingSum) }) : null,
     end ? t('bank.statement_to', { day: DAY_SHORT_MONTH.format(end) }) : t('bank.no_statement'),
   ];
+  const on = expected.length ? balanceOn(book, expected) : null;
   tile.append(type, accEl('span', 'bank-account__name', name),
     accEl('span', 'figure', balance != null ? money(balance, fields.currency) : '\u2014'),
+    ...(on == null ? [] : [accEl('span', 'meta bank-account__ahead', t('bank.on_day', { amount: money(on, fields.currency), day: DAY_SHORT_MONTH.format(horizon) }))]),
     accEl('span', 'meta bank-account__meta', meta.filter(Boolean).join(' \u00b7 ')));
   return tile;
 }
 
 // Under a project, in the accounts' place: what came in and went out, the
 // net (each without and with what is pending; transfers in none of them),
-// and the accounts and months the transactions come from.
-function renderProjectSums(transactions, accounts) {
+// what the project's running recurring payments (`recurringOf`'s `current`) are
+// expected to pay or bring a month, and the accounts and months the
+// transactions come from.
+function renderProjectSums(transactions, accounts, running) {
   const sum = list => list.reduce((n, entry) => n + cents(entry.transaction.amount), 0) / 100;
   const counted = transactions.filter(entry => !entry.pair);
   const posted = counted.filter(entry => !entry.pending);
@@ -276,11 +283,19 @@ function renderProjectSums(transactions, accounts) {
   const times = transactions.map(entry => entry.time);
   const [from, to] = times.length
     ? [Math.min(...times), Math.max(...times)].map(time => SHORT_MONTH_YEAR.format(new Date(time))) : [];
+  const monthly = running.filter(entry => entry.month != null);
+  const perMonth = list => list.reduce((n, entry) => n + cents(entry.month), 0) / 100;
+  const plus = perMonth(monthly.filter(entry => entry.month > 0));
+  const minus = perMonth(monthly.filter(entry => entry.month < 0));
+  const recurring = t('count.recurring_payments', { n: monthly.length });
   return stats(
     side(t('bank.in'), isIn, 1),
     side(t('bank.out'), entry => !isIn(entry), -1),
     stat(t('bank.net'), accEl('span', 'figure', signedAmount(net)),
       withPending !== net ? t('bank.with_pending', { amount: signedAmount(withPending) }) : null),
+    ...(monthly.length ? [stat(t('bank.expected'), accEl('span', 'figure', signedAmount(plus + minus)),
+      plus && minus ? t('bank.a_month_in_out', { plus: signedAmount(plus), minus: signedAmount(minus), recurring })
+        : t('bank.a_month', { recurring }))] : []),
     stat(t('props.from'), accounts.map(doc => doc.title || t('untitled')).join(', ') || '\u2014',
       from ? (from === to ? from : `${from} \u2013 ${to}`) : null));
 }
@@ -336,30 +351,43 @@ function renderCut(counts, links, recurringCount) {
 
 // ----------------------------------------------------------------------------
 // The cash flow: a pair of bars per week, from the first transaction's week to
-// the later of today's and the last transaction's, at most two years; money in
+// the later of today's and the last transaction's -- while payments are
+// expected, on to the horizon's (`reach`) -- at most two years; money in
 // above the line, out below, each as high as the square root of its sum
 // against the largest week's, so one large transaction doesn't flatten the
 // paydays. The bars count the posted transactions of the cut but transfers, in
-// every week shown; its range keeps the transactions, the cut's counts and a
-// project's sums to the weeks picked.
+// every week shown; beyond them, faint, the pending ones and the payments
+// expected (`ahead`, `expectedOf`). Its range keeps the transactions, the cut's
+// counts and a project's sums to the weeks picked.
 const FLOW_WEEKS = 104;
-const flow = scrubber({ lens: 'bank', meta: t('bank.flow_meta'), track: 'scrub__track--flow' });
+const flow = scrubber({
+  lens: 'bank', meta: t('bank.flow_meta'), track: 'scrub__track--flow',
+});
 
-function renderFlow(transactions, inCut) {
+function renderFlow(transactions, inCut, ahead, reach) {
   const today = dayStart(new Date());
   const times = transactions.map(entry => entry.time);
-  const weeks = weeksBetween(new Date(Math.min(...times)), new Date(Math.max(today.getTime(), ...times)))
-    .slice(-FLOW_WEEKS);
-  const sums = weeks.map(() => ({ in: 0, out: 0 }));
+  const first = times.length ? Math.min(...times) : today.getTime();
+  const last = Math.max(today.getTime(), ...times, ...(reach ? [reach.getTime()] : []));
+  const weeks = weeksBetween(new Date(first), new Date(last)).slice(-FLOW_WEEKS);
+  // Each week's sums in cents, posted and not yet: `{ in, out }` each, and
+  // what the faint ones are, for its title.
+  const sums = weeks.map(() => ({ posted: { in: 0, out: 0 }, ahead: { in: 0, out: 0 }, what: [] }));
+  const add = (date, amount, pending, what) => {
+    const week = weekOf(weeks, date);
+    if (week < 0) return;
+    const side = amount > 0 ? 'in' : 'out';
+    sums[week][pending ? 'ahead' : 'posted'][side] += Math.abs(amount);
+    const sum = amountText(Math.abs(amount) / 100);
+    if (what) sums[week].what.push(side === 'in' ? t('bank.week_in_what', { amount: sum, what }) : t('bank.week_out_what', { amount: sum, what }));
+  };
   for (const entry of inCut) {
-    const week = entry.pending || entry.pair ? -1 : weekOf(weeks, new Date(entry.time));
-    if (week < 0) continue;
-    const amount = cents(entry.transaction.amount);
-    if (amount > 0) sums[week].in += amount;
-    else sums[week].out -= amount;
+    if (!entry.pair) add(new Date(entry.time), cents(entry.transaction.amount), entry.pending, entry.pending ? t('transaction.pending') : null);
   }
-  const largest = Math.max(1, ...sums.flatMap(sum => [sum.in, sum.out]));
-  const height = sum => `${Math.sqrt(sum / largest) * 100}%`;
+  for (const entry of ahead) add(entry.day, cents(entry.amount), true, t('bank.expected_from', { name: entry.recurringPayment.title || t('untitled') }));
+  const whole = (sum, side) => sum.posted[side] + sum.ahead[side];
+  const largest = Math.max(1, ...sums.flatMap(sum => [whole(sum, 'in'), whole(sum, 'out')]));
+  const height = n => Math.sqrt(n / largest) * 100;
   flow.render({
     title: t('bank.cash_flow', { n: weeks.length }),
     weeks,
@@ -367,34 +395,43 @@ function renderFlow(transactions, inCut) {
     labels: weeks.length > 53 ? 'years' : 'months',
     bar(i, kept) {
       const week = kept ?? flowWeek();
-      const { in: moneyIn, out } = sums[i];
-      week.firstChild.firstChild.style.height = height(moneyIn);
-      week.lastChild.firstChild.style.height = height(out);
-      const what = [moneyIn ? `in ${amountText(moneyIn / 100)}` : null, out ? `out ${amountText(out / 100)}` : null];
-      week.title = t('week.of', { day: DAY_MONTH_YEAR.format(weeks[i]), what: what.filter(Boolean).join(' \u00b7 ') || t('bank.no_transactions') });
+      const sum = sums[i];
+      const [moneyIn, out] = week.children;
+      for (const [side, solid, faint] of [['in', moneyIn.lastChild, moneyIn.firstChild], ['out', out.firstChild, out.lastChild]]) {
+        const posted = height(sum.posted[side]);
+        solid.style.height = `${posted}%`;
+        faint.style.height = `${height(whole(sum, side)) - posted}%`;
+      }
+      const what = [sum.posted.in ? t('bank.week_in', { amount: amountText(sum.posted.in / 100) }) : null,
+        sum.posted.out ? t('bank.week_out', { amount: amountText(sum.posted.out / 100) }) : null, ...sum.what];
+      const said = what.filter(Boolean).join(' \u00b7 ') || t('bank.no_transactions');
+      week.title = t('week.of', { day: DAY_MONTH_YEAR.format(weeks[i]), what: said });
       return week;
     },
   });
   return flow.el;
 }
 
-// A week of the cash flow: its bar of money in over its bar of money out.
+// A week of the cash flow: its bars of money in over its bars of money out,
+// each side's faint one (what is pending and expected) beyond its posted
+// one: over it for money in, under it for money out.
 function flowWeek() {
   const week = accEl('span', 'scrub__week');
   const moneyIn = accEl('span', 'scrub__in');
   const out = accEl('span', 'scrub__out');
-  moneyIn.append(accEl('i'));
-  out.append(accEl('i'));
+  moneyIn.append(accEl('i', 'scrub__ahead'), accEl('i'));
+  out.append(accEl('i'), accEl('i', 'scrub__ahead'));
   week.append(moneyIn, out);
   return week;
 }
 
 // ----------------------------------------------------------------------------
 // The transactions under their months, then a note: where the statements start,
-// or, under a project, how a transaction is in it; and, while transfers show,
-// that they count in neither In nor Out. Under a project there is no
-// balance: balances belong to accounts.
-function renderTransactions(shown, accounts, ledgers, project) {
+// or, under a project, how a transaction is in it; while transfers show, that
+// they count in neither In nor Out; and `aheadNote`, how many payments are
+// expected in the weeks picked. Under a project there is no balance:
+// balances belong to accounts.
+function renderTransactions(shown, accounts, ledgers, project, aheadNote) {
   const table = accEl('div', project ? 'table bank bank--project' : 'table bank');
   const head = accEl('div', 'list-row table__head');
   head.append(accEl('span', 'label', t('docs.date')), accEl('span', 'label', t('bank.transaction')),
@@ -428,6 +465,7 @@ function renderTransactions(shown, accounts, ledgers, project) {
       ? t('bank.project_note')
       : startsNote(accounts, ledgers),
     shown.some(entry => entry.pair) ? t('bank.transfers_note') : null,
+    aheadNote,
   ].filter(Boolean).join(' ');
   if (note) {
     const foot = accEl('div', 'lens-hidden');

@@ -3,15 +3,21 @@
 // the posted transactions with the balance after each (`ledger`); a transaction's
 // party (`partyOf`), the other half of a transfer (`pairOf`), its name
 // (`transactionName`) and its projects through its link (`linkProjects`); the
-// recurring payments (vault.md#recurring), their transactions and occurrences.
-// The Bank lens (features/lenses/bank.js), a transaction's card
-// (features/panel/transaction.js), a recurring payment's card (features/panel/recurring-payment.js)
-// and a statements watch's pane (features/workspace/folders.js) show them.
+// accounts and statements in the vault panel's filter (`bankScope`); the
+// recurring payments (vault.md#recurring), their transactions and occurrences,
+// and what they are expected to pay or bring (`expectedOf`) by the end of
+// next month (`horizonOf`). The Bank lens (features/lenses/bank.js), a
+// transaction's card (features/panel/transaction.js), a recurring payment's card
+// (features/panel/recurring-payment.js) and a statements watch's pane
+// (features/workspace/folders.js) show them.
 
 import { addDays, dayStart, daysBetween, localDay, parseDate } from '../core/format.js';
 import { t } from '../core/text.js';
 import { periodOf, scheduleStarts, timesAYear } from './schedule.js';
-import { entities, parseContact, projects, projectsOf, threadProjects, threads } from './entities.js';
+import {
+  NO_PROJECT, entities, matchesFilter, parseContact, projects, projectsOf, threadProjects, threads, watchSourceKey,
+  watches,
+} from './entities.js';
 
 // The statements of the bank account `id`: the statement entities
 // naming it.
@@ -107,6 +113,47 @@ export function linkProjects(transaction) {
   if (threads.has(to)) return threadProjects(to);
   const doc = entities.get(to);
   return doc ? projectsOf(doc) : [];
+}
+
+// Whether `transaction` is in the project `selected_project`, through its link
+// (`linkProjects`): for No project, it has none that way; without a
+// project, every transaction.
+export function transactionInProject(transaction, selected_project) {
+  if (!selected_project) return true;
+  const ids = linkProjects(transaction);
+  return selected_project === NO_PROJECT ? !ids.length : ids.includes(selected_project);
+}
+
+// Whether the recurring payment `recurringPayment` is in the project `selected_project`, by its
+// own projects: for No project, it has none; without a project, every one.
+export function recurringPaymentInProject(recurringPayment, selected_project) {
+  if (!selected_project) return true;
+  const ids = projectsOf(recurringPayment);
+  return selected_project === NO_PROJECT ? !ids.length : ids.includes(selected_project);
+}
+
+// The bank accounts and statements in the vault panel's filter `state`:
+// `{ accounts, statements }`, the statements a Set. Under a project, or No
+// project, the statements are filtered without it: their transactions are in it
+// through their links (`transactionInProject`). With nothing narrowing the
+// scope, every bank account; else the accounts of the statements in it,
+// and the account of a statements watch picked as the source.
+export function bankScope(state) {
+  const filter = state.selected_project ? { ...state, selected_project: null } : state;
+  const statements = new Set();
+  const all = [];
+  for (const doc of entities.values()) {
+    if (doc.kind === 'bank-account') all.push(doc);
+    else if (doc.statement && matchesFilter(doc, filter)) statements.add(doc);
+  }
+  const narrowed = state.selected_project || state.selected_source || state.selected_labels.length
+    || state.word_filter;
+  if (!narrowed) return { accounts: all, statements };
+  const ids = new Set([...statements].map(doc => doc.statement.account));
+  for (const watch of watches.values()) {
+    if (watch.account && watchSourceKey(watch.id) === state.selected_source) ids.add(watch.account);
+  }
+  return { accounts: all.filter(doc => ids.has(doc.id)), statements };
 }
 
 // Money in cents while it is summed, so the sums don't drift.
@@ -324,13 +371,52 @@ export function occurrences(recurringPayment) {
   return out.sort((a, b) => b.day - a.day);
 }
 
+// The occurrences of `recurringPayment` no transaction pays yet (pending ones included),
+// to `until`, oldest first: `{ recurringPayment, day, amount }` each, the amount as
+// on its day (`amountOn`). One the statements go `PAY_DAYS` past is missed
+// instead (`occurrences`); without statements, they start today.
+function expectedOf(recurringPayment, until) {
+  const end = statementsEnd(recurringPayment['recurring-payment']?.account);
+  const paid = new Set(occurrences(recurringPayment).filter(o => o.state !== 'extra').map(o => o.day.getTime()));
+  const from = end ? addDays(dayStart(end), 1 - PAY_DAYS) : dayStart(new Date());
+  return occurrenceDays(recurringPayment, addDays(dayStart(until), 1))
+    .filter(day => day >= from && !paid.has(day.getTime()))
+    .map(day => ({ recurringPayment, day, amount: amountOn(recurringPayment, day) ?? 0 }));
+}
+
+// What the recurring payments `list` are expected to pay or bring to `until`
+// (`expectedOf`), by day.
+export function expectedIn(list, until) {
+  return list.flatMap(recurringPayment => expectedOf(recurringPayment, until)).sort((a, b) => a.day - b.day);
+}
+
 // The recurring payment's next occurrence after its account's statements (after today
 // without any) that no transaction pays yet; null when it has ended.
 export function nextOccurrence(recurringPayment) {
   const after = statementsEnd(recurringPayment['recurring-payment']?.account) ?? dayStart(new Date());
-  const before = new Date(after.getFullYear() + 2, after.getMonth(), after.getDate() + 1);
-  const paid = new Set(occurrences(recurringPayment).filter(o => o.state !== 'extra').map(o => o.day.getTime()));
-  return occurrenceDays(recurringPayment, before).find(day => day > after && !paid.has(day.getTime())) ?? null;
+  const until = new Date(after.getFullYear() + 2, after.getMonth(), after.getDate());
+  return expectedOf(recurringPayment, until).find(entry => entry.day > after)?.day ?? null;
+}
+
+// The day the payments expected are counted to: the end of the month after
+// the one holding the later of `today` and the day after the newest
+// statement of the bank accounts `accounts` (entities).
+export function horizonOf(accounts, today = dayStart(new Date())) {
+  let from = today;
+  for (const account of accounts) {
+    const end = statementsEnd(account.id);
+    if (end && addDays(dayStart(end), 1) > from) from = addDays(dayStart(end), 1);
+  }
+  return new Date(from.getFullYear(), from.getMonth() + 2, 0);
+}
+
+// An account's balance once what is pending is posted and the payments
+// `expected` (`expectedOf`, its recurring payments') are made: its ledger `book`'s
+// balance with both; null without a balance.
+export function balanceOn(book, expected) {
+  if (book.balance == null) return null;
+  const ahead = expected.reduce((sum, entry) => sum + cents(entry.amount), 0);
+  return units(cents(book.balance) + cents(book.pendingSum) + ahead);
 }
 
 // Whether the recurring payment has ended: its `until` before `today`.
