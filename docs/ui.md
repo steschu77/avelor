@@ -290,14 +290,23 @@ entity or thread of it; without a link, through its recurring payment
 (`vault.md#recurring`); the statements are filtered without the project.
 
 - **The accounts** as tiles: kind and bank, name and balance, number, what
-  is pending and how far the statements go ("statement to 13 Nov"). A
-  click makes the account's watch's source the filter, a second click
-  shows every source again; an account without a watch shows its card.
-  With several accounts, their total ends the strip, with what is
-  pending, while they share a currency.
+  is pending and how far the statements go ("statement to 13 Nov"); while
+  the account's recurring payments are expected to pay or bring anything
+  (`panel.md#a-series-card`, `expectedIn`), under the balance the balance
+  on the horizon, with what is pending and expected by then ("$33,631.39
+  on 31 Dec", `balanceOn`). The horizon is the end of the month after the
+  one holding the later of today and the day after the newest statement
+  (`horizonOf`, `model/bank.js`). A click makes the account's watch's
+  source the filter, a second click shows every source again; an account
+  without a watch shows its card. With several accounts, their total ends
+  the strip, with what is pending and on the horizon, while they share a
+  currency.
 - **Under a project** the project's sums take the accounts' place: In and
   Out (with what is pending, else their count), Net (with what is
-  pending), transfers in none of them, and the accounts and months they
+  pending), transfers in none of them; Expected, what the project's
+  running recurring payments (by their own projects) pay or bring a month,
+  with the in and the out while there are both, and their count; and the
+  accounts and months they
   come from, in the weeks picked on the cash flow. The bookings show no balance, which belongs to
   an account; the note under them says how a booking is in a project.
 - **The cut**, for the session: In, Out and Transfers (between the
@@ -326,15 +335,20 @@ entity or thread of it; without a link, through its recurring payment
 - **The cash flow**, the Timeline's scrubber (`scrubber`,
   `features/lenses/scrub.js`): "Cash flow · 15 weeks", a pair of bars per
   week from the first booking's week to the later of today's and the last
-  booking's, at most two years (older bookings are in the list, not on
-  it); money in above the line, out below, each as high as the square
-  root of its sum against the largest week's, so one large booking doesn't
-  flatten the paydays. The bars count the booked bookings of the cut but
-  transfers. The months are under it, the years over a year of weeks. A
-  drag across it picks the weeks it passes, a click one week: the
-  bookings, the cut's counts, the head's count and a project's
-  sums keep to them ("No bookings in these weeks." while none is), the
-  accounts' tiles don't. The range is named with
+  booking's, and while payments are expected on to the horizon's, at most
+  two years (older bookings are in the list, not on it); money in above
+  the line, out below, each as high as the square root of its sum against
+  the largest week's, so one large booking doesn't flatten the paydays.
+  The bars count the booked bookings of the cut but transfers; beyond
+  them, faint, the pending ones and the payments expected (under a
+  project, its series'; In and Out cut them, the link doesn't), each named
+  in the week's tooltip. The months are under it, the years over a year
+  of weeks. A drag across it picks the weeks it passes, a click one week:
+  the bookings, the cut's counts, the head's count and a project's sums
+  keep to them ("No bookings in these weeks." while none is, "…, but 2
+  payments expected." while payments are; with bookings, the note under
+  them counts the payments expected), the accounts' tiles don't. The
+  range is named with
   Clear and lasts while the app runs; Today drops a range without today.
   At midnight, today moves on.
 - **The bookings** by month, newest first, a pending one before the booked

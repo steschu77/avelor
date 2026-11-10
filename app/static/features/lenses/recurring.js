@@ -11,8 +11,7 @@
 
 import { accEl } from '../../core/dom.js';
 import { DATE_FORMAT, DAY_SHORT_MONTH, parseDate, plural, signedAmount } from '../../core/format.js';
-import { NO_PROJECT, projectsOf } from '../../model/entities.js';
-import { amountOn, cents, occurrences, perYear, seriesEnded, seriesIn, statementsEnd } from '../../model/bank.js';
+import { amountOn, cents, occurrences, perYear, seriesEnded, seriesIn, seriesInProject, statementsEnd } from '../../model/bank.js';
 import { KIND_ICONS, iconEl } from '../../ui/icons.js';
 import { stat, stats } from '../../ui/page.js';
 import { repeatsText } from '../panel/details.js';
@@ -25,12 +24,10 @@ import { repeatsText } from '../panel/details.js';
 export function recurringOf(accounts, selected_project) {
   const today = new Date();
   const ids = new Set(accounts.map(doc => doc.id));
-  const inProject = series => !selected_project
-    || (selected_project === NO_PROJECT ? !projectsOf(series).length : projectsOf(series).includes(selected_project));
   const current = [];
   const ended = [];
   for (const series of seriesIn(ids)) {
-    if (!inProject(series)) continue;
+    if (!seriesInProject(series, selected_project)) continue;
     const amount = amountOn(series, today) ?? 0;
     const times = perYear(series);
     const entry = { series, amount, year: times == null ? null : amount * times, month: times == null ? null : (amount * times) / 12 };

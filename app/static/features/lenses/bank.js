@@ -6,11 +6,15 @@
 // of weeks the bookings keep to; then the bookings by month, newest first,
 // each with what it is linked to (a transfer: its other half) and its
 // account's balance after it (`ledger`, model/bank.js). The scope is the vault panel's filter on the statements
-// (`matchesFilter`): with nothing narrowing it, every bank account shows,
+// (`bankScope`): with nothing narrowing it, every bank account shows,
 // one without statements too. Under a project, a booking is in it through
-// what it is linked to (`linkProjects`), and the project's In, Out and Net
-// take the accounts' place. A tile makes its account's source the filter; a
-// booking selects itself, its card in the panel (features/panel/booking.js).
+// what it is linked to (`bookingInProject`), and the project's In, Out and
+// Net take the accounts' place, with what its series are expected to pay
+// or bring a month. What is pending and the payments expected to the end of
+// next month (`expectedOf`, `horizonOf`) are faint on the cash flow and
+// continue each account's balance. A tile makes its account's source the
+// filter; a booking selects itself, its card in the panel
+// (features/panel/booking.js).
 // Without a bank account, the lens says where bookings come from and offers
 // Add a bank account (the Folders page, `addBankAccount`).
 
@@ -18,8 +22,11 @@ import { $, accEl, setAria } from '../../core/dom.js';
 import { DAY_MONTH, DAY_MONTH_YEAR, DAY_SHORT_MONTH, MONTH_YEAR, SHORT_MONTH_YEAR } from '../../core/format.js';
 import { amountText, dayStart, everyMidnight, money, plural, signedAmount } from '../../core/format.js';
 import { store } from '../../model/state.js';
-import { NO_PROJECT, accountWatch, entities, matchesFilter, watchSourceKey, watches } from '../../model/entities.js';
-import { ACCOUNT_KINDS, BOOKING_KINDS, bookingName, cents, ledger, linkProjects, pairOf, seriesOf, statementsEnd } from '../../model/bank.js';
+import { NO_PROJECT, accountWatch, entities, watchSourceKey } from '../../model/entities.js';
+import {
+  ACCOUNT_KINDS, BOOKING_KINDS, balanceOn, bankScope, bookingInProject, bookingName, cents, expectedIn, horizonOf,
+  ledger, pairOf, seriesIn, seriesInProject, seriesOf, statementsEnd,
+} from '../../model/bank.js';
 import { KIND_ICONS, bookingIcon, iconEl } from '../../ui/icons.js';
 import { stat, stats } from '../../ui/page.js';
 import { accSeg } from '../../ui/segmented.js';
@@ -77,37 +84,6 @@ function markBooking() {
 store.subscribe([state => state.selected_entity, state => state.selected_booking], markBooking);
 
 // ----------------------------------------------------------------------------
-// The accounts and statements in the scope. Under a project, or No project,
-// the statements are filtered without it: their bookings are in it through
-// their links (`inProject`). With nothing narrowing the scope, every bank
-// account; else the accounts of the statements in it, and the account of a
-// statements watch picked as the source.
-function scopeOf(state) {
-  const filter = state.selected_project ? { ...state, selected_project: null } : state;
-  const statements = new Set();
-  const all = [];
-  for (const doc of entities.values()) {
-    if (doc.kind === 'bank-account') all.push(doc);
-    else if (doc.transactions && matchesFilter(doc, filter)) statements.add(doc);
-  }
-  const narrowed = state.selected_project || state.selected_source || state.selected_labels.length
-    || state.word_filter;
-  if (!narrowed) return { accounts: all, statements };
-  const ids = new Set([...statements].map(doc => doc.transactions.account));
-  for (const watch of watches.values()) {
-    if (watch.account && watchSourceKey(watch.id) === state.selected_source) ids.add(watch.account);
-  }
-  return { accounts: all.filter(doc => ids.has(doc.id)), statements };
-}
-
-// Whether `entry`'s booking is in the project selected, through its link:
-// for No project, it has none that way; without a project, every booking.
-function inProject(entry, selected_project) {
-  if (!selected_project) return true;
-  const ids = linkProjects(entry.booking);
-  return selected_project === NO_PROJECT ? !ids.length : ids.includes(selected_project);
-}
-
 // The one currency of `accounts`, or null if they have several.
 function currencyOf(accounts) {
   const currencies = new Set(accounts.map(doc => doc['bank-account']?.currency));
@@ -122,11 +98,16 @@ function renderBankLens() {
     return;
   }
   const project = state.selected_project && state.selected_project !== NO_PROJECT ? state.selected_project : null;
-  const scope = scopeOf(state);
+  const scope = bankScope(state);
   const ledgers = new Map(scope.accounts.map(doc => [doc.id, ledger(doc)]));
   const recurring = recurringOf(scope.accounts, state.selected_project);
+  // What the accounts' series are expected to pay or bring to the horizon,
+  // which continues the tiles' balances.
+  const horizon = horizonOf(scope.accounts);
+  const expected = expectedIn(seriesIn(new Set(scope.accounts.map(doc => doc.id))), horizon);
+  const tiles = { ledgers, state, expected, horizon };
   if (cut.view === 'recurring') {
-    renderRecurringView(recurring, scope.accounts, ledgers, project, state);
+    renderRecurringView(recurring, scope.accounts, tiles, project);
     return;
   }
 
@@ -136,7 +117,7 @@ function renderBankLens() {
   for (const account of scope.accounts) {
     const { entries, pending } = ledgers.get(account.id);
     const take = (entry, seq, isPending) => {
-      if (scope.statements.has(entry.statement) && inProject(entry, state.selected_project)) {
+      if (scope.statements.has(entry.statement) && bookingInProject(entry.booking, state.selected_project)) {
         bookings.push({ ...entry, account, seq, pending: isPending, pair: pairOf(entry.booking) });
       }
     };
@@ -154,20 +135,31 @@ function renderBankLens() {
   const links = { linked, unlinked: cutIn.length - linked };
   const shown = cutIn.filter(linkCut);
 
+  // The cash flow takes the payments expected of the series in the project,
+  // money in or out as the cut shows it.
+  const expectedHere = expected.filter(entry => seriesInProject(entry.series, state.selected_project));
+  const ahead = expectedHere.filter(entry => cut[entry.amount > 0 ? 'in' : 'out']);
+  const aheadPicked = flow.range() ? ahead.filter(entry => flow.holds(entry.day)).length : 0;
+  const aheadNote = aheadPicked ? `${plural(aheadPicked, 'payment')} expected in these weeks.` : null;
+
   const accounts = project ? [...new Set(bookings.map(entry => entry.account))] : scope.accounts;
   countEl.textContent = `${plural(shown.length, 'booking')} \u00b7 ${plural(accounts.length, 'account')}`;
   const parts = [];
-  if (project) parts.push(renderProjectSums(picked, accounts));
-  else if (accounts.length) parts.push(renderAccounts(accounts, ledgers, state));
+  if (project) parts.push(renderProjectSums(picked, accounts, recurring.current));
+  else if (accounts.length) parts.push(renderAccounts(accounts, tiles));
   parts.push(renderCut(counts, links, recurring.current.length));
-  if (bookings.length) parts.push(renderFlow(bookings, bookings.filter(entry => sideCut(entry) && linkCut(entry))));
+  if (bookings.length || expectedHere.length) {
+    const inCut = bookings.filter(entry => sideCut(entry) && linkCut(entry));
+    parts.push(renderFlow(bookings, inCut, ahead, expectedHere.length ? horizon : null));
+  }
   if (shown.length) {
-    parts.push(renderBookings(shown, accounts, ledgers, project));
+    parts.push(renderBookings(shown, accounts, ledgers, project, aheadNote));
   } else {
     const text = !bookings.length
       ? (project ? 'No booking is linked to this project yet.'
         : accounts.length ? 'No bookings here.' : 'No bank account in this scope.')
-      : picked.length ? 'No bookings here.' : 'No bookings in these weeks.';
+      : picked.length ? 'No bookings here.'
+        : aheadPicked ? `No bookings in these weeks, but ${plural(aheadPicked, 'payment')} expected.` : 'No bookings in these weeks.';
     parts.push(accEl('p', 'note bank__none', text));
   }
   lensEl.replaceChildren(...parts);
@@ -177,7 +169,7 @@ function renderBankLens() {
 // The Recurring view: the accounts (not under a project), the cut -- In and
 // Out counting the running series, the view -- then the fixed costs
 // (`renderRecurring`); the cash flow steps aside, its weeks pick bookings.
-function renderRecurringView(recurring, accounts, ledgers, project, state) {
+function renderRecurringView(recurring, accounts, tiles, project) {
   const side = entry => (entry.amount > 0 ? 'in' : 'out');
   const counts = { in: 0, out: 0 };
   for (const entry of recurring.current) counts[side(entry)]++;
@@ -186,17 +178,22 @@ function renderRecurringView(recurring, accounts, ledgers, project, state) {
   countEl.textContent = [plural(shown.current.length, 'series', 'series'),
     shown.ended.length ? `${shown.ended.length} ended` : null, plural(accounts.length, 'account')].filter(Boolean).join(' \u00b7 ');
   const parts = [];
-  if (!project && accounts.length) parts.push(renderAccounts(accounts, ledgers, state));
+  if (!project && accounts.length) parts.push(renderAccounts(accounts, tiles));
   parts.push(renderCut(counts, null, recurring.current.length), ...renderRecurring(shown, accounts));
   lensEl.replaceChildren(...parts);
   markBooking();
 }
 
 // ----------------------------------------------------------------------------
-// The accounts as tiles, then their total while there are several.
-function renderAccounts(accounts, ledgers, state) {
+// The accounts as tiles, then their total while there are several; each
+// with its balance on `horizon` while payments are `expected` (`tiles`:
+// also the accounts' `ledgers` and the `state`).
+function renderAccounts(accounts, { ledgers, state, expected, horizon }) {
   const strip = accEl('div', 'bank-accounts');
-  for (const account of accounts) strip.append(renderAccount(account, ledgers.get(account.id), state));
+  for (const account of accounts) {
+    const mine = expected.filter(entry => entry.series.recurring.account === account.id);
+    strip.append(renderAccount(account, ledgers.get(account.id), state, mine, horizon));
+  }
   if (accounts.length > 1) {
     const currency = currencyOf(accounts);
     const sum = accounts.reduce((n, doc) => n + cents(ledgers.get(doc.id).balance), 0) / 100;
@@ -206,6 +203,10 @@ function renderAccounts(accounts, ledgers, state) {
     if (currency !== null) {
       total.append(accEl('span', 'figure', money(sum, currency)));
       if (pending) total.append(accEl('span', 'meta', `${money(sum + pending, currency)} with what is pending`));
+      if (expected.length) {
+        const ahead = expected.reduce((n, entry) => n + cents(entry.amount), 0) / 100;
+        total.append(accEl('span', 'meta', `${money(sum + pending + ahead, currency)} on ${DAY_SHORT_MONTH.format(horizon)}`));
+      }
     } else {
       total.append(accEl('span', 'meta', 'in several currencies'));
     }
@@ -214,11 +215,12 @@ function renderAccounts(accounts, ledgers, state) {
   return strip;
 }
 
-// An account: its kind and bank, its name and balance, its number, what is
-// pending and how far its statements go. A click makes its watch's source
-// the filter, or the whole vault again; an account without a watch shows
-// its card.
-function renderAccount(account, book, state) {
+// An account: its kind and bank, its name and balance (and under it, while
+// its series are `expected` to pay or bring anything, the balance on
+// `horizon`, `balanceOn`), its number, what is pending and how far its
+// statements go. A click makes its watch's source the filter, or the whole
+// vault again; an account without a watch shows its card.
+function renderAccount(account, book, state, expected, horizon) {
   const fields = account['bank-account'] ?? {};
   const name = account.title || 'Untitled';
   const watch = accountWatch(account.id);
@@ -241,16 +243,20 @@ function renderAccount(account, book, state) {
     book.pending.length ? `${signedAmount(book.pendingSum)} pending` : null,
     end ? `statement to ${DAY_SHORT_MONTH.format(end)}` : 'no statement yet',
   ];
+  const on = expected.length ? balanceOn(book, expected) : null;
   tile.append(kind, accEl('span', 'bank-account__name', name),
     accEl('span', 'figure', balance != null ? money(balance, fields.currency) : '\u2014'),
+    ...(on == null ? [] : [accEl('span', 'meta bank-account__ahead', `${money(on, fields.currency)} on ${DAY_SHORT_MONTH.format(horizon)}`)]),
     accEl('span', 'meta bank-account__meta', meta.filter(Boolean).join(' \u00b7 ')));
   return tile;
 }
 
 // Under a project, in the accounts' place: what came in and went out, the
 // net (each without and with what is pending; transfers in none of them),
-// and the accounts and months the bookings come from.
-function renderProjectSums(bookings, accounts) {
+// what the project's running series (`recurringOf`'s `current`) are
+// expected to pay or bring a month, and the accounts and months the
+// bookings come from.
+function renderProjectSums(bookings, accounts, running) {
   const sum = list => list.reduce((n, entry) => n + cents(entry.booking.amount), 0) / 100;
   const counted = bookings.filter(entry => !entry.pair);
   const booked = counted.filter(entry => !entry.pending);
@@ -266,11 +272,18 @@ function renderProjectSums(bookings, accounts) {
   const times = bookings.map(entry => entry.time);
   const [from, to] = times.length
     ? [Math.min(...times), Math.max(...times)].map(time => SHORT_MONTH_YEAR.format(new Date(time))) : [];
+  const monthly = running.filter(entry => entry.month != null);
+  const perMonth = list => list.reduce((n, entry) => n + cents(entry.month), 0) / 100;
+  const plus = perMonth(monthly.filter(entry => entry.month > 0));
+  const minus = perMonth(monthly.filter(entry => entry.month < 0));
+  const series = plural(monthly.length, 'series', 'series');
   return stats(
     side('In', isIn, 1),
     side('Out', entry => !isIn(entry), -1),
     stat('Net', accEl('span', 'figure', signedAmount(net)),
       withPending !== net ? `${signedAmount(withPending)} with what is pending` : null),
+    ...(monthly.length ? [stat('Expected', accEl('span', 'figure', signedAmount(plus + minus)),
+      plus && minus ? `a month: ${signedAmount(plus)} in, ${signedAmount(minus)} out \u00b7 ${series}` : `a month \u00b7 ${series}`)] : []),
     stat('From', accounts.map(doc => doc.title || 'Untitled').join(', ') || '\u2014',
       from ? (from === to ? from : `${from} \u2013 ${to}`) : null));
 }
@@ -319,30 +332,42 @@ function renderCut(counts, links, series) {
 
 // ----------------------------------------------------------------------------
 // The cash flow: a pair of bars per week, from the first booking's week to
-// the later of today's and the last booking's, at most two years; money in
+// the later of today's and the last booking's -- while payments are
+// expected, on to the horizon's (`reach`) -- at most two years; money in
 // above the line, out below, each as high as the square root of its sum
 // against the largest week's, so one large booking doesn't flatten the
 // paydays. The bars count the booked bookings of the cut but transfers, in
-// every week shown; its range keeps the bookings, the cut's counts and a
-// project's sums to the weeks picked.
+// every week shown; beyond them, faint, the pending ones and the payments
+// expected (`ahead`, `expectedOf`). Its range keeps the bookings, the cut's
+// counts and a project's sums to the weeks picked.
 const FLOW_WEEKS = 104;
-const flow = scrubber({ lens: 'bank', meta: 'in above the line, out below', track: 'scrub__track--flow' });
+const flow = scrubber({
+  lens: 'bank', meta: 'in above the line, out below; faint: what is pending and expected', track: 'scrub__track--flow',
+});
 
-function renderFlow(bookings, inCut) {
+function renderFlow(bookings, inCut, ahead, reach) {
   const today = dayStart(new Date());
   const times = bookings.map(entry => entry.time);
-  const weeks = weeksBetween(new Date(Math.min(...times)), new Date(Math.max(today.getTime(), ...times)))
-    .slice(-FLOW_WEEKS);
-  const sums = weeks.map(() => ({ in: 0, out: 0 }));
+  const first = times.length ? Math.min(...times) : today.getTime();
+  const last = Math.max(today.getTime(), ...times, ...(reach ? [reach.getTime()] : []));
+  const weeks = weeksBetween(new Date(first), new Date(last)).slice(-FLOW_WEEKS);
+  // Each week's sums in cents, booked and not yet: `{ in, out }` each, and
+  // what the faint ones are, for its title.
+  const sums = weeks.map(() => ({ booked: { in: 0, out: 0 }, ahead: { in: 0, out: 0 }, what: [] }));
+  const add = (date, amount, pending, what) => {
+    const week = weekOf(weeks, date);
+    if (week < 0) return;
+    const side = amount > 0 ? 'in' : 'out';
+    sums[week][pending ? 'ahead' : 'booked'][side] += Math.abs(amount);
+    if (what) sums[week].what.push(`${side} ${amountText(Math.abs(amount) / 100)} ${what}`);
+  };
   for (const entry of inCut) {
-    const week = entry.pending || entry.pair ? -1 : weekOf(weeks, new Date(entry.time));
-    if (week < 0) continue;
-    const amount = cents(entry.booking.amount);
-    if (amount > 0) sums[week].in += amount;
-    else sums[week].out -= amount;
+    if (!entry.pair) add(new Date(entry.time), cents(entry.booking.amount), entry.pending, entry.pending ? 'pending' : null);
   }
-  const largest = Math.max(1, ...sums.flatMap(sum => [sum.in, sum.out]));
-  const height = sum => `${Math.sqrt(sum / largest) * 100}%`;
+  for (const entry of ahead) add(entry.day, cents(entry.amount), true, `expected (${entry.series.title || 'Untitled'})`);
+  const whole = (sum, side) => sum.booked[side] + sum.ahead[side];
+  const largest = Math.max(1, ...sums.flatMap(sum => [whole(sum, 'in'), whole(sum, 'out')]));
+  const height = n => Math.sqrt(n / largest) * 100;
   flow.render({
     title: `Cash flow \u00b7 ${plural(weeks.length, 'week')}`,
     weeks,
@@ -350,10 +375,15 @@ function renderFlow(bookings, inCut) {
     labels: weeks.length > 53 ? 'years' : 'months',
     bar(i, kept) {
       const week = kept ?? flowWeek();
-      const { in: moneyIn, out } = sums[i];
-      week.firstChild.firstChild.style.height = height(moneyIn);
-      week.lastChild.firstChild.style.height = height(out);
-      const what = [moneyIn ? `in ${amountText(moneyIn / 100)}` : null, out ? `out ${amountText(out / 100)}` : null];
+      const sum = sums[i];
+      const [moneyIn, out] = week.children;
+      for (const [side, solid, faint] of [['in', moneyIn.lastChild, moneyIn.firstChild], ['out', out.firstChild, out.lastChild]]) {
+        const booked = height(sum.booked[side]);
+        solid.style.height = `${booked}%`;
+        faint.style.height = `${height(whole(sum, side)) - booked}%`;
+      }
+      const what = [sum.booked.in ? `in ${amountText(sum.booked.in / 100)}` : null,
+        sum.booked.out ? `out ${amountText(sum.booked.out / 100)}` : null, ...sum.what];
       week.title = `Week of ${DAY_MONTH_YEAR.format(weeks[i])} \u00b7 ${what.filter(Boolean).join(' \u00b7 ') || 'no bookings'}`;
       return week;
     },
@@ -361,23 +391,26 @@ function renderFlow(bookings, inCut) {
   return flow.el;
 }
 
-// A week of the cash flow: its bar of money in over its bar of money out.
+// A week of the cash flow: its bars of money in over its bars of money out,
+// each side's faint one (what is pending and expected) beyond its booked
+// one: over it for money in, under it for money out.
 function flowWeek() {
   const week = accEl('span', 'scrub__week');
   const moneyIn = accEl('span', 'scrub__in');
   const out = accEl('span', 'scrub__out');
-  moneyIn.append(accEl('i'));
-  out.append(accEl('i'));
+  moneyIn.append(accEl('i', 'scrub__ahead'), accEl('i'));
+  out.append(accEl('i'), accEl('i', 'scrub__ahead'));
   week.append(moneyIn, out);
   return week;
 }
 
 // ----------------------------------------------------------------------------
 // The bookings under their months, then a note: where the statements start,
-// or, under a project, how a booking is in it; and, while transfers show,
-// that they count in neither In nor Out. Under a project there is no
-// balance: balances belong to accounts.
-function renderBookings(shown, accounts, ledgers, project) {
+// or, under a project, how a booking is in it; while transfers show, that
+// they count in neither In nor Out; and `aheadNote`, how many payments are
+// expected in the weeks picked. Under a project there is no balance:
+// balances belong to accounts.
+function renderBookings(shown, accounts, ledgers, project, aheadNote) {
   const table = accEl('div', project ? 'table bank bank--project' : 'table bank');
   const head = accEl('div', 'list-row table__head');
   head.append(accEl('span', 'label', 'Date'), accEl('span', 'label', 'Booking'), accEl('span', 'label', 'Linked to'),
@@ -411,6 +444,7 @@ function renderBookings(shown, accounts, ledgers, project) {
       ? 'A booking is in a project through what it is linked to: a bill, an event, a document of the project, or the project itself.'
       : startsNote(accounts, ledgers),
     shown.some(entry => entry.pair) ? 'Transfers between your accounts count in neither In nor Out.' : null,
+    aheadNote,
   ].filter(Boolean).join(' ');
   if (note) {
     const foot = accEl('div', 'lens-hidden');
