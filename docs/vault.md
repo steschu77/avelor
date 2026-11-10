@@ -598,6 +598,30 @@ It carries the following additional fields:
     of the vault's accounts. Optional; set by the import
     (`import.md#statements`), removed with `unpair_transfer`
     (`api.md#structure`). Each half names the other.
+  * `recurring-payment`: Entity ID, the recurring payment the transaction belongs to
+    (`vault.md#recurring`), on the transaction's account. Optional.
+
+### Recurring payment <a id="recurring"></a>
+
+Block: `recurring-payment:`
+
+A payment the vault expects on a schedule: a rent, a premium, a
+subscription, a salary. A pure YAML file of its own in `Accounts/`, related
+to the contract it comes from by its `linked-to`. Its fields:
+
+* `account`: UUIDv7, the bank account it is paid from or into,
+* `party`: ContactRef, the other side,
+* `schedule`: list of RFC 5545 lines (`RRULE:…`), as an event's `schedule`,
+* `from`: Date, the first occurrence,
+* `until`: Date, the last day an occurrence may fall on; optional,
+* `amounts`: list of `{from: Date, amount: number}`: from each date on,
+  the amount, negative for money out; the last one current,
+* `vary`: number, how far a transaction may differ from the amount and still
+  pay it as it is; optional,
+* `category`: string, such as `housing`, `insurance`, `utilities`,
+  `subscriptions` or `income`; optional.
+
+Its transactions name it in their `recurring-payment` (`vault.md#statement`).
 
 ## Kind derivation <a id="kind-derivation"></a>
 
@@ -619,6 +643,7 @@ thread member derives as `eml`.
 * if the entity has the `statement` role: -> type-id: `txs`
 * if the entity has the `record` role: -> type-id: `rec`
 * if the entity has the `document` role: -> type-id: `doc`
+* if the entity has the `recurring-payment` role: -> type-id: `rcp`
 * if the entity has the `message` role: -> type-id: `msg`
 * otherwise, a markdown file is a plain document: -> type-id: `doc`
 * otherwise, a YAML file is a plain record: -> type-id: `rec`
@@ -812,7 +837,8 @@ Vault/
   Email/                # *.md emails fetched from an account
   Attachments/         # an email's attached files, each beside its *.md document
   Scans/               # *.md documents imported from folder watches (scans, PDFs)
-  Accounts/            # *.yaml bank accounts, and the statements imported into them
+  Accounts/            # *.yaml bank accounts, the statements imported into them,
+                       # and the recurring payments
   .trash/              # deleted entities, at their vault-relative path (§ Trash)
   …any user folders for notes, letters, tasks…
 ```
@@ -1008,8 +1034,8 @@ holds nothing the files don't: deleting it costs one full read.
 A search reads an entity's words: its title, its labels and its text
 (`search::words_of`). The text is the body as plain text, a line per
 block, list item, table row and code line (`markdown::plain_text`), then
-the envelope's texts: the names, places, items and messages its roles
-hold, and every string a record keeps (`Envelope::text`); no ids, dates,
+the envelope's texts: the names, places, items, categories and messages
+its roles hold, and every string a record keeps (`Envelope::text`); no ids, dates,
 states or sources. The catalog keeps every file's words
 (`vault.md#catalog`). The command `search` finds the entities holding
 every word of a text (`search.rs`), for the vault panel's words box

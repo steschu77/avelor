@@ -11,6 +11,7 @@ use crate::envelope::Email;
 use crate::envelope::Event;
 use crate::envelope::Message;
 use crate::envelope::Original;
+use crate::envelope::RecurringPayment;
 use crate::envelope::Remote;
 use crate::envelope::Statement;
 use crate::envelope::Task;
@@ -66,6 +67,7 @@ static NO_ROLES: Roles = Roles {
     document: None,
     message: None,
     statement: None,
+    recurring_payment: None,
     event: None,
     task: None,
     contact: None,
@@ -517,6 +519,12 @@ impl Document {
     /// Set the entity's `statement` block; `None` drops the role.
     pub fn set_statement(&mut self, statement: Option<Statement>) {
         self.envelope_mut().roles.statement = statement;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's `recurring-payment` block; `None` drops the role.
+    pub fn set_recurring_payment(&mut self, recurring: Option<RecurringPayment>) {
+        self.envelope_mut().roles.recurring_payment = recurring;
     }
 
     // ------------------------------------------------------------------------

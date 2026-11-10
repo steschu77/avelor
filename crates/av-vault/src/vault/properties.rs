@@ -72,6 +72,33 @@ impl Index {
         self.edit_transaction(id, transaction, changes, |item| item.linked_to = to)
     }
 
+    /// Put the transactions `transactions` of the statement `id` into the recurring
+    /// payment `to`, a recurring payment of the statement's account; `None` takes them
+    /// out. The statement is written once.
+    pub fn set_transaction_recurring_payment(
+        &mut self,
+        id: &Id,
+        transactions: &[Id],
+        to: Option<Id>,
+        changes: &mut Changes,
+    ) -> Result<SaveOutcome> {
+        self.check_writable(id)?;
+        if let Some(to) = &to {
+            let statement = self
+                .get(id)
+                .and_then(|d| d.roles().statement.as_ref()?.account);
+            let recurring_payment = self
+                .get(to)
+                .and_then(|d| d.roles().recurring_payment.as_ref()?.account);
+            if recurring_payment.is_none() || recurring_payment != statement {
+                return Err(Error::InvalidArgument { arg: "to".into() });
+            }
+        }
+        self.edit_transactions(id, transactions, changes, |item| {
+            item.recurring_payment = to
+        })
+    }
+
     /// Unpair the transfer whose half is the transaction `transaction` of the
     /// statement `id`: its `transfer` key is removed, and so is the other
     /// half's, in whichever statement of the vault holds it, while it names
@@ -135,15 +162,34 @@ impl Index {
         id: &Id,
         transaction: &Id,
         changes: &mut Changes,
+        change: impl FnMut(&mut Transaction),
+    ) -> Result<SaveOutcome> {
+        self.edit_transactions(id, std::slice::from_ref(transaction), changes, change)
+    }
+
+    /// Apply `change` to the transactions `transactions` of the statement `id`, and
+    /// write the statement once; `invalid_argument` if it lacks one of them.
+    pub fn edit_transactions(
+        &mut self,
+        id: &Id,
+        transactions: &[Id],
+        changes: &mut Changes,
         mut change: impl FnMut(&mut Transaction),
     ) -> Result<SaveOutcome> {
-        self.transaction(id, transaction)?;
-        let is_it = |item: &Transaction| item.id.as_ref() == Some(transaction);
+        self.check_writable(id)?;
+        for transaction in transactions {
+            self.transaction(id, transaction)?;
+        }
+        let is_one = |item: &Transaction| item.id.is_some_and(|id| transactions.contains(&id));
         let mut statement = self
             .get(id)
             .and_then(|doc| doc.roles().statement.clone())
             .unwrap_or_default();
-        for item in statement.transactions.iter_mut().filter(|item| is_it(item)) {
+        for item in statement
+            .transactions
+            .iter_mut()
+            .filter(|item| is_one(item))
+        {
             change(item);
         }
         self.update(id, changes, |d| d.set_statement(Some(statement)))
