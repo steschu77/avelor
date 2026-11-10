@@ -1,7 +1,8 @@
 // The Bank lens (ui.md#bank): the bank accounts in the scope as tiles, with
 // their total; the cut, money in, money out and transfers between the
-// vault's accounts (`pairOf`, in neither In nor Out), and Linked or Not
-// linked; the cash flow, a scrubber (features/lenses/scrub.js) whose range
+// vault's accounts (`pairOf`, in neither In nor Out), Linked or Not
+// linked, and the view, the bookings or the fixed costs (Recurring,
+// features/lenses/recurring.js); the cash flow, a scrubber (features/lenses/scrub.js) whose range
 // of weeks the bookings keep to; then the bookings by month, newest first,
 // each with what it is linked to (a transfer: its other half) and its
 // account's balance after it (`ledger`, model/bank.js). The scope is the vault panel's filter on the statements
@@ -25,16 +26,18 @@ import { accSeg } from '../../ui/segmented.js';
 import { linkChip, linkTarget, pairChip } from '../panel/panel.js';
 import { selectBooking, selectDocument, selectFilter } from '../selection.js';
 import { addBankAccount } from '../workspace/folders.js';
+import { recurringOf, renderRecurring } from './recurring.js';
 import { invalidateLenses, registerLens } from './registry.js';
 import { scrubber, weekOf, weeksBetween } from './scrub.js';
 
 const lensEl = $('lens-bank');
 const countEl = $('bank-count');
 
-// The cut, for the session: whether money in, money out and transfers
-// show, each switched by its toggle; and which of them by their link
-// ('all', 'linked', 'unlinked').
-const cut = { in: true, out: true, transfers: true, link: 'all' };
+// The cut, for the session: the bookings or the recurring payments
+// ('bookings', 'recurring', features/lenses/recurring.js); whether money
+// in, money out and transfers show, each switched by its toggle; and which
+// of them by their link ('all', 'linked', 'unlinked').
+const cut = { view: 'bookings', in: true, out: true, transfers: true, link: 'all' };
 
 const KINDS = new Map(ACCOUNT_KINDS);
 const isIn = entry => entry.booking.amount > 0;
@@ -61,12 +64,14 @@ function onRow(e) {
 lensEl.addEventListener('click', onRow);
 lensEl.addEventListener('keydown', onRow);
 
-// The selected booking's row is marked, without a render.
+// The selected booking's row, or a recurring payment's, is marked, without
+// a render.
 function markBooking() {
   const { selected_entity, selected_booking } = store.getState();
   for (const row of lensEl.querySelectorAll('.bank__row')) {
-    setAria(row, 'aria-selected', !!selected_booking && row.dataset.booking === selected_booking
-      && row.dataset.statement === selected_entity);
+    const marked = 'series' in row.dataset ? !selected_booking
+      : !!selected_booking && row.dataset.booking === selected_booking;
+    setAria(row, 'aria-selected', marked && row.dataset.statement === selected_entity);
   }
 }
 store.subscribe([state => state.selected_entity, state => state.selected_booking], markBooking);
@@ -119,6 +124,11 @@ function renderBankLens() {
   const project = state.selected_project && state.selected_project !== NO_PROJECT ? state.selected_project : null;
   const scope = scopeOf(state);
   const ledgers = new Map(scope.accounts.map(doc => [doc.id, ledger(doc)]));
+  const recurring = recurringOf(scope.accounts, state.selected_project);
+  if (cut.view === 'recurring') {
+    renderRecurringView(recurring, scope.accounts, ledgers, project, state);
+    return;
+  }
 
   // The bookings in the scope, newest first; a pending one before the
   // booked ones of its day.
@@ -149,7 +159,7 @@ function renderBankLens() {
   const parts = [];
   if (project) parts.push(renderProjectSums(picked, accounts));
   else if (accounts.length) parts.push(renderAccounts(accounts, ledgers, state));
-  parts.push(renderCut(counts, links));
+  parts.push(renderCut(counts, links, recurring.current.length));
   if (bookings.length) parts.push(renderFlow(bookings, bookings.filter(entry => sideCut(entry) && linkCut(entry))));
   if (shown.length) {
     parts.push(renderBookings(shown, accounts, ledgers, project));
@@ -160,6 +170,24 @@ function renderBankLens() {
       : picked.length ? 'No bookings here.' : 'No bookings in these weeks.';
     parts.push(accEl('p', 'note bank__none', text));
   }
+  lensEl.replaceChildren(...parts);
+  markBooking();
+}
+
+// The Recurring view: the accounts (not under a project), the cut -- In and
+// Out counting the running series, the view -- then the fixed costs
+// (`renderRecurring`); the cash flow steps aside, its weeks pick bookings.
+function renderRecurringView(recurring, accounts, ledgers, project, state) {
+  const side = entry => (entry.amount > 0 ? 'in' : 'out');
+  const counts = { in: 0, out: 0 };
+  for (const entry of recurring.current) counts[side(entry)]++;
+  const keep = list => list.filter(entry => cut[side(entry)]);
+  const shown = { current: keep(recurring.current), ended: keep(recurring.ended) };
+  countEl.textContent = [plural(shown.current.length, 'series', 'series'),
+    shown.ended.length ? `${shown.ended.length} ended` : null, plural(accounts.length, 'account')].filter(Boolean).join(' \u00b7 ');
+  const parts = [];
+  if (!project && accounts.length) parts.push(renderAccounts(accounts, ledgers, state));
+  parts.push(renderCut(counts, null, recurring.current.length), ...renderRecurring(shown, accounts));
   lensEl.replaceChildren(...parts);
   markBooking();
 }
@@ -249,13 +277,19 @@ function renderProjectSums(bookings, accounts) {
 
 // ----------------------------------------------------------------------------
 // The cut: a toggle each for money in, money out and transfers, with their
-// counts; then All, Linked and Not linked, counted within them.
+// counts; then All, Linked and Not linked, counted within them; then the
+// view, Bookings or Recurring (with the running series' count). In the
+// Recurring view (`links` null) In and Out count series, and Transfers and
+// the link step aside.
 const SIDES = [['in', 'In', 'money in'], ['out', 'Out', 'money out'],
   ['transfers', 'Transfers', 'transfers between your accounts']];
+const SERIES_SIDES = { in: 'income', out: 'the fixed costs' };
 
-function renderCut(counts, links) {
+function renderCut(counts, links, series) {
   const bar = accEl('div', 'filter-bar');
-  for (const [key, label, what] of SIDES) {
+  for (const [key, label, money] of SIDES) {
+    if (!(key in counts)) continue;
+    const what = links ? money : SERIES_SIDES[key];
     const toggle = accEl('button', 'type-toggle', label);
     toggle.type = 'button';
     toggle.setAttribute('aria-pressed', String(cut[key]));
@@ -268,13 +302,18 @@ function renderCut(counts, links) {
     });
     bar.append(toggle);
   }
-  const options = [['all', 'All'], ['linked', `Linked ${links.linked}`], ['unlinked', `Not linked ${links.unlinked}`]];
-  const link = accSeg(options, cut.link, value => {
-    cut.link = value;
+  const seg = (options, key) => accSeg(options, cut[key], value => {
+    cut[key] = value;
     renderBankLens();
   });
-  link.classList.add('push');
-  bar.append(link);
+  if (links) {
+    const link = seg([['all', 'All'], ['linked', `Linked ${links.linked}`], ['unlinked', `Not linked ${links.unlinked}`]], 'link');
+    link.classList.add('push');
+    bar.append(link);
+  }
+  const view = seg([['bookings', 'Bookings'], ['recurring', `Recurring ${series}`]], 'view');
+  if (!links) view.classList.add('push');
+  bar.append(view);
   return bar;
 }
 

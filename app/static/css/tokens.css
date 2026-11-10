@@ -92,6 +92,9 @@
   --w-bank-link: 200px;
   --w-bank-amount: 88px;
   --w-bank-balance: 80px;
+  /* the Recurring view's columns: the schedule, a month's and a year's */
+  --w-series-schedule: 220px;
+  --w-series-sum: 96px;
   /* a recurring payment: an occurrence's state on its card, the schedule's
      day and an amount typed in, there and in New recurring payment */
   --w-series-state: 52px;

@@ -67,7 +67,28 @@
   --cols: var(--w-bank-date) minmax(0, 1fr) var(--w-bank-link) var(--w-bank-amount);
 }
 
-/* under a project: its bookings' sums (.stats) in the accounts' place */
+/* the Recurring view (features/lenses/recurring.js): a row per recurring
+   payment under its category's group row, the ended ones apart -- the
+   series, its schedule, the amount each time, a month's and a year's */
+.bank.series {
+  --cols: minmax(0, 1fr) var(--w-series-schedule) var(--w-bank-amount) var(--w-series-sum) var(--w-series-sum);
+}
+
+.series__schedule {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* an ended series: kept, counted in no sum */
+.series__row--ended .row-title,
+.series__row--ended .bank__amount {
+  color: var(--c-ink-mute);
+}
+
+/* under a project: its bookings' sums (.stats) in the accounts' place;
+   in the Recurring view, the series' sums under the cut */
 .bank-lens>.stats {
   flex: none;
   padding-inline: var(--p-gutter);
