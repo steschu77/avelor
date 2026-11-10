@@ -36,7 +36,7 @@ const DOC_TYPES = [
 ];
 const KIND_TYPES = {
   message: 'documents', email: 'email', conversation: 'conversations', 'bank-account': 'bank',
-  statement: 'bank', list: 'lists', record: 'records', contact: 'contacts', task: 'tasks',
+  statement: 'bank', 'recurring-payment': 'bank', list: 'lists', record: 'records', contact: 'contacts', task: 'tasks',
   event: 'events', calendar: 'events',
 };
 

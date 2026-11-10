@@ -3,21 +3,26 @@
 // `panelMode`). Its head is who paid or was paid (a transfer's other
 // account), the day and the statement's file; then the amount, the
 // account, the other side, a transfer's other half with Not a transfer
-// (`unpair_transfer`), the memo and reference, the statement and the
-// balance after it; the projects it is in through its link (no x: they are
-// the linked entity's), and the link, set or removed with
-// `set_transaction_link`. A transaction is an item of its statement's file: nothing
-// of it is renamed, edited or deleted here.
+// (`unpair_transfer`), the memo and reference, the statement, the
+// balance after it and its recurring payment (`set_transaction_recurring_payment`); the projects
+// it is in through its link or its recurring payment (no x: they are the linked
+// entity's), and the link, set or removed with `set_transaction_link`. A
+// transaction is an item of its statement's file: nothing of it is renamed,
+// edited or deleted here.
 
 import { $, accEl } from '../../core/dom.js';
+import { titled } from '../../core/dom.js';
 import { DATE_FORMAT, DAY_MONTH_YEAR, amountText, parseDate, signedAmount, signedMoney } from '../../core/format.js';
 import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { entities, projects, projectsInOrder } from '../../model/entities.js';
 import { TRANSACTION_TYPES, transactionName, transactionOf, ledger, linkProjects, pairOf, partyRef } from '../../model/bank.js';
-import { setTransactionLinkLocal, unpairTransferLocal } from '../../model/structure.js';
+import { amountOn, transactionDay, howOften, partyName, partyNames, recurringPaymentEnded, recurringPaymentsIn, recurringPaymentOf, similarNames } from '../../model/bank.js';
+import { setTransactionLinkLocal, setTransactionRecurringPaymentLocal, unpairTransferLocal } from '../../model/structure.js';
+import { openNewRecurringPayment } from '../recurring-payment-new.js';
 import { armedButton } from '../../ui/confirm.js';
-import { KIND_ICONS, TRANSFER_ICON, iconEl } from '../../ui/icons.js';
+import { KIND_ICONS, transactionIcon, iconEl } from '../../ui/icons.js';
+import { showMenu } from '../../ui/menu.js';
 import { linkMenuChip } from '../linked.js';
 import { panelMode } from '../selection.js';
 import { contactChip, entityChip } from './details.js';
@@ -40,7 +45,7 @@ function renderTransactionCard(state) {
 
   const head = accEl('div', 'pane-section pane-section--ruled doc-head');
   const title = accEl('div', 'doc-head__title');
-  title.append(iconEl(pair ? TRANSFER_ICON : KIND_ICONS.statement.icon), accEl('span', 'doc-title', transactionName(transaction, pair)));
+  title.append(iconEl(transactionIcon(pair, recurringPaymentOf(transaction))), accEl('span', 'doc-title', transactionName(transaction, pair)));
   const sub = accEl('div', 'doc-head__sub');
   const date = parseDate(transaction.date);
   const path = accEl('span', 'meta truncate-start', statement.path ?? '');
@@ -58,7 +63,9 @@ function renderTransactionCard(state) {
   const through = linkProjects(transaction);
   if (through.length) {
     const row = accEl('div', 'pane-section msg__chips');
-    const how = projects.has(to) ? t('transaction.linked_project') : `through ${linkTarget(to)?.title || t('transaction.its_link')}`;
+    const via = to ?? transaction['recurring-payment'];
+    const how = projects.has(to) ? t('transaction.linked_project')
+      : t('transaction.through', { name: linkTarget(via)?.title || t('transaction.its_link') });
     row.append(...projectChips(through, null), accEl('span', 'meta', how));
     card.append(row);
   }
@@ -101,7 +108,55 @@ function renderProps(statement, transaction, account, pair) {
     const balance = account ? ledger(account).entries.find(entry => entry.transaction.id === transaction.id)?.balance : null;
     add(t('props.balance'), balance != null ? amountText(balance) : '\u2014', ' ', accEl('span', 'meta', t('transaction.after_this')));
   }
+  const chips = renderRecurringPayment(statement, transaction);
+  if (chips.length) add(t('props.recurring_payment'), ...chips);
   return props;
+}
+
+// The transaction's recurring payment (vault.md#recurring): a chip that selects it, with
+// an x while the statement can be written; then "+", the recurring payment menu.
+function renderRecurringPayment(statement, transaction) {
+  const current = recurringPaymentOf(transaction)?.id ?? null;
+  const set = to => setTransactionRecurringPaymentLocal([{ id: statement.doc_id, transaction: transaction.id }], to);
+  const parts = [];
+  if (current) parts.push(linkChip(current, { onRemove: statement.writable ? () => set(null) : null }));
+  if (statement.writable) parts.push(addRecurringPaymentChip(statement, transaction, current, set));
+  return parts;
+}
+
+// The "+" after the recurring payment: a menu of the account's recurring payments running on the
+// transaction's day (an ended one isn't offered), its party's first (the same
+// name, or a similar one, `similarNames`), then New recurring payment, the
+// form filled from the transaction (features/recurring-payment-new.js).
+function addRecurringPaymentChip(statement, transaction, current, set) {
+  const add = accEl('button', 'chip chip--action', '+');
+  add.type = 'button';
+  titled(add, current ? t('transaction.move_recurring') : t('transaction.add_recurring'));
+  add.addEventListener('click', () => {
+    const account = statement.statement.account;
+    const day = transactionDay(transaction) ?? new Date();
+    const name = partyName(transaction);
+    const party = name.trim().toLowerCase();
+    const running = recurringPaymentsIn(new Set([account])).filter(recurringPayment => recurringPayment.id !== current && !recurringPaymentEnded(recurringPayment, day));
+    const isParty = recurringPayment => [...partyNames(recurringPayment)].some(name => name === party || similarNames(name, party));
+    const item = recurringPayment => ({
+      label: recurringPayment.title || t('untitled'),
+      icon: KIND_ICONS['recurring-payment'].icon,
+      hint: [howOften(recurringPayment), signedAmount(amountOn(recurringPayment, day) ?? 0)].join(' \u00b7 '),
+      run: () => set(recurringPayment.id),
+    });
+    const theirs = running.filter(isParty);
+    const others = running.filter(recurringPayment => !isParty(recurringPayment));
+    const items = [];
+    if (theirs.length) items.push({ head: name || t('transaction.its_party') }, ...theirs.map(item));
+    if (others.length) items.push({ head: entities.get(account)?.title || t('transaction.the_account') }, ...others.map(item));
+    items.push({
+      label: t('transaction.new_recurring'), icon: '#i-add', hint: t('transaction.from_this'), separator: items.length > 0,
+      run: () => openNewRecurringPayment(statement, transaction),
+    });
+    showMenu(add, items);
+  });
+  return add;
 }
 
 // A transfer's other half: a chip of its account that selects it, its

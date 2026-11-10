@@ -21,15 +21,16 @@ Three panels:
 Both side panels can be extended to full width for focused work and have
 grips to resize them; the widths are remembered across restarts
 (`ui.md#preferences`). The right panel can also be half-open: a card's chat
-button puts the assistant beside the card, over the main view, as the full
-width does (`assistant.md#conversations`). Opening a panel never moves the
-main view's layout. The expanded vault area hosts the pages of the vault
-panel: the Workspace pages (Accounts, Folders, Vault, Trash), Settings
-(`ui.md#settings`), Fetch email, Import scans and New. It is expanded only
-while one of them is shown: a page opens it (`openVaultOp`, `ui/page.js`);
-its ×, Esc on a page that registers it (`registerVaultPage`) or a click on a
-filter closes it (`closeVaultArea`). Menus are popups (`showMenu`,
-`ui/menu.js`), which mark their anchor `aria-expanded`.
+button puts the assistant beside the card, over the main view, as the
+full width does (`assistant.md#conversations`). Opening a panel never
+moves the main view's layout. The expanded vault area hosts the
+pages of the vault panel: the Workspace pages (Accounts, Folders, Vault,
+Trash), Settings (`ui.md#settings`), Fetch email, Import scans, New and New
+recurring payment (`panel.md#a-new-recurring`). It is
+expanded only while one of them is shown: a page opens it (`openVaultOp`,
+`ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
+or a click on a filter closes it (`closeVaultArea`). Menus are popups
+(`showMenu`, `ui/menu.js`), which mark their anchor `aria-expanded`.
 
 ## Vault panel <a id="vault-panel"></a>
 
@@ -313,7 +314,8 @@ account shows, one without statements too, else the accounts of the
 statements in it and the account of a statements watch picked as the
 source. Under a project, or No project, a transaction is in it through what it
 is linked to (`linkProjects`, `model/bank.js`): the project itself, or an
-entity or thread of it; the statements are filtered without the project.
+entity or thread of it; without a link, through its recurring payment
+(`vault.md#recurring`); the statements are filtered without the project.
 
 - **The accounts** as tiles: type and bank, name and balance, number, what
   is pending and how far the statements go ("statement to 13 Nov"). A
@@ -348,11 +350,13 @@ entity or thread of it; the statements are filtered without the project.
   ones of its day: the day; who paid or was paid (the sender of money in,
   the receiver of money out, else the title; a transfer after its other
   half's account, "To House fund", `transactionName`, its icon the swap
-  arrows, `TRANSFER_ICON`), "Pending", then the
+  arrows, `TRANSFER_ICON`; a transaction of a recurring payment, the recurring payment's
+  icon), "Pending", then the
   memo (else the title, else the type in words; a transfer's:
   Transfer), after the account's name while the scope holds several; what
   it is linked to, a chip that selects it (a transfer: ⇄ and the other
-  account, selecting the other half, `pairChip`); the amount, signed (a
+  account, selecting the other half, `pairChip`; without a link, its
+  recurring payment); the amount, signed (a
   transfer's not marked as money in); and the account's balance after it
   (`ledger`, `model/bank.js`), which goes first where the lens is narrow. A
   month's head counts its transactions, the
@@ -409,8 +413,8 @@ What a key, a menu, a button or Go to starts is a registered action
 - **Ctrl+Shift+P** opens Go to (`ui.md#go-to`).
 - **Ctrl+,** opens Settings (`ui.md#settings`).
 - **Esc** closes an open menu, else the page in the expanded vault area
-  (Settings, Fetch email, Import scans, New); in an editor it leaves edit
-  mode.
+  (Settings, Fetch email, Import scans, New, New recurring payment); in an
+  editor it leaves edit mode.
 - **Ctrl+Enter** runs the open page's main action (Fetch, Import all,
   Create).
 - **Ctrl+N** opens New.

@@ -7,7 +7,7 @@
 
 
 import { oncePerFrame } from '../core/dom.js';
-import { rpcCall } from '../core/rpc.js';
+import { newGroup, rpcCall } from '../core/rpc.js';
 import { createCache } from '../core/cache.js';
 import { serializeMarkdown } from '../editor/markdown.js';
 import { store } from './state.js';
@@ -41,7 +41,6 @@ const reloading = new Set(); // doc_ids whose file is being read again
 // The editing sessions, from Edit to leaving edit mode: their saves are one
 // step to undo (saving.md#undo), the group each names.
 const sessions = new Map(); // doc_id -> its session's group
-let sessionsBegun = 0;
 
 export function isDirty(doc_id) {
   return store.getState().dirty_docs.has(doc_id);
@@ -170,7 +169,7 @@ export function trySave(doc_id) {
 // `doc_id`'s editing session begins: its saves until it ends are one step
 // (saving.md#undo).
 export function beginEditSession(doc_id) {
-  sessions.set(doc_id, `edit:${doc_id}:${++sessionsBegun}`);
+  sessions.set(doc_id, newGroup(`edit:${doc_id}`));
 }
 
 // `doc_id`'s editing session ends, after the save that leaves it.

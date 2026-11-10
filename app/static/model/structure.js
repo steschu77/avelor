@@ -36,8 +36,8 @@ import { isDirty, startReload, trySave } from './documents.js';
 // the entities it skipped instead: one changed outside the app is such a
 // conflict, any other is reported. A failure shows in the status bar, in
 // the host's words (core/rpc.js).
-export function structureCall(cmd, args, select = null) {
-  rpcCall(cmd, args).then(reply => {
+export function structureCall(cmd, args, select = null, step = undefined) {
+  rpcCall(cmd, args, { step }).then(reply => {
     const skipped = reply?.skipped ?? [];
     const conflict = reply?.conflict ?? skipped.find(skip => skip.reason === 'changed_outside');
     if (conflict) {
@@ -182,6 +182,20 @@ export function setTransactionLinkLocal(statement, transaction, to) {
 // statements and pushes them back. The selection stays.
 export function unpairTransferLocal(statement, transaction) {
   structureCall('unpair_transfer', { id: statement, transaction }, () => store.getState());
+}
+
+// Put the transactions `transactions` (`{ id: statement, transaction }` each) into the
+// recurring payment `to`, null taking them out of theirs; the host writes
+// each statement once and pushes it back. The selection stays. `step`: the
+// group it is one step with (`newGroup`).
+export function setTransactionRecurringPaymentLocal(transactions, to, step = undefined) {
+  structureCall('set_transaction_recurring_payment', { transactions, to }, () => store.getState(), step);
+}
+
+// Write the recurring payment `id`'s role as `recurring` (vault.md#recurring);
+// the host pushes the entity back. The selection stays.
+export function setRecurringPaymentLocal(id, recurring) {
+  structureCall('set_recurring_payment', { id, recurring_payment: recurring }, () => store.getState());
 }
 
 // Write `change` to the entity `id` (`edit_entities`, api.md#structure): a

@@ -1,10 +1,13 @@
-// Schedules (vault.md#event): the RFC 5545 lines of an event's `schedule`
-// (`RRULE:`, `EXDATE:`, as Google keeps them), expanded in local time from the
-// first start, so 10:00 stays 10:00 across DST. Supported: FREQ
-// DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL, COUNT, UNTIL, BYDAY (weekdays;
-// with an ordinal such as 2TU or -1FR in a month), BYMONTHDAY, BYMONTH, and
-// EXDATE. Any other rule shows the first occurrence only. For the calendar
-// (model/calendar.js).
+// Schedules (vault.md#event, vault.md#recurring): the RFC 5545 lines of an
+// event's or a recurring payment's `schedule` (`RRULE:`, `EXDATE:`, as Google
+// keeps them), expanded in local time from the first start, so 10:00 stays
+// 10:00 across DST. Supported: FREQ DAILY/WEEKLY/MONTHLY/YEARLY with
+// INTERVAL, COUNT, UNTIL, BYDAY (weekdays; with an ordinal such as 2TU or
+// -1FR in a month), BYMONTHDAY, BYMONTH, and EXDATE. Any other rule shows the
+// first occurrence only. For the calendar (model/calendar.js) and the
+// recurring payments (model/bank.js).
+
+import { t } from '../core/text.js';
 
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 const RRULE_PARTS = new Set(['FREQ', 'INTERVAL', 'COUNT', 'UNTIL', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'WKST']);
@@ -12,7 +15,7 @@ const RRULE_FREQS = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'];
 const RRULE_MAX_PERIODS = 20000;
 
 // ----------------------------------------------------------------------------
-// A recurring event's lines: its RRULE's parts by name (null without one), the line
+// A schedule's lines: its RRULE's parts by name (null without one), the line
 // as written, and the local days (`dayKey`) its EXDATEs leave out.
 export function parseSchedule(lines) {
     let rule = null;
@@ -43,7 +46,8 @@ export function ruleSupported(rule) {
 }
 
 // ----------------------------------------------------------------------------
-// The occurrence starts of the recurring event beginning at `first`, before `before`.
+// The occurrence starts of the schedule `lines` from `first`, before
+// `before`.
 export function scheduleStarts(first, lines, before) {
     const { rule, excluded } = parseSchedule(lines);
     if (!ruleSupported(rule)) return first < before ? [first] : [];
@@ -150,4 +154,59 @@ export function icalDate(text, endOfDay = false) {
 // A local day, for matching EXDATEs with occurrences.
 export function dayKey(date) {
     return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+// ----------------------------------------------------------------------------
+// A recurring payment's schedule (model/bank.js): a period picked
+// (`PERIODS`) and its day as one RRULE line (`scheduleLine`, `periodOf`), and
+// how many times a year a schedule repeats (`timesAYear`).
+export const PERIODS = [
+  ['week', t('period.week')], ['month', t('period.month')], ['quarter', t('period.quarter')], ['half', t('period.half')],
+  ['year', t('period.year')],
+];
+
+// The RRULE line of `period` (one of PERIODS) on the day of the month
+// `day`; a week's on `from`'s weekday, a year's in `from`'s month.
+export function scheduleLine(period, day, from) {
+    switch (period) {
+        case 'week': return `RRULE:FREQ=WEEKLY;BYDAY=${WEEKDAYS[from.getDay()]}`;
+        case 'quarter': return `RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=${day}`;
+        case 'half': return `RRULE:FREQ=MONTHLY;INTERVAL=6;BYMONTHDAY=${day}`;
+        case 'year': return `RRULE:FREQ=YEARLY;BYMONTH=${from.getMonth() + 1};BYMONTHDAY=${day}`;
+        default: return `RRULE:FREQ=MONTHLY;BYMONTHDAY=${day}`;
+    }
+}
+
+// The period and day of the schedule `lines`, as `scheduleLine` writes them;
+// null for any other schedule.
+export function periodOf(lines) {
+    const { rule } = parseSchedule(lines ?? []);
+    if (!rule || lines.length !== 1) return null;
+    const parts = Object.keys(rule).sort().join();
+    const day = Number(rule.BYMONTHDAY);
+    if (rule.FREQ === 'WEEKLY') {
+        return parts === 'BYDAY,FREQ' && WEEKDAYS.includes(rule.BYDAY) ? { period: 'week', day: null } : null;
+    }
+    if (!(day >= 1 && day <= 31) || String(day) !== rule.BYMONTHDAY) return null;
+    if (rule.FREQ === 'YEARLY') return parts === 'BYMONTH,BYMONTHDAY,FREQ' ? { period: 'year', day } : null;
+    if (rule.FREQ !== 'MONTHLY') return null;
+    const period = { 1: 'month', 3: 'quarter', 6: 'half' }[Number(rule.INTERVAL ?? 1)];
+    const written = rule.INTERVAL ? 'BYMONTHDAY,FREQ,INTERVAL' : 'BYMONTHDAY,FREQ';
+    return period && parts === written ? { period, day } : null;
+}
+
+// How many times a year the schedule `lines` repeats; null for a rule the
+// page doesn't expand.
+export function timesAYear(lines) {
+    const { rule } = parseSchedule(lines);
+    if (!ruleSupported(rule)) return null;
+    const interval = Math.max(1, Number(rule.INTERVAL) || 1);
+    const count = value => (value ? value.split(',').length : 1);
+    const each = {
+        DAILY: 1,
+        WEEKLY: count(rule.BYDAY),
+        MONTHLY: count(rule.BYMONTHDAY || rule.BYDAY),
+        YEARLY: count(rule.BYMONTH) * count(rule.BYMONTHDAY || rule.BYDAY),
+    }[rule.FREQ];
+    return ({ DAILY: 365, WEEKLY: 52, MONTHLY: 12, YEARLY: 1 }[rule.FREQ] / interval) * each;
 }

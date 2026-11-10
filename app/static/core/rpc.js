@@ -22,6 +22,13 @@ const rpcPending = new Map(); // id -> { cmd, channel, resolve, reject }
 const rpcLatest = new Map(); // channel -> id of its latest call
 const rpcListeners = new Map(); // event -> Set of listeners
 
+// A group of its own for `rpcCall`'s `step`, named after `what`: the
+// edits sent with it are one step (saving.md#undo).
+let groupsBegun = 0;
+export function newGroup(what) {
+  return `${what}:${++groupsBegun}`;
+}
+
 // Send `cmd` with `args`; `step` names the group of edits its edit is one
 // step with (saving.md#undo). The promise resolves with the reply's value
 // and rejects with an RpcError. Of the calls on one `channel` only the

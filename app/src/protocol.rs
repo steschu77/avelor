@@ -15,6 +15,7 @@ use crate::close;
 use crate::documents;
 use crate::google;
 use crate::google::accounts::{CalendarSource, Level};
+use crate::recurring_payments;
 use crate::scans;
 use crate::search;
 use crate::settings;
@@ -137,6 +138,10 @@ enum Command {
     // Account statements (`bank`).
     StatementsImport(OfWatch),
     SetBankAccount(bank::AccountChange),
+    // Recurring payments (`recurring_payments`).
+    CreateRecurringPayment(Box<recurring_payments::NewRecurringPayment>),
+    SetRecurringPayment(Box<recurring_payments::RecurringPaymentChange>),
+    SetTransactionRecurringPayment(recurring_payments::TransactionsRecurringPayment),
     // Fetch email (`email`).
     EmailLabels(OfAccount),
     EmailSearch(email::SearchRequest),
@@ -271,9 +276,9 @@ struct TransactionLink {
 
 /// `{id, transaction}`: the transaction `transaction` of the statement `id`.
 #[derive(Deserialize)]
-struct TransactionRef {
-    id: Id,
-    transaction: Id,
+pub(crate) struct TransactionRef {
+    pub id: Id,
+    pub transaction: Id,
 }
 
 /// `{ids, change}`: one change to every entity named.
@@ -419,6 +424,11 @@ impl Command {
             "scan_import" => Command::ScanImport(from_value(args)?),
             "statements_import" => Command::StatementsImport(from_value(args)?),
             "set_bank_account" => Command::SetBankAccount(from_value(args)?),
+            "create_recurring_payment" => Command::CreateRecurringPayment(from_value(args)?),
+            "set_recurring_payment" => Command::SetRecurringPayment(from_value(args)?),
+            "set_transaction_recurring_payment" => {
+                Command::SetTransactionRecurringPayment(from_value(args)?)
+            }
             "email_labels" => Command::EmailLabels(from_value(args)?),
             "email_search" => Command::EmailSearch(from_value(args)?),
             "email_headers" => Command::EmailHeaders(from_value(args)?),
@@ -555,6 +565,13 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::ScanImport(a) => scans::scan_import(app, req, a),
         Command::StatementsImport(a) => bank::statements_import(app, req, a.watch),
         Command::SetBankAccount(a) => bank::set_bank_account(app, req, a),
+        Command::CreateRecurringPayment(a) => {
+            recurring_payments::create_recurring_payment(app, req, *a)
+        }
+        Command::SetRecurringPayment(a) => recurring_payments::set_recurring_payment(app, req, *a),
+        Command::SetTransactionRecurringPayment(a) => {
+            recurring_payments::set_transaction_recurring_payment(app, req, a)
+        }
         Command::EmailLabels(a) => email::email_labels(app, req, a.account),
         Command::EmailSearch(a) => email::email_search(app, req, a),
         Command::EmailHeaders(a) => email::email_headers(app, req, a),

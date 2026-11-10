@@ -1,5 +1,5 @@
 import { equal, posted, test } from './harness.js';
-import { rpcCall, rpcOn } from '../../static/core/rpc.js';
+import { newGroup, rpcCall, rpcOn } from '../../static/core/rpc.js';
 
 const receive = message => globalThis.host.receive(JSON.stringify(message));
 
@@ -53,4 +53,8 @@ test('an event goes to its listeners in the order they came', () => {
   receive({ ev: 'told', data: 7 });
   receive({ ev: 'unheard', data: 8 });
   equal(heard, [['first', 7], ['second', 7]]);
+});
+
+test('a group of edits has a name of its own', () => {
+  equal(newGroup('labels') === newGroup('labels'), false);
 });

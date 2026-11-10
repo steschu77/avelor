@@ -327,6 +327,8 @@ leaving edit mode: its saves name the editing session
 (`beginEditSession`, `model/documents.js`), and its body undone comes
 back into the editor (`content`). Ctrl+Z outside the editor leaves edit
 mode first, saving, so the session is the last step.
+New recurring payment's Create is one step too, the payment and the
+transactions ticked for it (`newGroup`, `core/rpc.js`).
 What the app writes on its own is no step: a conflict copy
 (`#held-saves`), what a job writes (Fetch email, with the attachments it
 saves and reads, `email.md#fetch-email`, `email.md#attachments`; a

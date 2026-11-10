@@ -245,8 +245,9 @@ fn the_newest_statement_replaces_the_pending_transactions() {
         ..Export::default()
     };
     let mut first = known_of(plan(None, &[], &older));
-    let bill = Id::generate();
+    let (bill, recurring_payment) = (Id::generate(), Id::generate());
     first.items[1].linked_to = Some(bill);
+    first.items[1].recurring_payment = Some(recurring_payment);
     let pending_id = first.items[1].id;
     let first_id = first.id;
 
@@ -271,8 +272,8 @@ fn the_newest_statement_replaces_the_pending_transactions() {
         .find(|t| t.reference.as_deref() == Some("R2"));
     let twin = twin.unwrap();
     assert_eq!(
-        (twin.id, twin.linked_to),
-        (pending_id, Some(bill)),
+        (twin.id, twin.linked_to, twin.recurring_payment),
+        (pending_id, Some(bill), Some(recurring_payment)),
         "the pending one, posted"
     );
     assert_eq!(next.replaced.len(), 1);
@@ -672,6 +673,79 @@ fn a_watch_may_leave_transfers_unpaired() {
         !text.contains("pair-transfers"),
         "written only when off: {text}"
     );
+}
+
+// ------------------------------------------------------------------------
+/// The forged vault's checking statements and recurring payments, each
+/// a path in the vault and its text.
+fn forged_checking() -> Vec<(String, String)> {
+    let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data/forged/Accounts");
+    let mut files = Vec::new();
+    for entry in fs::read_dir(&folder).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        if name.contains(".checking-account-") || name.ends_with(".rcp.yaml") {
+            let text = fs::read_to_string(&path).unwrap();
+            files.push((format!("Accounts/{name}"), text));
+        }
+    }
+    files
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn decembers_transactions_join_the_forged_recurring_payments() {
+    let forged = forged_checking();
+    let more: Vec<(&str, String)> = forged
+        .iter()
+        .map(|(path, text)| (path.as_str(), text.clone()))
+        .collect();
+    let files = [("statement_2026-12.csv", DECEMBER)];
+    let (mut h, _) = with_vault("statements-recurring", "0042-7318-5520", &files, &more);
+    assert_eq!(
+        import(&mut h),
+        "1 statement \u{b7} 28 transactions \u{b7} 2 pending \u{b7} 4 in recurring payments"
+    );
+    let joined = |h: &Harness| {
+        let index = h.app.vault.index();
+        let december = statements(h).into_iter().max_by_key(|s| {
+            let doc = index.get(&s.id).unwrap();
+            doc.date()
+        });
+        let december = december.unwrap();
+        let mut found = Vec::new();
+        for item in &december.items {
+            let Some(recurring_payment) = item.recurring_payment else {
+                continue;
+            };
+            let (_, _, day) = item.day().unwrap().to_ymd();
+            found.push((
+                day,
+                index.get(&recurring_payment).unwrap().title().to_string(),
+                item.id,
+            ));
+        }
+        found.sort();
+        (december.id, found)
+    };
+    let (december, found) = joined(&h);
+    let titles: Vec<(i32, &str)> = found.iter().map(|(d, t, _)| (*d, t.as_str())).collect();
+    assert_eq!(
+        titles,
+        [
+            (1, "Mortgage"),
+            (10, "Springfield Power & Light"),
+            (15, "Salary, Cogsworth"),
+            (31, "Salary, Cogsworth"),
+        ],
+        "not the final pay after the plant's last day, nor the bank's cash on the 24th"
+    );
+
+    let power = found[1].2.unwrap();
+    let out = json!({ "transactions": [{ "id": december, "transaction": power }], "to": null });
+    h.call("set_transaction_recurring_payment", out);
+    assert_eq!(import(&mut h), "No new statements");
+    assert_eq!(joined(&h).1.len(), 3, "taken out by hand, it stays out");
 }
 
 // ------------------------------------------------------------------------

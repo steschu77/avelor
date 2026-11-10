@@ -140,6 +140,17 @@ export const amountText = n => (n == null ? '' : DECIMAL.format(n));
 export const signedAmount = n => `${sign(n)}${DECIMAL.format(Math.abs(n))}`;
 export const signedMoney = (n, currency) => `${sign(n)}${money(Math.abs(n), currency)}`;
 
+// An amount typed in as `amountText` writes it ("1,150.00", "1.150,00" in
+// German; "-60", with a typographic minus too) as a number; null for
+// anything else.
+const [GROUP, POINT] = ['group', 'decimal'].map(type => DECIMAL.formatToParts(12345.6).find(p => p.type === type)?.value);
+export function parseAmount(text) {
+  const grouped = text.replace(/\s/g, '').replace(/\u2212/g, '-');
+  const plain = (GROUP ? grouped.split(GROUP).join('') : grouped).replace(POINT ?? '.', '.');
+  const n = Number(plain);
+  return plain && Number.isFinite(n) ? n : null;
+}
+
 // ----------------------------------------------------------------------------
 // A file's size: "812 KB", "2.4 MB".
 export function fileSize(bytes) {

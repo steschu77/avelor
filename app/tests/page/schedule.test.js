@@ -1,6 +1,8 @@
 import { equal, test } from './harness.js';
 import { localDay, parseDate } from '../../static/core/format.js';
-import { byDay, icalDate, parseSchedule, ruleSupported, scheduleStarts } from '../../static/model/schedule.js';
+import {
+  byDay, icalDate, parseSchedule, periodOf, ruleSupported, scheduleStarts, timesAYear,
+} from '../../static/model/schedule.js';
 
 const FOREVER = new Date(2040, 0, 1);
 
@@ -107,6 +109,23 @@ test("a calendar's date and date-time", () => {
   equal(icalDate('20270322', true), new Date(2027, 2, 22, 23, 59, 59));
   equal(icalDate('20270322T100530'), new Date(2027, 2, 22, 10, 5, 30));
   equal(icalDate('20270322T100530Z'), new Date(Date.UTC(2027, 2, 22, 10, 5, 30)));
+});
+
+test('any other rule is no period', () => {
+  for (const line of [
+    'RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO', 'RRULE:FREQ=WEEKLY', 'RRULE:FREQ=MONTHLY;BYDAY=2TU', 'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1',
+    'RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15', 'RRULE:FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=1', 'RRULE:FREQ=DAILY',
+    'RRULE:FREQ=MONTHLY;BYMONTHDAY=1;COUNT=3', 'RRULE:FREQ=WEEKLY;BYDAY=MO,2TU',
+  ]) equal(periodOf([line]), null);
+  equal([periodOf([]), periodOf(undefined), periodOf(['RRULE:FREQ=MONTHLY;BYMONTHDAY=1', 'EXDATE:20270301'])], [null, null, null]);
+});
+
+test('how many times a year a schedule repeats', () => {
+  equal([
+    'RRULE:FREQ=DAILY', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE', 'RRULE:FREQ=WEEKLY;INTERVAL=2', 'RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15',
+    'RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=1', 'RRULE:FREQ=YEARLY;BYMONTH=3,9;BYMONTHDAY=1', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=1SU,2SU',
+    'RRULE:FREQ=HOURLY',
+  ].map(line => timesAYear([line])), [365, 104, 26, 24, 4, 2, 2, null]);
 });
 
 test('a timed one to a day is on that day too', () => {

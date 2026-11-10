@@ -19,12 +19,13 @@ import { leaveThreadLocal } from '../../model/structure.js';
 import { getDocIcon, iconEl } from '../../ui/icons.js';
 import { excerptNodes, markedNodes } from '../../ui/marks.js';
 import { endDragPreview, startDragPreview, takeMemberDrops } from '../../ui/dropzone.js';
-import { TASK_STATUSES, scheduleText } from '../panel/details.js';
+import { TASK_STATUSES } from '../panel/details.js';
 import { markSelection, selectDocument } from '../selection.js';
 import { invalidateLenses, registerLens } from './registry.js';
 import { scrubber, weekOf, weeksBetween } from './scrub.js';
 import { readOnlyTag } from './read-only.js';
 import { hiddenText, typeBar, typeOf } from './types.js';
+import { scheduleText } from '../panel/schedule-field.js';
 
 const lensEl = $('lens-timeline');
 const feedEl = $('tl-feed');

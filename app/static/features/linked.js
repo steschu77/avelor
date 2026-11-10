@@ -151,7 +151,8 @@ function linkedResults(target, query, current = (entities.get(target) ?? threads
 // items, then the newest entities and threads in the vault panel's filter,
 // the search finding older ones (`linkedResults`, but `target` and
 // `current`). A pick calls `onPick(id)`. A transaction's link
-// (features/panel/transaction.js).
+// (features/panel/transaction.js) and New recurring payment's
+// (features/recurring-payment-new.js).
 export function linkMenuChip(title, { target = null, current = null, before = () => [], onPick }) {
   const add = accEl('button', 'chip chip--action', '+');
   add.type = 'button';
