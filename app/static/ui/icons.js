@@ -16,6 +16,7 @@ export const KIND_ICONS = {
   project: { icon: '#i-folder' },
   statement: { icon: '#i-payment' },
   'bank-account': { icon: '#i-payment' },
+  'recurring-payment': { icon: '#i-arrow-sync' },
   calendar: { icon: '#i-calendar' },
   event: { icon: '#i-calendar' },
   task: { icon: '#i-checkmark' },
@@ -72,6 +73,12 @@ export const IMPORT_ICON = '#i-arrow-import';
 // A booking that is a transfer between two of the vault's accounts
 // (`pairOf`, model/bank.js): its row and card.
 export const TRANSFER_ICON = '#i-arrow-swap';
+
+// A booking's icon, its row's and card's: a transfer's (`pair`), a
+// recurring payment's (`recurringPayment`), else a payment's.
+export function bookingIcon(pair, recurringPayment) {
+  return pair ? TRANSFER_ICON : recurringPayment ? KIND_ICONS['recurring-payment'].icon : KIND_ICONS.statement.icon;
+}
 
 // ----------------------------------------------------------------------------
 const IMAGE_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'bmp', 'tif', 'tiff'];

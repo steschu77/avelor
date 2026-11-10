@@ -22,6 +22,7 @@ mod jobs;
 mod page;
 mod protocol;
 mod reader;
+mod recurring_payments;
 mod scans;
 mod search;
 mod shell;

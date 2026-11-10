@@ -48,9 +48,9 @@ pub(crate) struct Plan {
 /// account's `owner` on its side of each booking: a booking the account has
 /// (its reference, or without one its day, amount and purpose) is left out;
 /// as the newest statement it replaces the account's pending bookings, a new
-/// booking of a replaced one's card day and amount taking its id and link,
-/// and as an older one it brings none; its balances are checked against its
-/// bookings and the statement before it.
+/// booking of a replaced one's card day and amount taking its id, link and
+/// recurring payment, and as an older one it brings none; its balances are checked
+/// against its bookings and the statement before it.
 pub(crate) fn plan(owner: Option<&ContactRef>, known: &[Known], statement: &Export) -> Plan {
     let all_items = || known.iter().flat_map(|s| s.items.iter());
     let refs: HashSet<&str> = all_items()
@@ -107,7 +107,9 @@ pub(crate) fn plan(owner: Option<&ContactRef>, known: &[Known], statement: &Expo
                         && Some(row.cents) == cents
                 });
                 if let Some((_, booking, taken)) = twin {
-                    (booking.id, booking.linked_to, *taken) = (item.id, item.linked_to, true);
+                    (booking.id, booking.linked_to, booking.recurring_payment) =
+                        (item.id, item.linked_to, item.recurring_payment);
+                    *taken = true;
                 }
             }
             replaced.push((older.id, kept));

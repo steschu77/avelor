@@ -184,6 +184,19 @@ export function unpairTransferLocal(statement, booking) {
   structureCall('unpair_transfer', { id: statement, booking }, () => store.getState());
 }
 
+// Put the bookings `bookings` (`{ id: statement, booking }` each) into the
+// recurring payment `to`, null taking them out of theirs; the host writes
+// each statement once and pushes it back. The selection stays.
+export function setBookingRecurringPaymentLocal(bookings, to) {
+  structureCall('set_booking_recurring_payment', { bookings, to }, () => store.getState());
+}
+
+// Write the recurring payment `id`'s role as `recurring` (vault.md#recurring);
+// the host pushes the entity back. The selection stays.
+export function setRecurringPaymentLocal(id, recurring) {
+  structureCall('set_recurring_payment', { id, recurring_payment: recurring }, () => store.getState());
+}
+
 // Write `change` to the entity `id` (`edit_entities`, api.md#structure): a
 // document's `{genre}`, or a task's `{task: {status | due | assignee}}`,
 // null removing it. The host pushes the entity back, which the cards, the

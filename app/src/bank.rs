@@ -2,8 +2,9 @@
 //! CSV exports of its bank account, each new file a statement of the account
 //! in `Accounts/` (`statements_import`, a job). One bank's format is read
 //! (`read`: comdirect's export of an account's bookings); `plan` decides what
-//! a statement adds to its account, and `pairs` which of its bookings are
-//! transfers to or from the vault's other accounts. The account is a
+//! a statement adds to its account, `pairs` which of its bookings are
+//! transfers to or from the vault's other accounts, and
+//! `recurring_payments::join_new` which recurring payments its new bookings pay. The account is a
 //! bank-account entity (`new_account`, `set_bank_account`).
 
 use std::collections::HashSet;
@@ -22,6 +23,7 @@ use serde_json::json;
 use crate::app::App;
 use crate::jobs::{JobKind, count_summary};
 use crate::protocol::Req;
+use crate::recurring_payments;
 use crate::structure;
 use crate::texts::{self, Text};
 use crate::watches::{self, WatchKind, WatchSettings};
@@ -382,6 +384,7 @@ struct Counts {
     booked: usize,
     pending: usize,
     transfers: usize,
+    recurring_payment: usize,
     skipped: usize,
 }
 
@@ -514,10 +517,12 @@ fn import_files(app: &mut App, watch: Id, mut files: Vec<NewFile>) -> Vec<Text> 
         } else {
             Vec::new()
         };
+        let joined = recurring_payments::join_new(app, account.id, &mut plan.statement.bookings);
         match write_statement(app, watch, &account, file, statement, plan, &mut counts) {
             Ok(()) => {
                 counts.statements += 1;
                 counts.transfers += write_halves(app, &halves);
+                counts.recurring_payment += joined;
             }
             Err(why) => problems.push(named(why)),
         }
@@ -528,6 +533,7 @@ fn import_files(app: &mut App, watch: Id, mut files: Vec<NewFile>) -> Vec<Text> 
             (counts.booked, Text::new("bank.count.bookings")),
             (counts.pending, Text::new("bank.count.pending")),
             (counts.transfers, Text::new("bank.count.transfers")),
+            (counts.recurring_payment, Text::new("bank.count.recurring")),
             (counts.skipped, Text::new("bank.count.known")),
         ],
         Text::new("bank.no_new_statements"),

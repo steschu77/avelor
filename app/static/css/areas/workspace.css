@@ -132,6 +132,28 @@
   border-top: 1px solid var(--c-line);
 }
 
+/* New recurring payment (features/recurring-payment-new.js), the New sheet's: the
+   bookings it starts with, each with its check, those of a similar name
+   under them */
+.recurring-payment-ticks {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+
+.recurring-payment-ticks__head {
+  margin-top: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.recurring-payment-tick {
+  --cols: 16px var(--w-bank-date) minmax(0, 1fr) var(--w-bank-amount);
+  min-height: 32px;
+  gap: 0 10px;
+}
+
 /* Accounts (Workspace -> Accounts, features/workspace/accounts.js): an
    access row's service, its name over its product */
 .accounts__service {
