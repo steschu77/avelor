@@ -10,6 +10,7 @@ pub mod inflate;
 pub mod logger;
 pub mod mime;
 pub mod random;
+pub mod recurrence;
 pub mod secret;
 pub mod sha256;
 pub mod text;

@@ -587,13 +587,16 @@ It carries the following additional fields:
   * `linked-to`: Entity ID, e.g. the bill or task a payment belongs to, or
     a project. Optional; set with `set_booking_link` (`api.md#structure`).
     The booking is in the projects of what it links to: the project
-    itself, a thread's, or an entity's.
+    itself, a thread's, or an entity's; without a link, in its recurring
+    payment's.
   * `transfer`: UUIDv7, the other half's `id`, on a transfer between two
     of the vault's accounts. Optional; set by the import
     (`import.md#statements`), removed with `unpair_transfer`
     (`api.md#structure`). Each half names the other.
   * `recurring`: Entity ID, the recurring payment the booking belongs to
-    (`vault.md#recurring`), on the booking's account. Optional.
+    (`vault.md#recurring`), on the booking's account. Optional; set by the
+    import (`import.md#statements`) or with `set_booking_recurring`
+    (`api.md#statements`).
 
 ### Recurring payment <a id="recurring"></a>
 
@@ -834,8 +837,9 @@ thread goes beside its first member; calendar sync writes a calendar's
 events into `Calendar/<calendar>/`, and a mail fetch its attachments into
 `Attachments/`, each document with its original (`mail.md#attachments`). A
 bank account added on the Folders page is written into `Accounts/` with
-its statements watch, and that watch's import the statements
-(`import.md#statements`).
+its statements watch, that watch's import the statements
+(`import.md#statements`), and a recurring payment made from a booking
+(`create_recurring`, `panel.md#a-new-series`) beside them.
 
 ## The forged vault
 

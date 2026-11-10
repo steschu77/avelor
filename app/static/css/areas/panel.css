@@ -310,3 +310,45 @@
   align-items: baseline;
   gap: 10px;
 }
+
+/* a recurring payment's card (features/panel/series.js): the amount atop
+   the props, as a booking's; its occurrences newest first, each its day,
+   its state and the booking that paid it, an off one's offer under it */
+.occurrences {
+  display: flex;
+  flex-direction: column;
+}
+
+.occurrences__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 6px;
+}
+
+.occurrence {
+  --cols: var(--w-bank-date) var(--w-series-state) minmax(0, 1fr) auto;
+  min-height: 34px;
+  gap: 0 10px;
+}
+
+.occurrence>.chip {
+  justify-self: start;
+  max-width: 100%;
+}
+
+.occurrence__offer {
+  grid-column: 3 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.occurrence__offer>.note {
+  flex: 1 1 auto;
+}
+
+.occurrence__offer>.tool {
+  flex: none;
+}

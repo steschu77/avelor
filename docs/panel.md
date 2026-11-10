@@ -57,12 +57,17 @@ holds `selected_entity`, `selected_thread`, `selected_booking` and
   when the mail analysis found one ("Stadtwerke · Request",
   `mail.md#analysis`), for a document its genre and the file it stands
   for, with Open (`vault.md#document`), for a bank account its bank,
-  number, balance and owner, and for a statement its account, its bookings
+  number, balance and owner, for a statement its account, its bookings
   (and how many are pending) and the balance it ends with
-  (`vault.md#transactions`; `renderCardDetails`,
-  `features/panel/details.js`). A task's fields and a document's genre are
-  editable in place while the host can write the entity
-  (`panel.md#field-edits`); the rest is read-only;
+  (`vault.md#transactions`), and for a recurring payment its fields
+  (`panel.md#a-series-card`; `renderCardDetails`,
+  `features/panel/details.js`). A task's fields, a document's genre and a
+  recurring payment's fields are editable in place while the host can
+  write the entity (`panel.md#field-edits`); the rest is read-only;
+- the blocks other modules add (`registerCardBlock`): after the head or
+  after the details, each filled for the card's entity, hidden on a card
+  it has nothing for, and refreshed with the chips (a recurring payment's
+  sum and occurrences, `features/panel/series.js`);
 - its project and label chips on one line, with the "+" menu that adds
   either (`panel.md#labels`, `panel.md#projects`), and its link chips
   (`panel.md#links`);
@@ -382,10 +387,18 @@ renamed or deleted.
   it, its amount and day, and Not a transfer, two clicks, while both
   statements can be written: `unpair_transfer` through
   `unpairTransferLocal`, `model/structure.js`), the purpose and the bank's
-  reference, the statement (a chip that selects it), and the account's
+  reference, the statement (a chip that selects it), the account's
   balance after it (`ledger`); a pending booking has none yet.
-- The projects it is in through its link (`linkProjects`), without ×, and
-  "through" what it links to.
+- Its series (`vault.md#recurring`): a chip that selects it, with × while
+  the statement can be written, then "+", a menu of the account's
+  recurring payments that run on the booking's day (an ended one isn't
+  offered), those of the booking's party first (`partyNames`, the same
+  name or a similar one, `similarNames`, `model/bank.js`), then New
+  recurring payment, the form filled from the booking
+  (`panel.md#a-new-series`). A pick or × sends `set_booking_recurring`
+  (`setBookingRecurringLocal`, `model/structure.js`).
+- The projects it is in through its link, else its series
+  (`linkProjects`), without ×, and "through" what it links to.
 - The link: a chip with × while the statement can be written, then "+",
   a menu with a filter of the active projects and the newest entities and
   threads in the vault panel's filter (`linkedResults`,
@@ -393,6 +406,54 @@ renamed or deleted.
   and the current link. A pick or × sends `set_booking_link`
   (`setBookingLinkLocal`, `model/structure.js`), and the statement's
   `entity` brings it back.
+
+## A series' card <a id="a-series-card"></a>
+
+A recurring payment (`vault.md#recurring`) is an entity of its own: its
+card is an entity's (`#cards`), with two blocks of its own
+(`features/panel/series.js`) and its fields among the details
+(`seriesFields`, `features/panel/details.js`). The contract it comes from
+is its link, so the contract's card shows the series as an incoming link.
+
+- **The sum**, after the head: the amount each time as of today
+  (`amountOn`, `model/bank.js`), how often ("monthly", "twice a month",
+  `howOften`), a year's (`perYear`) and the category.
+- **The fields**: its account (a chip); while the host can write it, its
+  party typed in, the schedule as a period (Week, Month, Quarter, Half
+  year, Year) and the day of the month (a schedule another app wrote, in
+  words, `repeatsText`), From and Until, the current amount (since when,
+  and the earlier ones), Varies by and the category (the app's categories
+  and those the vault's series use offered, `CATEGORIES`); each written as
+  a task's fields are (`#field-edits`), the whole role through
+  `set_recurring` (`setRecurringLocal`, `model/structure.js`); else as
+  text. Then the next occurrence after the statements that no booking pays
+  yet (`nextOccurrence`).
+- **The occurrences**, after the details, newest first, as far as the
+  account's statements go (`occurrences`, by the import's rule,
+  `import.md#statements`): each its day, its state and the booking that
+  paid it (a chip that selects the booking) -- paid; off, more than `vary`
+  off the amount on its day, with "−72.15 since November 2026: take it as
+  the amount?" and Take it while the series can be written, which adds
+  that amount from the occurrence's day on; missed, once the statements go
+  7 days past it without a booking; and the series' bookings that pay none
+  as extras, on their own day. Their head counts them, "to 13 Nov · 3 paid
+  · 1 off".
+
+## A new recurring payment <a id="a-new-series"></a>
+
+New recurring payment, in a booking's Series menu, opens a form in the
+expanded vault area as the New page does (`features/series-new.js`),
+filled from the booking: the title and party (the booking's other side),
+the account, the schedule (monthly on the booking's day), From, Until,
+the amount, Varies by, the category, Linked to (a chip with × and "+",
+the newest entities in the vault panel's filter and the search, as a
+booking's link), the projects and labels, and the bookings it starts
+with: the account's bookings of the party that aren't in a series and go
+the same way, ticked, then those of a similar name (`similarNames`) with
+Tick all, each with its check, day, name, purpose and amount. From
+follows the first booking ticked until it is set. Create (or Ctrl+Enter)
+sends `create_recurring`, then `set_booking_recurring` for the ticked
+bookings, and selects the new series; Cancel or Esc closes the form.
 
 ## Labels <a id="labels"></a>
 
@@ -562,12 +623,16 @@ one shows them as text:
 - **Done**: when the task was marked done (`task.done`), shown only.
 - **Genre** (a document): typed in, with the genres the vault's documents
   use offered (`#genre-list`); empty removes it. The card's icon follows.
+- **A recurring payment's fields** (`#a-series-card`): typed in, the
+  period a segmented button; each writes the whole role through
+  `set_recurring` (`setRecurringLocal`), an empty Until, Varies by or
+  category removing its key.
 
 A field writes when Enter is pressed or it is left, if its value changed;
 Esc puts back what it held (`onEditEnd`, `ui/field.js`). A date input's
-change fires for every digit typed, so it isn't what writes. Each edit is
-one `edit_entities` for the one entity (`editEntityLocal`,
-`model/structure.js`). It publishes no selection, so the cards aren't
+change fires for every digit typed, so it isn't what writes. Each edit of
+a task or a genre is one `edit_entities` for the one entity
+(`editEntityLocal`, `model/structure.js`). It publishes no selection, so the cards aren't
 rebuilt: they follow the entity's push (`refreshCardChips`). While one of
 the block's fields has the focus, that refresh waits until the block is
 left, so what is typed stays; a button that had the focus gets it back.
@@ -654,6 +719,9 @@ and save their bodies at once.
 | D14 | Genre | the Genre typed in, Enter or blur → `editEntityLocal(id, {genre})` | `edit_entities` → `entity` | the card's icon and the rows' follow |
 | D15 | A booking's link | a booking's row in the Bank lens → `selectBooking`; its card's "+" → a pick, or × → `setBookingLinkLocal` | `set_booking_link {id, booking, to}` → `Index::set_booking_link` → `entity` (the statement) | the card's link and projects, the lens's Linked to |
 | D16 | Not a transfer | a transfer's card → Not a transfer, twice (`armedButton`) → `unpairTransferLocal` | `unpair_transfer {id, booking}` → `Index::unpair_transfer` → `entity` (both statements) | both halves in In and Out again |
+| D17 | A booking's series | a booking's card → its Series "+" → a series, or × → `setBookingRecurringLocal` | `set_booking_recurring {bookings, to}` → `Index::set_booking_recurring` → `entity` (the statement) | the row's icon and chip, the series' occurrences follow |
+| D18 | New recurring payment | the Series menu's New recurring payment → `openNewSeries`; Create or Ctrl+Enter → `createSeries` | `create_recurring` → `entity`, `ok {id}`; then `set_booking_recurring` → `entity` per statement | the series selected, its bookings in it |
+| D19 | A series' fields | a series' card: a field typed in, Enter or blur; a period; Take it → `setRecurringLocal` | `set_recurring {id, recurring}` → `entity` | the card's sum, fields and occurrences follow |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |
 | E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |

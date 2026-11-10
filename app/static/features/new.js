@@ -408,8 +408,8 @@ function renderNewTypeRows(d, row) {
     }
     case 'contact':
       newSegRow(row('Type'), NEW_CONTACT_TYPES, () => d.contactType, value => { d.contactType = value; });
-      row('Email', newTextInput(d, 'email', '', 'email'));
-      row('Phone', newTextInput(d, 'phone', '', 'tel'));
+      row('Email', newTextInput(d, 'email', '', { type: 'email' }));
+      row('Phone', newTextInput(d, 'phone', '', { type: 'tel' }));
       row('Address', newTextInput(d, 'address', 'Street, town'));
       break;
     default:
@@ -486,22 +486,7 @@ function newAddItem(d, at) {
 
 // The projects and labels on one row, as on a card, and the link.
 function renderNewChips(d) {
-  const leave = project_id => {
-    d.projects = d.projects.filter(p => p !== project_id);
-    renderNewChips(d);
-  };
-  const setTags = tags => {
-    d.tags = tags;
-    renderNewChips(d);
-  };
-  const add = addChip({ projects: d.projects, tags: d.tags }, {
-    onJoin: project_id => {
-      d.projects = [...d.projects, project_id];
-      renderNewChips(d);
-    },
-    onAddTag: label => setTags([...d.tags, label]),
-  });
-  d.els.chips.replaceChildren(...projectChips(d.projects, leave), ...tagChips(d.tags, setTags), add);
+  draftChips(d, d.els.chips, () => renderNewChips(d));
   if (d.scope && d.projects.length === 1 && d.projects[0] === d.scope) {
     d.els.chips.append(accEl('span', 'meta push', 'from the current scope'));
   }
@@ -540,16 +525,42 @@ function renderNewFoot(d) {
 // ----------------------------------------------------------------------------
 // fields
 
-function newTextInput(d, key, placeholder, type = 'text') {
-  const input = accEl('input', 'form-input');
+// An input of the draft `d`'s `key`, of `type`; `onInput` after each change.
+// The New page's, and New recurring payment's (features/series-new.js).
+export function newTextInput(d, key, placeholder, { type = 'text', className = 'form-input', onInput = null } = {}) {
+  const input = accEl('input', className);
   input.type = type;
   input.placeholder = placeholder;
   input.value = d[key];
-  input.addEventListener('input', () => { d[key] = input.value; });
+  input.addEventListener('input', () => {
+    d[key] = input.value;
+    onInput?.();
+  });
   return input;
 }
 
-function newDateInput(value, onChange) {
+// The projects and labels of the draft `d` into `el`: a chip each, with x,
+// and "+" (`addChip`); `rerender` after a change.
+export function draftChips(d, el, rerender) {
+  const leave = project_id => {
+    d.projects = d.projects.filter(p => p !== project_id);
+    rerender();
+  };
+  const setTags = tags => {
+    d.tags = tags;
+    rerender();
+  };
+  const add = addChip({ projects: d.projects, tags: d.tags }, {
+    onJoin: project_id => {
+      d.projects = [...d.projects, project_id];
+      rerender();
+    },
+    onAddTag: label => setTags([...d.tags, label]),
+  });
+  el.replaceChildren(...projectChips(d.projects, leave), ...tagChips(d.tags, setTags), add);
+}
+
+export function newDateInput(value, onChange) {
   const input = accEl('input', 'form-input new__date');
   input.type = 'date';
   input.value = value;

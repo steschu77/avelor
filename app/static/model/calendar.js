@@ -199,7 +199,8 @@ export function ruleSupported(rule) {
 
 // ----------------------------------------------------------------------------
 // The occurrence starts of the series beginning at `first`, before `before`.
-function recurrenceStarts(first, lines, before) {
+// An event's, and a recurring payment's (model/bank.js).
+export function recurrenceStarts(first, lines, before) {
     const { rule, excluded } = parseRecurrence(lines);
     if (!ruleSupported(rule)) return first < before ? [first] : [];
 
@@ -305,6 +306,58 @@ export function icalDate(text, endOfDay = false) {
 // A local day, for matching EXDATEs with occurrences.
 function dayKey(date) {
     return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+// ----------------------------------------------------------------------------
+// A recurring payment's schedule (model/bank.js): a period picked
+// (`PERIODS`) and its day as one RRULE line (`everyLine`, `periodOf`), and
+// how many times a year a series repeats (`timesAYear`).
+export const PERIODS = [['week', 'Week'], ['month', 'Month'], ['quarter', 'Quarter'], ['half', 'Half year'], ['year', 'Year']];
+
+// The RRULE line of `period` (one of PERIODS) on the day of the month
+// `day`; a week's on `from`'s weekday, a year's in `from`'s month.
+export function everyLine(period, day, from) {
+    switch (period) {
+        case 'week': return `RRULE:FREQ=WEEKLY;BYDAY=${WEEKDAYS[from.getDay()]}`;
+        case 'quarter': return `RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=${day}`;
+        case 'half': return `RRULE:FREQ=MONTHLY;INTERVAL=6;BYMONTHDAY=${day}`;
+        case 'year': return `RRULE:FREQ=YEARLY;BYMONTH=${from.getMonth() + 1};BYMONTHDAY=${day}`;
+        default: return `RRULE:FREQ=MONTHLY;BYMONTHDAY=${day}`;
+    }
+}
+
+// The period and day of the series `lines`, as `everyLine` writes them;
+// null for any other schedule.
+export function periodOf(lines) {
+    const { rule } = parseRecurrence(lines ?? []);
+    if (!rule || lines.length !== 1) return null;
+    const parts = Object.keys(rule).sort().join();
+    const day = Number(rule.BYMONTHDAY);
+    if (rule.FREQ === 'WEEKLY') {
+        return parts === 'BYDAY,FREQ' && WEEKDAYS.includes(rule.BYDAY) ? { period: 'week', day: null } : null;
+    }
+    if (!(day >= 1 && day <= 31) || String(day) !== rule.BYMONTHDAY) return null;
+    if (rule.FREQ === 'YEARLY') return parts === 'BYMONTH,BYMONTHDAY,FREQ' ? { period: 'year', day } : null;
+    if (rule.FREQ !== 'MONTHLY') return null;
+    const period = { 1: 'month', 3: 'quarter', 6: 'half' }[Number(rule.INTERVAL ?? 1)];
+    const written = rule.INTERVAL ? 'BYMONTHDAY,FREQ,INTERVAL' : 'BYMONTHDAY,FREQ';
+    return period && parts === written ? { period, day } : null;
+}
+
+// How many times a year the series `lines` repeats; null for a rule the
+// page doesn't expand.
+export function timesAYear(lines) {
+    const { rule } = parseRecurrence(lines);
+    if (!ruleSupported(rule)) return null;
+    const interval = Math.max(1, Number(rule.INTERVAL) || 1);
+    const count = value => (value ? value.split(',').length : 1);
+    const each = {
+        DAILY: 1,
+        WEEKLY: count(rule.BYDAY),
+        MONTHLY: count(rule.BYMONTHDAY || rule.BYDAY),
+        YEARLY: count(rule.BYMONTH) * count(rule.BYMONTHDAY || rule.BYDAY),
+    }[rule.FREQ];
+    return ({ DAILY: 365, WEEKLY: 52, MONTHLY: 12, YEARLY: 1 }[rule.FREQ] / interval) * each;
 }
 
 // ----------------------------------------------------------------------------

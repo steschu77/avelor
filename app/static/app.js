@@ -46,6 +46,7 @@ import './features/lenses/timeline.js';
 import { initCalendarLens } from './features/lenses/calendar.js';
 import './features/lenses/bank.js';
 import './features/panel/booking.js';
+import './features/panel/series.js';
 
 initDocumentsLens();
 initCalendarLens();

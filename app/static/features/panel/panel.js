@@ -367,6 +367,33 @@ function renderCardAttachments(doc_id, block) {
   block.hidden = !rows.length;
 }
 
+// The blocks other modules add to every card (a recurring payment's,
+// features/panel/series.js): `place` is `head` (after the head) or `details`
+// (after the details), `className` the block's; `render(doc)` gives its
+// nodes, or null on a card it has nothing for, which hides it. Drawn with
+// the card, and again with its chips.
+const cardBlocks = [];
+
+export function registerCardBlock(place, className, render) {
+  cardBlocks.push({ place, className, render });
+}
+
+// The block `el` filled for `doc` by `render`, or hidden.
+function fillCardBlock(el, render, doc) {
+  const nodes = render(doc);
+  el.hidden = !nodes;
+  el.replaceChildren(...(nodes ?? []));
+}
+
+// The card's elements of the blocks at `place`, filled for `doc`.
+function cardBlocksAt(place, doc) {
+  return cardBlocks.filter(block => block.place === place).map(({ className, render }) => {
+    const el = accEl('div', className);
+    fillCardBlock(el, render, doc);
+    return { el, render };
+  });
+}
+
 // The cards' heads, event details, links, attachments and threads lines
 // follow every entity change -- a task made for the card, a title changed,
 // an event synced, a thread restored, an attachment saved -- without
@@ -375,6 +402,7 @@ const refreshCardChips = oncePerFrame(() => {
   renderThreadProjects();
   for (const controller of msgControllers.values()) {
     renderCardHead(controller);
+    for (const { el, render } of controller.blocks) fillCardBlock(el, render, entities.get(controller.doc_id));
     renderCardDetails(controller.detailsEl, entities.get(controller.doc_id), controller.occurrence);
     renderCardLinks(controller.doc_id, controller.linksEl);
     renderCardAttachments(controller.doc_id, controller.attachmentsEl);
@@ -788,12 +816,16 @@ function createMessageController(msg, { selectable = false, thread = false, occu
   renderCardThreads(doc_id, threadsEl);
   head.appendChild(threadsEl);
   card.appendChild(head);
+  const headBlocks = cardBlocksAt('head', msg);
+  card.append(...headBlocks.map(block => block.el));
 
   // An event's details (features/panel/details.js), refreshed with the
   // chips.
   const detailsEl = accEl('div', 'pane-section props');
   renderCardDetails(detailsEl, msg, occurrence);
   card.appendChild(detailsEl);
+  const detailBlocks = cardBlocksAt('details', msg);
+  card.append(...detailBlocks.map(block => block.el));
 
   // In a thread, the head drags the card: dropped on the Documents lens it
   // leaves the thread (features/lenses/documents.js); like a row there, on
@@ -877,6 +909,7 @@ function createMessageController(msg, { selectable = false, thread = false, occu
   const controller = {
     doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
     dateEl, detailsEl, linksEl, attachmentsEl, threadsEl, chatBtn, occurrence, unsubscribeContent,
+    blocks: [...headBlocks, ...detailBlocks],
   };
   msgControllers.set(doc_id, controller);
   renderCardHead(controller);

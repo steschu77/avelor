@@ -108,7 +108,7 @@ pub enum SaveOutcome {
 impl SaveOutcome {
     /// The outcome of this write followed by `next`: a conflict wins, then
     /// a write.
-    fn and(self, next: SaveOutcome) -> SaveOutcome {
+    pub fn and(self, next: SaveOutcome) -> SaveOutcome {
         match (self, next) {
             (conflict @ SaveOutcome::Conflict(_), _) | (_, conflict @ SaveOutcome::Conflict(_)) => {
                 conflict

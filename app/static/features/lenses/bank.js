@@ -18,8 +18,8 @@ import { DAY_MONTH, DAY_MONTH_YEAR, DAY_SHORT_MONTH, MONTH_YEAR, SHORT_MONTH_YEA
 import { amountText, dayStart, everyMidnight, money, plural, signedAmount } from '../../core/format.js';
 import { store } from '../../model/state.js';
 import { NO_PROJECT, accountWatch, entities, matchesFilter, watchSourceKey, watches } from '../../model/entities.js';
-import { ACCOUNT_KINDS, BOOKING_KINDS, bookingName, cents, ledger, linkProjects, pairOf, statementsEnd } from '../../model/bank.js';
-import { KIND_ICONS, TRANSFER_ICON, iconEl } from '../../ui/icons.js';
+import { ACCOUNT_KINDS, BOOKING_KINDS, bookingName, cents, ledger, linkProjects, pairOf, seriesOf, statementsEnd } from '../../model/bank.js';
+import { KIND_ICONS, bookingIcon, iconEl } from '../../ui/icons.js';
 import { stat, stats } from '../../ui/page.js';
 import { accSeg } from '../../ui/segmented.js';
 import { linkChip, linkTarget, pairChip } from '../panel/panel.js';
@@ -440,7 +440,10 @@ function renderRow(entry, several, project) {
   if (booking.id) row.dataset.booking = booking.id;
   row.title = `Open ${who}`;
   const cell = accEl('span', 'bank__cell');
-  cell.append(iconEl(pair ? TRANSFER_ICON : KIND_ICONS.transactions.icon, 'table__icon'), accEl('span', 'row-title', who));
+  const series = seriesOf(booking);
+  const iconPart = iconEl(bookingIcon(pair, series), 'table__icon');
+  if (series) iconPart.setAttribute('aria-label', `Recurring: ${series.title || 'Untitled'}`);
+  cell.append(iconPart, accEl('span', 'row-title', who));
   if (entry.pending) cell.append(accEl('span', 'chip chip--pending', 'Pending'));
   const detail = [several ? account.title || 'Untitled' : null, what].filter(Boolean).join(' \u00b7 ');
   if (detail) cell.append(accEl('span', 'meta bank__detail', detail));
@@ -448,6 +451,7 @@ function renderRow(entry, several, project) {
   const to = booking['linked-to'];
   if (pair) link.append(pairChip(pair));
   else if (to) link.append(linkTarget(to) ? linkChip(to) : accEl('span', 'meta', '\u2014'));
+  else if (series) link.append(linkChip(series.id));
   row.append(accEl('span', 'meta', DAY_MONTH.format(new Date(entry.time))), cell, link,
     accEl('span', `bank__amount${amount > 0 && !pair ? ' bank__amount--in' : ''}`, signedAmount(amount)));
   if (!project) row.append(accEl('span', 'meta bank__balance', entry.pending ? '' : amountText(entry.balance)));

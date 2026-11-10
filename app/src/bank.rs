@@ -2,8 +2,9 @@
 //! CSV exports of its bank account, each new file a statement of the account
 //! in `Accounts/` (`statements_import`, a job). One bank's format is read
 //! (`read`: comdirect's export of an account's bookings); `plan` decides what
-//! a statement adds to its account, and `pairs` which of its bookings are
-//! transfers to or from the vault's other accounts. The account is a
+//! a statement adds to its account, `pairs` which of its bookings are
+//! transfers to or from the vault's other accounts, and
+//! `recurring::join_new` which series its new bookings pay. The account is a
 //! bank-account entity (`new_account`, `set_bank_account`).
 
 use std::collections::HashSet;
@@ -23,6 +24,7 @@ use serde_json::json;
 use crate::app::App;
 use crate::jobs::{JobKind, count_summary};
 use crate::protocol::Req;
+use crate::recurring;
 use crate::structure;
 use crate::watches::{self, WatchKind, WatchSettings};
 
@@ -349,7 +351,7 @@ fn some(text: &str) -> Option<String> {
 }
 
 // ----------------------------------------------------------------------------
-fn to_cents(amount: f64) -> i64 {
+pub(crate) fn to_cents(amount: f64) -> i64 {
     (amount * 100.0).round() as i64
 }
 
@@ -367,7 +369,7 @@ fn is_pending(item: &Transaction) -> bool {
 }
 
 // ----------------------------------------------------------------------------
-fn day_of(item: &Transaction) -> Option<Date> {
+pub(crate) fn day_of(item: &Transaction) -> Option<Date> {
     item.date.map(|date| date.date)
 }
 
@@ -396,9 +398,9 @@ pub(crate) struct Plan {
 /// account's `owner` on its side of each booking: a booking the account has
 /// (its reference, or without one its day, amount and purpose) is left out;
 /// as the newest statement it replaces the account's pending bookings, a new
-/// booking of a replaced one's card day and amount taking its id and link,
-/// and as an older one it brings none; its balances are checked against its
-/// bookings and the statement before it.
+/// booking of a replaced one's card day and amount taking its id, link and
+/// series, and as an older one it brings none; its balances are checked
+/// against its bookings and the statement before it.
 pub(crate) fn plan(owner: Option<&ContactRef>, known: &[Known], statement: &Statement) -> Plan {
     let all_items = || known.iter().flat_map(|s| s.items.iter());
     let refs: HashSet<&str> = all_items()
@@ -452,7 +454,9 @@ pub(crate) fn plan(owner: Option<&ContactRef>, known: &[Known], statement: &Stat
                         && Some(row.cents) == cents
                 });
                 if let Some((_, booking, taken)) = twin {
-                    (booking.id, booking.linked_to, *taken) = (item.id, item.linked_to, true);
+                    (booking.id, booking.linked_to, booking.recurring) =
+                        (item.id, item.linked_to, item.recurring);
+                    *taken = true;
                 }
             }
             replaced.push((older.id, kept));
@@ -936,6 +940,7 @@ struct Counts {
     booked: usize,
     pending: usize,
     transfers: usize,
+    recurring: usize,
     skipped: usize,
 }
 
@@ -1064,10 +1069,12 @@ fn import_files(app: &mut App, watch: Id, mut files: Vec<NewFile>) -> String {
         } else {
             Vec::new()
         };
+        let joined = recurring::join_new(app, account.id, &mut plan.transactions.transactions);
         match write_statement(app, watch, &account, file, statement, plan, &mut counts) {
             Ok(()) => {
                 counts.statements += 1;
                 counts.transfers += write_halves(app, &halves);
+                counts.recurring += joined;
             }
             Err(why) => problems.push(named(&why)),
         }
@@ -1078,6 +1085,11 @@ fn import_files(app: &mut App, watch: Id, mut files: Vec<NewFile>) -> String {
             (counts.booked, "booking", "bookings"),
             (counts.pending, "pending", "pending"),
             (counts.transfers, "transfer paired", "transfers paired"),
+            (
+                counts.recurring,
+                "in a recurring payment",
+                "in recurring payments",
+            ),
             (
                 counts.skipped,
                 "in the vault already",
@@ -1424,8 +1436,9 @@ mod tests {
             ..Statement::default()
         };
         let mut first = known_of(plan(None, &[], &older));
-        let bill = Id::generate();
+        let (bill, series) = (Id::generate(), Id::generate());
         first.items[1].linked_to = Some(bill);
+        first.items[1].recurring = Some(series);
         let pending_id = first.items[1].id;
         let first_id = first.id;
 
@@ -1450,8 +1463,8 @@ mod tests {
             .find(|t| t.reference.as_deref() == Some("R2"));
         let twin = twin.unwrap();
         assert_eq!(
-            (twin.id, twin.linked_to),
-            (pending_id, Some(bill)),
+            (twin.id, twin.linked_to, twin.recurring),
+            (pending_id, Some(bill), Some(series)),
             "the pending one, booked"
         );
         assert_eq!(next.replaced.len(), 1);
@@ -1855,6 +1868,79 @@ mod tests {
             !text.contains("pair-transfers"),
             "written only when off: {text}"
         );
+    }
+
+    // ------------------------------------------------------------------------
+    /// The forged vault's checking statements and recurring payments, each
+    /// a path in the vault and its text.
+    fn forged_checking() -> Vec<(String, String)> {
+        let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data/forged/Accounts");
+        let mut files = Vec::new();
+        for entry in fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            if name.contains(".checking-account-") || name.ends_with(".rcp.yaml") {
+                let text = fs::read_to_string(&path).unwrap();
+                files.push((format!("Accounts/{name}"), text));
+            }
+        }
+        files
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn decembers_bookings_join_the_forged_series() {
+        let forged = forged_checking();
+        let more: Vec<(&str, String)> = forged
+            .iter()
+            .map(|(path, text)| (path.as_str(), text.clone()))
+            .collect();
+        let files = [("statement_2026-12.csv", DECEMBER)];
+        let (mut h, _) = with_vault("statements-recurring", "0042-7318-5520", &files, &more);
+        assert_eq!(
+            import(&mut h),
+            "1 statement \u{b7} 28 bookings \u{b7} 2 pending \u{b7} 4 in recurring payments"
+        );
+        let joined = |h: &Harness| {
+            let index = h.app.vault.index();
+            let december = statements(h).into_iter().max_by_key(|s| {
+                let doc = index.get(&s.id).unwrap();
+                doc.date()
+            });
+            let december = december.unwrap();
+            let mut found = Vec::new();
+            for item in &december.items {
+                let Some(series) = item.recurring else {
+                    continue;
+                };
+                let (_, _, day) = day_of(item).unwrap().to_ymd();
+                found.push((
+                    day,
+                    index.get(&series).unwrap().title().to_string(),
+                    item.id,
+                ));
+            }
+            found.sort();
+            (december.id, found)
+        };
+        let (december, found) = joined(&h);
+        let titles: Vec<(i32, &str)> = found.iter().map(|(d, t, _)| (*d, t.as_str())).collect();
+        assert_eq!(
+            titles,
+            [
+                (1, "Mortgage"),
+                (10, "Springfield Power & Light"),
+                (15, "Salary, Cogsworth"),
+                (31, "Salary, Cogsworth"),
+            ],
+            "not the final pay after the plant's last day, nor the bank's cash on the 24th"
+        );
+
+        let power = found[1].2.unwrap();
+        let out = json!({ "bookings": [{ "id": december, "booking": power }], "to": null });
+        h.call("set_booking_recurring", out);
+        assert_eq!(import(&mut h), "No new statements");
+        assert_eq!(joined(&h).1.len(), 3, "taken out by hand, it stays out");
     }
 
     // ------------------------------------------------------------------------

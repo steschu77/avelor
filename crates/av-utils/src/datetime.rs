@@ -23,6 +23,13 @@ pub enum Weekday {
 }
 
 // ----------------------------------------------------------------------------
+impl From<Weekday> for i32 {
+    fn from(value: Weekday) -> i32 {
+        value as i32
+    }
+}
+
+// ----------------------------------------------------------------------------
 impl TryFrom<i32> for Weekday {
     type Error = Error;
 
@@ -102,14 +109,15 @@ const fn is_leap_year(year: i32) -> bool {
 }
 
 // ----------------------------------------------------------------------------
+/// How many days `month` of `year` has.
 #[rustfmt::skip]
-const fn days_in_month(year: i32, month: Month) -> Result<i32> {
+pub const fn days_in_month(year: i32, month: Month) -> i32 {
     use Month::*;
     match month {
-        Jan | Mar | May | Jul | Aug | Oct | Dec => Ok(31),
-        Apr | Jun | Sep | Nov => Ok(30),
-        Feb if is_leap_year(year) => Ok(29),
-        Feb => Ok(28),
+        Jan | Mar | May | Jul | Aug | Oct | Dec => 31,
+        Apr | Jun | Sep | Nov => 30,
+        Feb if is_leap_year(year) => 29,
+        Feb => 28,
     }
 }
 
@@ -126,7 +134,7 @@ impl Date {
 
     // ------------------------------------------------------------------------
     pub fn from_ymd(year: i32, month: i32, day: i32) -> Result<Self> {
-        let dim = days_in_month(year, Month::try_from(month)?)?;
+        let dim = days_in_month(year, Month::try_from(month)?);
         if day < 1 || day > dim {
             return Err(Error::InvalidDate);
         }

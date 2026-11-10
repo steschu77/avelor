@@ -92,6 +92,11 @@
   --w-bank-link: 200px;
   --w-bank-amount: 88px;
   --w-bank-balance: 80px;
+  /* a recurring payment: an occurrence's state on its card, the schedule's
+     day and an amount typed in, there and in New recurring payment */
+  --w-series-state: 52px;
+  --w-series-day: 56px;
+  --w-series-amount: 96px;
 
   /* sidebar and table inset */
   --p-gutter: 12px;

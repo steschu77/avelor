@@ -16,6 +16,7 @@ use crate::documents;
 use crate::folders;
 use crate::google;
 use crate::google_accounts::{CalendarSource, Level};
+use crate::recurring;
 use crate::scans;
 use crate::search;
 use crate::structure;
@@ -122,6 +123,10 @@ enum Command {
     // Account statements (`bank`).
     StatementsImport(OfWatch),
     SetBankAccount(bank::AccountChange),
+    // Recurring payments (`recurring`).
+    CreateRecurring(Box<recurring::NewRecurring>),
+    SetRecurring(Box<recurring::RecurringChange>),
+    SetBookingRecurring(recurring::BookingsSeries),
     // Fetch mail (`mail`).
     MailLabels(OfAccount),
     MailSearch(mail::SearchRequest),
@@ -250,9 +255,9 @@ struct BookingLink {
 
 /// `{id, booking}`: the booking `booking` of the statement `id`.
 #[derive(Deserialize)]
-struct Booking {
-    id: Id,
-    booking: Id,
+pub(crate) struct Booking {
+    pub id: Id,
+    pub booking: Id,
 }
 
 /// `{ids, change}`: one change to every entity named.
@@ -393,6 +398,9 @@ impl Command {
             "scan_import" => Command::ScanImport(from_value(args)?),
             "statements_import" => Command::StatementsImport(from_value(args)?),
             "set_bank_account" => Command::SetBankAccount(from_value(args)?),
+            "create_recurring" => Command::CreateRecurring(from_value(args)?),
+            "set_recurring" => Command::SetRecurring(from_value(args)?),
+            "set_booking_recurring" => Command::SetBookingRecurring(from_value(args)?),
             "mail_labels" => Command::MailLabels(from_value(args)?),
             "mail_search" => Command::MailSearch(from_value(args)?),
             "mail_headers" => Command::MailHeaders(from_value(args)?),
@@ -495,6 +503,9 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::ScanImport(a) => scans::scan_import(app, req, a),
         Command::StatementsImport(a) => bank::statements_import(app, req, a.watch),
         Command::SetBankAccount(a) => bank::set_bank_account(app, req, a),
+        Command::CreateRecurring(a) => recurring::create_recurring(app, req, *a),
+        Command::SetRecurring(a) => recurring::set_recurring(app, req, *a),
+        Command::SetBookingRecurring(a) => recurring::set_booking_recurring(app, req, a),
         Command::MailLabels(a) => mail::mail_labels(app, req, a.account),
         Command::MailSearch(a) => mail::mail_search(app, req, a),
         Command::MailHeaders(a) => mail::mail_headers(app, req, a),

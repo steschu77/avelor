@@ -230,6 +230,35 @@ mark {
   color: var(--c-ink-mute);
 }
 
+/* a recurring payment's fields, on its card and in New recurring payment
+   (features/panel/details.js, features/series-new.js): the schedule, its
+   period then its day; an amount typed in */
+.series-every {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.series-every__day {
+  flex: none;
+  width: var(--w-series-day);
+}
+
+.series-amount {
+  flex: none;
+  width: var(--w-series-amount);
+}
+
+/* an overdue task (the dashboard's), a recurring payment's missed or off
+   occurrence (features/panel/series.js) */
+.chip--danger {
+  white-space: nowrap;
+  border-color: transparent;
+  background: var(--c-danger-soft);
+  color: var(--c-ink);
+}
+
 /* buttons drawn as text: a link's title, which selects what it names (a
    chip's, a Linked tab row's, a card's threads line's), and a chip's x that
    removes a label, a project or a link (features/panel/panel.js,

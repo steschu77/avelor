@@ -1,13 +1,13 @@
-// What a card shows of its event, task, mail, document, bank account or
-// statement (panel.md#cards):
+// What a card shows of its event, task, mail, document, bank account,
+// statement or recurring payment (panel.md#cards):
 // the details grid (`renderCardDetails`) with the contacts, the calendar
 // and the account as chips that select what they name, a task's fields and a document's
-// genre editable where the host can write them (`edit_entities`), and a
-// task's tag (`taskTag`), which the day view's task rows and the calendar's
-// grid show too.
+// genre editable where the host can write them (`edit_entities`), a
+// recurring payment's too (`set_recurring`), and a task's tag (`taskTag`),
+// which the day view's task rows and the calendar's grid show too.
 
 import { accEl } from '../../core/dom.js';
-import { DATE_FORMAT, fileSize, money } from '../../core/format.js';
+import { DATE_FORMAT, amountText, fileSize, money, parseAmount, parseDate } from '../../core/format.js';
 import { TIME_FORMAT, isoInstant, localDay, relativeDay } from '../../core/format.js';
 import { entities, parseContact } from '../../model/entities.js';
 import {
@@ -15,7 +15,11 @@ import {
 } from '../../model/calendar.js';
 import { isOverdue } from '../../model/calendar.js';
 import { addDays, sameDay } from '../../model/calendar.js';
-import { editEntityLocal } from '../../model/structure.js';
+import { PERIODS, everyLine, periodOf } from '../../model/calendar.js';
+import {
+    CATEGORIES, amountsOf, nextOccurrence, withAmount,
+} from '../../model/bank.js';
+import { editEntityLocal, setRecurringLocal } from '../../model/structure.js';
 import { onEditEnd } from '../../ui/field.js';
 import { fileIcon, iconEl } from '../../ui/icons.js';
 import { accSeg } from '../../ui/segmented.js';
@@ -113,6 +117,7 @@ export function renderCardDetails(row, doc, occurrence = null) {
         add('Bookings', String(bookings.length - pending) + (pending ? ` \u00b7 ${pending} pending` : ''));
         if (statement.balance != null) add('Balance', money(statement.balance, holder?.['bank-account']?.currency));
     }
+    if (doc?.recurring) seriesFields(doc, add);
     row.replaceChildren(...parts);
     row.hidden = !parts.length;
     if (focusKey) row.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true });
@@ -220,6 +225,135 @@ function genreField(doc) {
     });
     editField(input, value => editEntityLocal(doc.doc_id, { genre: value.trim() || null }));
     return input;
+}
+
+// ----------------------------------------------------------------------------
+// A recurring payment's fields (vault.md#recurring): its account, then while
+// the host can write it its party, schedule (a period and its day, as
+// `everyLine` writes them; another schedule in words), first and last day,
+// current amount (since when, and the earlier ones), how far a booking may
+// vary and its category, each writing the whole role (`setRecurringLocal`);
+// else as text. Then its next occurrence after the statements.
+function seriesFields(doc, add) {
+    const { doc_id: id, recurring } = doc;
+    const account = entities.get(recurring.account);
+    if (account) {
+        add('Account', entityChip(account.id, account.title || 'Untitled'),
+            accEl('span', 'meta', account['bank-account']?.number ?? ''));
+    }
+    const amounts = amountsOf(recurring);
+    const current = amounts.at(-1);
+    const day = text => DATE_FORMAT.format(parseDate(text));
+    const earlier = amounts.slice(0, -1).reverse()
+        .map(entry => `${amountText(entry.amount)} from ${day(entry.from)}`).join(', ');
+    const since = current ? [accEl('span', 'meta', `since ${day(current.from)}${earlier ? ` \u00b7 before: ${earlier}` : ''}`)] : [];
+    const schedule = periodOf(recurring.every);
+    if (!doc.writable) {
+        if (recurring.party) add('Party', contactChip(recurring.party));
+        add('Every', repeatsText(recurring.every ?? []));
+        if (recurring.from) add('From', day(recurring.from));
+        if (recurring.until) add('Until', day(recurring.until));
+        if (current) add('Amount', amountText(current.amount), ' ', ...since);
+        if (recurring.vary != null) add('Varies by', amountText(recurring.vary));
+        if (recurring.category) add('Category', recurring.category);
+    } else {
+        // the role with `change`, a key whose value is null left out
+        const write = change => {
+            const next = { ...recurring, ...change };
+            for (const key of Object.keys(next)) if (next[key] == null) delete next[key];
+            setRecurringLocal(id, next);
+        };
+        const party = fieldInput('text', 'party', recurring.party ? parseContact(recurring.party).name : '', 'form-input');
+        party.placeholder = 'Who is paid, or pays';
+        editField(party, value => write({ party: value.trim() || null }));
+        add('Party', party);
+
+        if (schedule) {
+            const from = parseDate(recurring.from) ?? new Date();
+            const seg = accSeg(PERIODS, schedule.period, period => {
+                write({ every: [everyLine(period, schedule.day ?? from.getDate(), from)] });
+            });
+            [...seg.children].forEach((option, i) => { option.dataset.focusKey = `every:${PERIODS[i][0]}`; });
+            const dayInput = everyDayInput(schedule.day ?? from.getDate(), 'every:day');
+            editField(dayInput, value => {
+                const n = Number(value);
+                if (n >= 1 && n <= 31) write({ every: [everyLine(schedule.period, n, from)] });
+            });
+            add('Every', everyField(seg, schedule.period, dayInput));
+        } else {
+            add('Every', repeatsText(recurring.every ?? []));
+        }
+
+        const from = fieldInput('date', 'from', recurring.from ? localDay(parseDate(recurring.from)) : '', 'form-input props__date');
+        editField(from, value => { if (value) write({ from: value }); });
+        add('From', from);
+        const until = fieldInput('date', 'until', recurring.until ? localDay(parseDate(recurring.until)) : '', 'form-input props__date');
+        editField(until, value => write({ until: value || null }));
+        add('Until', until, ...(recurring.until ? [] : [accEl('span', 'meta', 'open-ended')]));
+
+        const amount = fieldInput('text', 'amount', current ? amountText(current.amount) : '', 'form-input series-amount');
+        editField(amount, value => {
+            const n = parseAmount(value);
+            const day = localDay(parseDate(current?.from ?? recurring.from));
+            if (n != null) write({ amounts: withAmount(recurring, day, n).amounts });
+        });
+        add('Amount', amount, ...since);
+
+        const vary = fieldInput('text', 'vary', recurring.vary != null ? amountText(recurring.vary) : '', 'form-input series-amount');
+        vary.placeholder = '0.00';
+        editField(vary, value => {
+            const n = value.trim() ? parseAmount(value) : null;
+            if (n == null && value.trim()) return;
+            write({ vary: n == null ? null : Math.abs(n) });
+        });
+        add('Varies by', vary, accEl('span', 'meta', 'a booking within it pays as it is'));
+
+        const category = fieldInput('text', 'category', recurring.category ?? '', 'form-input');
+        category.placeholder = 'None';
+        offerCategories(category);
+        editField(category, value => write({ category: value.trim() || null }));
+        add('Category', category);
+    }
+    const next = nextOccurrence(doc);
+    if (next) add('Next', DATE_FORMAT.format(next), ' ', accEl('span', 'meta', 'after the statements'));
+}
+
+// A recurring payment's schedule as a field (its card's, and New recurring
+// payment's, features/series-new.js): `seg`, the period's segmented
+// control, then but for a week the day of the month, `day`
+// (`everyDayInput`).
+export function everyField(seg, period, day) {
+    const field = accEl('span', 'series-every');
+    field.append(seg, ...(period === 'week' ? [] : [accEl('span', 'meta', 'on day'), day]));
+    return field;
+}
+
+// The input of a schedule's day of the month, holding `value`; `key` finds
+// it again once its block is drawn anew.
+export function everyDayInput(value, key) {
+    const input = fieldInput('number', key, String(value), 'form-input series-every__day');
+    input.min = '1';
+    input.max = '31';
+    return input;
+}
+
+// `input` offers the categories of a series: the app's (`CATEGORIES`) and
+// those the vault's series use.
+const categoryList = accEl('datalist');
+categoryList.id = 'category-list';
+document.body.append(categoryList);
+
+export function offerCategories(input) {
+    input.setAttribute('list', categoryList.id);
+    input.addEventListener('focus', () => {
+        const used = new Set(CATEGORIES);
+        for (const other of entities.values()) if (other.recurring?.category) used.add(other.recurring.category);
+        categoryList.replaceChildren(...[...used].sort().map(name => {
+            const option = accEl('option');
+            option.value = name;
+            return option;
+        }));
+    });
 }
 
 // ----------------------------------------------------------------------------

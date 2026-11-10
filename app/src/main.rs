@@ -26,6 +26,7 @@ mod mail;
 mod page;
 mod protocol;
 mod reader;
+mod recurring;
 mod scans;
 mod search;
 mod shell;

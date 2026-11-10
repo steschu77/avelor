@@ -276,8 +276,9 @@ A statements watch imports the CSV exports of one bank account
 (`bank.rs`). Import, on the watch's source or pane, lists the watch's files
 that aren't in the vault and reads them on a worker, then writes each into
 the account, the oldest first, as a job "Importing statements ·
-<account>"; its note counts the statements and bookings that came in and
-the transfers paired, and names each file left out and each balance that
+<account>"; its note counts the statements and bookings that came in, the
+transfers paired and the bookings put into a recurring payment ("5 in
+recurring payments"), and names each file left out and each balance that
 doesn't add up. A file counts as in the vault by its account and origin:
 the `import.origin` of a statement of the account (`vault.md#import`),
 whichever watch imported it.
@@ -307,8 +308,8 @@ whichever watch imported it.
   with nothing else writes no statement. The statement whose last booking
   is the account's newest replaces the account's pending bookings: they
   leave the older statements, and a new booking of a removed one's card
-  day and amount takes its `id` and `linked-to`. An older statement
-  brings no pending bookings.
+  day and amount takes its `id`, `linked-to` and `recurring`. An older
+  statement brings no pending bookings.
 - **Transfers**: a booked booking out whose `iban` names another bank
   account of the vault (by the number's digits, as an IBAN ends with it)
   and a booked booking of the same amount into that account, at most 3
@@ -317,6 +318,20 @@ whichever watch imported it.
   once. Whichever statement comes second pairs them, and the other
   account's statement is written too. The watch's Pair transfers step
   turns this off; the pairs made stay.
+- **Recurring payments**: a new booking without a series joins the
+  account's recurring payment (`vault.md#recurring`) whose party it names
+  (the same name, case aside: the series' `party`, or the party of one of
+  its bookings, so a name added by hand is known from then on), going the
+  same way (in or out), within 7 days (or half the gap to the next one) of
+  an occurrence of the series no booking pays yet: its `recurring` names
+  the series, in the same write. Of several, the one whose amount is
+  nearest, then whose occurrence is; the amount doesn't decide, so one off
+  shows as off on the series' card (`panel.md#a-series-card`). Only new
+  bookings are matched: one taken out by hand stays out. The occurrences
+  are read from `every` (`av_utils::recurrence`: weekly with `BYDAY`,
+  monthly with `INTERVAL` and `BYMONTHDAY`, yearly with `BYMONTH` and
+  `BYMONTHDAY`, `COUNT`, `UNTIL`); a series of another schedule joins
+  nothing at import.
 - **The balances**: the balance before plus the booked rows is the balance
   after; and the balance before is the one the statement before it ends
   with, if that one ends before this one starts. Otherwise the job's note
@@ -341,7 +356,7 @@ whichever watch imported it.
 | K4 | Arrange | drag pages, merge with previous/next, split, edit titles, tick | page only (`scanPlace`, `features/import/scans.js`) | documents as arranged |
 | K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}`; with the watch's analysis on, the job "Analysing scans" or "Analysing PDFs" (G5's steps) → `entity`, `job`, `account` | documents in `Scans/`, analysed; one file kept beside its document |
 | K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
-| M1 | Import statements | a statements watch's source or pane, once its folder is chosen: Import → `importWatch` (`features/workspace/folders.js`) | `statements_import {watch}` → `ok {job}` (`invalid_argument` without a folder); the files listed and read on the job's worker → per file `entity` (the statement, the older ones it took pending bookings from, the other accounts' statements holding a transfer's other half, the account) → `job` with the note | statements in `Accounts/`, the account's balance, its transfers paired |
+| M1 | Import statements | a statements watch's source or pane, once its folder is chosen: Import → `importWatch` (`features/workspace/folders.js`) | `statements_import {watch}` → `ok {job}` (`invalid_argument` without a folder); the files listed and read on the job's worker → per file `entity` (the statement, the older ones it took pending bookings from, the other accounts' statements holding a transfer's other half, the account) → `job` with the note | statements in `Accounts/`, the account's balance, its transfers paired, its bookings in their series |
 | M2 | Change the account | the pane's name, Bank, Number, Kind | `set_title {id, title}`; `set_bank_account {entity, institution?, number?, type?}` → `entity`, `ok` | the account, the watch's name |
 
 ## Design <a id="design"></a>
@@ -352,8 +367,9 @@ whichever watch imported it.
   `scan.origin`, `Index::scan_origins`), a statement by its account and
   origin (`import.origin`, `bank::account_origins`).
 - **Statements**: the reader (`bank::read`), what a statement adds to its
-  account (`bank::plan`) and the transfers it pairs (`bank::pairs`) are
-  pure functions with tests, the reader's
+  account (`bank::plan`), the transfers it pairs (`bank::pairs`) and the
+  series its bookings join (`recurring::join`) are pure functions with
+  tests, the reader's
   on the December statement in `data/statements`; the files
   are listed and read on the job's worker, and written on the UI thread,
   one vault edit per entity.

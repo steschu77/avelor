@@ -132,6 +132,14 @@ export const amountText = n => (n == null ? '' : DECIMAL.format(n));
 export const signedAmount = n => `${sign(n)}${DECIMAL.format(Math.abs(n))}`;
 export const signedMoney = (n, currency) => `${sign(n)}${money(Math.abs(n), currency)}`;
 
+// An amount typed in ("1,150.00", "-60", with a typographic minus too) as a
+// number; null for anything else.
+export function parseAmount(text) {
+  const plain = text.trim().replace(/\u2212/g, '-').replace(/,/g, '');
+  const n = Number(plain);
+  return plain && Number.isFinite(n) ? n : null;
+}
+
 // ----------------------------------------------------------------------------
 // A file's size: "812 KB", "2.4 MB".
 export function fileSize(bytes) {
