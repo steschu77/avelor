@@ -197,6 +197,14 @@ export function setRecurringPaymentLocal(id, recurring) {
   structureCall('set_recurring_payment', { id, recurring_payment: recurring }, () => store.getState());
 }
 
+// Write the project `id`'s block as `project` (vault.md#project): its facts,
+// the documents that meet what it expects, ...; the host pushes the project
+// back, which its header follows. No selection is published, so the cards
+// aren't rebuilt.
+export function setProjectLocal(id, project) {
+  structureCall('set_project', { id, project });
+}
+
 // Write `change` to the entity `id` (`edit_entities`, api.md#structure): a
 // document's `{genre}`, or a task's `{task: {status | due | assignee}}`,
 // null removing it. The host pushes the entity back, which the cards, the

@@ -545,6 +545,43 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   and the project as `entity_deleted`; `onEntityDeleted` drops it and, if
   it was the filter, shows all documents.
 
+### A project's blueprint <a id="blueprint"></a>
+
+A project whose block carries a blueprint, facts or checks
+(`vault.md#project`) shows it under its description while its details are
+unfolded (`features/blueprint.js`):
+
+- **Its facts** on a line: the shipped blueprint's in its order, set or
+  not, then the project's others (`factsOf`, `model/blueprint.js`), each
+  with its label and its value, a dash while it has none. A value's pencil
+  shows on hover and edits it in place by its type (`features/facts.js`):
+  a text or an amount typed in, a date, a trip's days (from and to; while
+  they aren't fixed, what its sketch says of them: "Aug 2028 · 4–5 nights
+  · not fixed"), or a pick from a menu (the vault's contacts, with a name
+  typed that has none; the vault's calendars; a choice's values). Enter or
+  leaving the inputs writes the whole block through `set_project`
+  (`setProjectLocal`, `model/structure.js`) if the value changed, Esc puts
+  it back; empty removes the fact. The budget says what the project's
+  bookings have spent ("3,148.00 booked").
+- **A tab line**: Missing and Next, each with its count, then how far the
+  project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00").
+  One list is open at a time; its tab again folds it, so the lens keeps
+  its room.
+- **Missing**: what the project's checks find (`checksOf`), each with the
+  check that found it: an expected document no entity meets yet, or none
+  recent enough (`within`), with Find, a menu of the project's entries
+  whose pick is written into its `by`; a payment past its day that no
+  booking linked to what it is `for` pays; the bookings beyond the
+  budget (`spentIn`: money out less money in of the bookings linked into
+  the project, `bookingInProject`, transfers between the vault's accounts
+  not counted); an open task past its due day, which a click opens.
+- **Next**: the project's open tasks by their due days, those without one
+  last, each opened by a click; then the payments it awaits, by their
+  days.
+
+While one of its inputs has the focus, the blueprint isn't drawn again;
+it is once they are left.
+
 ## Membership and structural edits <a id="structural-edits"></a>
 
 Membership is edited, and entities deleted, by the host, never on the page
@@ -638,6 +675,8 @@ one shows them as text:
   period a segmented button; each writes the whole role through
   `set_recurring_payment` (`setRecurringPaymentLocal`), an empty Until, Varies by or
   category removing its key.
+- **A project's facts** (`#blueprint`): edited in place under the lens
+  header, each writing the whole block through `set_project`.
 
 A field writes when Enter is pressed or it is left, if its value changed;
 Esc puts back what it held (`onEditEnd`, `ui/field.js`). A date input's
