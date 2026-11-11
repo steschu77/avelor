@@ -431,6 +431,10 @@ mark {
   padding: 8px 12px 6px;
 }
 
+.menu__head--sep {
+  border-top: 1px solid var(--c-line);
+}
+
 .menu__check {
   width: 10px;
   font-size: var(--fs-meta);
@@ -446,6 +450,12 @@ mark {
   margin-left: auto;
   padding-left: 16px;
   color: var(--c-label);
+}
+
+/* what an item makes (New project's blueprints), a short note at the right */
+.menu__desc {
+  margin-left: auto;
+  padding-left: 18px;
 }
 
 /* Resize grip on a pane's left edge; --end puts it on the right edge. */

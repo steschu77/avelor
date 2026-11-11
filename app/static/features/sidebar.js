@@ -20,6 +20,7 @@ import { accounts, sourceKeyOf } from '../model/entities.js';
 import { watchSourceKey, watches } from '../model/entities.js';
 import { structureCall } from '../model/structure.js';
 import { joinProjectLocal } from '../model/structure.js';
+import { BLUEPRINTS, newProjectBlock } from '../model/blueprint.js';
 import { iconEl } from '../ui/icons.js';
 import { KIND_ICONS } from '../ui/icons.js';
 import { IMPORT_ICON } from '../ui/icons.js';
@@ -27,6 +28,7 @@ import { onEditEnd } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
+import { openNewProject } from './header.js';
 import { importWatch, watchName, watchType } from './workspace/folders.js';
 import { openEmailFetch } from './import/email.js';
 import { revealVault, switchVault } from './workspace/vault.js';
@@ -266,8 +268,9 @@ function editProject(project_id, row) {
 // `renderSidebar` has built its pill.
 let editProjectId = null;
 
-// The "Add project" button: the host writes a new project and pushes it as
-// `entity`; its pill then opens in rename mode. The selection stays.
+// Project in the New project menu: the host writes a new project and
+// pushes it as `entity`; its pill then opens in rename mode. The selection
+// stays.
 function addProject() {
   structureCall('create_project', { title: t('sidebar.new_project') }, project_id => {
     editProjectId = project_id;
@@ -276,7 +279,32 @@ function addProject() {
   });
 }
 
-$('add-project-btn').addEventListener('click', addProject);
+// A shipped blueprint in the menu: the host writes the project with the
+// blueprint's block (`newProjectBlock`); it becomes the filter, its details
+// unfold and its name opens in the header (`openNewProject`).
+function addBlueprintProject(blueprint) {
+  const title = blueprint.untitled;
+  const project = newProjectBlock(blueprint);
+  structureCall('create_project', { title, project }, project_id => {
+    if (project_id) {
+      selectFilter({ selected_project: project_id });
+      openNewProject();
+    }
+    return store.getState();
+  });
+}
+
+// The Projects section's "+": the New project menu, a blank project, then
+// the shipped blueprints, each with what it makes.
+const addProjectBtn = $('add-project-btn');
+addProjectBtn.addEventListener('click', () => showMenu(addProjectBtn, [
+  { label: t('sidebar.menu_project'), icon: KIND_ICONS.project.icon, desc: t('sidebar.menu_blank'), run: addProject },
+  ...(BLUEPRINTS.length ? [{ head: t('sidebar.blueprints'), separator: true }] : []),
+  ...BLUEPRINTS.map(blueprint => ({
+    label: blueprint.title, icon: blueprint.icon, desc: blueprint.note,
+    run: () => addBlueprintProject(blueprint),
+  })),
+], { head: t('sidebar.new_project') }));
 
 // Dropping an entity (a table row, which drags its doc_id as text/plain; see
 // features/lenses/documents.js) on a project pill adds it to that project. The

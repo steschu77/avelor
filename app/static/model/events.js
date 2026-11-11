@@ -25,9 +25,12 @@ import { onDocContent } from './documents.js';
 import { onActivated } from './documents.js';
 
 // ----------------------------------------------------------------------------
+// A project as it is now, with its block (vault.md#project): its blueprint,
+// facts, checks, ...
 function onProject(id, meta) {
   const { title: name, path, starred, archived, writable, deletable } = meta;
-  projects.set(id, { id, name, path, starred, archived, writable, deletable });
+  const project = meta.project ?? {};
+  projects.set(id, { id, name, path, starred, archived, writable, deletable, project });
   store.setState({ projects_rev: store.getState().projects_rev + 1 });
 }
 

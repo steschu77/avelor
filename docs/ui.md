@@ -30,7 +30,9 @@ Trash), Fetch email, Import scans, New and New recurring payment
 expanded only while one of them is shown: a page opens it (`openVaultOp`,
 `ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
 or a click on a filter closes it (`closeVaultArea`). Menus are popups
-(`showMenu`, `ui/menu.js`), which mark their anchor `aria-expanded`.
+(`showMenu`, `ui/menu.js`), which mark their anchor `aria-expanded`; an
+item may say on its right what it makes (`.menu__desc`, New project's
+blueprints).
 
 ## Vault panel <a id="vault-panel"></a>
 
