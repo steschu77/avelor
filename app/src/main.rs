@@ -9,6 +9,7 @@ mod api;
 mod app;
 mod attachments;
 mod bank;
+mod blueprints;
 mod calendar;
 mod catalog;
 mod chat;

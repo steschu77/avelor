@@ -95,13 +95,19 @@ impl Index {
         Ok(SaveOutcome::Saved)
     }
 
-    /// Create a new project titled `title`. Its file gets its generated
-    /// name (`filename::generated_name`) in `Projects/`, the conventional
-    /// folder (vault.md#vault-layout), and is markdown, so its body
-    /// can serve as the project's readme.
-    pub fn create_project(&mut self, title: String, changes: &mut Changes) -> Result<Id> {
+    /// Create a new project titled `title`, its block `project` (a
+    /// blueprint's, or empty). Its file gets its generated name
+    /// (`filename::generated_name`) in `Projects/`, the conventional folder
+    /// (vault.md#vault-layout), and is markdown, so its body can serve as
+    /// the project's readme.
+    pub fn create_project(
+        &mut self,
+        title: String,
+        project: Project,
+        changes: &mut Changes,
+    ) -> Result<Id> {
         let roles = Roles {
-            project: Some(Project::default()),
+            project: Some(project),
             ..Default::default()
         };
         let doc = Document::create(

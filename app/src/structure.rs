@@ -13,10 +13,11 @@ use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_vault::change::Change;
+use av_vault::envelope::Project;
 use av_vault::vault::NewEntity;
 use av_vault::vault::SaveOutcome;
 use av_vault::vault::{Changes, Index};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::app::App;
 use crate::calendar;
@@ -136,14 +137,47 @@ pub fn create_entity(app: &mut App, req: Req, new: NewEntity) {
 }
 
 // ----------------------------------------------------------------------------
-/// `create_project`: a project titled `title`, in `Projects/`.
-pub fn create_project(app: &mut App, req: Req, title: String) {
-    let step = Text::new("undo.create_project").arg("title", title.clone());
+/// `create_project`'s and `set_project`'s args: the project's block
+/// (`vault.md#project`), a blueprint's or empty.
+#[derive(Deserialize)]
+pub(crate) struct NewProject {
+    title: String,
+    #[serde(default)]
+    project: Project,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ProjectChange {
+    id: Id,
+    project: Project,
+}
+
+// ----------------------------------------------------------------------------
+/// `create_project`: a project titled `title`, its block `project`, in
+/// `Projects/`.
+pub fn create_project(app: &mut App, req: Req, new: NewProject) {
+    let step = Text::new("undo.create_project").arg("title", new.title.clone());
     let created = app.step(&req, step, |index, changes| {
-        index.create_project(title, changes)
+        index.create_project(new.title, new.project, changes)
     });
     let id = created.as_ref().ok().copied();
     answer(app, req, created.map(|_| SaveOutcome::Saved), id);
+}
+
+// ----------------------------------------------------------------------------
+/// `set_project`: the project `id`'s block as given; `not_found` for an
+/// entity that is no project.
+pub fn set_project(app: &mut App, req: Req, change: ProjectChange) {
+    let id = change.id;
+    let doc = app.vault.index().get(&id);
+    if doc.is_none_or(|doc| doc.roles().project.is_none()) {
+        return req.err(Error::NotFound);
+    }
+    let step = Text::new("undo.set_project").arg("title", named(app, &id, ""));
+    let result = app.step(&req, step, |index, changes| {
+        index.edit(&id, changes, |d| d.set_project(Some(change.project)))
+    });
+    answer(app, req, result, Some(id));
 }
 
 // ----------------------------------------------------------------------------
@@ -577,6 +611,34 @@ mod tests {
         let sent = h.call("create_entity", args);
         assert_eq!(shape(&sent), ["reply"]);
         assert_eq!(sent[0]["err"]["code"], "invalid_argument");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_project_is_made_and_set_with_its_blueprint() {
+        let (mut h, ids) = notes("blueprint", 1);
+        let block = json!({ "blueprint": "travel", "checks": ["budget"], "labels": ["travel"] });
+        let sent = h.call(
+            "create_project",
+            json!({ "title": "Trip", "project": block }),
+        );
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["project"], block);
+        let project = sent[1]["ok"]["id"].clone();
+
+        let facts = json!({ "home": "Springfield", "budget": 6000 });
+        let changed = json!({ "blueprint": "travel", "facts": facts, "sketch": { "stops": [] } });
+        let sent = undoes(
+            &mut h,
+            "set_project",
+            json!({ "id": project, "project": changed }),
+        );
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["project"], changed);
+        assert_eq!(sent[1]["ok"]["id"], project);
+
+        let sent = h.call("set_project", json!({ "id": ids[0], "project": {} }));
+        assert_eq!(sent[0]["err"]["code"], "not_found");
     }
 
     // ------------------------------------------------------------------------

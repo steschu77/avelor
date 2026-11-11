@@ -187,6 +187,27 @@ fn the_host_uses_the_keys_it_looks_up_and_those_it_gives_the_page() {
 
 // ----------------------------------------------------------------------------
 #[test]
+fn a_blueprint_names_its_title_note_and_labels() {
+    let yaml = concat!(
+        "title: blueprint.trip.title\n",
+        "note: blueprint.trip.note\n",
+        "facts:\n",
+        "  - {name: days, label: blueprint.trip.days, type: days}\n",
+        "labels: [travel]\n",
+    );
+    let keys = blueprint_keys(yaml);
+    assert_eq!(
+        keys.into_iter().collect::<Vec<_>>(),
+        [
+            "blueprint.trip.days",
+            "blueprint.trip.note",
+            "blueprint.trip.title"
+        ]
+    );
+}
+
+// ----------------------------------------------------------------------------
+#[test]
 fn the_page_s_markup_names_its_texts_by_key() {
     let html = r#"<button data-table-only data-t-title="editor.table" data-t="editor.table_label"></button>
 <input data-t-placeholder="words.placeholder">"#;

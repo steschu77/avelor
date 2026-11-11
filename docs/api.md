@@ -138,7 +138,8 @@ has no file, is read-only or has broken frontmatter, `not_found`,
 | `create_thread` | `{ title, members }` | A thread with these members, without projects of its own (`vault.md#thread`); its file goes beside its first member. | the new thread |
 | `join_thread` | `{ id, thread }` | Make `id` a member of `thread`. | the thread |
 | `leave_thread` | `{ id, thread }` | Remove `id` from `thread`; a thread left with fewer than two members dissolves: the other member leaves too, and the thread's file goes to `.trash`. | the thread |
-| `create_project` | `{ title }` | A project titled `title`, as a markdown file in `Projects/`. | the new project |
+| `create_project` | `{ title, project? }` | A project titled `title`, as a markdown file in `Projects/`, its block `project` (`vault.md#project`: a blueprint's, else empty). | the new project |
+| `set_project` | `{ id, project }` | The project `id`'s block as given (`vault.md#project`); `not_found` for an entity that is no project. A step (`saving.md#undo`). | the project |
 | `join_project` | `{ id, project }` | Make `id` a member of the project; nothing if it already is. | the project |
 | `leave_project` | `{ id, project }` | Remove `id` from the project. | the project |
 | `set_title` | `{ id, title }` | Set the title of any entity; an empty title removes the `title` key. The file keeps its name. | the entity |

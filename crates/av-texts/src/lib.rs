@@ -281,6 +281,26 @@ pub fn html_keys(html: &str) -> Result<BTreeSet<String>, Vec<String>> {
 }
 
 // ----------------------------------------------------------------------------
+/// The keys a shipped blueprint (YAML, `app/blueprints`) names, which the
+/// host shows: its `title`, `note` and `untitled`, and each fact's
+/// `label`.
+pub fn blueprint_keys(yaml: &str) -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    for line in yaml.lines() {
+        for field in ["title: ", "note: ", "untitled: "] {
+            if let Some(key) = line.strip_prefix(field) {
+                keys.insert(key.trim().to_string());
+            }
+        }
+        if let Some((_, rest)) = line.split_once("label: ") {
+            let key = rest.split([',', '}']).next().unwrap_or_default();
+            keys.insert(key.trim().to_string());
+        }
+    }
+    keys
+}
+
+// ----------------------------------------------------------------------------
 /// The catalogs' problems, each naming the catalog's file and the key:
 /// English against what `used` names (a key used that it lacks, one used
 /// nowhere, a count's forms where the host needs a plain text); each of

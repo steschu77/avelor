@@ -4,7 +4,7 @@ use crate::change::Change;
 use crate::envelope::Conversation;
 use crate::envelope::DocumentType;
 use crate::envelope::Transaction;
-use crate::envelope::{Bare, Roles};
+use crate::envelope::{Bare, Project, Roles};
 use crate::schema::layout;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
@@ -475,8 +475,14 @@ fn created_project_survives_reindexing() {
     let mut index = Index::build(&root);
 
     let mut changes = Changes::default();
+    let blueprint = Project {
+        blueprint: Some("travel".into()),
+        checks: vec!["budget".into()],
+        labels: vec!["travel".into()],
+        ..Project::default()
+    };
     let project = index
-        .create_project("New project".into(), &mut changes)
+        .create_project("New project".into(), blueprint.clone(), &mut changes)
         .unwrap();
     assert_eq!(changes.created, Some(project));
     assert!(changes.saved.is_empty());
@@ -499,6 +505,7 @@ fn created_project_survives_reindexing() {
     let doc = reindexed.get(&project).unwrap();
     assert_eq!(doc.kind(), DocumentType::Project);
     assert_eq!(doc.title(), "New project");
+    assert_eq!(doc.roles().project.as_ref(), Some(&blueprint));
 
     fs::remove_dir_all(&root).ok();
 }
@@ -817,7 +824,9 @@ fn deleting_a_project_takes_it_out_of_its_members_first() {
     let (root, ids) = thread_vault();
     let mut index = Index::build(&root);
     let mut changes = Changes::default();
-    let project = index.create_project("P".into(), &mut changes).unwrap();
+    let project = index
+        .create_project("P".into(), Project::default(), &mut changes)
+        .unwrap();
     let joined = index.join_project(&ids[0], &project, &mut changes);
     assert_eq!(joined.unwrap(), SaveOutcome::Saved);
     let created = index.create_thread("T".into(), &ids[1..3], &mut changes);
@@ -848,7 +857,9 @@ fn deleting_a_project_writes_nothing_unless_every_member_can_leave() {
     let (root, ids) = thread_vault();
     let mut index = Index::build(&root);
     let mut changes = Changes::default();
-    let project = index.create_project("P".into(), &mut changes).unwrap();
+    let project = index
+        .create_project("P".into(), Project::default(), &mut changes)
+        .unwrap();
     for id in &ids[0..2] {
         let joined = index.join_project(id, &project, &mut changes);
         assert_eq!(joined.unwrap(), SaveOutcome::Saved);
@@ -2361,7 +2372,9 @@ fn a_new_file_is_taken_away_and_made_again() {
     let (root, _) = thread_vault();
     let mut index = Index::build(&root);
     let mut step = Changes::default();
-    let project = index.create_project("Move".into(), &mut step).unwrap();
+    let project = index
+        .create_project("Move".into(), Project::default(), &mut step)
+        .unwrap();
     let mut titled = Changes::default();
     let renamed = index.set_title(&project, "Moving".into(), &mut titled);
     assert_eq!(renamed.unwrap(), SaveOutcome::Saved);
