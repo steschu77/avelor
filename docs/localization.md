@@ -73,7 +73,9 @@ plain texts only: the failed start's box, the folder picker's title and
 the sign-in pages (`texts::text`, `texts::filled`), and what it writes
 into the vault, in the run's language (`Text::render`): an email's "No
 subject", a statement's title with its months, the title of the email
-analysis's conversation.
+analysis's conversation. A shipped blueprint's words are keys too
+(`app/blueprints`), worded as the host hands them to the page
+(`texts::of`); the build reads them from the file.
 
 ## The language <a id="language"></a>
 
@@ -129,7 +131,7 @@ A language comes as a pull request with its catalog:
 
 ## Not localized
 
-The vault's format (`Contacts/` stays `Contacts/`, the label
-`conflict`), the docs, the code's names and comments, the models'
-instructions, the log, and the messages only a developer sees ("There is
-no host.").
+The vault's format (`Contacts/` stays `Contacts/`, the labels
+`conflict` and `travel`), the docs, the code's names and comments, the
+models' instructions, the log, and the messages only a developer sees
+("There is no host.").

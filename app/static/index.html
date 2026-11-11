@@ -3,8 +3,10 @@
 
 <head>
   <meta charset="utf-8">
-  <!-- the page's preferences, filled in by the host (page.rs) -->
+  <!-- the page's preferences and the shipped blueprints, filled in by the
+       host (page.rs) -->
   <script type="application/json" id="prefs">{}</script>
+  <script type="application/json" id="blueprints">[]</script>
   <script type="application/json" id="texts">{}</script>
   <!-- the CSS in cascade order (architecture.md#css); build.rs inlines it -->
   <link rel="stylesheet" href="css/tokens.css">

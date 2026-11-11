@@ -1,0 +1,12 @@
+title: blueprint.travel.title
+note: blueprint.travel.note
+untitled: blueprint.travel.untitled
+icon: "#i-airplane"
+facts:
+  - {name: days, label: blueprint.travel.days, type: days}
+  - {name: home, label: blueprint.travel.home, type: text}
+  - {name: travelers, label: blueprint.travel.travelers, type: contacts}
+  - {name: calendar, label: blueprint.travel.calendar, type: calendar}
+  - {name: budget, label: blueprint.travel.budget, type: amount}
+checks: [budget, deadlines]
+labels: [travel]

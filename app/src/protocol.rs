@@ -78,7 +78,8 @@ enum Command {
     // The structural commands (`structure`).
     CreateEntity(Box<NewEntity>),
     CreateThread(NewThread),
-    CreateProject(Title),
+    CreateProject(structure::NewProject),
+    SetProject(Box<structure::ProjectChange>),
     JoinThread(InThread),
     LeaveThread(InThread),
     JoinProject(InProject),
@@ -190,12 +191,6 @@ struct Ids {
 struct NewThread {
     title: String,
     members: Vec<Id>,
-}
-
-/// `{title}`
-#[derive(Deserialize)]
-struct Title {
-    title: String,
 }
 
 /// `{text}`
@@ -361,6 +356,7 @@ impl Command {
             "create_entity" => Command::CreateEntity(from_value(args)?),
             "create_thread" => Command::CreateThread(from_value(args)?),
             "create_project" => Command::CreateProject(from_value(args)?),
+            "set_project" => Command::SetProject(from_value(args)?),
             "join_thread" => Command::JoinThread(from_value(args)?),
             "leave_thread" => Command::LeaveThread(from_value(args)?),
             "join_project" => Command::JoinProject(from_value(args)?),
@@ -461,7 +457,8 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetEditing(a) => documents::set_editing(app, req, a.ids),
         Command::CreateEntity(a) => structure::create_entity(app, req, *a),
         Command::CreateThread(a) => structure::create_thread(app, req, a.title, a.members),
-        Command::CreateProject(a) => structure::create_project(app, req, a.title),
+        Command::CreateProject(a) => structure::create_project(app, req, a),
+        Command::SetProject(a) => structure::set_project(app, req, *a),
         Command::JoinThread(a) => structure::membership(app, req, a.id, a.thread, S::join_thread),
         Command::LeaveThread(a) => structure::membership(app, req, a.id, a.thread, S::leave_thread),
         Command::JoinProject(a) => {

@@ -394,8 +394,9 @@ knows neither: `app` turns the indexing's texts into its rows.
 |---|---|
 | `main.rs` | logger, panic hook, the config (`load_config`), the run's language (`texts::init`) |
 | `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net, Close to `App` (`architecture.md#platforms`) |
-| `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences, the texts in the run's language, its own filled in (`worded`), and the platform's `BRIDGE_JS` |
-| `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`, `filled`, `Text::render`), a text the page shows (`Text`: a key and its arguments, a date or money among them); its tests |
+| `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences, the shipped blueprints, the texts in the run's language, its own filled in (`worded`), and the platform's `BRIDGE_JS` |
+| `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`, `filled`, `of`, `Text::render`), a text the page shows (`Text`: a key and its arguments, a date or money among them); its tests |
+| `blueprints.rs` | the shipped blueprints (`app/blueprints/*.yaml`, `vault.md#project`): their facts with their types, checks and labels, read with `shipped`, as the page's data block (`json`), their words keys of the catalogs worded in the run's language; their tests |
 | `sys.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
 | `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile, the catalogs), the mark of the web; folder picker, message boxes, ShellExecute |
 | `sys/win32.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; the clock's timer (`WM_TIMER` → `App::on_clock`); `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
@@ -416,7 +417,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch, reveal and `rebuild_index`, `set_prefs`, `open_url`, `open_file` and the types it opens (`may_open`) |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `set_editing`; `DocumentState`, the documents in edit mode and the app's version of each one in conflict; the conflict copy shared with calendar sync (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
-| `structure.rs` | the structural commands: `create_entity`, threads, projects, titles, stars, archiving, labels, links (a booking's too), `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
+| `structure.rs` | the structural commands: `create_entity`, threads, projects (`create_project`, `set_project`), titles, stars, archiving, labels, links (a booking's too), `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 | `accounts.rs` | both kinds of account: the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
 | `google/accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account; the auto-syncs' schedule, `SYNC_EVERY` and `AutoSyncs` |
@@ -729,7 +730,8 @@ a rule with a color of its own, outside `tokens.css`, fails the build),
 minifies JS (oxc, mangling) and CSS (hand-written) in release builds,
 inlines both into `index.html` in `OUT_DIR`, with the icons of
 `app/static/icons` as one hidden SVG of symbols (an icon nothing refers to,
-or a reference to one that isn't there, fails the build), checks the catalogs against the keys the page
+the page's sources or a shipped blueprint, or a reference to one that isn't
+there, fails the build), checks the catalogs against the keys the page
 and the host use and writes each language's texts for both
 (`localization.md#check`), and embeds the
 manifest, the icon and the version (a VERSIONINFO from the workspace's
@@ -740,7 +742,9 @@ source with a non-ASCII character fails the build, named by its line and
 column. A new module
 is in the page once a module there imports it. The markdown selftest gets
 a bundle of its own beside it (`markdown.md#testing`). The host fills the
-preferences into the page (`page::html`) and loads it with
+preferences, the shipped blueprints and the run's texts into the page
+(`page::html`) and
+loads it with
 `NavigateToString`, on Linux with `load_html`.
 
 The release profile is built for size: `opt-level = "z"`, LTO, one codegen

@@ -309,6 +309,34 @@ the markdown is the project's description, shown and edited under the
 vault header. Entities are linked to the project via their `projects`
 metadata field.
 
+The block can carry a blueprint: what the project needs, as data in its
+own file. Every field is optional; a project without one is `project: {}`.
+
+* `blueprint`: string, the shipped blueprint it came from (`travel`, the
+  name of its file in `app/blueprints`); absent for one of its own,
+* `facts`: map, the project's own values by name (`home: Springfield`,
+  `budget: 6000`); what each is, the blueprint says,
+* `documents`: [ExpectedDocument], what the project expects:
+  * `name`: string,
+  * `genre`: Genre, `label`: string, `from`: ContactRef, how to know one,
+  * `within`: string, how recent it must be, a span (`90d`),
+  * `after`: string, the fact it comes after (`handover`),
+  * `several`: boolean, one or several,
+  * `by`: [ID], the entities that meet it,
+* `payments`: [ExpectedPayment], what the project waits to be paid, or to
+  pay: `name`, `amount`, `from` or `to` (ContactRef), `due` (Date), `for`
+  (the ID of the entity it is about; a booking linked to it meets it),
+* `checks`: [string], the gaps the header shows, by their kind
+  (`documents`, `payments`, `budget`, `deadlines`),
+* `afterwards`: [Afterwards], tasks written when the project is archived:
+  `title`, and `due`, a fact plus a span (`handover + 5y`),
+* `labels`: [string], what the project is about, carried by its members
+  and its tasks.
+
+Keys the app doesn't know stay, at every level. A project made from a
+shipped blueprint keeps in its file what it took (its checks, its labels),
+so a release changes no project.
+
 ### Document <a id="document"></a>
 
 Block: `document:`

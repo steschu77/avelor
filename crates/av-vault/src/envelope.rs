@@ -89,8 +89,95 @@ impl fmt::Display for DocumentType {
 }
 
 // ----------------------------------------------------------------------------
+/// A project's blueprint (vault.md#project): what it needs, as data in its
+/// own file. Every part is optional; a project without one is `project: {}`.
+/// Keys the app doesn't know stay, at every level (`extra`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Project {}
+pub struct Project {
+    /// The shipped blueprint it came from (its file's name, `travel`);
+    /// absent for one of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blueprint: Option<String>,
+    /// Its own values by name; what each is, the blueprint says.
+    #[serde(default, skip_serializing_if = "Extra::is_empty")]
+    pub facts: Extra,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<ExpectedDocument>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub payments: Vec<ExpectedPayment>,
+    /// The gaps the header shows, by their kind (`documents`, `budget`, …).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
+    /// Tasks written when the project is archived.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub afterwards: Vec<Afterwards>,
+    /// What the project is about, carried by its members and its tasks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// A document a project expects: how to know one, and the entities that
+/// meet it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ExpectedDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub genre: Option<Genre>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<ContactRef>,
+    /// How recent it must be, a span (`90d`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within: Option<String>,
+    /// The fact it comes after (`handover`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub several: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub by: Vec<Id>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// A payment a project waits for, or makes: met by a booking linked to
+/// what it is `for`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ExpectedPayment {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<ContactRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<ContactRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<DateTime>,
+    #[serde(rename = "for", default, skip_serializing_if = "Option::is_none")]
+    pub for_entity: Option<Id>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// A task written when the project is archived, due from one of its facts
+/// plus a span (`handover + 5y`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Afterwards {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<String>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
 
 // ----------------------------------------------------------------------------
 /// A thread has no fields of its own: its members are the entities whose
@@ -1091,6 +1178,77 @@ contact:
         let env = Envelope::parse(&old).unwrap();
         assert_eq!(env.linked_to, None);
         assert_eq!(env.compose().unwrap(), "task:\n  status: todo\n");
+    }
+
+    #[test]
+    fn a_projects_blueprint_round_trips_with_unknown_keys() {
+        let yaml = format!(
+            "title: Bad 2027
+project:
+  blueprint: renovation
+  facts:
+    budget: 15000
+    days:
+      from: 2027-07-01
+      nights: 9-11
+    where: Neue Str. 2, Hamburg
+  documents:
+  - name: quotes
+    genre: quote
+    several: true
+    by:
+    - {ID}
+    hint: kept
+  - name: handover report
+    within: 90d
+    after: handover
+  payments:
+  - name: payout
+    amount: 1150.0
+    from: '@{PROJ_ID}'
+    due: 2027-06-30
+    for: {ID}
+    note: kept
+  checks:
+  - documents
+  - budget
+  afterwards:
+  - title: The tiler's warranty ends
+    due: handover + 5y
+    labels: kept
+  labels:
+  - bathroom
+  sketch:
+    stops:
+    - place: Hamburg
+"
+        );
+        let env = Envelope::parse(&yaml).unwrap();
+        let project = env.roles.project.as_ref().unwrap();
+        assert_eq!(project.blueprint.as_deref(), Some("renovation"));
+        assert_eq!(project.facts["budget"].as_u64(), Some(15000));
+        assert_eq!(
+            project.documents[0].genre,
+            Some(Genre::Other("quote".into()))
+        );
+        assert!(project.documents[0].several);
+        assert_eq!(project.documents[0].by, [Id::parse(ID).unwrap()]);
+        assert_eq!(project.payments[0].for_entity, Some(Id::parse(ID).unwrap()));
+        assert_eq!(project.checks, ["documents", "budget"]);
+        assert_eq!(project.afterwards[0].due.as_deref(), Some("handover + 5y"));
+        assert!(project.extra.contains_key("sketch"));
+        assert!(project.documents[0].extra.contains_key("hint"));
+        assert!(project.payments[0].extra.contains_key("note"));
+        assert!(project.afterwards[0].extra.contains_key("labels"));
+        assert!(env.extra.is_empty(), "the block left in extra");
+        assert_eq!(env.compose().unwrap(), yaml);
+    }
+
+    #[test]
+    fn a_project_without_a_blueprint_stays_empty() {
+        let env = Envelope::parse("title: P\nproject: {}\n").unwrap();
+        assert_eq!(env.roles.project, Some(Project::default()));
+        assert_eq!(env.compose().unwrap(), "title: P\nproject: {}\n");
     }
 
     #[test]

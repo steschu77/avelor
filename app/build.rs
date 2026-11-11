@@ -382,8 +382,9 @@ fn icon_refs(text: &str) -> impl Iterator<Item = String> + '_ {
 }
 
 // ----------------------------------------------------------------------------
-/// The page, `index.html` with its CSS, its icons and the bundle of `app.js`
-/// inlined, and what the bundle's modules import (`page-deps.txt`); the catalogs the bundle's
+/// The page, `index.html` with its CSS, its icons (those its sources and the
+/// shipped blueprints name) and the bundle of `app.js` inlined, and what the
+/// bundle's modules import (`page-deps.txt`); the catalogs the bundle's
 /// texts come from (`build_texts`); and the
 /// markdown selftest with its own bundle (`markdown.md#testing`), which
 /// opens from disk. All are written to `out_dir`.
@@ -395,8 +396,11 @@ fn build_pages(root: &Path, out_dir: &Path) {
 
     let page = bundle(&static_dir, "app.js");
     fs::write(out_dir.join("page-deps.txt"), page.graph.to_string()).unwrap();
-    build_texts(root, out_dir, &index, &page.js);
-    let sprite = icon_sprite(&static_dir, &[&index, &page.js]);
+    let blueprints = blueprints(root);
+    build_texts(root, out_dir, &index, &page.js, &blueprints);
+    let mut sources = vec![index.as_str(), page.js.as_str()];
+    sources.extend(blueprints.iter().map(String::as_str));
+    let sprite = icon_sprite(&static_dir, &sources);
     assert!(html.contains("<body>\n"), "index.html has no <body>");
     let html = html.replacen("<body>\n", &format!("<body>\n{sprite}"), 1);
     let html = inline_script(
@@ -416,16 +420,17 @@ fn build_pages(root: &Path, out_dir: &Path) {
     fs::write(out_dir.join("markdown.selftest.html"), html).unwrap();
 
     println!("cargo:rerun-if-changed=static");
+    println!("cargo:rerun-if-changed=blueprints");
 }
 
 // ----------------------------------------------------------------------------
 /// The catalogs (`app/texts/*.json`, `localization.md`), checked against
-/// the keys the page's markup `html` and script `js` and the host's
-/// sources use; a problem fails the build, each one
+/// the keys the page's markup `html` and script `js`, the host's sources
+/// and the shipped `blueprints` use; a problem fails the build, each one
 /// listed. Written to `out_dir` as `texts.rs`,
 /// which `texts.rs` includes: each language's texts over English's, as the
 /// JSON both the page and the host read.
-fn build_texts(root: &Path, out_dir: &Path, html: &str, js: &str) {
+fn build_texts(root: &Path, out_dir: &Path, html: &str, js: &str, blueprints: &[String]) {
     let mut catalogs = Vec::new();
     for entry in fs::read_dir(root.join("texts")).expect("app has no texts folder") {
         let path = entry.unwrap().path();
@@ -464,6 +469,9 @@ fn build_texts(root: &Path, out_dir: &Path, html: &str, js: &str) {
         let host = av_texts::host_keys(&text);
         used.page.extend(host.page);
         used.host.extend(host.host);
+    }
+    for yaml in blueprints {
+        used.host.extend(av_texts::blueprint_keys(yaml));
     }
     let problems = av_texts::check(&english, &catalogs, OWN_LANGUAGES, &used);
     if !problems.is_empty() {
@@ -519,6 +527,19 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
         }
     }
     files
+}
+
+// ----------------------------------------------------------------------------
+/// The shipped blueprints' texts (`app/blueprints`), which name their icons.
+fn blueprints(root: &Path) -> Vec<String> {
+    let mut texts = Vec::new();
+    for entry in fs::read_dir(root.join("blueprints")).expect("app has no blueprints folder") {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|ext| ext == "yaml") {
+            texts.push(fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}")));
+        }
+    }
+    texts
 }
 
 // ----------------------------------------------------------------------------

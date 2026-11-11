@@ -11,6 +11,7 @@ use crate::envelope::Email;
 use crate::envelope::Event;
 use crate::envelope::Message;
 use crate::envelope::Original;
+use crate::envelope::Project;
 use crate::envelope::RecurringPayment;
 use crate::envelope::Remote;
 use crate::envelope::Statement;
@@ -503,6 +504,12 @@ impl Document {
     /// Set the entity's `statement` block; `None` drops the role.
     pub fn set_statement(&mut self, statement: Option<Statement>) {
         self.envelope_mut().roles.statement = statement;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's `project` block; `None` drops the role.
+    pub fn set_project(&mut self, project: Option<Project>) {
+        self.envelope_mut().roles.project = project;
     }
 
     // ------------------------------------------------------------------------
