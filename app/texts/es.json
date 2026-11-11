@@ -803,6 +803,8 @@
   "google.page.outdated": "Este inicio de sesión está desactualizado.",
   "google.page.outdated_line": "Hay uno más reciente esperando: termínalo en su propia pestaña o empieza de nuevo en Avelor.",
   "header.archive": "Archivar proyecto",
+  "header.blueprint": "Dar una plantilla al proyecto",
+  "header.blueprint_head": "Plantilla",
   "header.cards": "Tarjetas",
   "header.cards_title": "Mostrar u ocultar las tarjetas del resumen",
   "header.clear_filter": "Borrar el filtro",

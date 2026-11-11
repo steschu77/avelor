@@ -19,7 +19,7 @@ import {
   bindDocContent, editorRoots, onEdited, trySave,
 } from '../model/documents.js';
 import { beginEditSession, endEditSession, reportEditing } from '../model/documents.js';
-import { setLabelsLocal, setLinkLocal, structureCall } from '../model/structure.js';
+import { setLabelsLocal, setLinkLocal, setProjectLocal, structureCall } from '../model/structure.js';
 import { armedButton } from '../ui/confirm.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
@@ -28,6 +28,7 @@ import { editTextInPlace } from '../ui/field.js';
 import { openLink } from './selection.js';
 import { selectFilter } from './selection.js';
 import { showBlueprint } from './blueprint.js';
+import { BLUEPRINTS, withBlueprint } from '../model/blueprint.js';
 import { leaveCardEditMode } from './panel/panel.js';
 import { addChip, labelChips, linkChip } from './panel/panel.js';
 import { linkMenuChip } from './linked.js';
@@ -241,6 +242,20 @@ $('project-rename-btn').addEventListener('click', editProjectName);
 projectDescBtn.addEventListener('click',
   () => setProjectDescEditMode(!projectDescEditor.isEditable()));
 
+// Blueprint: a project without one gets a shipped blueprint, from a menu as
+// New project's (features/sidebar.js); its name, and the checks and labels
+// it brings, go into the project's block (`withBlueprint`), which keeps what
+// it has. A blueprint stays: once set, the button is gone.
+const projectBlueprintBtn = $('project-blueprint-btn');
+projectBlueprintBtn.addEventListener('click', () => {
+  const project = projects.get(descProjectId);
+  if (!project) return;
+  showMenu(projectBlueprintBtn, BLUEPRINTS.map(blueprint => ({
+    label: blueprint.title, icon: blueprint.icon, desc: blueprint.note,
+    run: () => setProjectLocal(project.id, withBlueprint(project.project, blueprint)),
+  })), { head: t('header.blueprint_head') });
+});
+
 // Archive toggles: an archived project's button is pressed and unarchives.
 const projectArchiveBtn = $('project-archive-btn');
 projectArchiveBtn.addEventListener('click', () => {
@@ -269,6 +284,7 @@ store.subscribe(
     projectArchiveBtn.setAttribute('aria-pressed', String(archived));
     projectArchiveBtn.title = archived ? t('header.unarchive') : t('header.archive');
     projectDeleteBtn.setAttribute('aria-disabled', String(!project?.deletable));
+    projectBlueprintBtn.hidden = !project?.writable || Boolean(project.project.blueprint) || !BLUEPRINTS.length;
   });
 
 // Another project selected: the outgoing one is saved first. The fold state

@@ -319,7 +319,9 @@ The block can carry a blueprint: what the project needs, as data in its
 own file. Every field is optional; a project without one is `project: {}`.
 
 * `blueprint`: string, the shipped blueprint it came from (`travel`, the
-  name of its file in `app/blueprints`); absent for one of its own,
+  name of its file in `app/blueprints`), set when the project is made or
+  later on one without (`panel.md#blueprint`), never taken off; absent for
+  one of its own,
 * `facts`: map, the project's own values by name (`home: Springfield`,
   `budget: 6000`); what each is, the blueprint says,
 * `documents`: [ExpectedDocument], what the project expects:

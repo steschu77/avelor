@@ -25,6 +25,18 @@ export function newProjectBlock(blueprint) {
   return block;
 }
 
+// The block `project` with the shipped `blueprint` put on, as a project
+// without one gets it (features/header.js): its name, and the checks and
+// labels it brings that the block lacks; what the block has stays.
+export function withBlueprint(project, blueprint) {
+  const block = newProjectBlock(blueprint);
+  const union = (had = [], more = []) => [...new Set([...had, ...more])];
+  const next = { ...project, blueprint: block.blueprint };
+  if (block.checks) next.checks = union(project.checks, block.checks);
+  if (block.labels) next.labels = union(project.labels, block.labels);
+  return next;
+}
+
 // Whether the project's block has anything for its header to show.
 export function hasBlueprint(project) {
   return Boolean(project?.blueprint || Object.keys(project?.facts ?? {}).length

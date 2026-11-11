@@ -740,6 +740,8 @@
   "google.page.outdated": "Diese Anmeldung ist veraltet.",
   "google.page.outdated_line": "Eine neuere wartet: Schließe sie in ihrem eigenen Tab ab oder beginne in Avelor neu.",
   "header.archive": "Projekt archivieren",
+  "header.blueprint": "Dem Projekt eine Vorlage geben",
+  "header.blueprint_head": "Vorlage",
   "header.cards": "Karten",
   "header.cards_title": "Karten der Übersicht ein- oder ausblenden",
   "header.clear_filter": "Filter leeren",

@@ -568,7 +568,13 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
 
 A project whose block carries a blueprint, facts or checks
 (`vault.md#project`) shows it under its description while its details are
-unfolded (`features/blueprint.js`):
+unfolded (`features/blueprint.js`). A project without a blueprint gets
+one from Blueprint in its toolbar, while the host can write it: the
+shipped blueprints as New project offers them (`#projects`); a pick puts
+its name, and the checks and labels it brings that the block lacks, into
+the block (`withBlueprint`, `model/blueprint.js`, `set_project`), keeping
+what the block has. A blueprint stays with its project: once set, the
+button is gone.
 
 - **Its facts** on a line: the shipped blueprint's in its order, set or
   not, then the project's others (`factsOf`, `model/blueprint.js`), each
@@ -809,3 +815,4 @@ and save their bodies at once.
 | C6 | Description | fold chevron → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
 | C7 | Archive | header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |
 | C8 | Delete a project | header Delete, two clicks within 3 s → description saved first → `structureCall('delete_entity')` | `Index::delete`: members leave the project, file to `.trash/` → `entity` per member, `entity_deleted`, the answer | filter back to all documents |
+| C14 | A blueprint for a project | Blueprint (the project toolbar, a project without one) → a shipped blueprint → `setProjectLocal(id, withBlueprint(…))` | `set_project {id, project}` → `entity` | the blueprint's block under the description, its facts and checks |

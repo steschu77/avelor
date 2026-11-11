@@ -1,7 +1,9 @@
 import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import { projects } from '../../static/model/entities.js';
-import { checksOf, factsOf, hasBlueprint, membersOf, newProjectBlock, withFact } from '../../static/model/blueprint.js';
+import {
+  checksOf, factsOf, hasBlueprint, membersOf, newProjectBlock, withBlueprint, withFact,
+} from '../../static/model/blueprint.js';
 
 const TODAY = new Date(2027, 2, 15);
 const project = block => ({ id: 'p', kind: 'project', title: 'P', project: block });
@@ -14,6 +16,11 @@ const BLUEPRINT = { name: 'move', checks: ['deadlines', 'documents'], labels: ['
 test('a project takes the checks and the labels of its blueprint', () => {
   equal(newProjectBlock(BLUEPRINT), { blueprint: 'move', checks: ['deadlines', 'documents'], labels: ['move'] });
   equal(newProjectBlock({ name: 'plain', checks: [], labels: [] }), { blueprint: 'plain' });
+});
+
+test('a blueprint put on a project leaves what it has', () => {
+  equal(withBlueprint({ checks: ['budget', 'deadlines'], facts: { a: 1 } }, BLUEPRINT),
+    { blueprint: 'move', checks: ['budget', 'deadlines', 'documents'], labels: ['move'], facts: { a: 1 } });
 });
 
 test('a project has something for its header to show', () => {

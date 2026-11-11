@@ -740,6 +740,8 @@
   "google.page.outdated": "This sign-in is outdated.",
   "google.page.outdated_line": "A newer one is waiting: finish it in its own tab, or start again in Avelor.",
   "header.archive": "Archive project",
+  "header.blueprint": "Give the project a blueprint",
+  "header.blueprint_head": "Blueprint",
   "header.cards": "Cards",
   "header.cards_title": "Show or hide dashboard cards",
   "header.clear_filter": "Clear the filter",
