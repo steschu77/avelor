@@ -723,6 +723,7 @@
   "header.filter_label": "Filter by a label",
   "header.filter_labels": "Filter labels",
   "header.hide_details": "Hide project details",
+  "header.link_to": "Link the project to an entity",
   "header.no_other_labels": "No other labels",
   "header.rename": "Rename project",
   "header.show_details": "Show project details",
@@ -991,6 +992,7 @@
   "palette.which_command": "Which command?",
   "palette.which_key": "What it does, or the key",
   "palette.window": "Window",
+  "panel.add_label": "Add a label",
   "panel.add_project_label": "Add to a project or a label",
   "panel.chat_count": {
     "one": "Chat about document · {n} conversation",

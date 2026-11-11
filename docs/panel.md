@@ -545,6 +545,14 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
 - **Description**: the project file's body, under the vault header behind
   a fold chevron and edited with its pen (`#project-desc` via
   `bindDocContent`), loaded and saved like a document (`saving.md`).
+- **Its own labels and link** (`vault.md#metadata`): under the toolbar,
+  behind the same fold (`#project-props`, `renderProjectProps`): its
+  labels as a card's chips with × and "+", which offers labels only
+  (`addChip`, `#labels`), and its link as a chip with ×, or "+" that picks
+  one as a transaction's link does (`linkMenuChip`, `features/linked.js`), from
+  the vault panel's filter without the project itself,
+  while the host can write the project (`set_labels`, `set_link`). The
+  label chips after the header's name are the filter's.
 - **Archive**: the Archive button in the project header's toolbar, pressed
   while the project is archived (`toggleArchive`), sends `set_archived`;
   the sidebar folds archived projects under an "Archived" row

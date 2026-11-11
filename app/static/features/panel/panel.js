@@ -209,16 +209,17 @@ export function labelChips(labels, onChange, removeTitle = label => t('panel.rem
 const STAR_ICON = '#i-star-filled';
 
 // The "+" chip after a row of project and label chips. It opens a menu with
-// a filter: the active projects, starred first, and the labels in use --
-// but those in `has` ({ projects, labels }) -- and "New label" for a text
-// that names none. A pick calls `onJoin(project_id)` or `onAddTag(label)`.
-// The card's and the New page's.
-export function addChip(has, { onJoin, onAddLabel }) {
+// a filter: the active projects, starred first (none without `onJoin`), and
+// the labels in use -- but those in `has` ({ projects, labels }) -- and "New
+// label" for a text that names none. A pick calls `onJoin(project_id)` or
+// `onAddLabel(label)`. The card's, the draft card's, the Task tab's and a
+// project's own labels' (features/header.js).
+export function addChip(has, { onJoin = null, onAddLabel }) {
   const add = accEl('button', 'chip chip--action', '+');
   add.type = 'button';
-  titled(add, t('panel.add_project_label'));
+  titled(add, onJoin ? t('panel.add_project_label') : t('panel.add_label'));
   add.addEventListener('click', () => {
-    const projectItems = projectsInOrder()
+    const projectItems = !onJoin ? [] : projectsInOrder()
       .filter(p => !p.archived && !has.projects.includes(p.id))
       .map(p => ({ label: p.name, icon: p.starred ? STAR_ICON : '', run: () => onJoin(p.id) }));
     const used = new Set();
@@ -229,7 +230,8 @@ export function addChip(has, { onJoin, onAddLabel }) {
     const newLabel = text => known.has(text.toLowerCase())
       ? []
       : [{ label: t('panel.new_label', { label: text }), run: () => onAddLabel(text) }];
-    showMenu(add, [{ head: t('sidebar.projects') }, ...projectItems, { head: t('panel.labels') }, ...labelItems],
+    const projectHead = onJoin ? [{ head: t('sidebar.projects') }, ...projectItems] : [];
+    showMenu(add, [...projectHead, { head: t('panel.labels') }, ...labelItems],
       { filter: { placeholder: t('panel.filter_or_label'), extra: newLabel } });
   });
   return add;

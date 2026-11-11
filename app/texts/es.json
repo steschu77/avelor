@@ -786,6 +786,7 @@
   "header.filter_label": "Filtrar por una etiqueta",
   "header.filter_labels": "Filtrar etiquetas",
   "header.hide_details": "Ocultar los detalles del proyecto",
+  "header.link_to": "Enlazar el proyecto con una entrada",
   "header.no_other_labels": "No hay más etiquetas",
   "header.rename": "Renombrar proyecto",
   "header.show_details": "Mostrar los detalles del proyecto",
@@ -1061,6 +1062,7 @@
   "palette.which_command": "¿Qué comando?",
   "palette.which_key": "Qué hace, o la tecla",
   "palette.window": "Ventana",
+  "panel.add_label": "Añadir una etiqueta",
   "panel.add_project_label": "Añadir a un proyecto o una etiqueta",
   "panel.chat_count": {
     "one": "Conversar sobre el documento · {n} conversación",

@@ -13,6 +13,15 @@
   padding: 0 var(--p-gutter) 6px;
 }
 
+/* a project's own labels and link under its toolbar (features/header.js) */
+.project-props {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 var(--p-gutter) 8px;
+}
+
 /* the active labels after the project's name in the lens header, on one
    line: what doesn't fit is cut off at the right */
 .label-filter {

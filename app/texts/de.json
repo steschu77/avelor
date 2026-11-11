@@ -723,6 +723,7 @@
   "header.filter_label": "Nach einem Label filtern",
   "header.filter_labels": "Labels filtern",
   "header.hide_details": "Projektdetails ausblenden",
+  "header.link_to": "Das Projekt mit einem Eintrag verknüpfen",
   "header.no_other_labels": "Keine weiteren Labels",
   "header.rename": "Projekt umbenennen",
   "header.show_details": "Projektdetails zeigen",
@@ -986,6 +987,7 @@
   "palette.which_command": "Welcher Befehl?",
   "palette.which_key": "Was sie tut, oder die Taste",
   "palette.window": "Fenster",
+  "panel.add_label": "Label hinzufügen",
   "panel.add_project_label": "Zu einem Projekt oder Label hinzufügen",
   "panel.chat_count": {
     "one": "Über das Dokument chatten · {n} Unterhaltung",

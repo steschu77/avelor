@@ -128,14 +128,16 @@ function renderLinkedResults() {
 }
 
 // The entities and threads in the vault panel's filter (project, source,
-// labels: `matchesFilter`; a thread while one of its members is) whose
-// title holds `query` (any case), newest first, at most LINKED_RESULTS --
-// but `target` and what it links to (`current`, the target's own link by
+// labels: `matchesFilter`; a thread while one of its members is; `scope`
+// makes it another, a project's link's without the project) whose title
+// holds `query` (any case), newest first, at most LINKED_RESULTS -- but
+// `target` and what it links to (`current`, the target's own link by
 // default; a transaction's card passes its transaction's, features/panel/transaction.js).
-function linkedResults(target, query, current = (entities.get(target) ?? threads.get(target))?.linked_to) {
+function linkedResults(target, query, current = (entities.get(target) ?? threads.get(target))?.linked_to,
+  scope = state => state) {
   const q = query.trim().toLowerCase();
   const time = id => linkTarget(id)?.date?.getTime() ?? 0;
-  const state = store.getState();
+  const state = scope(store.getState());
   return [
     ...[...entities.values()].filter(doc => matchesFilter(doc, state)),
     ...[...threads.values()].filter(thread => threadMatchesFilter(thread.id, state)),
@@ -148,20 +150,21 @@ function linkedResults(target, query, current = (entities.get(target) ?? threads
 }
 
 // A "+" chip titled `title` whose menu offers what to link to: `before()`'s
-// items, then the newest entities and threads in the vault panel's filter,
-// the search finding older ones (`linkedResults`, but `target` and
-// `current`). A pick calls `onPick(id)`. A transaction's link
-// (features/panel/transaction.js) and New recurring payment's
-// (features/recurring-payment-new.js).
-export function linkMenuChip(title, { target = null, current = null, before = () => [], onPick }) {
+// items, then the newest entities and threads in the vault panel's filter
+// (made another by `scope`), the search finding older ones (`linkedResults`,
+// but `target` and `current`). A pick calls `onPick(id)`. A transaction's link
+// (features/panel/transaction.js), New recurring payment's
+// (features/recurring-payment-new.js) and a project's own
+// (features/header.js).
+export function linkMenuChip(title, { target = null, current = null, before = () => [], scope = undefined, onPick }) {
   const add = accEl('button', 'chip chip--action', '+');
   add.type = 'button';
   titled(add, title);
   add.addEventListener('click', () => {
     const item = id => ({ label: linkTarget(id)?.title || t('untitled'), icon: linkTarget(id)?.icon ?? '', run: () => onPick(id) });
-    const newest = linkedResults(target, '', current);
+    const newest = linkedResults(target, '', current, scope);
     const listed = new Set(newest);
-    const found = text => linkedResults(target, text, current).filter(id => !listed.has(id)).map(item);
+    const found = text => linkedResults(target, text, current, scope).filter(id => !listed.has(id)).map(item);
     showMenu(add, [...before(), { head: t('linked.newest') }, ...newest.map(item)],
       { filter: { placeholder: t('linked.search'), extra: found } });
   });

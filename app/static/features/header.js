@@ -19,7 +19,7 @@ import {
   bindDocContent, editorRoots, onEdited, trySave,
 } from '../model/documents.js';
 import { beginEditSession, endEditSession, reportEditing } from '../model/documents.js';
-import { structureCall } from '../model/structure.js';
+import { setLabelsLocal, setLinkLocal, structureCall } from '../model/structure.js';
 import { armedButton } from '../ui/confirm.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
@@ -28,7 +28,8 @@ import { editTextInPlace } from '../ui/field.js';
 import { openLink } from './selection.js';
 import { selectFilter } from './selection.js';
 import { leaveCardEditMode } from './panel/panel.js';
-import { labelChips } from './panel/panel.js';
+import { addChip, labelChips, linkChip } from './panel/panel.js';
+import { linkMenuChip } from './linked.js';
 import { vaultSources } from './sources.js';
 
 const projectNameEl = $('project-name');
@@ -152,9 +153,37 @@ function projectUnfolded() {
 function updateProjectDesc() {
   const shown = Boolean(descProjectId) && projectUnfolded();
   projectToolsEl.hidden = !shown;
+  renderProjectProps(shown);
   projectDescEl.hidden = !shown || (!projectDescEditor.isEditable()
     && serializeMarkdown(projectDescEl).trim() === '');
 }
+
+// The project's own labels and link (vault.md#metadata) in its details,
+// under the toolbar: its labels as a card's chips with an x and "+" (labels
+// only, `addChip`), its link as a chip with an x, or "+" that picks one
+// (`linkMenuChip`, offering entities beyond the project itself), while the
+// host can write the project (`set_labels`, `set_link`). The label chips
+// after the name are the filter's.
+const projectPropsEl = $('project-props');
+
+function renderProjectProps(shown) {
+  const project = shown ? projects.get(descProjectId) : null;
+  const chips = [];
+  if (project) {
+    const { id, labels, linked_to: to, writable } = project;
+    chips.push(...labelChips(labels, writable ? next => setLabelsLocal(id, next) : null));
+    if (writable) chips.push(addChip({ projects: [], labels }, { onAddLabel: label => setLabelsLocal(id, [...labels, label]) }));
+    if (to) chips.push(linkChip(to, { onRemove: writable ? () => setLinkLocal(id, null) : null }));
+    else if (writable) {
+      const scope = state => ({ ...state, selected_project: null });
+      chips.push(linkMenuChip(t('header.link_to'), { target: id, scope, onPick: other => setLinkLocal(id, other) }));
+    }
+  }
+  projectPropsEl.replaceChildren(...chips);
+  projectPropsEl.hidden = !chips.length;
+}
+const redrawProjectProps = oncePerFrame(() => renderProjectProps(Boolean(descProjectId) && projectUnfolded()));
+store.subscribe([state => state.projects_rev, state => state.entities_rev], () => redrawProjectProps());
 
 function setProjectDescEditMode(on) {
   if (!descProjectId) return;
