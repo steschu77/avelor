@@ -188,13 +188,22 @@ function editProjectName() {
 }
 
 // Folding while the description is edited saves it first.
-projectFoldBtn.addEventListener('click', () => {
-  const unfold = !projectUnfolded();
+function foldProjectDetails(unfold) {
   if (!unfold) setProjectDescEditMode(false);
   projectFoldBtn.setAttribute('aria-expanded', String(unfold));
   projectFoldBtn.title = unfold ? t('header.hide_details') : t('header.show_details');
   updateProjectDesc();
-});
+}
+
+projectFoldBtn.addEventListener('click', () => foldProjectDetails(!projectUnfolded()));
+
+// A project New project just made from a blueprint, selected: its details
+// unfold to be filled in, and its name opens to be edited in place
+// (features/sidebar.js).
+export function openNewProject() {
+  foldProjectDetails(true);
+  editProjectName();
+}
 
 $('project-rename-btn').addEventListener('click', editProjectName);
 projectDescBtn.addEventListener('click',

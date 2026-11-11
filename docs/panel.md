@@ -513,8 +513,16 @@ Google like any other edit of it.
 Projects are entities with the `project` role (`vault.md#project`); the
 vault panel lists them and filters by them (`ui.md#vault-panel`).
 
-- **Create**: the sidebar's "+" (`addProject`) creates "New project" in
-  `Projects/`, whose new pill opens in rename mode.
+- **Create**: the Projects section's "+" opens the New project menu:
+  Project, blank, and under Blueprints the shipped ones
+  (`model/blueprint.js`, from the page's blueprints block, `page.rs`),
+  each with its icon and what it makes. Project (`addProject`) creates
+  "New project" in `Projects/`, whose new pill opens in rename mode. A
+  blueprint (`addBlueprintProject`) creates one named after it ("New
+  trip") with the block it starts with (`newProjectBlock`: its name,
+  checks and labels, `vault.md#project`); the project becomes the filter,
+  its details unfold and its name opens in the header (`openNewProject`,
+  `features/header.js`).
 - **Rename**: the pen on a sidebar project row (`editProject`), or the
   rename button in the vault header's project toolbar (`editProjectName`,
   which edits `#project-name` in place, `panel.md#titles`): the name
@@ -746,7 +754,7 @@ and save their bodies at once.
 | E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |
 | E4 | Leave | card thread button, or the card's head dropped on the Documents or Timeline lens → `leaveThreadLocal` | `leave_thread`; below two members the thread file goes to `.trash/` | selection per `selectionWithout` |
 | E5 | Switch thread | a chip in the threads line of a card in several threads → `switchThread` | — | that thread shown, the entity still selected and focused |
-| C1 | Create a project | "+" → `addProject` → `structureCall('create_project', {title: 'New project'})` | `Index::create_project` in `Projects/` → `entity`, `ok {id}` | new pill in rename mode |
+| C1 | Create a project | "+" → the New project menu → Project (`addProject`) or a blueprint (`addBlueprintProject`) → `structureCall('create_project', {title, project?})` | `Index::create_project` in `Projects/` → `entity`, `ok {id}` | Project: the new pill in rename mode; a blueprint: the project the filter, its details unfolded, its name in rename mode |
 | C2 | Rename a project | pill pen or header rename → inline input, Enter/blur | `set_title` → `entity` | header and chips follow (`projects_rev`) |
 | C3 | Star | star icon → `toggleStar` | `set_starred {starred}` → `entity` | starred first |
 | C4 | Add to a project | drag an entity's row onto a pill or a project's row in Documents, or a project in a card's "+" menu → `joinProjectLocal` | `join_project` → `entity` | the card's chips and the counts update |

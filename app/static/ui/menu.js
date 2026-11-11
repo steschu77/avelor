@@ -25,9 +25,10 @@ function closeMenu() {
 }
 
 // `items`: { label, hint?, desc?, icon?, checked?, separator?, dim?, run? }
-// or { head } -- `hint` is the small label on the right, `desc` a short note
-// there, `icon` an icon before the label (`#i-<name>`), `checked` shows a
-// check column, `separator` draws a line above the item; `head` labels a
+// or { head, separator? } -- `hint` is the small label on the right (a
+// key), `desc` a short note there on what the item makes, `icon` an icon
+// before the label (`#i-<name>`), `checked` shows a check column,
+// `separator` draws a line above the item or the head; `head` labels a
 // section, the items up to the next head. `options.head` is a label over the items; `options.matchWidth`
 // makes the menu at least as wide as `anchor`. `options.filter`
 // ({ placeholder, extra(text) }) puts a text box over the items, focused:
@@ -45,10 +46,8 @@ export function showMenu(anchor, items, options = {}) {
   closeMenu();
   const menu = accEl('div', 'menu');
   menu.setAttribute('role', 'menu');
-  const menuHead = text => {
-    const head = accEl('div', 'label menu__head', text);
-    return head;
-  };
+  const menuHead = (text, separator = false) =>
+    accEl('div', 'label menu__head' + (separator ? ' menu__head--sep' : ''), text);
   if (options.head) menu.appendChild(menuHead(options.head));
   const pick = it => {
     closeMenu();
@@ -57,7 +56,7 @@ export function showMenu(anchor, items, options = {}) {
   const icons = items.some(it => it.icon);
   const checks = items.some(it => it.checked !== undefined);
   const menuItem = it => {
-    if (it.head) return menuHead(it.head);
+    if (it.head) return menuHead(it.head, it.separator);
     const mi = accEl('div', 'menu__item' + (it.separator ? ' menu__item--sep' : ''));
     mi.id = `menu-item-${++itemIds}`;
     mi.setAttribute('role', checks ? 'menuitemcheckbox' : 'menuitem');
