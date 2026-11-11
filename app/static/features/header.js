@@ -27,6 +27,7 @@ import { createEditorToolbar } from '../ui/toolbar.js';
 import { editTextInPlace } from '../ui/field.js';
 import { openLink } from './selection.js';
 import { selectFilter } from './selection.js';
+import { showBlueprint } from './blueprint.js';
 import { leaveCardEditMode } from './panel/panel.js';
 import { addChip, labelChips, linkChip } from './panel/panel.js';
 import { linkMenuChip } from './linked.js';
@@ -125,8 +126,9 @@ labelAddBtn.addEventListener('click', () => {
 
 // The selected project's details under the header, shown while the fold
 // button (the chevron) is unfolded: a toolbar (rename, edit description,
-// archive, delete) and the description -- its file's body in an editor, loaded and
-// saved like any document (saving.md). The description pen toggles edit
+// archive, delete), the description -- its file's body in an editor, loaded and
+// saved like any document (saving.md) -- and its blueprint
+// (features/blueprint.js). The description pen toggles edit
 // mode, Escape leaves it. The description is hidden while empty and not
 // being edited.
 const projectFoldBtn = $('project-fold-btn');
@@ -156,6 +158,7 @@ function updateProjectDesc() {
   renderProjectProps(shown);
   projectDescEl.hidden = !shown || (!projectDescEditor.isEditable()
     && serializeMarkdown(projectDescEl).trim() === '');
+  showBlueprint(shown ? descProjectId : null);
 }
 
 // The project's own labels and link (vault.md#metadata) in its details,

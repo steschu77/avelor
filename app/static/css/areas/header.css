@@ -22,6 +22,142 @@
   padding: 0 var(--p-gutter) 8px;
 }
 
+/* A project's blueprint under its description (features/blueprint.js): its
+   facts on a line, each edited in place, then a tab line, Missing and Next
+   with their counts and how far it is, and the list open. */
+.bp {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 var(--p-gutter) 12px;
+}
+
+.bp__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  padding: 9px 0;
+  border-top: 1px solid var(--c-line);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.bp__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bp__value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font: 400 var(--fs-body)/1.3 var(--f-serif);
+  color: var(--c-ink);
+}
+
+/* a value's pencil shows on hover, as a card's title's does, or while the
+   fact has the focus */
+.bp__value>.icon-btn {
+  visibility: hidden;
+}
+
+.bp__fact:hover .icon-btn,
+.bp__fact:focus-within .icon-btn {
+  visibility: visible;
+}
+
+/* a fact edited in place: its inputs where the value was */
+.bp__edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bp__input[type="text"] {
+  width: 12em;
+}
+
+.bp__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.bp__tabs>.tool {
+  gap: 6px;
+  padding: 0 8px;
+  margin-bottom: -1px;
+  border-bottom: 1px solid transparent;
+}
+
+.bp__tabs>.tool[aria-pressed="true"] {
+  background: none;
+  color: var(--c-ink);
+  border-bottom-color: var(--c-ink);
+}
+
+/* how far it is, at the tab line's end */
+.bp__progress {
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.bp__list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* a line of the blueprint: a gap or a next step, its icon, its text with a
+   note under it, what acts on it at the right */
+.bp__item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 0 8px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-top: 1px solid var(--c-line);
+  font: 400 var(--fs-small)/1.4 var(--f-serif);
+  color: var(--c-ink);
+}
+
+.bp__item:first-child {
+  border-top: none;
+}
+
+.bp__item>.icon {
+  align-self: center;
+  color: var(--c-ink-mute);
+}
+
+.bp__item--gap>.icon {
+  color: var(--c-danger-ink);
+}
+
+.bp__item--open>.bp__text {
+  cursor: pointer;
+}
+
+.bp__item>.tool {
+  align-self: center;
+}
+
+.bp__sub {
+  display: block;
+}
+
+/* the rule that found a gap, the note's head */
+.bp__rule {
+  color: var(--c-ink);
+}
+
 /* the active labels after the project's name in the lens header, on one
    line: what doesn't fit is cut off at the right */
 .label-filter {
