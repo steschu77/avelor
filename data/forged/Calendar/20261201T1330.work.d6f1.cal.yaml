@@ -1,0 +1,12 @@
+id: 01a231cc-43c0-7416-9e9b-283844cfd6f1
+title: Work
+date: 2026-12-01T13:30:00Z
+remote:
+  account: 01a0c342-0940-7d5a-b215-6123a44c9144
+  remote:
+  - calendar-id: c_7b3d9e1f5a2c4b6d8e0f1a3c@group.calendar.google.com
+  - sync-token: C1syAUJaWJQNnN4YYC9tE32VnQG9CVjt=
+  - time-min: 2025-12-01T06:00:00Z
+calendar:
+  color: '#8B5CF6'
+  work-of: '@01a07772-b000-713b-8a40-dae23a1e74cd'
