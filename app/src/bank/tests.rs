@@ -27,7 +27,7 @@ fn a_statement_has_its_balances_and_its_rows() {
     assert_eq!(statement.currency.as_deref(), Some("EUR"));
     assert_eq!(
         (statement.opening, statement.closing),
-        (Some(3_205_928), Some(3_247_422))
+        (Some(2_891_128), Some(2_932_622))
     );
     assert_eq!(statement.rows.len(), 30);
     let pending = statement.rows.iter().filter(|r| r.posted.is_none()).count();
@@ -38,7 +38,7 @@ fn a_statement_has_its_balances_and_its_rows() {
         .filter(|r| r.posted.is_some())
         .map(|r| r.cents)
         .sum();
-    assert_eq!(3_205_928 + posted, 3_247_422);
+    assert_eq!(2_891_128 + posted, 2_932_622);
 }
 
 // ------------------------------------------------------------------------
@@ -188,7 +188,7 @@ fn a_first_statement_brings_every_transaction() {
     assert_eq!((plan.skipped, plan.problems.len()), (0, 0));
     assert_eq!(plan.statement.transactions.len(), 30);
     assert_eq!(plan.statement.amount, Some(414.94));
-    assert_eq!(plan.statement.balance, Some(32474.22));
+    assert_eq!(plan.statement.balance, Some(29326.22));
     assert_eq!(
         (plan.first, plan.last),
         (Some(day("2026-12-01")), Some(day("2026-12-31")))
@@ -515,7 +515,7 @@ fn a_statement_goes_into_its_account_once() {
     let known = statements(&h);
     assert_eq!(known.len(), 1);
     assert_eq!(known[0].items.len(), 30);
-    assert_eq!(known[0].balance, Some(3_247_422));
+    assert_eq!(known[0].balance, Some(2_932_622));
     let entry = h.app.vault.index().entry(&known[0].id).unwrap();
     let path = entry.local.to_string_lossy().replace('\\', "/");
     assert!(
@@ -526,7 +526,7 @@ fn a_statement_goes_into_its_account_once() {
     let fields = account(&h);
     assert_eq!(
         (fields.balance, fields.currency.as_deref()),
-        (Some(32474.22), Some("EUR"))
+        (Some(29326.22), Some("EUR"))
     );
     let text = fs::read_to_string(&entry.path).unwrap();
     assert!(

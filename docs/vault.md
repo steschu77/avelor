@@ -968,9 +968,14 @@ The forged vault (`data/forged`) shows the model in use:
 | `Accounts/…d9a1.bnk.yaml` | bank account | `bank-account`, `created` | |
 | `Accounts/…675b.txs.yaml` | statement | `statement`, `import` | transactions `linked-to` the task they paid for |
 | `Accounts/…b6e7.rcp.yaml` | recurring payment | `recurring-payment`, `created` | the statements' transactions name it in `recurring-payment` |
-| `Projects/…489b.prj.md` | project | `project`, `created` | body = project description (The Money Pit, starred) |
+| `Projects/…489b.prj.md` | project | `project`, `created` | body = project description (The Money Pit, starred); a blueprint of its own: the documents it expects, a payment back |
+| `Projects/…64a2.prj.md` | project | `project`, `created` | a trip (`blueprint: travel`): its dates set, the travelers as contacts, a payment to make |
+| `Projects/…d70b.prj.md` | project | `project`, `created` | a trip sketched: the window, the length, the stops |
+| `Calendar/Family/…4481.evt.md` | event | `event`, `remote` | a flight: `type`, `by`, `booking`, its arrival in its own zone |
+| `Calendar/…d6f1.cal.yaml` | calendar | `calendar`, `remote` | a work calendar (`work-of`) |
 
-These are the ID card thread's entities; the whole vault has every type.
+These are the ID card thread's entities, then the trips'; the whole vault
+has every type.
 
 ## Flows <a id="flows"></a>
 

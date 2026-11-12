@@ -6,7 +6,7 @@ import:
   origin: statement_2026-11.csv
 statement:
   account: 01955b3b-ca80-7fef-afbe-46d15556d9a1
-  amount: 3832.75
+  amount: 684.75
   transactions:
   - id: 01a19c21-7200-712c-a348-ef95216cc40c
     title: Salary November
@@ -128,3 +128,19 @@ statement:
     sender: Alexander Yahnek
     receiver: Shady Pines Properties
     linked-to: 01a22ee6-b000-71f9-8207-bafc44e3ded1
+  - id: 01a2202a-b700-75c8-b306-a2a1ceb358a8
+    title: Hanseflug, X7K2PL
+    date: 2026-11-28T03:20:00Z
+    status: posted
+    amount: -3075.0
+    sender: Alexander Yahnek
+    receiver: Hanseflug
+    linked-to: 01a22025-38c0-7469-a00c-2735c9b6e9c3
+  - id: 01a22977-1600-7de5-bb2b-703c63298a48
+    title: Miniaturbahn Speicherstadt, 3 tickets
+    date: 2026-11-29T22:40:00Z
+    status: posted
+    amount: -73.0
+    sender: Alexander Yahnek
+    receiver: Miniaturbahn Speicherstadt
+    linked-to: 01a2d78e-f500-7013-a6da-fb4cd5bff8ca
