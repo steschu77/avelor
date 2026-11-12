@@ -1,7 +1,7 @@
 # Avelor — Side panel and structural edits
 
 > The side panel and what the user organizes in it: the card every entity
-> is shown as, a thread's members, the calendar's day view, the context
+> is shown as, a thread's members, a trip's leg, the calendar's day view, the context
 > column, links, labels, projects, and the structural edits (threads,
 > projects, titles, labels, links, deletes) with how they are saved. The
 > lenses and the vault panel are `ui.md`; the editor inside each card,
@@ -92,7 +92,7 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   `#preview-toolbar-template`), an editing toolbar (cloned from
   `#editor-toolbar-template`), and its own `createEditor()` instance.
 
-It is used from exactly three places:
+It is used from exactly four places:
 
 - **`renderDocument(doc)`** — an entity outside any thread: one card
   appended into `#doc-content` (inside `#panel-doc-view`).
@@ -102,15 +102,18 @@ It is used from exactly three places:
 - **`renderDay(day)`** — the cards of the calendar's day
   (`panel.md#the-day-view`), appended into `#day-cards` (inside
   `#panel-day-view`, under the day's head).
+- **`renderLeg(ids, focusDocId)`** — the parts of a trip's leg
+  (`#route`), in their order on the route, appended into `#leg-cards`
+  (inside `#panel-leg-view`, under the leg's head).
 
-The three containers share the CSS class `.msg-list` — `flex: 1;
+The four containers share the CSS class `.msg-list` — `flex: 1;
 min-height: 0; overflow: auto; display: flex; flex-direction: column` —
 the single scrollable container; each card is a normal, non-scrolling flex
 child of it.
 
 Its options: `thread` — a member of the thread shown, whose head drags it
 out and whose remove-from-thread applies; `selectable` — a click selects
-its entity (`panel.md#selection`), in a thread and in a day,
+its entity (`panel.md#selection`), in a thread, a leg and a day,
 but not for a lone document, with nothing else on screen to select;
 `occurrence` — a day card's occurrence of its event, whose date the head
 and whose times the details show. A card's head (title, date) and details
@@ -136,12 +139,15 @@ template itself:
 
 ## Panel state <a id="panel-state"></a>
 
-Four store keys decide what the panel shows:
+Five store keys decide what the panel shows:
 
 - `selected_entity` — the selected entity,
 - `selected_thread` — the thread it's shown in, or `null`,
 - `selected_transaction` — a transaction of the selected statement, or `null`
   (`selectTransaction`; any other selection clears it),
+- `selected_leg` — the parts of a trip's leg it's shown with, or `null`
+  (`selectLeg`, a click on the leg, `#route`; it stays while one of its
+  parts is selected, unless in a thread),
 - `threads_rev` — bumped by every thread/membership change, so the cards
   are rebuilt even when neither selection changes (e.g. a member was
   added).
@@ -156,16 +162,17 @@ Four store keys decide what the panel shows:
 | `day` | `selected_lens === 'calendar'` | `#panel-day-view`, its events, tasks |
 | `thread` | `selected_thread` exists and `selected_entity` (if any) is one of its members | `#panel-thread-view`, all members |
 | `transaction` | `selected_transaction` is a transaction of `selected_entity`, a statement | `#panel-transaction-view`, the transaction's card (`#transaction-card`) |
+| `leg` | `selected_entity` is one of the parts of `selected_leg` | `#panel-leg-view`, the leg's head ("Leg 1 of 3 · via Frankfurt", "Springfield → Hamburg") and its parts |
 | `document` | `selected_entity` is a known entity | `#panel-doc-view`, one standalone card |
 | `none` | nothing selected, or the selected entity was deleted | `#panel-doc-view`, empty preview |
 
-`renderPanel` sets the four panels' `hidden` **first** and only then
+`renderPanel` sets the five panels' `hidden` **first** and only then
 renders, so a panel is never still `hidden` (`display: none`) when a
 scroll call runs against it — scrolling inside a hidden ancestor is a
 silent no-op with no layout box to scroll against. It is idempotent: it
 remembers what it built (`renderedThreadId`, `renderedDocId`,
-`renderedRev`) and only rebuilds cards when the shown thread or
-standalone entity, or `threads_rev`, changed.
+`renderedLeg`, `renderedRev`) and only rebuilds cards when the shown
+thread, leg or standalone entity, or `threads_rev`, changed.
 
 All card-building paths start from `destroyRenderedCards()`, which tears
 down every rendered card's controller (editor, content subscription,
@@ -604,6 +611,7 @@ button is gone.
   and value typed in, as a record's + Field (`newFactEl`), Enter writing
   it as text, Esc dropping it; a name the project has a fact of already
   isn't written, that fact being changed with its own pencil.
+- **A trip's route** (`#route`), under its facts.
 - **A tab line**: Missing and Next, each with its count, then how far the
   project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00").
   One list is open at a time; its tab again folds it, so the lens keeps
@@ -622,6 +630,64 @@ button is gone.
 
 While one of its inputs has the focus, the blueprint isn't drawn again;
 it is once they are left.
+
+### A trip's route <a id="route"></a>
+
+A trip (a project of the `travel` blueprint) shows its route between its
+facts and its tab line (`features/route.js`): the trip as its nights, home
+at both ends, named in their tooltips (`routeOf`, `model/trip.js`).
+
+- **Dated**: while its dates are set (the Days fact), the route comes
+  from the trip's events. Every night from the first day to the last is
+  covered by a stay, or by a journey that runs over it. A run of nights
+  at one place is a **stop**; a night without a stay is where the trip was
+  the night before (its stay's place, or where a journey arrived
+  since), else where the next one leaves from. Journeys with no night
+  between them are one **leg**, each a part of it, a via where they meet;
+  a change of place without one is a leg missing: between two stops, a
+  leg leaving from elsewhere than the trip is, one arriving elsewhere than
+  the next stop, home at both ends too (a place not known differs from
+  none). Each night and each leg is booked, planned
+  (`status: tentative`) or missing; a stop with some nights missing says
+  how many have a stay ("2 of 3").
+- **Sketched**: while the days are open, the route is the sketch's
+  (`vault.md#project`): a stop per stop, its nights guessed ("~6 nights",
+  "2–3") and its note under it; a leg per journey there (over night, it takes
+  a night) and the journey home, its means guessed ("flight?").
+- **Drawn as the nights**: a stop as wide as its nights, an overnight leg
+  as wide as its night; the legs share at most a quarter of the strip, so
+  it keeps to one line at any width and any number of stops. Along a
+  stop's foot a cell per night: booked (ink), planned (faint), missing
+  (danger), sketched (a line, a range's maybe faded); a leg's line solid
+  while booked, dashed while planned, dashed in danger while missing, dotted
+  while sketched, an icon per part by its means and a dot where they meet.
+  Under a stop its days ("Fri 07/09 – Thu 07/15"); under a leg "not
+  booked" while planned, else its vias ("via Frankfurt"), how long it takes
+  or its means, and "no journey" while missing. Each part says less as it
+  narrows (container queries, `header.css`): a stop its days short
+  ("9–15"), then its name or its nights alone; a leg its words, then all
+  but its first part. Its tooltip says the rest, a leg's parts with their
+  times (`tripSummary`).
+- **A click** on a stop selects its first stay and keeps the Timeline to
+  its weeks (`showWeeks`, `ui.md#timeline`); on a leg of more than one
+  part, its parts, their cards in the panel as a day's events in the
+  calendar's, the first focused (`selectLeg`, `#panel-state`), under the
+  calendar lens the first one's day; on one of one part, that part.
+  The part the panel shows is marked. A gap opens New with what is
+  missing filled in (`openNew`, `features/new.js`), in the trip and its
+  calendar: a stop without a stay a stay at its place for its nights; a
+  leg missing a journey between its places on its day, a day only.
+- **The sketch, edited in place** while the host can write the project: a
+  click picks a stop or a leg, edited in a line under the strip. A stop's
+  place, nights (a number, about one `~6`, a range `2-3`; what reads as
+  neither isn't written) and note, each by itself; Add a stop after it;
+  Remove. A leg's means, each a menu of the others with Remove; Via, one
+  more part with no night between; Over night for the journey to a stop. An
+  empty sketch offers Add a stop. Each edit writes the whole block through
+  `set_project`, from the block the host last pushed.
+
+An event of the route says on its card what it meets there
+(`#trip-fields`).
 
 ## Membership and structural edits <a id="structural-edits"></a>
 
@@ -790,6 +856,12 @@ the fields show as text; in a calendar read-only in Google, planned or
 booked, the times and Where do, and a place named keeps the event's
 times. Its calendar moves as a plain event's does (`#cards`).
 
+After the calendar, **Meets**: where the event is on its trip's route
+(`#route`, `routeSpot`), a journey its leg ("Springfield → Hamburg ·
+leg 1 of 3, part 1 of 2 · the night of 07/08", the night it runs over
+itself), a stay its stop and its nights; none for an event the route
+doesn't take, an activity or one outside the trip's days.
+
 ## Saving structural edits <a id="saving-structure"></a>
 
 Structural edits are saved the way content is (`saving.md`): the vault
@@ -885,4 +957,6 @@ and save their bodies at once.
 | C6 | Description | fold chevron → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
 | C7 | Archive | header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |
 | C8 | Delete a project | header Delete, two clicks within 3 s → description saved first → `structureCall('delete_entity')` | `Index::delete`: members leave the project, file to `.trash/` → `entity` per member, `entity_deleted`, the answer | filter back to all documents |
+| C9 | A trip's route | a stop of a dated route → `selectDocument` (its first stay) and `showWeeks`; a leg → `selectLeg` (its parts), one of one part `selectDocument`; a gap → `openNew('event', {…})` | — | the card and its Meets; the Timeline kept to the stop's weeks; New filled in |
+| C10 | A trip's sketch | a sketched stop or leg picked; a place, nights or note typed in, Enter or blur; a means picked, Via, Over night; Add a stop, Remove → `setProjectLocal(id, {…, sketch})` | `set_project {id, project}` → `entity` | the route follows |
 | C14 | A blueprint for a project | Blueprint (the project toolbar, a project without one) → a shipped blueprint → `setProjectLocal(id, withBlueprint(…))` | `set_project {id, project}` → `entity` | the blueprint's block under the description, its facts and checks |

@@ -222,6 +222,11 @@
   white-space: nowrap;
 }
 
+/* what it meets on its trip's route, the note on the same baseline */
+.props>dd:has(>.props__meets) {
+  align-items: baseline;
+}
+
 /* Messages (#doc-content, #thread-messages): one card per message on the
  * root-to-active path, each with its own head/tags/toolbar/editor. A lone
  * document is a borderless sheet on card. */
@@ -240,7 +245,8 @@
   background: var(--c-card);
 }
 
-/* a thread's or a day's cards sit white on paper, the selected one ringed */
+/* a thread's, a day's or a leg's cards sit on card over paper, the selected
+   one ringed */
 .msg-list--thread,
 .msg-list--day {
   padding: 12px;

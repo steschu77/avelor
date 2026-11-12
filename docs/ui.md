@@ -266,12 +266,14 @@ day — a recurring event on its first start, a task on its own date — but cal
   all types; the lens head's Types button folds this lens's bar.
 - **The scrubber** (`scrubber`, `features/lenses/scrub.js`, shared with
   the Bank lens): "Time · 12 entries" (the feed's), a bar per week from
-  Monday over last year and this one, as high as its entries of the types
-  shown against the busiest week's; the weeks to come lighter, a dashed
-  line at today, the two years under it. A drag across it picks the weeks
-  it passes as the range, a click one week; the range is named ("5–18 Oct
-  2026") with Clear, the feed and the toggles keep to it, and it lasts
-  while the app runs. Today scrolls the feed to today, dropping a range
+  Monday over last year and this one, on to the latest entry's week past
+  it (a trip next summer), as high as its entries of the types shown
+  against the busiest week's; the weeks to come lighter, a dashed line at
+  today, the years under it. A drag across it picks the weeks it passes as
+  the range, a click one week, a click on a trip's stop its weeks
+  (`showWeeks`, `panel.md#route`); the range is named ("5–18 Oct 2026")
+  with Clear, the feed and the toggles keep to it, and it lasts while the
+  app runs. Today scrolls the feed to today, dropping a range
   without it. Older and later entries are in the feed, not on the
   scrubber.
 - **The feed**: newest first, a heading per month, a block per day with
@@ -659,6 +661,6 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | F5 | Task dropped on a column | a task card of the Tasks card dragged onto another column (`dragTask`, `dropColumn`, `features/dashboard/cards.js`) → `editEntityLocal(id, {task: {status}})` | `edit_entities` → `entity` (with `task.done` for Done), `ok {changed, skipped}` | the task in its new column, Done first; the panel's card follows |
 | F6 | Fold, select, types in Documents | a group row or a thread's fold (`toggleGroup`, `toggleThread`); Open → `selectFilter`; an entity's row → `selectDocument(id, thread)`, a thread's row → `selectById`; a type toggle, Show all types, Types | `set_prefs {prefs}` (`doc_folded`, `doc_hidden`, `doc_types_bar`) | rows folded or shown; the entity in its thread, or the thread, in the panel; the projects' folds and the types kept across restarts |
 | F7 | Drop on a row in Documents | an entity's row or a card's head dropped on a project's row → `joinProjectLocal`, on a thread's row → `joinThreadLocal` | `join_project` / `join_thread` → `entity` | its rows under the project or the thread; joined to a thread, it is shown there |
-| F8 | Timeline | a drag or click across the scrubber's track (`pointerdown` … `pointerup`, `features/lenses/scrub.js`); Clear; Today; a type toggle, Show all types, Types; a row → `selectDocument`; a card's head dropped on the lens → `leaveThreadLocal` | `set_prefs {prefs}` (`tl_hidden`, `tl_types_bar`); `leave_thread` | the feed kept to the weeks picked, or to all; scrolled to today; the types and the bar kept across restarts; the entity in the panel; the card out of its thread |
+| F8 | Timeline | a drag or click across the scrubber's track (`pointerdown` … `pointerup`, `features/lenses/scrub.js`); a trip's stop (`showWeeks`, `panel.md#route`); Clear; Today; a type toggle, Show all types, Types; a row → `selectDocument`; a card's head dropped on the lens → `leaveThreadLocal` | `set_prefs {prefs}` (`tl_hidden`, `tl_types_bar`); `leave_thread` | the feed kept to the weeks picked, or to all; scrolled to today; the types and the bar kept across restarts; the entity in the panel; the card out of its thread |
 | F2 | Calendar month and day | prev/next/today (`features/lenses/calendar.js`); day click → `selectDay`; event or task click → `selectDay(day, id)`; today's overdue count → `selectDay(today)`, `scrollToOverdue` | — | the day's events as cards, then its tasks due (today: also the overdue ones) as rows; the clicked one focused, a task opened into its card |
 | F9 | Bank | the Bank tab; an account's tile → `selectFilter({selected_source})` (again: every source; without a watch: `selectDocument`); In, Out, Transfers, All, Linked, Not linked, Transactions, Recurring (`features/lenses/bank.js`); a drag or click across the cash flow's track (`features/lenses/scrub.js`); Clear; Today; a transaction → `selectTransaction(statement, transaction)`; its Linked to chip → `selectById`, a transfer's ⇄ chip → `selectTransaction` (the other half); a recurring payment's row in Recurring → `selectDocument`; the empty state's Add a bank account, or + Bank account after the tiles → `addBankAccount` | — | the transactions in the scope and the cut, a project's through their links, kept to the weeks picked, or to all; the fixed costs (`features/lenses/recurring.js`); the transaction's or the recurring payment's card; the Folders page with a new bank account's pane |

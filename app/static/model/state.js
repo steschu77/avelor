@@ -54,6 +54,9 @@ export const store = createStore({
   // a transaction of `selected_entity`, a statement: its card in the panel
   // (`selectTransaction`, features/selection.js)
   selected_transaction: null,
+  // a trip's leg the panel shows, the ids of its parts (`selectLeg`,
+  // features/selection.js)
+  selected_leg: null,
   selected_day: dayStart(new Date()), // the day the calendar's panel shows (features/lenses/calendar.js)
   selected_lens: 'dashboard', // the lens shown; the one shown last comes back on start (`restoreLens`)
   files_total: 0,

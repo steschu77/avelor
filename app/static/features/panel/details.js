@@ -27,7 +27,7 @@ import { accSeg, keyedSeg } from '../../ui/segmented.js';
 import { openOriginal, selectById } from '../selection.js';
 import { plainEventFields, statusField } from './event-fields.js';
 import { eventScheduleField, scheduleField, scheduleText } from './schedule-field.js';
-import { eventTypeField, tripFields } from './trip-fields.js';
+import { eventTypeField, meetsField, tripFields } from './trip-fields.js';
 import { showMenu } from '../../ui/menu.js';
 
 // ----------------------------------------------------------------------------
@@ -88,12 +88,13 @@ export function renderCardDetails(row, doc, occurrence = null) {
 }
 
 // ----------------------------------------------------------------------------
-// An event's rows: its Type (`eventTypeField`), when it is (`occurrence`'s times on
-// a day card, and where an exception moved it from), how it repeats and where,
-// or a trip event's fields in their place (`tripFields`, but for a recurring
-// event); then the guests, its calendar, in a work calendar whether it is a
-// day off or a remote one (`workField`), and a status other than confirmed,
-// but a trip's, whose fields hold it.
+// An event's rows: its Type (`eventTypeField`), when it is (`occurrence`'s times
+// on a day card, and where an exception moved it from), how it repeats and
+// where, or a trip event's fields in their place (`tripFields`, but for a
+// recurring event);
+// then the guests, its calendar, in a work calendar whether it is a day off
+// or a remote one (`workField`), a trip event's Meets, and a status other
+// than confirmed, but a trip's, whose fields hold it.
 function eventFields(doc, add, occurrence) {
     const { event } = doc;
     const trip = isTripEvent(doc) && !event.schedule?.length;
@@ -121,6 +122,8 @@ function eventFields(doc, add, occurrence) {
     else if (move) add(t('props.calendar'), move);
     const work = calendar?.calendar?.['work-of'] || event.work ? workField(doc) : null;
     if (work) add(t('props.work'), ...work);
+    const meets = trip ? meetsField(doc) : null;
+    if (meets) add(t('props.meets'), ...meets);
     const status = { tentative: t('event.tentative'), cancelled: t('event.cancelled') }[event.status];
     if (editable && event.status !== 'cancelled') add(t('props.status'), statusField(event, edit));
     else if (status && !trip) add(t('props.status'), status);

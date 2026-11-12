@@ -1,11 +1,12 @@
 // A project's blueprint in the lens header (panel.md#blueprint,
 // vault.md#project), under its description while its details are unfolded
 // (`showBlueprint`, features/header.js): its facts on a line, each edited in
-// place (features/facts.js); then a tab line, Missing and Next with their
-// counts and how far it is (`checksOf`, model/blueprint.js). One list is
-// open at a time, its tab again folds it, so the lens keeps its room. A
-// row's task opens on a click; an expected document's gap has Find, which
-// picks one of the project's members to meet it.
+// place (features/facts.js); a trip's route (features/route.js); then a tab
+// line, Missing and Next with their counts and how far it is (`checksOf`,
+// model/blueprint.js). One list is open at a time, its tab again folds it,
+// so the lens keeps its room. A row's task opens on a click; an expected
+// document's gap has Find, which picks one of the project's members to meet
+// it.
 
 import { $, accEl, oncePerFrame } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
@@ -17,8 +18,10 @@ import { checksOf, factsOf, hasBlueprint, membersOf } from '../model/blueprint.j
 import { setProjectLocal } from '../model/structure.js';
 import { KIND_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
+import { toolButton } from '../ui/toolbar.js';
 import { factEl, newFactEl } from './facts.js';
 import { TASK_STATUSES } from './panel/details.js';
+import { routeEls } from './route.js';
 import { selectDocument } from './selection.js';
 
 const bpEl = $('project-bp');
@@ -49,10 +52,15 @@ const render = oncePerFrame(() => {
   }
   bpEl.replaceChildren(...renderBlueprint(project));
 });
-bpEl.addEventListener('focusout', () => setTimeout(() => {
-  if (!typing()) render();
-}));
-store.subscribe([state => state.projects_rev, state => state.entities_rev], () => render());
+// Focus moving to a button of the blueprint (a pressed one takes it) draws
+// nothing anew: the button would be replaced before its click.
+bpEl.addEventListener('focusout', e => {
+  if (bpEl.contains(e.relatedTarget)) return;
+  setTimeout(() => {
+    if (!typing()) render();
+  });
+});
+store.subscribe([state => state.projects_rev, state => state.entities_rev, state => state.selected_entity], () => render());
 
 // ----------------------------------------------------------------------------
 function renderBlueprint({ id, project, writable }) {
@@ -82,7 +90,7 @@ function renderBlueprint({ id, project, writable }) {
   }
   tabs.append(accEl('span', 'meta bp__progress', progressText(result.progress)));
 
-  const parts = [facts, tabs];
+  const parts = [facts, ...routeEls(ctx, render), tabs];
   if (openList) {
     const [, rows, none] = lists[openList];
     const list = accEl('div', 'bp__list');
@@ -118,14 +126,6 @@ function itemEl(icon, title, sub, { gap = false, rule = null, action = null, ope
     pressable(text).addEventListener('click', open);
   }
   return item;
-}
-
-function toolButton(label, title, run) {
-  const btn = accEl('button', 'tool label', label);
-  btn.type = 'button';
-  btn.title = title;
-  btn.addEventListener('click', () => run(btn));
-  return btn;
 }
 
 const WARNING = '#i-warning';

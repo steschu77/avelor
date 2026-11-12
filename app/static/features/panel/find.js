@@ -11,7 +11,7 @@ import { store } from '../../model/state.js';
 import { termsRegex } from '../../ui/marks.js';
 
 const READ = '.msg .doc-title, .msg .props, .msg .chip--label, .msg .editor';
-const VIEWS = ['panel-doc-view', 'panel-thread-view', 'panel-day-view'].map($);
+const VIEWS = ['panel-doc-view', 'panel-thread-view', 'panel-day-view', 'panel-leg-view'].map($);
 
 const findEl = $('find');
 const queryEl = $('find-q');

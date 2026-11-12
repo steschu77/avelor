@@ -172,9 +172,11 @@ function showNewMenu(anchor) {
 
 // Open the New page for `kind`, in the project selected in the sidebar; an
 // event in its calendar, if it names one still in the vault (a trip's
-// `calendar` fact). Once created, the page closes and the new entity is
-// selected.
-function openNew(kind) {
+// `calendar` fact).
+// `fields`: what the draft starts with besides (a gap of a trip's route,
+// features/route.js), a place named in the zone it had last. Once created,
+// the page closes and the new entity is selected.
+export function openNew(kind, fields = {}) {
   openVaultOp('new');
   const scope = projectScope();
   const d = newDraft(kind, {
@@ -188,6 +190,10 @@ function openNew(kind) {
   });
   const calendar = scope && projects.get(scope)?.project?.facts?.calendar;
   d.calendar = entities.get(calendar)?.kind === 'calendar' ? calendar : null;
+  Object.assign(d, fields);
+  for (const [key, zoneKey] of [['from', 'fromZone'], ['to', 'toZone'], ['place', 'fromZone']]) {
+    if (fields[key]) d[zoneKey] = placeZone(fields[key]) ?? d[zoneKey];
+  }
   newPage = d;
 
   d.els.sheet = accEl('section', 'new__sheet');
