@@ -5,6 +5,7 @@ use super::{Changes, Index, SaveOutcome};
 use crate::change::Change;
 use crate::document::Document;
 use crate::envelope::Conversation;
+use crate::envelope::DocumentType;
 use crate::envelope::{Transaction, to_cents};
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
@@ -310,14 +311,29 @@ impl Index {
             .map(|id| {
                 let outcome = match self.get(id) {
                     None => Err(Error::NotFound),
-                    Some(doc) if !change.fits(doc) => Err(Error::InvalidArgument {
-                        arg: "change".into(),
-                    }),
+                    Some(doc) if !change.fits(doc) || !self.reaches(change) => {
+                        Err(Error::InvalidArgument {
+                            arg: "change".into(),
+                        })
+                    }
                     Some(_) => self.edit(id, changes, |d| change.apply(d, now)),
                 };
                 (*id, outcome)
             })
             .collect()
+    }
+
+    /// Whether what `change` names is in the vault: an event's calendar a
+    /// calendar entity.
+    fn reaches(&self, change: &Change) -> bool {
+        let Change::Event(event) = change else {
+            return true;
+        };
+        let calendar = event.calendar.flatten();
+        calendar.is_none_or(|id| {
+            self.get(&id)
+                .is_some_and(|d| d.kind() == DocumentType::Calendar)
+        })
     }
 
     /// Replace the `conversation` block of `id`, which may be any entity;

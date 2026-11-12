@@ -7,6 +7,7 @@
 
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
+use av_utils::id::Id;
 use av_utils::patch::present;
 use serde::Deserialize;
 
@@ -87,6 +88,13 @@ pub struct EventChange {
     pub location: Option<Option<String>>,
     #[serde(default, deserialize_with = "present")]
     pub status: Option<Option<String>>,
+    /// A recurring event's RFC 5545 lines; empty or null makes it a single
+    /// event.
+    #[serde(default, deserialize_with = "present")]
+    pub schedule: Option<Option<Vec<String>>>,
+    /// Another calendar entity of the vault; it can't be removed.
+    #[serde(default, deserialize_with = "present")]
+    pub calendar: Option<Option<Id>>,
 }
 
 // ----------------------------------------------------------------------------
@@ -101,13 +109,8 @@ pub struct CalendarChange {
 
 impl EventChange {
     // ------------------------------------------------------------------------
-    /// Whether it changes the event's times, which a recurring event keeps.
-    fn moves(&self) -> bool {
-        self.start.is_some() || self.end.is_some() || self.tz.is_some() || self.end_tz.is_some()
-    }
-
-    // ------------------------------------------------------------------------
-    /// A status the app doesn't set, a type that isn't one, or no start.
+    /// A status the app doesn't set, a type that isn't one, no start or
+    /// calendar, or a schedule that isn't one (`is_schedule`).
     fn check(&self) -> Result<()> {
         let invalid = |arg: &str| Err(Error::InvalidArgument { arg: arg.into() });
         let outside = |field: &Option<Option<String>>, values: &[&str]| {
@@ -121,6 +124,15 @@ impl EventChange {
         }
         if self.start == Some(None) {
             return invalid("start");
+        }
+        if self.calendar == Some(None) {
+            return invalid("calendar");
+        }
+        if let Some(Some(lines)) = &self.schedule
+            && !lines.is_empty()
+            && !is_schedule(lines)
+        {
+            return invalid("schedule");
         }
         Ok(())
     }
@@ -151,6 +163,12 @@ impl EventChange {
         if let Some(end) = self.end {
             event.end = end;
         }
+        if let Some(schedule) = &self.schedule {
+            event.schedule = schedule.clone().unwrap_or_default();
+        }
+        if let Some(Some(calendar)) = self.calendar {
+            event.calendar = Some(calendar);
+        }
     }
 }
 
@@ -173,17 +191,24 @@ impl Change {
 
     // ------------------------------------------------------------------------
     /// Whether `doc` can take the change: a type a document, a task's
-    /// field a task, an event's an event (its times only if it isn't a
-    /// recurring event), a calendar's a calendar.
+    /// field a task, an event's an event, leaving its times in order
+    /// (`in_order`; a recurring event's move all its occurrences) and a
+    /// timed schedule given with a zone, a calendar's a calendar.
     pub fn fits(&self, doc: &Document) -> bool {
         let kind = doc.kind();
         match self {
             Change::DocType(_) => kind == DocumentType::Document,
             Change::Task(_) => kind == DocumentType::Task,
-            Change::Event(event) => {
-                let roles = doc.roles();
-                let recurring = roles.event.as_ref().is_some_and(|e| !e.schedule.is_empty());
-                kind == DocumentType::Event && !(recurring && event.moves())
+            Change::Event(change) => {
+                let mut event = doc.roles().event.clone().unwrap_or_default();
+                change.apply(&mut event);
+                // a timed schedule repeats in its zone
+                let timed = event.start.is_some_and(|s| s.time.is_some());
+                let zoneless = change.schedule.is_some()
+                    && timed
+                    && !event.schedule.is_empty()
+                    && event.tz.is_none();
+                kind == DocumentType::Event && in_order(&event) && !zoneless
             }
             Change::Calendar(_) => kind == DocumentType::Calendar,
             Change::Date(_) => kind != DocumentType::Event,
@@ -223,6 +248,39 @@ impl Change {
             Change::Date(date) => doc.set_date(*date),
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+/// Whether an event's start and end are both days (all day) or both times,
+/// and its end after its start: a day's end is the day after its last
+/// (vault.md#event), a time's may be its start.
+fn in_order(event: &Event) -> bool {
+    match (event.start, event.end) {
+        (Some(start), Some(end)) if start.time.is_none() => end.time.is_none() && end > start,
+        (Some(start), Some(end)) => end.time.is_some() && end >= start,
+        _ => true,
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Whether `lines` are a schedule as Google keeps one (vault.md#event): one
+/// `RRULE` with a `FREQ`, beside `EXDATE` and `RDATE` lines.
+fn is_schedule(lines: &[String]) -> bool {
+    let name = |line: &str| {
+        line.split([':', ';'])
+            .next()
+            .unwrap_or("")
+            .to_ascii_uppercase()
+    };
+    let rules: Vec<&String> = lines.iter().filter(|l| name(l) == "RRULE").collect();
+    let others = lines
+        .iter()
+        .all(|l| ["RRULE", "EXDATE", "RDATE"].contains(&name(l).as_str()));
+    let freq = |rule: &str| {
+        rule.split([':', ';'])
+            .any(|part| part.to_ascii_uppercase().starts_with("FREQ="))
+    };
+    others && rules.len() == 1 && freq(rules[0])
 }
 
 // ----------------------------------------------------------------------------
@@ -337,15 +395,123 @@ mod tests {
 
     // ------------------------------------------------------------------------
     #[test]
-    fn a_recurring_event_takes_a_trip_field_but_not_new_times() {
-        let recurring =
-            entity("event:\n  start: 2026-10-05T08:00:00Z\n  schedule: ['RRULE:FREQ=WEEKLY']\n");
+    fn a_recurring_event_takes_new_times_and_a_schedule() {
+        let mut recurring = entity(
+            "event:\n  start: 2026-10-05T08:00:00Z\n  tz: Europe/Berlin\n  schedule: ['RRULE:FREQ=WEEKLY']\n",
+        );
         let part = event_change("{type: activity}");
         let moved = event_change("{start: 2026-10-06T08:00:00Z}");
-        let zone = event_change("{tz: Europe/Berlin}");
-        assert!(part.fits(&recurring));
-        assert!(!moved.fits(&recurring) && !zone.fits(&recurring));
+        let zone = event_change("{tz: Europe/Lisbon}");
+        assert!(part.fits(&recurring) && moved.fits(&recurring) && zone.fits(&recurring));
         assert!(!part.fits(&task("  status: todo\n")));
+
+        let daily =
+            event_change("{schedule: ['RRULE:FREQ=DAILY;COUNT=5', 'EXDATE:20261007T080000Z']}");
+        assert!(daily.check().is_ok() && daily.fits(&recurring));
+        daily.apply(&mut recurring, date(NOW));
+        let schedule = &recurring.roles().event.as_ref().unwrap().schedule;
+        assert_eq!(schedule[0], "RRULE:FREQ=DAILY;COUNT=5");
+        let once = event_change("{schedule: null}");
+        once.apply(&mut recurring, date(NOW));
+        assert!(
+            recurring
+                .roles()
+                .event
+                .as_ref()
+                .unwrap()
+                .schedule
+                .is_empty()
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_schedule_that_isnt_one_is_refused() {
+        for lines in [
+            "['FREQ=DAILY']",
+            "['RRULE:COUNT=3']",
+            "['RRULE:FREQ=DAILY', 'RRULE:FREQ=WEEKLY']",
+            "['EXDATE:20261007T080000Z']",
+            "['RRULE:FREQ=DAILY', 'X-OTHER:1']",
+        ] {
+            let change = event_change(&format!("{{schedule: {lines}}}"));
+            assert!(
+                matches!(change.check(), Err(Error::InvalidArgument { .. })),
+                "{lines}"
+            );
+        }
+        let fine = "{schedule: ['RRULE:FREQ=WEEKLY;BYDAY=MO,TH', 'EXDATE;TZID=Europe/Berlin:20261012T100000']}";
+        assert!(event_change(fine).check().is_ok());
+        assert!(
+            event_change("{schedule: []}").check().is_ok(),
+            "empty: once"
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_event_takes_another_calendar_but_not_none() {
+        let other = Id::generate();
+        let mut doc = entity(
+            "event:\n  calendar: 01a0e1cc-a24c-7490-82fe-e75669985b50\n  start: 2026-10-05\n",
+        );
+        let moved = event_change(&format!("{{calendar: {other}}}"));
+        assert!(moved.check().is_ok() && moved.fits(&doc));
+        moved.apply(&mut doc, date(NOW));
+        assert_eq!(doc.roles().event.as_ref().unwrap().calendar, Some(other));
+        let none = event_change("{calendar: null}");
+        assert!(matches!(none.check(), Err(Error::InvalidArgument { .. })));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_timed_schedule_needs_a_zone() {
+        let single = entity("event:\n  start: 2026-10-05T08:00:00Z\n  end: 2026-10-05T09:00:00Z\n");
+        let weekly = event_change("{schedule: ['RRULE:FREQ=WEEKLY']}");
+        assert!(!weekly.fits(&single));
+        let zoned = event_change("{schedule: ['RRULE:FREQ=WEEKLY'], tz: Europe/Berlin}");
+        assert!(zoned.fits(&single));
+        let day = entity("event:\n  start: 2026-10-05\n  end: 2026-10-06\n");
+        assert!(weekly.fits(&day), "all day, the day repeats");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_event_patch_refuses_an_end_before_its_start_or_of_another_kind() {
+        let timed = entity("event:\n  start: 2026-10-05T08:00:00Z\n  end: 2026-10-05T09:00:00Z\n");
+        assert!(!event_change("{end: 2026-10-05T07:00:00Z}").fits(&timed));
+        assert!(!event_change("{start: 2026-10-05T10:00:00Z}").fits(&timed));
+        assert!(
+            !event_change("{end: 2026-10-06}").fits(&timed),
+            "a day ending a time"
+        );
+        assert!(event_change("{end: 2026-10-05T08:00:00Z}").fits(&timed));
+        let start = "{start: 2026-10-05T10:00:00Z, end: 2026-10-05T11:00:00Z}";
+        assert!(event_change(start).fits(&timed));
+
+        let day = entity("event:\n  start: 2026-10-05\n  end: 2026-10-06\n");
+        assert!(
+            !event_change("{end: 2026-10-05}").fits(&day),
+            "the day after the last"
+        );
+        assert!(!event_change("{end: 2026-10-05T10:00:00Z}").fits(&day));
+        assert!(event_change("{end: 2026-10-08}").fits(&day));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_date_only_start_makes_an_all_day_event() {
+        let mut doc = entity(
+            "event:\n  start: 2026-10-05T08:00:00Z\n  end: 2026-10-05T09:00:00Z\n  tz: Europe/Berlin\n",
+        );
+        let day = event_change("{start: 2026-10-05, end: 2026-10-06, tz: null, end-tz: null}");
+        assert!(day.fits(&doc));
+        day.apply(&mut doc, date(NOW));
+        let event = doc.roles().event.clone().unwrap();
+        assert_eq!(event.start, Some(date("2026-10-05")));
+        assert_eq!(event.end, Some(date("2026-10-06")));
+        assert_eq!(event.tz, None);
+        assert_eq!(doc.date(), Some(date("2026-10-05")), "its date a day");
     }
 
     // ------------------------------------------------------------------------

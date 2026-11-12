@@ -83,6 +83,12 @@ test('an occurrence moved into the days asked for is there, from before and from
   equal(occurrences('2027-07-13', '2027-07-17').map(([from]) => from), ['2027-07-14', '2027-07-15']);
 });
 
+test('a timed recurring event keeps its time in its zone', () => {
+  vault({ ...event('call', '2027-03-22T09:00:00Z', '2027-03-22T09:30:00Z', { schedule: ['RRULE:FREQ=WEEKLY;COUNT=2'], tz: 'Europe/Berlin' }) });
+  equal(eventsBetween(parseDate('2027-03-20'), parseDate('2027-04-04'), getEvents()).map(ev => [isoInstant(ev.date), isoInstant(ev.end)]),
+    [['2027-03-22T09:00:00Z', '2027-03-22T09:30:00Z'], ['2027-03-29T08:00:00Z', '2027-03-29T08:30:00Z']]);
+});
+
 test("a day's stack has an event once, a recurring one as its first occurrence there", () => {
   vault(timed('nightly', new Date(2027, 6, 5, 22), new Date(2027, 6, 6, 2), { schedule: ['RRULE:FREQ=DAILY'] }));
   const stack = dayOccurrences(parseDate('2027-07-08'));

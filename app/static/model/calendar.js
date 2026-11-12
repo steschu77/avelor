@@ -122,9 +122,10 @@ export function eventsBetween(s, e, evs) {
 // ----------------------------------------------------------------------------
 // `ev` if it overlaps [s, e); for a recurring event, a copy per occurrence that does,
 // with its own `date` and `end` (and `occurrence` set, so it isn't
-// expanded again). An occurrence Google moved, retitled or cancelled is as
-// its exception has it (`exception`): a moved one shows where it went, also
-// from a day after `e`.
+// expanded again), a timed one's on the wall clock of its zone. An
+// occurrence Google moved, retitled or cancelled is as its exception has it
+// (`exception`): a moved one shows where it went, also from a day after `e`
+// or before `s`.
 function occurrencesOf(ev, s, e) {
     const rules = ev.occurrence ? null : ev.event?.schedule;
     if (!rules?.length) {
@@ -133,10 +134,13 @@ function occurrencesOf(ev, s, e) {
     const duration = evtEnd(ev).getTime() - evtStart(ev).getTime();
     const exceptions = exceptionsOf(ev);
     let before = e;
+    let after = new Date(s.getTime() - duration);
     for (const x of exceptions.values()) {
         if (x.start && x.start < e && x.original >= before) before = addDays(x.original, 1);
+        if (x.start && x.original < after) after = x.original;
     }
-    return scheduleStarts(evtStart(ev), rules, before)
+    const zone = ev.all_day ? null : ev.event?.tz ?? null;
+    return scheduleStarts(evtStart(ev), rules, before, { zone, after })
         .flatMap(start => {
             const exception = exceptions.get(dayKey(start));
             if (exception?.cancelled) return [];

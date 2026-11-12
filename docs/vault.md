@@ -463,7 +463,8 @@ Block: `event:`
 
 An event is a markdown file with the following additional fields:
 
-* `calendar`: Calendar ID,
+* `calendar`: Calendar ID; a move to another calendar of its account waits
+  for that calendar's sync (`remote`'s `calendar-id`),
 * `status`: string (`confirmed`, `tentative`; `cancelled` once deleted in
   Google -- the file stays, the calendar doesn't show it),
 * `start`: Date, a date without a time for an all-day event,

@@ -1,7 +1,8 @@
 import { equal, test } from './harness.js';
-import { localDay, parseDate } from '../../static/core/format.js';
+import { isoInstant, localDay, parseDate } from '../../static/core/format.js';
 import {
-  byDay, icalDate, parseSchedule, periodOf, ruleSupported, scheduleStarts, timesAYear,
+  byDay, eventRuleOf, eventScheduleLines, icalDate, parseSchedule, periodOf, ruleSupported, scheduleLine, scheduleStarts,
+  timesAYear, weekdayOf,
 } from '../../static/model/schedule.js';
 
 const FOREVER = new Date(2040, 0, 1);
@@ -79,6 +80,24 @@ test('the occurrences end before a day', () => {
   equal(scheduleStarts(parseDate('2027-03-22'), ['RRULE:FREQ=DAILY'], parseDate('2027-03-24')).map(localDay), ['2027-03-22', '2027-03-23']);
 });
 
+test('the occurrences before a day are left out, and count', () => {
+  const starts = scheduleStarts(parseDate('2027-01-04'), ['RRULE:FREQ=WEEKLY;COUNT=10'], FOREVER, { after: parseDate('2027-03-01') });
+  equal(starts.map(localDay), ['2027-03-01', '2027-03-08']);
+});
+
+test("a timed one keeps its time on the clock of its zone", () => {
+  const first = new Date('2027-03-22T09:00:00Z');
+  const starts = scheduleStarts(first, ['RRULE:FREQ=WEEKLY;COUNT=3'], FOREVER, { zone: 'Europe/Berlin' });
+  equal(starts.map(isoInstant), ['2027-03-22T09:00:00Z', '2027-03-29T08:00:00Z', '2027-04-05T08:00:00Z']);
+});
+
+test("the weekday of a timed one is its zone's", () => {
+  const first = new Date('2027-07-08T23:05:00Z'); // Friday in Berlin, Thursday in Chicago
+  const weekly = zone => scheduleStarts(first, ['RRULE:FREQ=WEEKLY;BYDAY=FR;COUNT=1'], FOREVER, { zone }).map(isoInstant);
+  equal(weekly('Europe/Berlin'), ['2027-07-08T23:05:00Z']);
+  equal(weekly('America/Chicago'), ['2027-07-09T23:05:00Z']);
+});
+
 test("a timed one without a zone keeps its time on this PC's clock", () => {
   const starts = scheduleStarts(new Date(2027, 0, 4, 10, 30), ['RRULE:FREQ=WEEKLY;COUNT=52'], FOREVER);
   equal([...new Set(starts.map(start => `${start.getHours()}:${start.getMinutes()}`))], ['10:30']);
@@ -111,6 +130,25 @@ test("a calendar's date and date-time", () => {
   equal(icalDate('20270322T100530Z'), new Date(Date.UTC(2027, 2, 22, 10, 5, 30)));
 });
 
+test("a recurring payment's period as a rule, and back", () => {
+  const from = new Date(2027, 2, 24); // a Wednesday
+  const line = schedule => scheduleLine(schedule, from);
+  equal(line({ period: 'week' }), 'RRULE:FREQ=WEEKLY;BYDAY=WE');
+  equal(line({ period: 'week', days: ['SU', 'MO', 'MO'] }), 'RRULE:FREQ=WEEKLY;BYDAY=MO,SU');
+  equal(line({ period: 'month' }), 'RRULE:FREQ=MONTHLY;BYMONTHDAY=24');
+  equal(line({ period: 'quarter', day: 15 }), 'RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=15');
+  equal(line({ period: 'half', day: 1 }), 'RRULE:FREQ=MONTHLY;INTERVAL=6;BYMONTHDAY=1');
+  equal(line({ period: 'year', day: 31 }), 'RRULE:FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=31');
+  for (const schedule of [
+    { period: 'week', days: ['MO', 'SU'], day: null }, { period: 'month', days: null, day: 24 },
+    { period: 'quarter', days: null, day: 15 }, { period: 'half', days: null, day: 1 }, { period: 'year', days: null, day: 31 },
+  ]) equal(periodOf([line(schedule)]), schedule);
+});
+
+test("a day's weekday as a rule names it", () => {
+  equal([weekdayOf(new Date(2027, 2, 24)), weekdayOf(new Date(2027, 2, 28))], ['WE', 'SU']);
+});
+
 test('any other rule is no period', () => {
   for (const line of [
     'RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO', 'RRULE:FREQ=WEEKLY', 'RRULE:FREQ=MONTHLY;BYDAY=2TU', 'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1',
@@ -128,6 +166,46 @@ test('how many times a year a schedule repeats', () => {
   ].map(line => timesAYear([line])), [365, 104, 26, 24, 4, 2, 2, null]);
 });
 
+test("an event's schedule as its card has it", () => {
+  const start = new Date('2027-07-08T23:05:00Z');
+  const zone = 'Europe/Berlin';
+  const rule = (...lines) => eventRuleOf(lines, start, zone);
+  equal(rule(), { period: 'once', days: null, until: null, count: null, rest: [] });
+  equal(rule('RRULE:FREQ=DAILY'), { period: 'day', days: null, until: null, count: null, rest: [] });
+  equal(rule('RRULE:FREQ=WEEKLY;BYDAY=MO,FR;COUNT=8'), { period: 'week', days: ['MO', 'FR'], until: null, count: 8, rest: [] });
+  equal(rule('RRULE:FREQ=YEARLY;UNTIL=20300708T215900Z', 'EXDATE:20280708T230500Z'),
+    { period: 'year', days: null, until: '2030-07-08', count: null, rest: ['EXDATE:20280708T230500Z'] });
+  equal(rule('RRULE:FREQ=MONTHLY;BYMONTHDAY=9').period, 'month'); // the 9th in Berlin
+});
+
+test('a schedule its card has no form for', () => {
+  const start = new Date('2027-07-08T23:05:00Z');
+  for (const lines of [
+    ['RRULE:FREQ=WEEKLY;INTERVAL=2'], ['RRULE:FREQ=MONTHLY;BYDAY=2TU'], ['RRULE:FREQ=MONTHLY;BYMONTHDAY=8'],
+    ['RRULE:FREQ=DAILY;COUNT=3;UNTIL=20300708'], ['RRULE:FREQ=WEEKLY;BYDAY=MO,2TU'], ['RRULE:FREQ=HOURLY'],
+    ['RRULE:FREQ=DAILY', 'RRULE:FREQ=WEEKLY'], ['RRULE:FREQ=DAILY', 'RDATE:20270801'],
+  ]) equal(eventRuleOf(lines, start, 'Europe/Berlin'), null);
+});
+
+test("an event's schedule as its lines", () => {
+  const start = new Date('2027-07-08T23:05:00Z');
+  const lines = (schedule, zone = 'Europe/Berlin', allDay = false) => eventScheduleLines(schedule, start, zone, allDay);
+  equal(lines({ period: 'once', rest: ['EXDATE:20270708'] }), []);
+  equal(lines({ period: 'week' }), ['RRULE:FREQ=WEEKLY;BYDAY=FR']);
+  equal(lines({ period: 'week' }, 'America/Chicago'), ['RRULE:FREQ=WEEKLY;BYDAY=TH']);
+  equal(lines({ period: 'week', days: ['FR', 'MO'], until: '2027-07-30' }), ['RRULE:FREQ=WEEKLY;BYDAY=MO,FR;UNTIL=20270730T215900Z']);
+  equal(lines({ period: 'day', until: '2027-07-30' }, null, true), ['RRULE:FREQ=DAILY;UNTIL=20270730']);
+  equal(lines({ period: 'month', count: 5, until: '2027-07-30', rest: ['EXDATE:20270808'] }), ['RRULE:FREQ=MONTHLY;COUNT=5', 'EXDATE:20270808']);
+});
+
+test("a timed event's last day comes back as it was set", () => {
+  const start = new Date('2027-07-08T23:05:00Z');
+  for (const zone of ['Europe/Berlin', 'America/Chicago', 'Pacific/Auckland', null]) {
+    const schedule = { period: 'day', days: null, until: '2027-12-31', count: null, rest: [] };
+    equal(eventRuleOf(eventScheduleLines(schedule, start, zone, false), start, zone), schedule);
+  }
+});
+
 test('a timed one to a day is on that day too', () => {
   const starts = scheduleStarts(new Date(2027, 2, 30, 10), ['RRULE:FREQ=DAILY;UNTIL=20270401'], FOREVER);
   equal(starts.map(localDay), ['2027-03-30', '2027-03-31', '2027-04-01']);
@@ -135,4 +213,9 @@ test('a timed one to a day is on that day too', () => {
 
 test('monthly on a day that is one of some weekdays', () => {
   equal(days('2027-08-13', 'RRULE:FREQ=MONTHLY;BYDAY=FR,MO;BYMONTHDAY=13;COUNT=2'), ['2027-08-13', '2027-09-13']);
+});
+
+test("an all-day event's last day comes back as it was set", () => {
+  equal(eventRuleOf(['RRULE:FREQ=DAILY;UNTIL=20270730'], new Date(2027, 6, 8), null).until, '2027-07-30');
+  equal(eventRuleOf(['RRULE:FREQ=DAILY;UNTIL=20270730'], new Date('2027-07-08T23:05:00Z'), 'Pacific/Auckland').until, '2027-07-30');
 });

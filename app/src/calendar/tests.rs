@@ -141,6 +141,59 @@ fn a_sync_is_refused_before_any_job() {
 
 // ------------------------------------------------------------------------
 #[test]
+fn googles_kind_of_event_is_kept_and_a_kept_one_locked() {
+    let mut h = with_google("calendar-kinds", FULL, &[calendar_file(), event_file()]);
+    let id = Id::parse(EV).unwrap();
+    let entry = h.app.vault.index().entry(&id).unwrap();
+    let path = entry.local.clone();
+    let planned = calendar_sync::snapshot(&payload_of(&entry.doc));
+    let set_remote = |h: &mut Harness, kind: Option<&str>| {
+        let job_id = begin(h, HashMap::from([(path.clone(), (id, planned.clone()))]));
+        let remote = GoogleEvent {
+            event_type: kind.map(str::to_string),
+            ..google_event()
+        };
+        let output = SyncOutput {
+            effects: vec![Effect::SetRemote {
+                path: path.clone(),
+                remote_event_id: "abc".into(),
+                etag: Some("\"2\"".into()),
+                snapshot: planned.clone(),
+                remote_calendar_id: "cal1".into(),
+                remote: Box::new(remote),
+            }],
+            report: Report::default(),
+        };
+        apply(&mut h.app, job_id, Ok(output));
+        h.run_queue();
+        h.take();
+        fs::read_to_string(h.vault().join(&path)).unwrap()
+    };
+    let text = set_remote(&mut h, Some("birthday"));
+    assert!(text.contains("event-type: birthday"), "{text}");
+
+    let change = json!({ "event": { "location": "Room 2" } });
+    let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
+    assert_eq!(
+        reply(&sent)["ok"]["skipped"][0]["reason"],
+        "read_only_in_google"
+    );
+    let sent = h.call("delete_entity", json!({ "id": EV }));
+    assert_eq!(reply(&sent)["err"]["code"], "not_writable");
+    let sent = h.call("set_labels", json!({ "id": EV, "labels": ["family"] }));
+    assert!(reply(&sent).get("ok").is_some(), "{sent:?}");
+
+    let text = set_remote(&mut h, Some("default"));
+    assert!(
+        !text.contains("event-type"),
+        "a plain one records none: {text}"
+    );
+    let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
+    assert_eq!(reply(&sent)["ok"]["changed"], json!([EV]));
+}
+
+// ------------------------------------------------------------------------
+#[test]
 fn a_sync_writes_its_events_and_finishes_the_accounts_sync() {
     let mut h = with_google("calendar-apply", FULL, &[calendar_file()]);
     let source = find_source(&h.app, connected(), "cal1").unwrap();
@@ -578,6 +631,118 @@ fn a_calendar_checked_while_the_vault_is_indexed_isnt_made_twice() {
     h.wait_indexed();
     assert!(find_source(&h.app, connected(), "cal1").is_some());
     assert_eq!(calendar_files(&h), 1);
+}
+
+// ------------------------------------------------------------------------
+/// Move the event `EV` to `cal2`, checked but never synced; its entity.
+fn move_to_work(h: &mut Harness) -> Id {
+    check_work(h, true);
+    let work = find_calendar(&h.app, connected(), "cal2").unwrap();
+    let change = json!({ "event": { "calendar": work } });
+    let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
+    assert_eq!(reply(&sent)["ok"]["changed"], json!([EV]), "{sent:?}");
+    work
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn an_event_moves_into_a_calendar_never_synced() {
+    let files = [calendar_file(), event_file()];
+    let mut h = with_google("calendar-move-unsynced", FULL, &files);
+    let work = move_to_work(&mut h);
+
+    let source = find_source(&h.app, connected(), "cal2").unwrap();
+    let (job, _) = build_job(&h.app, connected(), work, &source, true, None);
+    let cal = &job.calendars[0];
+    assert!(cal.sync_token.is_none(), "its first sync");
+    let [moved] = &cal.events[..] else {
+        panic!("the moved event");
+    };
+    assert!(moved.wants_push("cal2"));
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_move_pushed_since_is_undone_and_waits_to_be_moved_back() {
+    let files = [calendar_file(), event_file()];
+    let mut h = with_google("calendar-move-undone", FULL, &files);
+    move_to_work(&mut h);
+    let id = Id::parse(EV).unwrap();
+    let local = |h: &Harness| {
+        let entry = h.app.vault.index().entry(&id).unwrap();
+        local_event(&entry.doc, &entry.local, connected())
+    };
+    let moved = local(&h);
+    let pushed = Effect::SetRemote {
+        path: moved.path.clone(),
+        remote_event_id: "abc".into(),
+        etag: Some("\"2\"".into()),
+        snapshot: moved.snapshot.clone(),
+        remote_calendar_id: "cal2".into(),
+        remote: Box::new(GoogleEvent {
+            attendees: None,
+            ..google_event()
+        }),
+    };
+    sync_effect(&mut h, moved.path.clone(), id, pushed);
+    assert!(!local(&h).wants_push("cal2"), "moved in Google");
+
+    h.call("undo", json!({}));
+    let entry = h.app.vault.index().entry(&id).unwrap();
+    let event = entry.doc.roles().event.clone().unwrap();
+    assert_eq!(event.calendar, Some(Id::parse(CAL).unwrap()));
+    let back = local(&h);
+    assert_eq!(back.remote_calendar_id.as_deref(), Some("cal2"));
+    assert!(back.wants_push("cal1"), "its old calendar's sync moves it");
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_move_stays_between_the_accounts_two_way_calendars() {
+    let accounts = "  scopes:\n    - calendar: full\n  calendars:\n  - id: cal1\n    name: Personal\n  - id: cal2\n    name: Work\n  - id: cal3\n    name: Holidays\n    access: reader\n";
+    let calendar = |id: Id, title: &str, remote: &str| {
+        let text = format!(
+            "id: {id}\ntitle: {title}\nremote:\n  account: {CONNECTED}\n  remote:\n  - calendar-id: {remote}\ncalendar: {{}}\n"
+        );
+        (
+            if remote == "cal2" {
+                "Calendar/work.cal.yaml"
+            } else {
+                "Calendar/holidays.cal.yaml"
+            },
+            text,
+        )
+    };
+    let (work, holidays) = (Id::generate(), Id::generate());
+    let files = [
+        calendar_file(),
+        calendar(work, "Work", "cal2"),
+        calendar(holidays, "Holidays", "cal3"),
+        event_file(),
+    ];
+    let mut h = with_google("calendar-move", accounts, &files);
+    let mut move_to = |to: Value| {
+        let change = json!({ "event": { "calendar": to } });
+        let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
+        reply(&sent).clone()
+    };
+    let read_only = move_to(json!(holidays));
+    assert_eq!(read_only["ok"]["skipped"][0]["reason"], "move_refused");
+    let not_a_calendar = move_to(json!(EV));
+    assert_eq!(
+        not_a_calendar["ok"]["skipped"][0]["reason"],
+        "invalid_argument"
+    );
+    let none = move_to(Value::Null);
+    assert_eq!(none["err"]["code"], "invalid_argument");
+    let moved = move_to(json!(work));
+    assert_eq!(moved["ok"]["changed"], json!([EV]));
+
+    let entry = h.app.vault.index().entry(&Id::parse(EV).unwrap()).unwrap();
+    let event = entry.doc.roles().event.clone().unwrap();
+    assert_eq!(event.calendar, Some(work));
+    let local = local_event(&entry.doc, &entry.local, connected());
+    assert!(local.wants_push("cal2"), "its new calendar's sync moves it");
 }
 
 // ------------------------------------------------------------------------
@@ -1189,6 +1354,25 @@ fn what_a_recurring_event_keeps_compares_equal_to_googles_instance() {
     let local = local_event(&reloaded, Path::new("x.evt.md"), connected());
     assert_eq!(local.exceptions, [exception(&moved, &local.payload)]);
     assert_eq!(local.snapshot, calendar_sync::snapshot(&normalize(&remote)));
+}
+
+#[test]
+fn a_schedule_with_an_end_goes_to_google_and_back() {
+    for rule in [
+        "RRULE:FREQ=WEEKLY;BYDAY=TH,SA;UNTIL=20270301T225900Z",
+        "RRULE:FREQ=DAILY;COUNT=5",
+    ] {
+        let fields = EventFields {
+            title: "Yoga".into(),
+            start: Some(DateTime::from_iso8601("2026-11-21T08:00:00Z").unwrap()),
+            tz: Some("Europe/Berlin".into()),
+            schedule: vec![rule.into()],
+            ..EventFields::default()
+        };
+        let google = to_google(&fields);
+        assert_eq!(google.recurrence, Some(vec![rule.to_string()]));
+        assert_eq!(from_google(&google).schedule, vec![rule.to_string()]);
+    }
 }
 
 #[test]

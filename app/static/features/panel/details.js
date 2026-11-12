@@ -11,21 +11,23 @@ import { accEl } from '../../core/dom.js';
 import { DATE_FORMAT, amountText, fileSize, money, parseAmount, parseDate } from '../../core/format.js';
 import { TIME_FORMAT, isoInstant, localDay, relativeDay } from '../../core/format.js';
 import { entities, parseContact } from '../../model/entities.js';
-import { googleKept, googleType, isOverdue } from '../../model/calendar.js';
+import { googleKept, googleLocked, googleType, isOverdue } from '../../model/calendar.js';
 import { addDays, sameDay } from '../../core/format.js';
 import { t } from '../../core/text.js';
-import { PERIODS, scheduleLine, periodOf } from '../../model/schedule.js';
+import { PERIODS, eventRuleOf, eventScheduleLines, periodOf, scheduleLine } from '../../model/schedule.js';
 import {
     CATEGORIES, amountsOf, nextOccurrence, withAmount,
 } from '../../model/bank.js';
 import { editEntityLocal, setRecurringPaymentLocal } from '../../model/structure.js';
-import { isTripEvent } from '../../model/trip.js';
+import { LOCAL_ZONE, isTripEvent } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { fileIcon, iconEl } from '../../ui/icons.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
 import { openOriginal, selectById } from '../selection.js';
-import { tripFields } from './trip-fields.js';
-import { scheduleField, scheduleText } from './schedule-field.js';
+import { plainEventFields, statusField } from './event-fields.js';
+import { eventScheduleField, scheduleField, scheduleText } from './schedule-field.js';
+import { eventTypeField, tripFields } from './trip-fields.js';
+import { showMenu } from '../../ui/menu.js';
 
 // ----------------------------------------------------------------------------
 // A task's tag: "Due", or "Overdue" and filled -- the only emphasis the grid
@@ -85,16 +87,24 @@ export function renderCardDetails(row, doc, occurrence = null) {
 }
 
 // ----------------------------------------------------------------------------
-// An event's rows: when it is (`occurrence`'s times on a day card, and where
-// an exception moved it from), how it repeats and where, or a trip event's
-// fields in their place (`tripFields`, but for a recurring event); then the
-// guests, its calendar, and a status other than confirmed, but a trip's, whose
-// fields hold it.
+// An event's rows: its Type (`eventTypeField`), when it is (`occurrence`'s times on
+// a day card, and where an exception moved it from), how it repeats and where,
+// or a trip event's fields in their place (`tripFields`, but for a recurring
+// event); then the guests, its calendar, and a status other than confirmed,
+// but a trip's, whose fields hold it.
 function eventFields(doc, add, occurrence) {
     const { event } = doc;
     const trip = isTripEvent(doc) && !event.schedule?.length;
+    const editable = !trip && doc.writable && !googleLocked(doc);
+    const edit = change => editEntityLocal(doc.doc_id, { event: change });
+    if (!trip && doc.writable) add(t('props.type'), eventTypeField(event, edit));
     if (trip) {
         tripFields(doc, add);
+    } else if (editable) {
+        // a recurring event's occurrence on a day card, then the series
+        if (occurrence?.occurrence) add(t('props.when'), whenText(occurrence) + movedText(occurrence.exception, doc.all_day));
+        plainEventFields(doc, add, edit);
+        add(t('props.schedule'), scheduleRow(doc, edit));
     } else {
         const exception = occurrence?.exception;
         add(t('props.when'), whenText(occurrence ?? doc) + movedText(exception, doc.all_day));
@@ -104,9 +114,12 @@ function eventFields(doc, add, occurrence) {
     }
     if (event.guests?.length) add(t('props.guests'), ...event.guests.map(contactChip));
     const calendar = entities.get(event.calendar);
-    if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')), ...accessText(calendar));
+    const move = doc.writable && !googleLocked(doc) ? moveButton(doc, edit) : null;
+    if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')), ...accessText(doc, calendar), ...(move ? [move] : []));
+    else if (move) add(t('props.calendar'), move);
     const status = { tentative: t('event.tentative'), cancelled: t('event.cancelled') }[event.status];
-    if (status && !trip) add(t('props.status'), status);
+    if (editable && event.status !== 'cancelled') add(t('props.status'), statusField(event, edit));
+    else if (status && !trip) add(t('props.status'), status);
 }
 
 // ----------------------------------------------------------------------------
@@ -135,6 +148,46 @@ function heldWhileTyping(row, render) {
         }));
     }
     return true;
+}
+
+// ----------------------------------------------------------------------------
+// Move: a menu of the calendars the event may go to, as the host allows
+// (`calendar::move_refused`): the other two-way ones of its calendar's
+// Google account, or any two-way one for an event in none. None to go to,
+// no button.
+function moveButton(doc, edit) {
+    const current = entities.get(doc.event.calendar);
+    // Google moves a plain event only, not one Gmail made
+    if ((current && current.access !== 'two-way') || googleType(doc)) return null;
+    const account = current?.source?.remote?.account;
+    const targets = [...entities.values()].filter(other => other.kind === 'calendar' && other.access === 'two-way'
+        && other.doc_id !== current?.doc_id && (!current || other.source?.remote?.account === account));
+    if (!targets.length) return null;
+    const btn = accEl('button', 'tool label', t('event.move'));
+    btn.type = 'button';
+    btn.dataset.focusKey = 'calendar:move';
+    btn.addEventListener('click', () => showMenu(btn, targets.map(other => ({
+        label: other.title || t('untitled'), run: () => edit({ calendar: other.doc_id }),
+    })), { head: t('event.move_head') }));
+    return btn;
+}
+
+// ----------------------------------------------------------------------------
+// A plain event's schedule (`eventScheduleField`), its new lines with the
+// zone a timed event repeats in (`tz`, this PC's if it had none); one
+// the field doesn't write, in words.
+function scheduleRow(doc, edit) {
+    const { event } = doc;
+    const zone = doc.all_day ? null : event.tz ?? LOCAL_ZONE;
+    const rule = eventRuleOf(event.schedule, doc.date, zone);
+    if (!rule) return scheduleText(event.schedule);
+    return eventScheduleField(rule, {
+        from: doc.date, key: 'schedule', bind: editField,
+        onChange: next => {
+            const lines = eventScheduleLines(next, doc.date, zone, doc.all_day);
+            edit({ schedule: lines.length ? lines : null, ...(zone && !event.tz ? { tz: zone } : {}) });
+        },
+    });
 }
 
 // ----------------------------------------------------------------------------
@@ -311,8 +364,9 @@ function statementFields(doc, add) {
 
 // ----------------------------------------------------------------------------
 // A recurring payment's fields (vault.md#recurring): its account, then while
-// the host can write it its party, schedule (a period and its day, as
-// `scheduleLine` writes them; another schedule in words), first and last day,
+// the host can write it its party, schedule (a period and a week's days or
+// its day, as `scheduleLine` writes them, `scheduleField`; another schedule
+// in words), first and last day,
 // current amount (since when, and the earlier ones), how far a transaction may
 // vary and its category, each writing the whole role (`setRecurringPaymentLocal`);
 // else as text. Then its next occurrence after the statements.
@@ -354,16 +408,10 @@ function recurringPaymentFields(doc, add) {
 
         if (schedule) {
             const from = parseDate(recurring.from) ?? new Date();
-            const seg = accSeg(PERIODS, schedule.period, period => {
-                write({ schedule: [scheduleLine(period, schedule.day ?? from.getDate(), from)] });
-            });
-            keyedSeg(seg, PERIODS, 'schedule');
-            const dayInput = scheduleDayInput(schedule.day ?? from.getDate(), 'schedule:day');
-            editField(dayInput, value => {
-                const n = Number(value);
-                if (n >= 1 && n <= 31) write({ schedule: [scheduleLine(schedule.period, n, from)] });
-            });
-            add(t('props.schedule'), scheduleField(seg, schedule.period, dayInput));
+            add(t('props.schedule'), scheduleField(schedule, {
+                periods: PERIODS, from, key: 'schedule', bind: editField,
+                onChange: rule => write({ schedule: [scheduleLine(rule, from)] }),
+            }));
         } else {
             add(t('props.schedule'), scheduleText(recurring.schedule ?? []));
         }
@@ -400,15 +448,6 @@ function recurringPaymentFields(doc, add) {
     }
     const next = nextOccurrence(doc);
     if (next) add(t('props.next'), DATE_FORMAT.format(next), ' ', accEl('span', 'meta', t('recurring.after_statements')));
-}
-
-// The input of a schedule's day of the month, holding `value`; `key` finds
-// it again once its block is drawn anew.
-export function scheduleDayInput(value, key) {
-    const input = fieldInput('number', key, String(value), 'form-input schedule-field__day');
-    input.min = '1';
-    input.max = '31';
-    return input;
 }
 
 // `input` offers the categories of a recurring payment: the app's (`CATEGORIES`) and

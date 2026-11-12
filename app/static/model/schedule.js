@@ -1,12 +1,13 @@
 // Schedules (vault.md#event, vault.md#recurring): the RFC 5545 lines of an
 // event's or a recurring payment's `schedule` (`RRULE:`, `EXDATE:`, as Google
-// keeps them), expanded in local time from the first start, so 10:00 stays
-// 10:00 across DST. Supported: FREQ DAILY/WEEKLY/MONTHLY/YEARLY with
+// keeps them), expanded on the wall clock from the first start -- in the
+// event's zone, else this PC's -- so 10:00 stays 10:00 across DST there. Supported: FREQ DAILY/WEEKLY/MONTHLY/YEARLY with
 // INTERVAL, COUNT, UNTIL, BYDAY (weekdays; with an ordinal such as 2TU or
 // -1FR in a month), BYMONTHDAY, BYMONTH, and EXDATE. Any other rule shows the
 // first occurrence only. For the calendar (model/calendar.js) and the
 // recurring payments (model/bank.js).
 
+import { isoInstant, localDay, zonedInstant, zonedTime } from '../core/format.js';
 import { t } from '../core/text.js';
 
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
@@ -47,8 +48,11 @@ export function ruleSupported(rule) {
 
 // ----------------------------------------------------------------------------
 // The occurrence starts of the schedule `lines` from `first`, before
-// `before`.
-export function scheduleStarts(first, lines, before) {
+// `before`. They are counted on the wall clock of `zone` (an IANA zone, a
+// timed event's), else of this PC: each candidate a Date whose UTC fields
+// hold its wall date and time, made an instant only once it may be shown,
+// from `after` on (the days before it still count toward a COUNT).
+export function scheduleStarts(first, lines, before, { zone = null, after = null } = {}) {
     const { rule, excluded } = parseSchedule(lines);
     if (!ruleSupported(rule)) return first < before ? [first] : [];
 
@@ -58,14 +62,23 @@ export function scheduleStarts(first, lines, before) {
     const days = rule.BYDAY ? rule.BYDAY.split(',').map(byDay) : null;
     const monthDays = rule.BYMONTHDAY ? rule.BYMONTHDAY.split(',').map(Number) : null;
     const months = rule.BYMONTH ? rule.BYMONTH.split(',').map(m => Number(m) - 1) : null;
-    const at = (y, m, d) => new Date(y, m, d, first.getHours(), first.getMinutes(), first.getSeconds());
+    const wall = wallOf(first, zone);
+    const at = (y, m, d) => new Date(Date.UTC(y, m, d, wall.getUTCHours(), wall.getUTCMinutes(), wall.getUTCSeconds()));
+    // a day's margin: no zone is a day away from this PC's wall clock
+    const shown = after ? wallOf(after, zone).getTime() - 864e5 : -Infinity;
 
     const starts = [];
     let generated = 0;
     for (let period = 0; period < RRULE_MAX_PERIODS; period++) {
-        for (const start of periodStarts(rule.FREQ, period * interval)) {
-            if (start < first || (months && !months.includes(start.getMonth()))) continue;
-            if (start >= before || (until && start > until) || generated >= count) return starts;
+        for (const candidate of periodStarts(rule.FREQ, period * interval)) {
+            if (candidate < wall || (months && !months.includes(candidate.getUTCMonth()))) continue;
+            if (generated >= count) return starts;
+            if (candidate.getTime() < shown) {
+                generated++;
+                continue;
+            }
+            const start = instantOf(candidate, zone);
+            if (start >= before || (until && start > until)) return starts;
             generated++;
             if (!excluded.has(dayKey(start))) starts.push(start);
         }
@@ -74,21 +87,21 @@ export function scheduleStarts(first, lines, before) {
 
     // The candidate starts of the `n`th period after the first's, in order.
     function periodStarts(freq, n) {
-        const y = first.getFullYear(), m = first.getMonth(), d = first.getDate();
+        const y = wall.getUTCFullYear(), m = wall.getUTCMonth(), d = wall.getUTCDate();
         if (freq === 'DAILY') {
             const day = at(y, m, d + n);
-            return !days || days.some(b => b.weekday === day.getDay()) ? [day] : [];
+            return !days || days.some(b => b.weekday === day.getUTCDay()) ? [day] : [];
         }
         if (freq === 'WEEKLY') {
-            const monday = d - ((first.getDay() + 6) % 7) + 7 * n;
-            const weekdays = days ? days.map(b => b.weekday) : [first.getDay()];
+            const monday = d - ((wall.getUTCDay() + 6) % 7) + 7 * n;
+            const weekdays = days ? days.map(b => b.weekday) : [wall.getUTCDay()];
             return weekdays
                 .map(w => at(y, m, monday + (w + 6) % 7))
                 .sort((a, b) => a - b);
         }
         if (freq === 'MONTHLY') {
-            const month = new Date(y, m + n, 1);
-            return monthStarts(month.getFullYear(), month.getMonth());
+            const month = new Date(Date.UTC(y, m + n, 1));
+            return monthStarts(month.getUTCFullYear(), month.getUTCMonth());
         }
         // YEARLY
         const year = y + n;
@@ -108,13 +121,34 @@ export function scheduleStarts(first, lines, before) {
         } else if (days) {
             dates = days.flatMap(b => weekdaysInMonth(y, m, length, b));
         } else {
-            dates = [first.getDate()];
+            dates = [wall.getUTCDate()];
         }
         return dates
             .filter(date => date >= 1 && date <= length)
             .sort((a, b) => a - b)
             .map(date => at(y, m, date));
     }
+}
+
+// ----------------------------------------------------------------------------
+// The wall date and time of `date` in `zone`, else this PC's, in a Date's
+// UTC fields (`scheduleStarts`); `instantOf` turns one back.
+function wallOf(date, zone) {
+    if (!zone) {
+        return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(),
+            date.getHours(), date.getMinutes(), date.getSeconds()));
+    }
+    const { day, time } = zonedTime(date, zone);
+    return new Date(`${day}T${time}:${String(date.getSeconds()).padStart(2, '0')}Z`);
+}
+
+function instantOf(wall, zone) {
+    if (!zone) {
+        return new Date(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate(),
+            wall.getUTCHours(), wall.getUTCMinutes(), wall.getUTCSeconds());
+    }
+    const [day, time] = wall.toISOString().slice(0, 16).split('T');
+    return zonedInstant(day, time, zone);
 }
 
 // ----------------------------------------------------------------------------
@@ -158,18 +192,22 @@ export function dayKey(date) {
 
 // ----------------------------------------------------------------------------
 // A recurring payment's schedule (model/bank.js): a period picked
-// (`PERIODS`) and its day as one RRULE line (`scheduleLine`, `periodOf`), and
-// how many times a year a schedule repeats (`timesAYear`).
+// (`PERIODS`) and a week's days or its day as one RRULE line
+// (`scheduleLine`, `periodOf`), and how many times a year a schedule repeats
+// (`timesAYear`).
 export const PERIODS = [
   ['week', t('period.week')], ['month', t('period.month')], ['quarter', t('period.quarter')], ['half', t('period.half')],
   ['year', t('period.year')],
 ];
 
-// The RRULE line of `period` (one of PERIODS) on the day of the month
-// `day`; a week's on `from`'s weekday, a year's in `from`'s month.
-export function scheduleLine(period, day, from) {
+// The RRULE line of the schedule `{period, days, day}` (a period of
+// PERIODS): a week's on its `days` (RRULE's MO..SU, else `from`'s weekday),
+// the others on the day of the month `day` (else `from`'s), a year's in
+// `from`'s month.
+export function scheduleLine({ period, days = null, day = null }, from) {
+    day ??= from.getDate();
     switch (period) {
-        case 'week': return `RRULE:FREQ=WEEKLY;BYDAY=${WEEKDAYS[from.getDay()]}`;
+        case 'week': return `RRULE:FREQ=WEEKLY;BYDAY=${weekOrder(days ?? [weekdayOf(from)]).join(',')}`;
         case 'quarter': return `RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=${day}`;
         case 'half': return `RRULE:FREQ=MONTHLY;INTERVAL=6;BYMONTHDAY=${day}`;
         case 'year': return `RRULE:FREQ=YEARLY;BYMONTH=${from.getMonth() + 1};BYMONTHDAY=${day}`;
@@ -177,22 +215,35 @@ export function scheduleLine(period, day, from) {
     }
 }
 
-// The period and day of the schedule `lines`, as `scheduleLine` writes them;
-// null for any other schedule.
+// The schedule `{period, days, day}` of the lines `lines`, as `scheduleLine`
+// writes them; null for any other schedule.
 export function periodOf(lines) {
     const { rule } = parseSchedule(lines ?? []);
     if (!rule || lines.length !== 1) return null;
     const parts = Object.keys(rule).sort().join();
     const day = Number(rule.BYMONTHDAY);
     if (rule.FREQ === 'WEEKLY') {
-        return parts === 'BYDAY,FREQ' && WEEKDAYS.includes(rule.BYDAY) ? { period: 'week', day: null } : null;
+        const days = rule.BYDAY?.split(',') ?? [];
+        const plain = days.length && days.every(code => WEEKDAYS.includes(code));
+        return parts === 'BYDAY,FREQ' && plain ? { period: 'week', days, day: null } : null;
     }
     if (!(day >= 1 && day <= 31) || String(day) !== rule.BYMONTHDAY) return null;
-    if (rule.FREQ === 'YEARLY') return parts === 'BYMONTH,BYMONTHDAY,FREQ' ? { period: 'year', day } : null;
+    if (rule.FREQ === 'YEARLY') return parts === 'BYMONTH,BYMONTHDAY,FREQ' ? { period: 'year', days: null, day } : null;
     if (rule.FREQ !== 'MONTHLY') return null;
     const period = { 1: 'month', 3: 'quarter', 6: 'half' }[Number(rule.INTERVAL ?? 1)];
     const written = rule.INTERVAL ? 'BYMONTHDAY,FREQ,INTERVAL' : 'BYMONTHDAY,FREQ';
-    return period && parts === written ? { period, day } : null;
+    return period && parts === written ? { period, days: null, day } : null;
+}
+
+// The RRULE name of `date`'s weekday (`MO`).
+export function weekdayOf(date) {
+    return WEEKDAYS[date.getDay()];
+}
+
+// RRULE's weekday names `days` once each, Monday first.
+function weekOrder(days) {
+    const monday = code => (WEEKDAYS.indexOf(code) + 6) % 7;
+    return [...new Set(days)].sort((a, b) => monday(a) - monday(b));
 }
 
 // How many times a year the schedule `lines` repeats; null for a rule the
@@ -209,4 +260,57 @@ export function timesAYear(lines) {
         YEARLY: count(rule.BYMONTH) * count(rule.BYMONTHDAY || rule.BYDAY),
     }[rule.FREQ];
     return ({ DAILY: 365, WEEKLY: 52, MONTHLY: 12, YEARLY: 1 }[rule.FREQ] / interval) * each;
+}
+
+// ----------------------------------------------------------------------------
+// An event's schedule (vault.md#event), as its card and New offer it: once,
+// or every day, week (on its days), month or year on the start's date,
+// ending never, after the day `until` or after `count` times.
+export const EVENT_PERIODS = [
+  ['once', t('period.once')], ['day', t('period.day')], ['week', t('period.week')], ['month', t('period.month')],
+  ['year', t('period.year')],
+];
+const EVENT_FREQS = { day: 'DAILY', week: 'WEEKLY', month: 'MONTHLY', year: 'YEARLY' };
+
+// The schedule `{period, days, until, count, rest}` of an event's lines
+// `lines` starting at `start`, its days counted in `zone` (none: this PC's),
+// as `eventScheduleLines` writes them, `rest` the EXDATE lines kept; null
+// for one it doesn't (an interval, a month's weekday, an RDATE).
+export function eventRuleOf(lines, start, zone = null) {
+    const rest = (lines ?? []).filter(line => !line.toUpperCase().startsWith('RRULE:'));
+    const rules = (lines ?? []).filter(line => line.toUpperCase().startsWith('RRULE:'));
+    if (!rules.length && !rest.length) return { period: 'once', days: null, until: null, count: null, rest };
+    if (rules.length !== 1 || rest.some(line => !line.toUpperCase().startsWith('EXDATE'))) return null;
+    const { rule } = parseSchedule(rules);
+    const period = Object.keys(EVENT_FREQS).find(p => EVENT_FREQS[p] === rule.FREQ);
+    if (!period) return null;
+    const parts = ['FREQ', 'COUNT', 'UNTIL', 'WKST', ...(period === 'week' ? ['BYDAY'] : []), ...(period === 'month' ? ['BYMONTHDAY'] : [])];
+    if (!Object.keys(rule).every(part => parts.includes(part)) || (rule.COUNT && rule.UNTIL)) return null;
+    const wall = zonedTime(start, zone);
+    if (rule.BYMONTHDAY && Number(rule.BYMONTHDAY) !== Number(wall.day.slice(8))) return null;
+    const days = rule.BYDAY ? rule.BYDAY.split(',') : null;
+    if (days && !days.every(code => WEEKDAYS.includes(code))) return null;
+    const until = rule.UNTIL ? zonedTime(icalDate(rule.UNTIL, true), rule.UNTIL.length < 15 ? null : zone).day : null;
+    return { period, days, until, count: rule.COUNT ? Number(rule.COUNT) : null, rest };
+}
+
+// The lines of the event schedule `rule` for an event starting at `start`:
+// none once; else an RRULE, a week's on its days (else the start's
+// weekday), up to the day `until` (the end of it in `zone` and in UTC for a
+// timed event, the day for an all-day one, `allDay`) or `count` times; then
+// the EXDATE lines it kept.
+export function eventScheduleLines({ period, days = null, until = null, count = null, rest = [] }, start, zone, allDay) {
+    if (period === 'once') return [];
+    let line = `RRULE:FREQ=${EVENT_FREQS[period]}`;
+    if (period === 'week') line += `;BYDAY=${weekOrder(days ?? [weekdayIn(start, zone)]).join(',')}`;
+    if (count) line += `;COUNT=${count}`;
+    else if (until && allDay) line += `;UNTIL=${until.replace(/-/g, '')}`;
+    else if (until) line += `;UNTIL=${isoInstant(zonedInstant(until, '23:59', zone)).replace(/[-:]/g, '')}`;
+    return [line, ...rest];
+}
+
+// The RRULE name of `date`'s weekday in `zone`, else this PC's.
+function weekdayIn(date, zone) {
+    const day = zone ? zonedTime(date, zone).day : localDay(date);
+    return WEEKDAYS[new Date(`${day}T12:00:00Z`).getUTCDay()];
 }

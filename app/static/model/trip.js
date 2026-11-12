@@ -10,6 +10,9 @@ import { entities, projects } from './entities.js';
 // The parts of a trip (`event.type`), what a journey is by (`event.by`), and
 // planned or booked (`event.status`), as the vault keeps them and in words.
 export const TRIP_TYPES = [['journey', t('event_type.journey')], ['stay', t('event_type.stay')], ['activity', t('event_type.activity')]];
+// An event's Type on its card: a plain one (`''`, no `type`), or a part of
+// a trip.
+export const EVENT_TYPES = [['', t('kind.event')], ...TRIP_TYPES];
 export const MEANS = [['flight', t('means.flight')], ['train', t('means.train')], ['bus', t('means.bus')], ['ferry', t('means.ferry')], ['car', t('means.car')]];
 export const STATES = [
   ['tentative', t('trip.planned'), { title: t('trip.planned_title') }],

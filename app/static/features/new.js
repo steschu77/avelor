@@ -14,7 +14,7 @@
 // "+ Task from this" of an assistant reply runs the `task.with` action
 // (`openTaskWith`).
 
-import { $, accEl } from '../core/dom.js';
+import { $, accEl, titled } from '../core/dom.js';
 import { rpcCall, rpcOn } from '../core/rpc.js';
 import { isoInstant, localDay, localTime, parseDate, relativeDay, zonedInstant } from '../core/format.js';
 import { registerAction, shortcutText } from '../core/actions.js';
@@ -39,7 +39,7 @@ import { TASK_STATUSES } from './panel/details.js';
 import {
   addChip, linkChip, linkTarget, projectChips, labelChips,
 } from './panel/panel.js';
-import { zoneButton } from './panel/event-fields.js';
+import { EVENT_STATUSES, zoneButton } from './panel/event-fields.js';
 import { placeInput } from './panel/trip-fields.js';
 import { watchFormGrid } from './workspace/folders.js';
 
@@ -498,7 +498,8 @@ function renderNewEventRows(d, row) {
     d.els.type.querySelector('[aria-pressed="true"]')?.focus();
   }));
   d.els.type = type;
-  newSegRow(row(t('props.state')), STATES, () => d.eventStatus, value => { d.eventStatus = value; });
+  if (d.eventType) newSegRow(row(t('props.state')), STATES, () => d.eventStatus, value => { d.eventStatus = value; });
+  else newSegRow(row(t('props.status')), EVENT_STATUSES, () => d.eventStatus, value => { d.eventStatus = value; });
   row(t('props.calendar'), newCalendarButton(d));
   if (d.eventType === 'journey') {
     const means = MEANS.map(([value, label]) => [value, label, { icon: MEANS_ICONS[value] }]);
@@ -530,7 +531,7 @@ function newCalendarButton(d) {
   button.addEventListener('click', () => calendarMenu(button, d.calendar, id => {
     d.calendar = id;
     show();
-  }));
+  }, undefined, { writable: true }));
   show();
   return button;
 }
@@ -552,9 +553,25 @@ function newPlaceRow(d, field, key, zoneKey) {
 // moving with the start while it lies before it -- the same day, an hour
 // later. With `zones` (the draft's keys), each in its zone, a button naming
 // it that opens the zones' menu; `between()` adds the rows between them (a
-// journey's To).
+// journey's To). Without a start time it is all day: its end a day, the
+// end's time off; All day, a check, clears the time or gives it 9:00 to
+// 10:00 again.
 function newTimeRows(d, row, [startLabel, endLabel], zones = [null, null], between = null) {
   const note = accEl('span', 'meta', relativeDay(parseDate(d.start)));
+  const allDay = accEl('button', 'check');
+  allDay.type = 'button';
+  titled(allDay, t('event.all_day'));
+  const dayOnly = () => {
+    allDay.textContent = d.startTime ? '' : '\u2713';
+    allDay.setAttribute('aria-pressed', String(!d.startTime));
+    endTime.disabled = !d.startTime;
+  };
+  allDay.addEventListener('click', () => {
+    [d.startTime, d.endTime] = d.startTime ? ['', d.endTime] : ['09:00', '10:00'];
+    startTime.value = d.startTime;
+    endTime.value = d.endTime;
+    dayOnly();
+  });
   const keepEnd = () => {
     if (!d.start) return;
     if (!d.end || d.end < d.start) d.end = d.start;
@@ -571,11 +588,13 @@ function newTimeRows(d, row, [startLabel, endLabel], zones = [null, null], betwe
   const startTime = newTimeInput(d.startTime, value => {
     d.startTime = value;
     keepEnd();
+    dayOnly();
   });
   const endDay = newDateInput(d.end, value => { d.end = value; });
   const endTime = newTimeInput(d.endTime, value => { d.endTime = value; });
+  dayOnly();
   const zone = i => (zones[i] ? [newZoneSlot(d, zones[i])] : []);
-  row(startLabel, startDay, startTime, ...zone(0), note);
+  row(startLabel, startDay, startTime, ...zone(0), note, allDay, accEl('span', 'meta', t('event.all_day')));
   between?.();
   row(endLabel, endDay, endTime, ...zone(1));
 }

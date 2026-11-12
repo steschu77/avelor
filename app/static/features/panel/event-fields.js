@@ -2,15 +2,55 @@
 // (features/panel/trip-fields.js) and a plain one's alike: an end's day and
 // time in its zone, with the zones' menu (`timeFields`), the change a new
 // start, end or zone makes, either end as text in its zone (`whenIn`), and
-// Where (`whereField`). Also New's zone menu (features/new.js).
+// Where (`whereField`); a plain event's rows (`plainEventFields`) and its
+// status (`statusField`). Also New's zone menu (features/new.js).
 
-import { accEl } from '../../core/dom.js';
+import { accEl, titled } from '../../core/dom.js';
 import { DATE_FORMAT, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
 import { addDays, daysBetween, timeFormatIn, zonedInstant, zonedTime } from '../../core/format.js';
 import { t } from '../../core/text.js';
 import { LOCAL_ZONE, endZone, startZone, tripPlaces, zoneName } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { showMenu } from '../../ui/menu.js';
+import { accSeg, keyedSeg } from '../../ui/segmented.js';
+
+// ----------------------------------------------------------------------------
+// A plain event's rows -- not a trip's -- while it can be changed: All day
+// (`allDayCheck`), on a line of its own; when it starts and ends, each end's
+// day, time and zone (a start without a time makes it an all-day event, one
+// typed into it a timed one of an hour); and where. `edit(change)` writes
+// an `{event: {...}}` change.
+export function plainEventFields(doc, add, edit) {
+  add(t('event.all_day'), allDayCheck(doc, edit));
+  add(t('props.starts'), ...timeFields(doc, 'start', edit));
+  if (doc.end) add(t('props.ends'), ...timeFields(doc, 'end', edit));
+  add(t('props.where'), whereField(doc.event, edit));
+}
+
+// All day, a check: checked makes the event its first day only, unchecked a
+// timed one from 9:00 to 10:00 on that day, in its zone.
+function allDayCheck(doc, edit) {
+  const zone = zoneOf(doc.event, 'start');
+  const check = accEl('button', 'check', doc.all_day ? '\u2713' : '');
+  check.type = 'button';
+  check.setAttribute('aria-pressed', String(doc.all_day));
+  check.dataset.focusKey = 'start:all-day';
+  titled(check, t('event.all_day'));
+  check.addEventListener('click', () => {
+    const day = doc.all_day ? localDay(doc.date) : zonedTime(doc.date, zone).day;
+    edit(startChange(doc, day, doc.all_day ? '09:00' : '', zone));
+  });
+  return check;
+}
+
+// A plain event's status, Confirmed or Tentative; one the host keeps
+// (`cancelled`) isn't offered. Also New's (features/new.js).
+export const EVENT_STATUSES = [['confirmed', t('event.confirmed')], ['tentative', t('event.tentative')]];
+
+export function statusField(event, edit) {
+  const status = event.status === 'tentative' ? 'tentative' : 'confirmed';
+  return keyedSeg(accSeg(EVENT_STATUSES, status, next => edit({ status: next })), EVENT_STATUSES, 'status');
+}
 
 // ----------------------------------------------------------------------------
 // "07/08/2027, 6:05 PM \u00b7 Chicago time": an end in its own zone.
@@ -54,7 +94,8 @@ export function timeFields(doc, end, edit) {
   const time = fieldInput('time', `${end}:time`, at.time, 'form-input props__time');
   const write = () => {
     if (!day.value) return;
-    edit(end === 'start' ? startChange(doc, day.value, time.value, zone) : endChange(doc, day.value, time.value, zone));
+    const change = end === 'start' ? startChange(doc, day.value, time.value, zone) : endChange(doc, day.value, time.value, zone);
+    if (change) edit(change);
   };
   editField(day, write);
   editField(time, write);
@@ -82,9 +123,11 @@ function startChange(doc, day, time, zone) {
 }
 
 // The change a new end makes: day-only, the day after (an all-day end is
-// excluded); else the instant in `zone`, its own if it isn't the start's.
+// excluded); else the instant in `zone`, its own if it isn't the start's;
+// none for a timed event's end without a time, which a day can't end.
 function endChange(doc, day, time, zone) {
-  if (doc.all_day || !time) return { end: localDay(addDays(parseDate(day), 1)) };
+  if (doc.all_day) return { end: localDay(addDays(parseDate(day), 1)) };
+  if (!time) return null;
   const own = zone === startZone(doc.event) ? null : zone;
   return { end: isoInstant(zonedInstant(day, time, zone)), 'end-tz': own };
 }

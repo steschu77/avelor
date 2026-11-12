@@ -209,8 +209,9 @@ pub fn read_only(app: &App, calendar: &Id) -> bool {
 /// `NotWritable` if the entity `id` is an event Google keeps as it is, of a
 /// calendar read-only in Google (`read_only`) or of a kind it keeps
 /// (`kept_kind`), for a change of what it syncs: `change` given,
-/// one that sets its times, zones, place or status (a trip's fields and
-/// `work` are the vault's own); none, its title, its body, or its delete.
+/// one that sets its times, zones, place, status, schedule or calendar (a
+/// trip's fields and `work` are the vault's own); none, its title, its body,
+/// or its delete.
 pub fn kept_by_google(app: &App, id: &Id, change: Option<&Change>) -> Option<Error> {
     if change.is_some_and(|c| !syncs(c)) {
         return None;
@@ -248,6 +249,43 @@ fn syncs(change: &Change) -> bool {
         || event.end_tz.is_some()
         || event.location.is_some()
         || event.status.is_some()
+        || event.schedule.is_some()
+        || event.calendar.is_some()
+}
+
+// ----------------------------------------------------------------------------
+/// Whether the event `id` may move to the calendar `to` (`move_refused`):
+/// into a two-way calendar (`Access::TwoWay`), from none or from another
+/// two-way one of the same account; Google moves an event within one
+/// account only, and a plain one only (no `event-type`).
+pub fn move_refused(app: &App, id: &Id, to: &Id) -> bool {
+    let entry = |id: &Id| app.vault.index().entry(id);
+    let account = |doc: &Document| match doc.source() {
+        Some(Source::Remote(remote)) => remote.account,
+        _ => None,
+    };
+    let Some(target) = entry(to) else {
+        return false;
+    };
+    if access(app, &target.doc) != Some(Access::TwoWay) {
+        return true;
+    }
+    let plain = |doc: &Document| match doc.source() {
+        Some(Source::Remote(remote)) => remote.get(EVENT_TYPE).is_none(),
+        _ => true,
+    };
+    if entry(id).is_some_and(|e| !plain(&e.doc)) {
+        return true;
+    }
+    let from = entry(id).and_then(|e| e.doc.roles().event.as_ref()?.calendar);
+    match from.as_ref().and_then(entry) {
+        Some(from) if from.doc.id() == *to => false,
+        Some(from) => {
+            access(app, &from.doc) != Some(Access::TwoWay)
+                || account(&from.doc) != account(&target.doc)
+        }
+        None => false,
+    }
 }
 
 // ----------------------------------------------------------------------------

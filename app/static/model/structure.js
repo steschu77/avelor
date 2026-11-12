@@ -226,6 +226,7 @@ export function editEntityLocal(id, change) {
 const SKIP_REASONS = {
   not_writable: t('structure.not_writable'),
   read_only_in_google: t('structure.read_only_in_google'),
+  move_refused: t('structure.move_refused'),
   not_found: t('structure.not_found'),
   invalid_argument: t('structure.invalid_argument'),
 };

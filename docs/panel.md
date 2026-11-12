@@ -433,8 +433,9 @@ is its link, so the contract's card shows the recurring payment as an incoming l
   `howOften`), a year's (`perYear`) and the category.
 - **The fields**: its account (a chip); while the host can write it, its
   party typed in, the schedule as a period (Week, Month, Quarter, Half
-  year, Year) and the day of the month (a schedule another app wrote, in
-  words, `scheduleText`), From and Until, the current amount (since when,
+  year, Year) and a week's days, any of them, or the day of the month
+  (`scheduleField`, `features/panel/schedule-field.js`; a schedule another
+  app wrote, in words, `scheduleText`), From and Until, the current amount (since when,
   and the earlier ones), Varies by and the category (the app's categories
   and those the vault's recurring payments use offered, `CATEGORIES`); each written as
   a task's fields are (`#field-edits`), the whole role through
@@ -760,7 +761,9 @@ recurring event keeps its own. While the host can write it:
   place's zone.
 - **Where**: the address, `location`.
 
-Each writes by itself (`editEntityLocal(id, {event: {…}})`). A time goes
+Each writes by itself (`editEntityLocal(id, {event: {…}})`); the times
+and Where are every event's (`timeFields`, `whereField`,
+`features/panel/event-fields.js`). A time goes
 with its zone: a new start keeps how long the event takes (the end moves
 with it); another zone keeps an end's wall time there, and a journey's
 arrival keeps the zone it had; a place named that had another zone moves
@@ -768,8 +771,9 @@ its end to that zone (`placeZone`: the zone the latest trip event naming
 it had). A planned journey may be a day only: it has no zone, its arrival no
 time; a time typed into its start makes it a timed event of an hour,
 clearing that time a day-only one again. While the host can't write it,
-the fields show as text. The calendar stays a chip: an event doesn't move
-between calendars.
+the fields show as text; in a calendar read-only in Google, planned or
+booked, the times and Where do, and a place named keeps the event's
+times. Its calendar moves as a plain event's does (`#cards`).
 
 ## Saving structural edits <a id="saving-structure"></a>
 

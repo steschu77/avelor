@@ -333,6 +333,13 @@ pub fn edit_entities(app: &mut App, req: Req, ids: Vec<Id>, change: Change) {
     let (locked, ids): (Vec<Id>, Vec<Id>) = ids
         .into_iter()
         .partition(|id| calendar::kept_by_google(app, id, Some(&change)).is_some());
+    let to = match &change {
+        Change::Event(event) => event.calendar.flatten(),
+        _ => None,
+    };
+    let (refused, ids): (Vec<Id>, Vec<Id>) = ids
+        .into_iter()
+        .partition(|id| to.is_some_and(|to| calendar::move_refused(app, id, &to)));
     let first = ids.first().map(|id| named(app, id, "")).unwrap_or_default();
     let step = Text::new("undo.edit_entities")
         .arg("n", ids.len())
@@ -374,6 +381,14 @@ pub fn edit_entities(app: &mut App, req: Req, ids: Vec<Id>, change: Change) {
         answer.skipped.push(Skipped {
             id,
             reason: "read_only_in_google",
+            changed: None,
+        });
+    }
+    for id in refused {
+        log::info!("Edit of {id}: skipped (not a move between two-way calendars of one account)");
+        answer.skipped.push(Skipped {
+            id,
+            reason: "move_refused",
             changed: None,
         });
     }
@@ -1024,7 +1039,7 @@ Body
 
     // ------------------------------------------------------------------------
     #[test]
-    fn a_planned_flight_is_booked_and_a_recurring_event_keeps_its_times() {
+    fn a_planned_flight_is_booked_and_a_recurring_event_moves_with_new_times() {
         let (mut h, _) = notes("edit-event", 1);
         let mut new_event = |event: serde_json::Value, title: &str| {
             let args = json!({ "roles": { "event": event }, "title": title });
@@ -1060,13 +1075,20 @@ Body
 
         let args = json!({ "ids": [flight, recurring], "change": { "event": times } });
         let sent = h.call("edit_entities", args);
-        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(shape(&sent), ["entity", "entity", "reply"]);
         assert_eq!(sent[0]["data"]["event"]["end-tz"], "Europe/Berlin");
         assert_eq!(sent[0]["data"]["date"], "2027-07-08T23:05:00Z");
-        let skipped = json!([{ "id": recurring, "reason": "invalid_argument" }]);
         assert_eq!(
-            sent[1]["ok"],
-            json!({ "changed": [flight], "skipped": skipped })
+            sent[1]["data"]["event"]["schedule"],
+            json!(["RRULE:FREQ=WEEKLY"])
+        );
+        assert_eq!(
+            sent[1]["data"]["date"], "2027-07-08T23:05:00Z",
+            "the series moved"
+        );
+        assert_eq!(
+            sent[2]["ok"],
+            json!({ "changed": [flight, recurring], "skipped": [] })
         );
 
         let cancelled = json!({ "event": { "status": "cancelled" } });

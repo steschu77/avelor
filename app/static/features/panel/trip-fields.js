@@ -5,6 +5,8 @@
 // and nights; an activity's place and times -- and where it is. While the
 // host can write it, each field writes by itself through `edit_entities`
 // (`editEntityLocal`, an `{event: {...}}` change); a time goes with its zone.
+// In a calendar Google keeps as it is (`googleLocked`), what it syncs -- planned
+// or booked, the times, where -- is shown as text, the rest still edited.
 // The place inputs offer the places of the vault's trip events, and a
 // place named turns to the zone it had last (`placeZone`). Also New's
 // place inputs (features/new.js). The times and Where are every event's
@@ -13,11 +15,12 @@
 import { accEl } from '../../core/dom.js';
 import { addDays, daysBetween, localDay, parseDate } from '../../core/format.js';
 import { t } from '../../core/text.js';
+import { googleLocked } from '../../model/calendar.js';
 import { editEntityLocal } from '../../model/structure.js';
-import { STATES, TRIP_TYPES, MEANS, isPlanned, placeZone, tripPlaces } from '../../model/trip.js';
+import { EVENT_TYPES, STATES, TRIP_TYPES, MEANS, isPlanned, placeZone, tripPlaces } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { MEANS_ICONS } from '../../ui/icons.js';
-import { accSeg } from '../../ui/segmented.js';
+import { accSeg, keyedSeg } from '../../ui/segmented.js';
 import { timeFields, whenIn, whereField, zoneChange, zoneOf } from './event-fields.js';
 
 
@@ -28,28 +31,38 @@ import { timeFields, whenIn, whereField, zoneChange, zoneOf } from './event-fiel
 export function tripFields(doc, add) {
   if (!doc.writable) return tripText(doc, add);
   const { doc_id: id, event } = doc;
+  const locked = googleLocked(doc);
   const edit = change => editEntityLocal(id, { event: change });
-  add(t('props.type'), keyed(accSeg(TRIP_TYPES, event.type ?? null, type => edit({ type })), TRIP_TYPES, 'type'));
+  // a place named moves its end into the place's zone, but where Google
+  // keeps the times
+  const move = (end, place) => (locked ? {} : placeMove(doc, end, place));
+  const times = end => (locked ? [whenIn(doc, end)] : timeFields(doc, end, edit));
+  add(t('props.type'), eventTypeField(event, edit));
   const state = isPlanned(event) ? 'tentative' : 'confirmed';
-  add(t('props.state'), keyed(accSeg(STATES, state, status => edit({ status })), STATES, 'state'));
+  if (locked) add(t('props.state'), isPlanned(event) ? t('trip.planned') : t('trip.booked'));
+  else add(t('props.state'), keyedSeg(accSeg(STATES, state, status => edit({ status })), STATES, 'state'));
   if (event.type === 'journey') {
     const means = MEANS.map(([value, label]) => [value, label, { icon: MEANS_ICONS[value] }]);
-    add(t('props.by'), keyed(accSeg(means, event.by ?? null, by => edit({ by })), MEANS, 'by'));
-    add(t('props.from'), placeField('from', event.from, from => edit({ from, ...placeMove(doc, 'start', from) })));
-    add(t('props.leaves'), ...timeFields(doc, 'start', edit));
-    add(t('props.to'), placeField('to', event.to, to => edit({ to, ...placeMove(doc, 'end', to) })));
-    add(t('props.arrives'), ...timeFields(doc, 'end', edit));
+    add(t('props.by'), keyedSeg(accSeg(means, event.by ?? null, by => edit({ by })), MEANS, 'by'));
+    add(t('props.from'), placeField('from', event.from, from => edit({ from, ...move('start', from) })));
+    add(t('props.leaves'), ...times('start'));
+    add(t('props.to'), placeField('to', event.to, to => edit({ to, ...move('end', to) })));
+    if (!locked || doc.end) add(t('props.arrives'), ...times('end'));
     const booking = fieldInput('text', 'booking', event.booking ?? '', 'form-input mono props__booking');
     booking.placeholder = t('trip.booking_ref');
     editField(booking, value => edit({ booking: value.trim() || null }));
     add(t('props.booking'), booking);
   } else if (event.type === 'stay') {
     add(t('props.place'), placeField('place', event.place, place => edit({ place })));
-    add(t('props.nights'), ...nightFields(doc, edit));
+    add(t('props.nights'), ...(locked ? [whenIn(doc, 'start')] : nightFields(doc, edit)));
   } else {
-    if (event.type) add(t('props.place'), placeField('place', event.place, place => edit({ place, ...placeMove(doc, 'start', place) })));
-    add(t('props.starts'), ...timeFields(doc, 'start', edit));
-    if (doc.end && !doc.all_day) add(t('props.ends'), ...timeFields(doc, 'end', edit));
+    if (event.type) add(t('props.place'), placeField('place', event.place, place => edit({ place, ...move('start', place) })));
+    add(t('props.starts'), ...times('start'));
+    if (doc.end && !doc.all_day) add(t('props.ends'), ...times('end'));
+  }
+  if (locked) {
+    if (event.location) add(t('props.where'), event.location);
+    return;
   }
   add(t('props.where'), whereField(event, edit));
 }
@@ -76,6 +89,15 @@ function tripText(doc, add) {
 
 // ----------------------------------------------------------------------------
 
+// An event's Type (`EVENT_TYPES`): Event, a plain one without `type`, or a
+// part of a trip; a trip's type turns a plain event's card to its trip
+// fields. The vault's own field, so also in a calendar Google keeps as it
+// is.
+export function eventTypeField(event, edit) {
+  const seg = accSeg(EVENT_TYPES, event.type ?? '', type => edit({ type: type || null }));
+  return keyedSeg(seg, EVENT_TYPES, 'type');
+}
+
 // A place newly named for an end that had another zone: the end moves to
 // the zone the place had last, at the same wall time; nothing if it has none.
 function placeMove(doc, end, place) {
@@ -101,12 +123,6 @@ function nightFields(doc, edit) {
 }
 
 // ----------------------------------------------------------------------------
-// The segmented control `seg` of `options`, its buttons found again once
-// the block is drawn anew.
-function keyed(seg, options, key) {
-  [...seg.children].forEach((option, i) => { option.dataset.focusKey = `${key}:${options[i][0]}`; });
-  return seg;
-}
 
 // A place's input of the card (`key` its field), writing what is typed
 // (`write(place)`, null for none).

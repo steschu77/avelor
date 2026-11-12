@@ -72,6 +72,16 @@ are written to a folder named after the calendar beside it, e.g.
   kept on the recurring event (`event.exceptions`) and shown that way; its card
   says where it was moved from. Its own description and guests aren't
   kept, and single occurrences changed in the vault aren't written back.
+  Its schedule and its times changed in the vault are (Google's
+  `recurrence`), and new times move every occurrence; the kept
+  exceptions stay until Google says otherwise.
+- An event moves to another calendar from its card (Move): between the
+  two-way calendars of one Google account, as Google moves one only within
+  an account and a plain one only (not one Gmail made), or from no
+  calendar into a two-way one; never out of or
+  into a read-only one, nor into none. Its new calendar's sync, the first
+  one too, moves it in Google (`#design`); the move undone
+  (`saving.md#undo`), its old calendar's moves it back.
   Occurrences of a recurring event that isn't in the vault count as skipped.
 - The body is written to Google as HTML and read back as markdown. Bold,
   italic, struck-out text, links and lists (also numbered and nested)

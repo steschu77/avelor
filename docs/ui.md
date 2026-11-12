@@ -306,8 +306,10 @@ day — a recurring event on its first start, a task on its own date — but cal
 `features/lenses/calendar.js`: a month grid with previous, next and
 today; recurring events
 expanded on the page from their RRULE and EXDATE lines, with Google's
-exceptions (`occurrencesOf`, matched by the occurrence's day); cancelled
-events hidden.
+exceptions (`occurrencesOf`, matched by the occurrence's day), a timed
+one on the wall clock of its zone (`tz`, `scheduleStarts`), so its
+10:00 in Berlin stays 10:00 there across a change of daylight saving time
+in either place; cancelled events hidden.
 
 - Open tasks with a due date show on their due day, tagged "Due"; once that
   day has passed and a task is still open, its tag reads "Overdue",
@@ -586,7 +588,8 @@ Then by its kind (`panel.md#trip-fields`):
   Its booking. Without a time it is a day only (a planned journey).
 - **Stay**: its place and nights, from the first night to the morning
   after the last.
-- **Activity**: its place, and its start and end in the place's zone.
+- **Activity**: its place, and its start and end in the place's zone; all
+  day without a start time, as an Event.
 
 Then where it is (`location`) for each.
 

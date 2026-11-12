@@ -37,3 +37,23 @@ export function keyedSeg(seg, options, key) {
   [...seg.children].forEach((option, i) => { option.dataset.focusKey = `${key}:${options[i][0]}`; });
   return seg;
 }
+
+// ----------------------------------------------------------------------------
+// A segmented control of `options` ([value, label]) any of which are
+// pressed, `current` their values: a click presses or releases one and
+// calls `onPick(values)`, but leaves one pressed at least.
+export function accSegMany(options, current, onPick) {
+  const seg = accEl('span', 'seg');
+  for (const [value, label] of options) {
+    const option = accEl('button', '', label);
+    const on = current.includes(value);
+    option.type = 'button';
+    option.setAttribute('aria-pressed', String(on));
+    option.addEventListener('click', () => {
+      const next = on ? current.filter(v => v !== value) : [...current, value];
+      if (next.length) onPick(next);
+    });
+    seg.append(option);
+  }
+  return seg;
+}

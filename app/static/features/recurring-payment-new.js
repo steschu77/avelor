@@ -2,7 +2,7 @@
 // menu opens (features/panel/transaction.js), filled from the transaction, in the
 // expanded vault area while its op is "recurring-payment" (panel.md#a-new-recurring):
 // the title (the party's name), the account and party, the schedule (a
-// period and its day, `scheduleLine`), from and until, the amount, how far it
+// period and a week's days or its day, `scheduleLine`), from and until, the amount, how far it
 // may vary, the category, what it is linked to (the contract or policy it
 // comes from), its projects and labels, and the transactions it starts with --
 // the account's transactions of the party not in a recurring payment, ticked, and those of
@@ -21,14 +21,13 @@ import { transactionDay, partyName, similarNames, statementsOf } from '../model/
 import { setTransactionRecurringPaymentLocal } from '../model/structure.js';
 import { KIND_ICONS, iconEl } from '../ui/icons.js';
 import { closeVaultArea, openVaultOp, registerVaultPage, replaceVaultPage, setPageFocus } from '../ui/page.js';
-import { accSeg } from '../ui/segmented.js';
 import { linkMenuChip } from './linked.js';
 import { draftChips, newDateInput, newTextInput } from './new.js';
-import { scheduleDayInput, offerCategories } from './panel/details.js';
+import { offerCategories } from './panel/details.js';
+import { scheduleField } from './panel/schedule-field.js';
 import { linkChip, linkTarget } from './panel/panel.js';
 import { selectDocument } from './selection.js';
 import { watchFormGrid } from './workspace/folders.js';
-import { scheduleField } from './panel/schedule-field.js';
 
 let draft = null; // the form shown
 
@@ -40,8 +39,7 @@ export function openNewRecurringPayment(statement, transaction) {
   const d = {
     account, party,
     title: party,
-    period: 'month',
-    day: day.getDate(),
+    rule: { period: 'month', days: null, day: day.getDate() },
     from: localDay(day),
     fromSet: false,
     until: '',
@@ -115,17 +113,16 @@ function renderForm(d) {
   row(t('props.party'), newTextInput(d, 'party', t('rp_new.party_placeholder'), { onInput }), accEl('span', 'note', t('rp_new.party_note')));
 
   const schedule = row(t('props.schedule'));
-  const dayInput = scheduleDayInput(d.day, 'recurring-payment:day');
-  dayInput.addEventListener('input', () => {
-    d.day = Number(dayInput.value);
-    renderFoot(d);
-  });
   const renderEvery = () => {
-    const seg = accSeg(PERIODS, d.period, period => {
-      d.period = period;
-      renderEvery();
-    });
-    schedule.replaceChildren(scheduleField(seg, d.period, dayInput));
+    schedule.replaceChildren(scheduleField(d.rule, {
+      periods: PERIODS, from: parseDate(d.from) ?? new Date(), key: 'recurring-payment:schedule',
+      bind: (input, set) => input.addEventListener('change', () => set(input.value)),
+      onChange: rule => {
+        d.rule = rule;
+        renderEvery();
+        renderFoot(d);
+      },
+    }));
   };
   renderEvery();
 
@@ -225,7 +222,7 @@ function renderTicks(d) {
 function blocked(d) {
   if (!d.title.trim()) return t('new.enter_title');
   if (!d.from) return t('rp_new.choose_first_day');
-  if (d.period !== 'week' && !(d.day >= 1 && d.day <= 31)) return t('rp_new.choose_month_day');
+  if (d.rule.period !== 'week' && !(d.rule.day >= 1 && d.rule.day <= 31)) return t('rp_new.choose_month_day');
   if (parseAmount(d.amount) == null) return t('rp_new.enter_amount');
   if (d.vary.trim() && parseAmount(d.vary) == null) return t('rp_new.enter_vary');
   return '';
@@ -258,7 +255,7 @@ function createRecurringPayment(d) {
   const recurring = {
     account: d.account,
     party: d.party.trim() || undefined,
-    schedule: [scheduleLine(d.period, d.day, from)],
+    schedule: [scheduleLine(d.rule, from)],
     from: d.from,
     until: d.until || undefined,
     amounts: [{ from: d.from, amount }],
