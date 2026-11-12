@@ -28,7 +28,7 @@ import { projects, projectsInOrder, projectsOf } from '../../model/entities.js';
 import { knownThreads, threads } from '../../model/entities.js';
 import { calendarDayOf } from '../../model/calendar.js';
 import { joinProjectLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
-import { getDocIcon, iconEl } from '../../ui/icons.js';
+import { docIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
 import { excerptNodes, markedNodes } from '../../ui/marks.js';
 import { closeVaultArea } from '../../ui/page.js';
@@ -329,7 +329,7 @@ function docRow(group, thread_id, doc, depth, word_filter) {
   const calendar = entities.get(doc.event?.calendar);
   if (filled?.doc !== doc || filled.word_filter !== word_filter || filled.calendar !== calendar) {
     const [, icon, title] = el.firstChild.children;
-    icon.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.type));
+    icon.firstChild.setAttribute('href', docIcon(doc));
     title.replaceChildren(...markedNodes(doc.title, word_filter?.terms), ...readOnlyTag(doc), title.lastChild);
     const hit = word_filter?.hits.get(doc.doc_id);
     let hitEl = title.nextElementSibling;
@@ -472,7 +472,7 @@ rowsEl.addEventListener('dragstart', ev => {
   if (!row) return;
   const { doc } = rowFills.get(row);
   ev.dataTransfer.setData('text/plain', row.dataset.id);
-  startDragPreview(ev, getDocIcon(doc.kind, doc.type), doc.title);
+  startDragPreview(ev, docIcon(doc), doc.title);
 });
 
 rowsEl.addEventListener('dragend', endDragPreview);

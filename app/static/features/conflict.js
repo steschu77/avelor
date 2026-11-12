@@ -17,8 +17,7 @@ import { store } from '../model/state.js';
 import { entities, projects, threads } from '../model/entities.js';
 import { overwriteDocContent } from '../model/documents.js';
 import { reloadEntity } from '../model/structure.js';
-import { KIND_ICONS, kindName } from '../ui/icons.js';
-import { getDocIcon } from '../ui/icons.js';
+import { docIcon, kindName } from '../ui/icons.js';
 
 const conflictDialogEl = $('conflict-dialog');
 const conflictTheirsEl = $('conflict-theirs');
@@ -51,9 +50,7 @@ function renderConflict(conflicts) {
   const meta = entity ?? projects.get(id) ?? threads.get(id);
   const kind = entity?.kind ?? (projects.has(id) ? 'project' : 'thread');
 
-  $('conflict-icon').firstChild.setAttribute('href', entity
-    ? getDocIcon(entity.kind, entity.type)
-    : KIND_ICONS[kind]?.icon ?? '');
+  $('conflict-icon').firstChild.setAttribute('href', docIcon(entity ?? { kind }));
   $('conflict-kind').textContent = kindName(kind);
   const title = meta?.title || meta?.name || t('untitled');
   $('conflict-title').textContent = changed

@@ -7,7 +7,7 @@
 // and this one, across which a drag picks a range of weeks that the feed
 // keeps to (while the app runs). A row selects its entity and drags like a
 // row of the Documents lens; a card dragged out of its thread onto the
-// lens leaves it.
+// lens leaves it. A planned event (tentative) is dashed.
 
 import { $, accEl, placeChildren } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
@@ -16,7 +16,8 @@ import { DAY_MONTH_YEAR, LONG_DAY, MONTH_YEAR, SHORT_MONTH_YEAR, TIME_FORMAT, WE
 import { store } from '../../model/state.js';
 import { entities, matchesFilter, parseContact, projectNames } from '../../model/entities.js';
 import { leaveThreadLocal } from '../../model/structure.js';
-import { getDocIcon, iconEl } from '../../ui/icons.js';
+import { isPlanned, tripSummary } from '../../model/trip.js';
+import { docIcon, iconEl } from '../../ui/icons.js';
 import { excerptNodes, markedNodes } from '../../ui/marks.js';
 import { endDragPreview, startDragPreview, takeMemberDrops } from '../../ui/dropzone.js';
 import { TASK_STATUSES } from '../panel/details.js';
@@ -47,7 +48,8 @@ function isEntry(doc) {
 }
 
 // What a row tells of its entity after the title, by its kind: an event's
-// place, time and rule; an email's sender and time; a task's status and due
+// place, time and rule, a trip's part its own (`tripSummary`: a journey's
+// times each in its place's time); an email's sender and time; a task's status and due
 // day; a conversation's model and messages, a list's items, a contact's phone or
 // email, a bank account's bank and number, statements' transactions; a
 // document's author or sender and its type; then its projects while no
@@ -57,7 +59,9 @@ const TASK_STATUS_NAMES = Object.fromEntries(TASK_STATUSES);
 function summaryOf(doc) {
   const time = doc.all_day ? '' : TIME_FORMAT.format(doc.date);
   const parts = [];
-  if (doc.event) {
+  if (doc.event?.type) {
+    parts.push(tripSummary(doc));
+  } else if (doc.event) {
     parts.push(doc.event.location);
     if (time) parts.push(doc.end ? `${time}\u2013${TIME_FORMAT.format(doc.end)}` : time);
     if (doc.event.schedule?.length) parts.push(scheduleText(doc.event.schedule));
@@ -175,12 +179,13 @@ function rowEl(doc, fill, word_filter) {
     const [icon, text, labels] = el.children;
     const terms = word_filter?.terms;
     const hit = word_filter?.hits.get(doc.doc_id);
-    icon.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.type));
+    icon.firstChild.setAttribute('href', docIcon(doc));
     text.firstChild.replaceChildren(...markedNodes(doc.title, terms), ...readOnlyTag(doc));
     text.lastChild.classList.toggle('tl__hit', Boolean(hit?.excerpt));
     if (hit?.excerpt) text.lastChild.replaceChildren(...excerptNodes(hit, terms));
     else text.lastChild.textContent = summaryOf(doc);
     labels.replaceChildren(...markedNodes((doc.labels ?? []).join(' \u00b7 '), terms));
+    el.classList.toggle('tl__row--planned', isPlanned(doc.event));
     rowFills.set(el, { doc, fill, word_filter, calendar });
   }
   return el;
@@ -274,7 +279,7 @@ feedEl.addEventListener('dragstart', ev => {
   if (!row) return;
   const doc = rowFills.get(row).doc;
   ev.dataTransfer.setData('text/plain', row.dataset.id);
-  startDragPreview(ev, getDocIcon(doc.kind, doc.type), doc.title);
+  startDragPreview(ev, docIcon(doc), doc.title);
 });
 
 feedEl.addEventListener('dragend', endDragPreview);

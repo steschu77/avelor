@@ -1,8 +1,12 @@
 import { equal, test } from './harness.js';
 import {
-  addDays, amountText, dayStart, daysBetween, fileSize, isoInstant, localDay, monthEndOf, monthStartOf, pageDate, parseAmount,
-  parseDate, relativeDay, sameDay, signedAmount, weekStartOf,
+  DATE_FORMAT, addDays, amountText, compareText, dayStart, daysBetween, durationText, fileSize, isoInstant, localDay,
+  monthEndOf, monthStartOf, pageDate, parseAmount, parseDate, relativeDay, sameDay, signedAmount, weekStartOf,
+  zonedInstant, zonedTime,
 } from '../../static/core/format.js';
+import { locale } from '../../static/core/text.js';
+
+const instant = (day, time, zone) => isoInstant(zonedInstant(day, time, zone));
 
 test("a day is the local day's start, not UTC's", () => {
   const day = parseDate('2027-03-28');
@@ -42,6 +46,46 @@ test('an instant as the host writes it, to the second', () => {
   equal(isoInstant(new Date(Date.UTC(2027, 6, 8, 23, 5, 0, 123))), '2027-07-08T23:05:00Z');
 });
 
+test("an instant's day and time in a zone", () => {
+  const at = new Date(Date.UTC(2027, 6, 8, 23, 5));
+  equal(zonedTime(at, 'America/Chicago'), { day: '2027-07-08', time: '18:05' });
+  equal(zonedTime(at, 'Europe/Berlin'), { day: '2027-07-09', time: '01:05' });
+  equal(zonedTime(new Date(Date.UTC(2027, 6, 8, 22)), 'Europe/Berlin'), { day: '2027-07-09', time: '00:00' });
+  equal(zonedTime(new Date(2027, 6, 8, 9, 5), null), { day: '2027-07-08', time: '09:05' });
+});
+
+test('the instant of a wall time in a zone, midnight without a time', () => {
+  equal(instant('2027-07-09', '09:20', 'Europe/Berlin'), '2027-07-09T07:20:00Z');
+  equal(instant('2027-07-09', '', 'Europe/Berlin'), '2027-07-08T22:00:00Z');
+  equal(zonedInstant('2027-07-09', '09:20', null), new Date(2027, 6, 9, 9, 20));
+});
+
+test('wall times around the hour left out in spring', () => {
+  equal(instant('2027-03-28', '01:59', 'Europe/Berlin'), '2027-03-28T00:59:00Z');
+  equal(instant('2027-03-28', '03:00', 'Europe/Berlin'), '2027-03-28T01:00:00Z');
+  equal(instant('2027-03-14', '01:30', 'America/Chicago'), '2027-03-14T07:30:00Z');
+  equal(instant('2027-03-14', '03:00', 'America/Chicago'), '2027-03-14T08:00:00Z');
+});
+
+test('a wall time of the hour left out is an hour later', () => {
+  equal(instant('2027-03-28', '02:30', 'Europe/Berlin'), '2027-03-28T01:30:00Z');
+});
+
+test('each hour of the year is the wall time it was told as', () => {
+  for (const zone of ['Europe/Berlin', 'America/Chicago', 'Pacific/Auckland', 'Asia/Kolkata']) {
+    for (let hour = 0; hour < 365 * 24; hour++) {
+      const told = zonedTime(new Date(Date.UTC(2027, 0, 1, hour)), zone);
+      equal(zonedTime(zonedInstant(told.day, told.time, zone), zone), told);
+    }
+  }
+});
+
+test('a duration in hours and minutes', () => {
+  const minutes = n => durationText(n * 6e4);
+  equal([minutes(495), minutes(45), minutes(120), minutes(0), minutes(-45)],
+    ['time.hours time.minutes', 'time.minutes', 'time.hours', 'time.minutes', 'time.minutes']);
+});
+
 test('a day as seen from today', () => {
   const today = new Date();
   equal([0, 1, -1, 3, -3].map(n => relativeDay(addDays(today, n))), ['today', 'tomorrow', 'yesterday', 'in 3 days', '3 days ago']);
@@ -64,4 +108,9 @@ test('an amount without one, and with its sign', () => {
 
 test("a file's size in its unit", () => {
   equal([812, 1023, 1024, 1024 * 1024 - 1, 1024 * 1024].map(fileSize), ['size.bytes', 'size.bytes', 'size.kb', 'size.kb', 'size.mb']);
+});
+
+test("the dates and the order are the page's language's, not the system's", () => {
+  equal(DATE_FORMAT.resolvedOptions().locale, new Intl.DateTimeFormat(locale).resolvedOptions().locale);
+  equal(['b', 'a', 'B'].sort(compareText), ['a', 'b', 'B']);
 });

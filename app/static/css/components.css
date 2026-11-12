@@ -171,6 +171,12 @@
   box-shadow: inset 0 0 0 1px var(--c-line);
 }
 
+/* options shown by their icons (a trip's means), their names the tooltips */
+.seg--icons>* {
+  display: inline-flex;
+  padding: 4px 8px;
+}
+
 /* The words of the vault panel's filter (ui/marks.js): marked in the
    lenses' rows, and highlighted over a card's text, which stays the
    file's (features/panel/find.js); the words typed in Go to. */

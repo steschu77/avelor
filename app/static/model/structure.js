@@ -214,8 +214,9 @@ export function setProjectLocal(id, project) {
 }
 
 // Write `change` to the entity `id` (`edit_entities`, api.md#structure): a
-// document's `{type}`, or a task's `{task: {status | due | assignee}}`,
-// null removing it. The host pushes the entity back, which the cards, the
+// document's `{type}`, a task's `{task: {status | due | assignee}}`, or an
+// event's fields `{event: {...}}` (a trip's, panel.md#trip-fields), null
+// removing it. The host pushes the entity back, which the cards, the
 // lenses and the dashboard follow; the selection stays as it is.
 export function editEntityLocal(id, change) {
   structureCall('edit_entities', { ids: [id], change });

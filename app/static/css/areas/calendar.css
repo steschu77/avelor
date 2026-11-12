@@ -109,6 +109,12 @@
   background: var(--c-hover);
 }
 
+/* a planned event (tentative): hatched, it holds the days */
+.cal__event--planned {
+  color: var(--c-ink-mute);
+  background: repeating-linear-gradient(135deg, transparent 0 3px, var(--c-hover) 3px 6px);
+}
+
 /* the selected entity's chips, every occurrence of a recurring event, as on the
    dashboard's Week card */
 .cal__event[aria-selected="true"] {

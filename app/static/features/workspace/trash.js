@@ -14,7 +14,7 @@ import { DATE_FORMAT, parseDate } from '../../core/format.js';
 import { t, textOf } from '../../core/text.js';
 import { showError, store } from '../../model/state.js';
 import { entities } from '../../model/entities.js';
-import { getDocIcon, iconEl } from '../../ui/icons.js';
+import { docIcon, iconEl } from '../../ui/icons.js';
 import { armedButton } from '../../ui/confirm.js';
 import { replaceVaultPage } from '../../ui/page.js';
 import { selectById } from '../selection.js';
@@ -65,7 +65,7 @@ function renderTrash() {
 function trashRow(item) {
   const row = accEl('div', 'list-row trash__row');
   const name = item.title || item.path.split(/[\\/]/).pop();
-  const icon = iconEl(item.kind ? getDocIcon(item.kind, item.type) : '', 'table__icon');
+  const icon = iconEl(item.kind ? docIcon(item) : '', 'table__icon');
   const title = accEl('span', 'row-title', name);
   title.title = name;
   const folder = accEl('span', 'mono truncate-start', item.path);

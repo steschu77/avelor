@@ -43,10 +43,69 @@ export function everyMidnight(fn) {
 }
 
 // ----------------------------------------------------------------------------
+const pad = n => String(n).padStart(2, '0');
+
 // `date`'s local day as `YYYY-MM-DD`, the value of an <input type="date">.
 export function localDay(date) {
-  const pad = n => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// `date`'s local time of day as `hh:mm`, the value of an <input type="time">.
+export function localTime(date) {
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// ----------------------------------------------------------------------------
+// Wall times in a time zone (an IANA name, `America/Chicago`; none: this
+// PC's), as a trip's events keep theirs (vault.md#event): an instant's day
+// and time there, and the instant a day and time there name.
+const zoneFormats = new Map(); // zone -> its formatter
+
+function zoneParts(date, zone) {
+  let f = zoneFormats.get(zone);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    zoneFormats.set(zone, f);
+  }
+  return Object.fromEntries(f.formatToParts(date).map(part => [part.type, part.value]));
+}
+
+// `date`'s day and time of day in `zone`: `{ day: 'YYYY-MM-DD', time: 'hh:mm' }`.
+export function zonedTime(date, zone) {
+  if (!zone) return { day: localDay(date), time: localTime(date) };
+  const p = zoneParts(date, zone);
+  return { day: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
+}
+
+// How far `zone`'s wall time is ahead of UTC at `ms`, in ms.
+function zoneOffset(ms, zone) {
+  const p = zoneParts(new Date(ms), zone);
+  const wall = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second));
+  return wall - Math.floor(ms / 1000) * 1000;
+}
+
+// The instant `day` (YYYY-MM-DD) at `time` (hh:mm, midnight without one)
+// names in `zone`. The offset is taken twice, so a wall time just after a
+// change of it lands right.
+export function zonedInstant(day, time, zone) {
+  const [y, m, d] = day.split('-').map(Number);
+  const [h, mi] = (time || '00:00').split(':').map(Number);
+  if (!zone) return new Date(y, m - 1, d, h, mi);
+  const wall = Date.UTC(y, m - 1, d, h, mi);
+  const first = wall - zoneOffset(wall, zone);
+  return new Date(wall - zoneOffset(first, zone));
+}
+
+// How long `ms` is: "8 h 15 min", "45 min", "2 h".
+export function durationText(ms) {
+  const minutes = Math.round(Math.abs(ms) / 6e4);
+  const h = Math.floor(minutes / 60);
+  const min = minutes % 60;
+  return [h ? t('time.hours', { n: h }) : '', min || !h ? t('time.minutes', { n: min }) : '']
+    .filter(Boolean).join(' ');
 }
 
 // `date` as the host writes an instant: UTC in ISO 8601, to the second.
@@ -73,6 +132,20 @@ export const DATE_FORMAT = format();                                    // 10/14
 export const DAY_MONTH = format({ day: '2-digit', month: '2-digit' }); // 10/14
 // A time of day, wherever the page shows one: 9:05 AM.
 export const TIME_FORMAT = format({ hour: 'numeric', minute: '2-digit' });
+
+// TIME_FORMAT's, in `zone` (none: this PC's): a trip's times, each in its
+// own place's time.
+const zoneTimes = new Map(); // zone -> its formatter
+
+export function timeFormatIn(zone) {
+  if (!zone) return TIME_FORMAT;
+  let f = zoneTimes.get(zone);
+  if (!f) {
+    f = format({ hour: 'numeric', minute: '2-digit', timeZone: zone });
+    zoneTimes.set(zone, f);
+  }
+  return f;
+}
 export const WEEKDAY = format({ weekday: 'short' });                    // Tue
 export const WEEKDAY_LONG = format({ weekday: 'long' });                // Tuesday
 export const MONTH = format({ month: 'short' });                        // Oct

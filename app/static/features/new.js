@@ -4,7 +4,11 @@
 // task for what the panel shows (a card's Task button opens it). Create
 // sends `create_entity` (api.md#structure): the host writes the
 // file into its type's folder and pushes the entity. The fields follow the
-// vault's roles (vault.md#well-known-roles).
+// vault's roles (vault.md#well-known-roles). An event says what part of a
+// trip it is, if it is one (Type), planned or booked, and its calendar, which
+// a trip's prefills when the sidebar selects one; its times are each in a
+// zone, and a trip's part asks for its own fields, each place's time in
+// that place's zone (panel.md#trip-fields).
 // A draft's form is built once, so its inputs keep focus; only its chips,
 // the list's items, the notes and the buttons are built again.
 // "+ Task from this" of an assistant reply runs the `task.with` action
@@ -12,18 +16,20 @@
 
 import { $, accEl } from '../core/dom.js';
 import { rpcCall, rpcOn } from '../core/rpc.js';
-import { isoInstant, localDay, parseDate, relativeDay } from '../core/format.js';
+import { isoInstant, localDay, localTime, parseDate, relativeDay, zonedInstant } from '../core/format.js';
 import { registerAction, shortcutText } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store, vaultOpen } from '../model/state.js';
-import { projectScope, projectsFor } from '../model/entities.js';
-import { getDocIcon, iconEl } from '../ui/icons.js';
+import { entities, projectScope, projects, projectsFor } from '../model/entities.js';
+import { LOCAL_ZONE, STATES, TRIP_TYPES, MEANS, placeZone } from '../model/trip.js';
+import { MEANS_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import {
   closeVaultArea, openVaultOp, registerVaultPage, replaceVaultPage,
   setPageFocus,
 } from '../ui/page.js';
 import { accSeg } from '../ui/segmented.js';
+import { calendarMenu } from './facts.js';
 import { selectDocument } from './selection.js';
 import {
   contextTarget, createdNote, registerContextTab, selectContextTab,
@@ -33,6 +39,8 @@ import { TASK_STATUSES } from './panel/details.js';
 import {
   addChip, linkChip, linkTarget, projectChips, labelChips,
 } from './panel/panel.js';
+import { zoneButton } from './panel/event-fields.js';
+import { placeInput } from './panel/trip-fields.js';
 import { watchFormGrid } from './workspace/folders.js';
 
 // The types New makes: their derived kind, what Go to calls it (`command`,
@@ -65,9 +73,17 @@ const NEW_TYPES = [
   },
 ];
 const NEW_CONTACT_TYPES = [['person', t('new.contact.person')], ['org', t('new.contact.org')]];
+// An event's Type: a plain one, or a part of a trip.
+const NEW_EVENT_TYPES = [['', t('kind.event')], ...TRIP_TYPES];
 
 function newTypeIcon(type) {
-  return getDocIcon(type.kind, type.kind === 'document' ? 'note' : null);
+  return docIcon({ kind: type.kind, type: type.kind === 'document' ? 'note' : null });
+}
+
+// The draft's icon: its type's, an event's by what part of a trip it is.
+function newDraftIcon(d) {
+  if (d.type.kind !== 'event') return newTypeIcon(d.type);
+  return docIcon({ kind: 'event', event: { type: d.eventType, by: d.by } });
 }
 
 // A new draft of `kind` (one of NEW_TYPES). `page`: it is the New page's,
@@ -90,6 +106,16 @@ function newDraft(kind, { page = false, linked = null, projects = [], scope = nu
     end: today,
     endTime: '10:00',
     location: '',
+    eventType: '', // what part of a trip it is, if any
+    eventStatus: 'confirmed', // planned (tentative) or booked
+    calendar: null, // its calendar entity
+    by: 'flight', // a journey's
+    from: '',
+    to: '',
+    place: '', // a stay's, an activity's
+    booking: '',
+    fromZone: LOCAL_ZONE, // the zones of its times: the start's (a plain event's and an activity's both)
+    toZone: LOCAL_ZONE, // a journey's arrival's
     contactType: 'person', // a contact's
     email: '',
     phone: '',
@@ -144,8 +170,10 @@ function showNewMenu(anchor) {
   showMenu(anchor, items, { head: t('new.head') });
 }
 
-// Open the New page for `kind`, in the project selected in the sidebar.
-// Once created, the page closes and the new entity is selected.
+// Open the New page for `kind`, in the project selected in the sidebar; an
+// event in its calendar, if it names one still in the vault (a trip's
+// `calendar` fact). Once created, the page closes and the new entity is
+// selected.
 function openNew(kind) {
   openVaultOp('new');
   const scope = projectScope();
@@ -158,16 +186,25 @@ function openNew(kind) {
       selectDocument(id);
     },
   });
+  const calendar = scope && projects.get(scope)?.project?.facts?.calendar;
+  d.calendar = entities.get(calendar)?.kind === 'calendar' ? calendar : null;
   newPage = d;
 
-  const sheet = accEl('section', 'new__sheet');
-  const kindEl = accEl('h2', 'pane-title new__kind');
-  kindEl.append(iconEl(newTypeIcon(d.type)), d.type.name);
-  sheet.append(kindEl, ...renderNewForm(d));
+  d.els.sheet = accEl('section', 'new__sheet');
+  renderNewSheet(d);
   const page = accEl('div', 'page');
-  page.append(sheet);
+  page.append(d.els.sheet);
   setPageFocus('new:title');
   replaceVaultPage(page);
+}
+
+// The New page's sheet: its head and the form; built again when an
+// event's Type changes its fields.
+function renderNewSheet(d) {
+  const kindEl = accEl('h2', 'pane-title new__kind');
+  d.els.icon = iconEl(newDraftIcon(d));
+  kindEl.append(d.els.icon, d.type.name);
+  d.els.sheet.replaceChildren(kindEl, ...renderNewForm(d));
   renderNewChips(d);
   renderNewFoot(d);
 }
@@ -277,12 +314,8 @@ function newRoles(d) {
       if (d.due) task.due = d.due;
       return { task };
     }
-    case 'event': {
-      const event = { start: newInstant(d.start, d.startTime) };
-      if (d.end) event.end = newInstant(d.end, d.endTime);
-      if (d.location.trim()) event.location = d.location.trim();
-      return { event };
-    }
+    case 'event':
+      return { event: newEvent(d) };
     case 'contact': {
       const contact = { type: d.contactType };
       for (const key of ['email', 'phone', 'address']) {
@@ -297,6 +330,39 @@ function newRoles(d) {
   }
 }
 
+// An event's block: its calendar and status; a stay's days, the morning
+// after the last night its end; a planned journey without a time its day only;
+// else its times, each in its zone (a trip's in its place's). Then where it
+// is, and the trip fields of its type.
+function newEvent(d) {
+  const type = d.eventType;
+  const event = {};
+  if (d.calendar) event.calendar = d.calendar;
+  if (type || d.eventStatus === 'tentative') event.status = d.eventStatus;
+  if (type === 'stay' || (type === 'journey' && !d.startTime)) {
+    event.start = d.start;
+    const last = type === 'stay' ? d.end : newNextDay(d.end || d.start);
+    event.end = last > d.start ? last : newNextDay(d.start);
+  } else {
+    const zone = d.fromZone;
+    const endZone = type === 'journey' ? d.toZone : zone;
+    event.start = isoInstant(zonedInstant(d.start, d.startTime, zone));
+    if (d.end) event.end = isoInstant(zonedInstant(d.end, d.endTime, endZone));
+    event.tz = zone;
+    if (endZone !== zone) event['end-tz'] = endZone;
+  }
+  if (d.location.trim()) event.location = d.location.trim();
+  if (type) event.type = type;
+  const keep = keys => keys.forEach(key => { if (d[key].trim()) event[key] = d[key].trim(); });
+  if (type === 'journey') {
+    event.by = d.by;
+    keep(['from', 'to', 'booking']);
+  } else if (type) {
+    keep(['place']);
+  }
+  return event;
+}
+
 // Create the draft `d` (Create, Ctrl+Enter); the host pushes the new
 // entity, and its host goes on (`onCreated`). A failure stays in the form,
 // as it was.
@@ -304,7 +370,7 @@ function createNew(d) {
   if (d.busy || newBlocked(d)) return;
   const args = { roles: newRoles(d), title: d.title.trim(), projects: d.projects, labels: d.labels };
   if (d.linked) args.linked_to = d.linked;
-  if (d.type.kind === 'document') args.date = newInstant(d.day, newLocalTime(new Date()));
+  if (d.type.kind === 'document') args.date = isoInstant(zonedInstant(d.day, localTime(new Date())));
   if (!['list', 'record'].includes(d.type.kind) && d.body.trim()) args.content = d.body;
   d.busy = true;
   d.error = null;
@@ -319,24 +385,16 @@ function createNew(d) {
 // ----------------------------------------------------------------------------
 // dates: the form's are local days (YYYY-MM-DD) and times (hh:mm)
 
-function newPad(n) {
-  return String(n).padStart(2, '0');
-}
-
-function newLocalTime(date) {
-  return `${newPad(date.getHours())}:${newPad(date.getMinutes())}`;
-}
-
-// `day` at `time` here (midnight without a time), as a UTC instant in ISO
-// 8601, to the second.
-function newInstant(day, time) {
-  return isoInstant(new Date(`${day}T${time || '00:00'}`));
-}
-
 // An hour after `time`, at most 23:59.
 function newHourLater(time) {
   const [h, m] = time.split(':').map(Number);
-  return h >= 23 ? '23:59' : `${newPad(h + 1)}:${newPad(m)}`;
+  return h >= 23 ? '23:59' : localTime(new Date(2000, 0, 1, h + 1, m));
+}
+
+// The day after `day`.
+function newNextDay(day) {
+  const [y, m, d] = day.split('-').map(Number);
+  return localDay(new Date(y, m - 1, d + 1));
 }
 
 // ----------------------------------------------------------------------------
@@ -412,33 +470,9 @@ function renderNewTypeRows(d, row) {
       showDue();
       break;
     }
-    case 'event': {
-      const note = accEl('span', 'meta', relativeDay(parseDate(d.start)));
-      // An end before the start moves with it: the same day, an hour later.
-      const keepEnd = () => {
-        if (!d.start) return;
-        if (!d.end || d.end < d.start) d.end = d.start;
-        if (d.end === d.start && d.startTime && d.endTime <= d.startTime) d.endTime = newHourLater(d.startTime);
-        endDay.value = d.end;
-        endTime.value = d.endTime;
-      };
-      const startDay = newDateInput(d.start, value => {
-        d.start = value;
-        note.textContent = relativeDay(parseDate(value));
-        keepEnd();
-        renderNewFoot(d);
-      });
-      const startTime = newTimeInput(d.startTime, value => {
-        d.startTime = value;
-        keepEnd();
-      });
-      const endDay = newDateInput(d.end, value => { d.end = value; });
-      const endTime = newTimeInput(d.endTime, value => { d.endTime = value; });
-      row(t('props.starts'), startDay, startTime, note);
-      row(t('props.ends'), endDay, endTime);
-      row(t('new.location'), newTextInput(d, 'location', t('new.address_or_place')));
+    case 'event':
+      renderNewEventRows(d, row);
       break;
-    }
     case 'contact':
       newSegRow(row(t('new.type')), NEW_CONTACT_TYPES, () => d.contactType, value => { d.contactType = value; });
       row(t('new.email_address'), newTextInput(d, 'email', '', { type: 'email' }));
@@ -448,6 +482,145 @@ function renderNewTypeRows(d, row) {
     default:
       break;
   }
+}
+
+// An event's rows: its Type (another builds the sheet again), planned or
+// booked, its calendar; then by its type a journey's means, places and
+// times, a stay's place and nights, an activity's place and times, a plain
+// event's times; and where it is.
+function renderNewEventRows(d, row) {
+  d.els.zones = [];
+  const type = row(t('props.type'));
+  type.append(accSeg(NEW_EVENT_TYPES, d.eventType, value => {
+    d.eventType = value;
+    if (value === 'stay' && d.end <= d.start) d.end = newNextDay(d.start);
+    renderNewSheet(d);
+    d.els.type.querySelector('[aria-pressed="true"]')?.focus();
+  }));
+  d.els.type = type;
+  newSegRow(row(t('props.state')), STATES, () => d.eventStatus, value => { d.eventStatus = value; });
+  row(t('props.calendar'), newCalendarButton(d));
+  if (d.eventType === 'journey') {
+    const means = MEANS.map(([value, label]) => [value, label, { icon: MEANS_ICONS[value] }]);
+    newSegRow(row(t('props.by')), means, () => d.by, value => {
+      d.by = value;
+      d.els.icon.firstChild.setAttribute('href', newDraftIcon(d));
+    });
+    newPlaceRow(d, row(t('props.from')), 'from', 'fromZone');
+    newTimeRows(d, row, [t('props.leaves'), t('props.arrives')], ['fromZone', 'toZone'],
+      () => newPlaceRow(d, row(t('props.to')), 'to', 'toZone'));
+    row(t('props.booking'), newTextInput(d, 'booking', t('new.its_reference'), { className: 'form-input mono' }));
+  } else if (d.eventType === 'stay') {
+    newPlaceRow(d, row(t('props.place')), 'place', null);
+    newNightsRow(d, row(t('props.nights')));
+  } else if (d.eventType === 'activity') {
+    newPlaceRow(d, row(t('props.place')), 'place', 'fromZone');
+    newTimeRows(d, row, [t('props.starts'), t('props.ends')], ['fromZone', null]);
+  } else {
+    newTimeRows(d, row, [t('props.starts'), t('props.ends')], ['fromZone', null]);
+  }
+  row(t('new.location'), newTextInput(d, 'location', t('new.address_or_place')));
+}
+
+// The draft's calendar: a button naming it, which opens the vault's.
+function newCalendarButton(d) {
+  const button = accEl('button', 'btn btn--ghost new__calendar');
+  button.type = 'button';
+  const show = () => { button.textContent = entities.get(d.calendar)?.title || t('watch.none'); };
+  button.addEventListener('click', () => calendarMenu(button, d.calendar, id => {
+    d.calendar = id;
+    show();
+  }));
+  show();
+  return button;
+}
+
+// A place of the draft (`key`): typed in, the vault's trip places offered;
+// one named that had a zone (`placeZone`) sets the draft's `zoneKey`.
+function newPlaceRow(d, field, key, zoneKey) {
+  field.append(placeInput(newTextInput(d, key, t('props.place'), {
+    onInput: () => {
+      const zone = zoneKey && placeZone(d[key]);
+      if (!zone || zone === d[zoneKey]) return;
+      d[zoneKey] = zone;
+      renderNewZones(d);
+    },
+  })));
+}
+
+// The start's and end's rows (`labels`): a day and a time each, the end
+// moving with the start while it lies before it -- the same day, an hour
+// later. With `zones` (the draft's keys), each in its zone, a button naming
+// it that opens the zones' menu; `between()` adds the rows between them (a
+// journey's To).
+function newTimeRows(d, row, [startLabel, endLabel], zones = [null, null], between = null) {
+  const note = accEl('span', 'meta', relativeDay(parseDate(d.start)));
+  const keepEnd = () => {
+    if (!d.start) return;
+    if (!d.end || d.end < d.start) d.end = d.start;
+    if (d.end === d.start && d.startTime && d.endTime <= d.startTime) d.endTime = newHourLater(d.startTime);
+    endDay.value = d.end;
+    endTime.value = d.endTime;
+  };
+  const startDay = newDateInput(d.start, value => {
+    d.start = value;
+    note.textContent = relativeDay(parseDate(value));
+    keepEnd();
+    renderNewFoot(d);
+  });
+  const startTime = newTimeInput(d.startTime, value => {
+    d.startTime = value;
+    keepEnd();
+  });
+  const endDay = newDateInput(d.end, value => { d.end = value; });
+  const endTime = newTimeInput(d.endTime, value => { d.endTime = value; });
+  const zone = i => (zones[i] ? [newZoneSlot(d, zones[i])] : []);
+  row(startLabel, startDay, startTime, ...zone(0), note);
+  between?.();
+  row(endLabel, endDay, endTime, ...zone(1));
+}
+
+// The zone `zoneKey` of the draft: kept to be built again when a place
+// takes its zone or another is picked (`renderNewZones`).
+function newZoneSlot(d, zoneKey) {
+  const slot = accEl('span', 'new__zone');
+  d.els.zones.push({ slot, zoneKey });
+  renderNewZones(d);
+  return slot;
+}
+
+function renderNewZones(d) {
+  for (const { slot, zoneKey } of d.els.zones ?? []) {
+    slot.replaceChildren(zoneButton(null, d[zoneKey], zone => {
+      d[zoneKey] = zone;
+      renderNewZones(d);
+    }));
+  }
+}
+
+// A stay's nights: the first night's day and the day it ends, the morning
+// after the last, and how many.
+function newNightsRow(d, field) {
+  const count = accEl('span', 'meta');
+  const show = () => {
+    const nights = d.start && d.end ? Math.round((parseDate(d.end) - parseDate(d.start)) / 864e5) : 0;
+    count.textContent = nights > 0 ? t('trip.nights', { n: nights }) : t('new.ends_before_start');
+  };
+  const from = newDateInput(d.start, value => {
+    d.start = value;
+    if (d.end <= value) {
+      d.end = newNextDay(value);
+      until.value = d.end;
+    }
+    show();
+    renderNewFoot(d);
+  });
+  const until = newDateInput(d.end, value => {
+    d.end = value;
+    show();
+  });
+  field.append(from, accEl('span', 'meta', t('new.until')), until, count);
+  show();
 }
 
 // The list's items, a record's note, or the markdown body of the others.

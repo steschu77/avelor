@@ -1,7 +1,8 @@
-import { t } from '../core/text.js';
 // The icons (symbols of the page's sprite, build.rs): an entity's by its
-// kind, a document's by its type (`getDocIcon`), and `iconEl`, an icon
-// made in a script.
+// kind, a document's by its type, a trip's event by what part it is
+// (`docIcon`), and `iconEl`, an icon made in a script.
+
+import { t } from '../core/text.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -58,14 +59,28 @@ const DOC_SUB_ICONS = {
 };
 
 // ----------------------------------------------------------------------------
-// The icon of an entity: its kind's, or for a document its type's, if it
-// has one.
-export function getDocIcon(kind, type) {
-  let icon = KIND_ICONS[kind]?.icon || '';
-  if (kind === 'document' && type) {
-    icon = DOC_SUB_ICONS[type]?.icon || icon;
-  }
-  return icon;
+// A trip's events (vault.md#event): a journey's by its means, a stay's, an
+// activity's.
+export const MEANS_ICONS = {
+  flight: '#i-airplane',
+  train: '#i-vehicle-subway',
+  bus: '#i-vehicle-bus',
+  ferry: '#i-vehicle-ship',
+  car: '#i-vehicle-car',
+};
+const TYPE_ICONS = { stay: '#i-bed', activity: '#i-ticket-diagonal' };
+
+// ----------------------------------------------------------------------------
+// The icon of an entity `doc` (its `kind`, `type`, `event`): a trip's event
+// by what part it is, a document by its type if it has one, else its
+// kind's.
+export function docIcon(doc) {
+  const kind = doc?.kind;
+  const part = kind === 'event' ? doc.event?.type : null;
+  if (part === 'journey') return MEANS_ICONS[doc.event.by] ?? KIND_ICONS.event.icon;
+  if (part) return TYPE_ICONS[part] ?? KIND_ICONS.event.icon;
+  if (kind === 'document' && doc.type) return DOC_SUB_ICONS[doc.type]?.icon || KIND_ICONS.document.icon;
+  return KIND_ICONS[kind]?.icon || '';
 }
 
 export const IMPORT_ICON = '#i-arrow-import';
