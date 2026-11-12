@@ -156,7 +156,7 @@ pub fn load_doc_content(app: &mut App, req: Req, id: Id) {
 /// failure is answered in the host's words. A step: the saves of one
 /// editing session, the page's group, are one (`saving.md#undo`).
 pub fn save_doc_content(app: &mut App, req: Req, id: Id, markdown: String, overwrite: bool) {
-    if let Some(err) = calendar::kept_by_google(app, &id) {
+    if let Some(err) = calendar::kept_by_google(app, &id, None) {
         return req.fail(err, Text::new("calendar.read_only"));
     }
     let mut changes = Changes::default();

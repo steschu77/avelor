@@ -127,8 +127,8 @@ impl Index {
     /// markdown, in the conventional folder of its type
     /// ([`layout`]). Its `date` is an event's start, else the one given,
     /// else now. Nothing is written if the title is empty, an event has no
-    /// start, one of `projects` isn't a project, or `linked_to` isn't in the
-    /// vault.
+    /// start or names a calendar that isn't one of the vault's, one of
+    /// `projects` isn't a project, or `linked_to` isn't in the vault.
     pub fn create_new(&mut self, new: NewEntity, changes: &mut Changes) -> Result<Id> {
         let invalid = |arg: &str| Error::InvalidArgument { arg: arg.into() };
         let (format, folder) = match new.roles.derived_type() {
@@ -148,10 +148,12 @@ impl Index {
             Some(event) => Some(event.start.ok_or_else(|| invalid("event.start"))?),
             None => new.date,
         };
-        let is_project = |id: &Id| {
-            self.get(id)
-                .is_some_and(|d| d.kind() == DocumentType::Project)
-        };
+        let is_a = |id: &Id, kind| self.get(id).is_some_and(|d| d.kind() == kind);
+        let calendar = new.roles.event.as_ref().and_then(|e| e.calendar);
+        if calendar.is_some_and(|id| !is_a(&id, DocumentType::Calendar)) {
+            return Err(invalid("event.calendar"));
+        }
+        let is_project = |id: &Id| is_a(id, DocumentType::Project);
         if !new.projects.iter().all(is_project) {
             return Err(invalid("projects"));
         }

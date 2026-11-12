@@ -15,7 +15,8 @@ use av_vault::schema::remote::{CALENDAR_ID, ETAG, EVENT_ID, EVENT_TYPE, SNAPSHOT
 
 /// What the sync keeps of an event, both ways: exactly what `to_google`
 /// sends. Guests are only pulled (`guests_of`), and so are the
-/// occurrences of a recurring event that differ from it (`exception_of`).
+/// occurrences of a recurring event that differ from it (`exception_of`). A trip's
+/// fields (`type`, `by`, `booking`, ...) are the vault's own.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(super) struct EventFields {
     pub(super) title: String,
@@ -23,6 +24,8 @@ pub(super) struct EventFields {
     pub(super) start: Option<DateTime>,
     pub(super) end: Option<DateTime>,
     pub(super) tz: Option<String>,
+    /// The end's zone, only if it isn't the start's.
+    pub(super) end_tz: Option<String>,
     pub(super) location: Option<String>,
     pub(super) status: Option<String>,
     pub(super) schedule: Vec<String>,
@@ -31,6 +34,8 @@ pub(super) struct EventFields {
 // ----------------------------------------------------------------------------
 /// A Google event as the vault stores it.
 pub(super) fn from_google(event: &GoogleEvent) -> EventFields {
+    let zone = |time: &Option<EventTime>| time.as_ref().and_then(|t| t.time_zone.clone());
+    let tz = zone(&event.start);
     EventFields {
         title: event
             .summary
@@ -41,7 +46,8 @@ pub(super) fn from_google(event: &GoogleEvent) -> EventFields {
         body: body_of(event.description.as_deref()),
         start: event.start.as_ref().and_then(time_of),
         end: event.end.as_ref().and_then(time_of),
-        tz: event.start.as_ref().and_then(|t| t.time_zone.clone()),
+        end_tz: zone(&event.end).filter(|end| tz.as_ref() != Some(end)),
+        tz,
         location: event.location.clone(),
         status: event.status.clone(),
         schedule: event.recurrence.clone().unwrap_or_default(),
@@ -51,9 +57,11 @@ pub(super) fn from_google(event: &GoogleEvent) -> EventFields {
 // ----------------------------------------------------------------------------
 /// What a push sends (and what change detection hashes): the synced fields
 /// in Google's shape, the body as HTML. A local event without an end lasts
-/// an hour, or a day.
+/// an hour, or a day; its end is meant in the start's zone unless it has
+/// one of its own.
 pub(super) fn to_google(fields: &EventFields) -> GoogleEvent {
     let time = |t| event_time(t, fields.tz.as_deref());
+    let end_zone = fields.end_tz.as_deref().or(fields.tz.as_deref());
     let end = fields.end.or_else(|| fields.start.map(default_end));
     GoogleEvent {
         summary: Some(fields.title.clone()).filter(|t| !t.is_empty()),
@@ -63,7 +71,7 @@ pub(super) fn to_google(fields: &EventFields) -> GoogleEvent {
         location: fields.location.clone(),
         status: fields.status.clone(),
         start: fields.start.map(time),
-        end: end.map(time),
+        end: end.map(|t| event_time(t, end_zone)),
         recurrence: Some(fields.schedule.clone()).filter(|r| !r.is_empty()),
         ..GoogleEvent::default()
     }
@@ -112,6 +120,7 @@ fn of_doc(doc: &Document) -> EventFields {
         start: event.start.or(doc.date()),
         end: event.end,
         tz: event.tz,
+        end_tz: event.end_tz,
         location: event.location,
         status: event.status,
         schedule: event.schedule,
@@ -131,6 +140,7 @@ pub(super) fn apply_to(fields: &EventFields, doc: &mut Document) {
     event.start = fields.start;
     event.end = fields.end;
     event.tz = fields.tz.clone();
+    event.end_tz = fields.end_tz.clone();
     event.location = fields.location.clone();
     event.status = fields.status.clone();
     event.schedule = fields.schedule.clone();

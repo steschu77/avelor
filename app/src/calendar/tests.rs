@@ -13,7 +13,7 @@ use av_vault::shared::ContactRef;
 use super::apply::{Counts, apply, keep_local_version};
 use super::auto_sync::{auto_sync_sources, on_auto_listed, waiting_push};
 use super::mapping::{
-    EventFields, event_entity, exception, exception_of, exception_to_google, from_google,
+    EventFields, apply_to, event_entity, exception, exception_of, exception_to_google, from_google,
     guests_of, keeps_nothing, looks_like_html, normalize, payload_of, take_exceptions, to_google,
 };
 use super::plan::{build_job, calendar_entity, find_calendar, first_sync_start, local_event};
@@ -1207,6 +1207,61 @@ fn google_events_map_to_utc_and_markdown() {
     assert!(back.description.unwrap().contains("Arrive early."));
     assert_eq!(back.recurrence.unwrap(), ["RRULE:FREQ=WEEKLY;BYDAY=MO"]);
     assert_eq!(back.id, None, "a pushable payload");
+}
+
+#[test]
+fn an_arrival_in_another_zone_keeps_its_zone_both_ways() {
+    let flight = GoogleEvent {
+        start: timed("2027-07-08T18:05:00-05:00", "America/Chicago"),
+        end: timed("2027-07-09T14:20:00+02:00", "Europe/Berlin"),
+        ..google_event()
+    };
+    let fields = from_google(&flight);
+    assert_eq!(fields.tz.as_deref(), Some("America/Chicago"));
+    assert_eq!(fields.end_tz.as_deref(), Some("Europe/Berlin"));
+    let back = to_google(&fields);
+    let zone = |t: Option<EventTime>| t.and_then(|t| t.time_zone);
+    assert_eq!(zone(back.start).as_deref(), Some("America/Chicago"));
+    assert_eq!(zone(back.end).as_deref(), Some("Europe/Berlin"));
+    assert_eq!(normalize(&normalize(&flight)), normalize(&flight));
+
+    // One zone for both ends keeps none of its own, and hashes as before.
+    let fields = from_google(&google_event());
+    assert_eq!(fields.end_tz, None);
+    let end = to_google(&fields).end.unwrap();
+    assert_eq!(end.time_zone.as_deref(), Some("Europe/Berlin"));
+    let doc = event_entity(&google_event(), Id::generate(), connected(), "cal1");
+    assert!(!doc.save().contains("end-tz"), "{}", doc.save());
+}
+
+#[test]
+fn a_pull_keeps_a_trips_fields() {
+    let mut doc = event_entity(&google_event(), Id::generate(), connected(), "cal1");
+    let synced = calendar_sync::snapshot(&payload_of(&doc));
+    let mut event = doc.roles().event.clone().unwrap();
+    event.event_type = Some("journey".into());
+    event.by = Some("flight".into());
+    event.booking = Some("X7K2PL".into());
+    doc.set_event(Some(event));
+    let snapshot = calendar_sync::snapshot(&payload_of(&doc));
+    assert_eq!(snapshot, synced, "the vault's own, not pushed");
+
+    let moved = GoogleEvent {
+        start: timed("2026-10-05T11:00:00+02:00", "Europe/Berlin"),
+        end: timed("2026-10-05T12:00:00+02:00", "Europe/Berlin"),
+        ..google_event()
+    };
+    apply_to(&from_google(&moved), &mut doc);
+    let event = doc.roles().event.clone().unwrap();
+    assert_eq!(
+        (
+            event.event_type.as_deref(),
+            event.by.as_deref(),
+            event.booking.as_deref()
+        ),
+        (Some("journey"), Some("flight"), Some("X7K2PL"))
+    );
+    assert_eq!(event.start.unwrap().as_iso8601(), "2026-10-05T09:00:00Z");
 }
 
 #[test]

@@ -63,6 +63,10 @@ are written to a folder named after the calendar beside it, e.g.
   delete it wrote back is not undone: the trashed file holds the
   cancelled event.
 - Guests come from Google only and are never written back.
+- An arrival in another zone than the start's keeps its own
+  (`event.end-tz`), both ways. A trip's fields (`type`, `by`,
+  `booking`, …, `vault.md#event`) and a work day's `work` stay in the
+  vault; a pull keeps them.
 - A recurring event is one entity; the calendar shows its occurrences. A single
   occurrence moved, renamed, given another place or deleted in Google is
   kept on the recurring event (`event.exceptions`) and shown that way; its card

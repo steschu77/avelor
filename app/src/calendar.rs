@@ -34,6 +34,7 @@ use av_google::client::Client;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::id::Id;
+use av_vault::change::Change;
 use av_vault::document::Document;
 use av_vault::envelope::{DocumentType, Source};
 use av_vault::schema::remote::{CALENDAR_ID, EVENT_TYPE};
@@ -207,9 +208,13 @@ pub fn read_only(app: &App, calendar: &Id) -> bool {
 // ----------------------------------------------------------------------------
 /// `NotWritable` if the entity `id` is an event Google keeps as it is, of a
 /// calendar read-only in Google (`read_only`) or of a kind it keeps
-/// (`kept_kind`), for a change of what it syncs: its title, its body, or
-/// its delete.
-pub fn kept_by_google(app: &App, id: &Id) -> Option<Error> {
+/// (`kept_kind`), for a change of what it syncs: `change` given,
+/// one that sets its times, zones, place or status (a trip's fields and
+/// `work` are the vault's own); none, its title, its body, or its delete.
+pub fn kept_by_google(app: &App, id: &Id, change: Option<&Change>) -> Option<Error> {
+    if change.is_some_and(|c| !syncs(c)) {
+        return None;
+    }
     let entry = app.vault.index().entry(id)?;
     let calendar = entry.doc.roles().event.as_ref()?.calendar;
     let kept = kept_kind(&entry.doc) || calendar.is_some_and(|c| read_only(app, &c));
@@ -229,6 +234,20 @@ fn kept_kind(doc: &Document) -> bool {
     remote
         .get(EVENT_TYPE)
         .is_some_and(|kind| KEPT_TYPES.contains(&kind))
+}
+
+// ----------------------------------------------------------------------------
+/// Whether `change` sets what an event syncs with Google (`mapping::EventFields`).
+fn syncs(change: &Change) -> bool {
+    let Change::Event(event) = change else {
+        return false;
+    };
+    event.start.is_some()
+        || event.end.is_some()
+        || event.tz.is_some()
+        || event.end_tz.is_some()
+        || event.location.is_some()
+        || event.status.is_some()
 }
 
 // ----------------------------------------------------------------------------
