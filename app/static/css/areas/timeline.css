@@ -94,6 +94,16 @@
   background: var(--c-hover);
 }
 
+/* a held event (tentative): it holds the days, nothing is booked */
+.tl__row--held {
+  margin: 2px -8px;
+  border: 1px dashed var(--c-ink-faint);
+}
+
+.tl__row--held .tl__title {
+  color: var(--c-ink-mute);
+}
+
 .tl__row[aria-selected="true"] {
   background: var(--c-card);
   box-shadow: inset 2px 0 0 var(--c-accent-line);

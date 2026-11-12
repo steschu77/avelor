@@ -30,7 +30,7 @@ import {
   amountOn, bankScope, bookingInProject, bookingName, expectedIn, horizonOf, occurrences, pairOf, recurringPaymentEnded,
   recurringPaymentsIn, recurringPaymentInProject, recurringPaymentOf,
 } from '../../model/bank.js';
-import { KIND_ICONS, bookingIcon, getDocIcon, iconEl } from '../../ui/icons.js';
+import { KIND_ICONS, bookingIcon, docIcon, iconEl } from '../../ui/icons.js';
 import { clearDropMark, dropTarget } from '../../ui/dropzone.js';
 import { showMenu } from '../../ui/menu.js';
 import { selectBooking, selectDocument } from '../selection.js';
@@ -294,7 +294,7 @@ function renderUpcoming({ today, shown }) {
     const row = entityEl('div', 'list-row feed__row feed__row--event', doc.doc_id);
     row.append(
       accEl('span', 'meta', `${WEEKDAY.format(day)} ${DAY_MONTH.format(day)}`),
-      iconEl(getDocIcon(doc.kind, doc.genre), 'table__icon'),
+      iconEl(docIcon(doc), 'table__icon'),
       accEl('span', 'row-title', doc.title),
       accEl('span', 'meta', time));
     return row;
@@ -397,7 +397,7 @@ function renderFiles() {
   const rows = files.map(doc => {
     const row = entityEl('div', 'list-row feed__row', doc.doc_id);
     row.append(
-      iconEl(getDocIcon(doc.kind, doc.genre), 'table__icon'),
+      iconEl(docIcon(doc), 'table__icon'),
       accEl('span', 'row-title', doc.title),
       accEl('span', 'meta', shortDate(doc.date)));
     return row;
@@ -418,7 +418,7 @@ function renderConversations() {
     const row = entityEl('div', 'list-row feed__row', doc.doc_id);
     const when = isDate(doc.date) ? shortDate(doc.date) : '';
     row.append(
-      iconEl(getDocIcon(doc.kind, doc.genre), 'table__icon'),
+      iconEl(docIcon(doc), 'table__icon'),
       accEl('span', 'row-title', doc.title),
       accEl('span', 'meta', [projectNames(doc), when].filter(Boolean).join(' \u00b7 ')));
     return row;

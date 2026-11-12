@@ -56,6 +56,34 @@ export function editTextInPlace(el, current, commit) {
 }
 
 // ----------------------------------------------------------------------------
+// An input of a card's details block (features/panel/details.js), of
+// `type`, holding `value`; `key` finds it again once the block is drawn
+// anew.
+export function fieldInput(type, key, value, className) {
+  const input = accEl('input', className);
+  input.type = type;
+  input.value = value;
+  input.dataset.focusKey = key;
+  return input;
+}
+
+// A field of a card's details block: Enter or leaving it writes what it
+// holds, if that changed (`write(value)`); Esc puts back what it held
+// (`onEditEnd`). A date input's change fires for every digit typed, so it
+// isn't what writes.
+export function editField(input, write) {
+  const arm = () => {
+    const before = input.value;
+    onEditEnd(input, save => {
+      if (!save) input.value = before;
+      else if (input.value !== before) write(input.value);
+      if (document.activeElement === input) arm();
+    });
+  };
+  input.addEventListener('focus', arm);
+}
+
+// ----------------------------------------------------------------------------
 // `${owner}\n${field}` -> { value, checking, error } while a field is
 // edited; `owner` is what the field belongs to: an account or watch id, or
 // 'new:<kind>' for one not saved yet. Absent: the saved value shows.

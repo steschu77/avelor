@@ -1,10 +1,11 @@
 // What a card shows of its event, task, email, document, bank account,
 // statement or recurring payment (panel.md#cards):
 // the details grid (`renderCardDetails`) with the contacts, the calendar
-// and the account as chips that select what they name, a task's fields and a document's
-// genre editable where the host can write them (`edit_entities`), a
-// recurring payment's too (`set_recurring_payment`), and a task's tag (`taskTag`),
-// which the day view's task rows and the calendar's grid show too.
+// and the account as chips that select what they name, a task's fields, a
+// document's genre and a trip event's fields (features/panel/trip-fields.js)
+// editable where the host can write them (`edit_entities`), a recurring
+// payment's too (`set_recurring_payment`), and a task's tag (`taskTag`), which the
+// day view's task rows and the calendar's grid show too.
 
 import { accEl } from '../../core/dom.js';
 import { DATE_FORMAT, amountText, fileSize, money, parseAmount, parseDate } from '../../core/format.js';
@@ -21,10 +22,12 @@ import {
     CATEGORIES, amountsOf, nextOccurrence, withAmount,
 } from '../../model/bank.js';
 import { editEntityLocal, setRecurringPaymentLocal } from '../../model/structure.js';
-import { onEditEnd } from '../../ui/field.js';
+import { isTripEvent } from '../../model/trip.js';
+import { editField, fieldInput } from '../../ui/field.js';
 import { fileIcon, iconEl } from '../../ui/icons.js';
 import { accSeg } from '../../ui/segmented.js';
 import { openOriginal, selectById } from '../selection.js';
+import { tripFields } from './trip-fields.js';
 
 // ----------------------------------------------------------------------------
 // A task's tag: "Due", or "Overdue" and filled -- the only emphasis the grid
@@ -44,7 +47,9 @@ export function dueTag(text) {
 // What a card shows of its event, task, email or document
 // (features/panel/panel.js): `row`, a `.props` grid, filled with when an
 // event is (`occurrence`'s times on a day card), how it repeats, where, the
-// guests, its calendar, and a status other than confirmed; a task's status,
+// guests, its calendar, and a status other than confirmed -- a trip's event
+// its trip fields instead of when, where and the status (`tripFields`, but
+// for a recurring event); a task's status,
 // when it is due (from today, marked when overdue), its assignee and when
 // it was done; an email's sender and its kind (the email analysis's,
 // `EMAIL_KINDS`); a document's genre, and the file it stands for
@@ -71,16 +76,21 @@ export function renderCardDetails(row, doc, occurrence = null) {
         parts.push(dt, dd);
     };
     if (event && doc.date) {
-        const exception = occurrence?.exception;
-        add(t('props.when'), whenText(occurrence ?? doc) + movedText(exception, doc.all_day));
-        if (event.schedule?.length) add(t('props.schedule'), scheduleText(event.schedule));
-        const location = exception?.location ?? event.location;
-        if (location) add(t('props.where'), location);
+        const trip = isTripEvent(doc) && !event.schedule?.length;
+        if (trip) {
+            tripFields(doc, add);
+        } else {
+            const exception = occurrence?.exception;
+            add(t('props.when'), whenText(occurrence ?? doc) + movedText(exception, doc.all_day));
+            if (event.schedule?.length) add(t('props.schedule'), scheduleText(event.schedule));
+            const location = exception?.location ?? event.location;
+            if (location) add(t('props.where'), location);
+        }
         if (event.attendees?.length) add(t('props.guests'), ...event.attendees.map(contactChip));
         const calendar = entities.get(event.calendar);
         if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')));
         const status = { tentative: t('event.tentative'), cancelled: t('event.cancelled') }[event.status];
-        if (status) add(t('props.status'), status);
+        if (status && !trip) add(t('props.status'), status);
     }
     if (task && doc.writable) {
         taskFields(doc, add);
@@ -375,33 +385,6 @@ function originalField(doc) {
     open.append(iconEl('#i-open'));
     open.addEventListener('click', () => openOriginal(doc.doc_id));
     return [iconEl(fileIcon(name)), `${name}${size}${encrypted}`, open];
-}
-
-// ----------------------------------------------------------------------------
-// An input of the block, of `type`, holding `value`; `key` finds it again
-// once the block is drawn anew.
-function fieldInput(type, key, value, className) {
-    const input = accEl('input', className);
-    input.type = type;
-    input.value = value;
-    input.dataset.focusKey = key;
-    return input;
-}
-
-// A field of the block: Enter or leaving it writes what it holds, if that
-// changed (`write(value)`); Esc puts back what it held (ui/field.js's
-// `onEditEnd`). A date input's change fires for every digit typed, so it
-// isn't what writes.
-function editField(input, write) {
-    const arm = () => {
-        const before = input.value;
-        onEditEnd(input, save => {
-            if (!save) input.value = before;
-            else if (input.value !== before) write(input.value);
-            if (document.activeElement === input) arm();
-        });
-    };
-    input.addEventListener('focus', arm);
 }
 
 // ----------------------------------------------------------------------------

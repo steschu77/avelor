@@ -5,15 +5,17 @@
 // `scrollIntoView`). The events, their recurring events expanded, and the tasks due
 // are model/calendar.js's, a task's tag features/panel/details.js's, the
 // selection features/selection.js's; the lens registers itself
-// (features/lenses/registry.js).
+// (features/lenses/registry.js). A held event (tentative) is hatched, and
+// a trip's part has its own icon (`docIcon`).
 
 import { $, accEl } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
-import { MONTH_YEAR, TIME_FORMAT, WEEKDAY, addDays, dayStart, everyMidnight, monthEndOf, monthStartOf, sameDay, weekStartOf } from '../../core/format.js';
 import { t } from '../../core/text.js';
+import { MONTH_YEAR, TIME_FORMAT, WEEKDAY, addDays, dayStart, everyMidnight, monthEndOf, monthStartOf, sameDay, weekStartOf } from '../../core/format.js';
 import { store } from '../../model/state.js';
+import { isHeld } from '../../model/trip.js';
 import { eventsBetween, eventsOnDay, getDueTasks, getEvents } from '../../model/calendar.js';
-import { KIND_ICONS, iconEl } from '../../ui/icons.js';
+import { docIcon, iconEl } from '../../ui/icons.js';
 import { markSelection, selectDay } from '../selection.js';
 import { invalidateLenses, registerLens } from './registry.js';
 import { dueTag, taskTag } from '../panel/details.js';
@@ -154,7 +156,8 @@ function monthCell(d, { events, tasks, overdue }, inMonth, isToday, isSelected) 
             scrollIntoView(ev.doc_id);
         });
 
-        evEl.appendChild(iconEl(KIND_ICONS[ev.kind]?.icon || '', 'cal__event-icon'));
+        evEl.classList.toggle('cal__event--held', isHeld(ev.event));
+        evEl.appendChild(iconEl(docIcon(ev), 'cal__event-icon'));
 
         evEl.appendChild(calChipTitle(ev.title));
 

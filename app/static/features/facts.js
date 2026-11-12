@@ -181,13 +181,18 @@ function pickContacts(fact, anchor, save) {
   });
 }
 
-// The vault's calendars to pick one of, or none.
 function pickCalendar(fact, anchor, save) {
+  calendarMenu(anchor, fact.value, save, fact.label);
+}
+
+// The vault's calendars at `anchor`, to pick one of (`onPick(id)`) or none
+// (null), `current` ticked; also New's (features/new.js).
+export function calendarMenu(anchor, current, onPick, head = t('props.calendar')) {
   const calendars = [...entities.values()].filter(doc => doc.kind === 'calendar');
   showMenu(anchor, [
-    { label: t('watch.none'), checked: !fact.value, run: () => save(null) },
-    ...calendars.map(doc => ({ label: doc.title || t('untitled'), checked: fact.value === doc.doc_id, run: () => save(doc.doc_id) })),
-  ], { head: fact.label });
+    { label: t('watch.none'), checked: !current, run: () => onPick(null) },
+    ...calendars.map(doc => ({ label: doc.title || t('untitled'), checked: current === doc.doc_id, run: () => onPick(doc.doc_id) })),
+  ], { head });
 }
 
 // A choice's values to pick one of, or none.

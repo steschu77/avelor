@@ -252,8 +252,12 @@ day — a recurring event on its first start, a task on its own date — but cal
   October" between them and the past, while today is in the range. Once a
   vault is open, the feed starts at that line; at midnight, today moves
   on.
-- **A row**: its type's icon, its title, what its kind tells
-  (`summaryOf`) — an event's place, times and rule, an email's sender and
+- **A row**: its type's icon (a trip's event by what part it is), its
+  title, what its kind tells (`summaryOf`) — an event's place, times and
+  rule, a trip's event held, a transport's times each in its place's time
+  ("6:05 PM Springfield → 9:20 AM Frankfurt, next day") and its booking,
+  a stay's place and nights, an activity's place and time (`tripSummary`,
+  `model/trip.js`), an email's sender and
   time, a task's status and due day, a conversation's model and messages, a
   list's items, a contact's phone or email, a bank account's bank and
   number, statements' bookings, a document's author or sender and genre
@@ -262,7 +266,8 @@ day — a recurring event on its first start, a task on its own date — but cal
   and the labels mark them, and a row whose title lacks some shows where
   they are instead of what its kind tells (`.tl__hit`). A click or Enter
   selects it, the selected one
-  marked (`markSelection`). It drags as a Documents row does; the lens
+  marked (`markSelection`). A held event (tentative) is dashed
+  (`.tl__row--held`). It drags as a Documents row does; the lens
   takes a card dragged out of a thread, which leaves it
   (`takeMemberDrops`, `panel.md#structural-edits`).
 - **Kept parts**: rows by entity, day blocks by day, month headings by
@@ -284,7 +289,8 @@ events hidden.
   click on a day selects the day. At midnight, today moves on.
 - The selected entity's chips are marked, every occurrence of a recurring event
   (`markSelection`, `features/selection.js`, as on the Dashboard's Week
-  card).
+  card). A held event (tentative) is hatched (`.cal__event--held`); a
+  trip's event has its own icon (`docIcon`).
 - The side panel shows the selected day (`panel.md#the-day-view`).
 
 ### Bank <a id="bank"></a>
@@ -475,6 +481,28 @@ Ctrl+Enter (`createNew`) sends `create_entity`, which writes the entity
 into its type's folder (`vault.md#vault-layout`); the area closes and
 the new entity is selected. A failure stays on the page; Esc cancels. The
 Task tab of the context column uses the same form (`panel.md#context-column`).
+
+An event asks what it is (Kind: Event, or a trip's Transport, Stay or
+Activity; another builds the page's rows again), whether it is held or
+booked (`status`), and its calendar, a menu of the vault's; opened while
+a trip is selected, its calendar is the trip's (its `calendar` fact), if
+that calendar is still in the vault.
+Then by its kind (`panel.md#trip-fields`):
+
+- **Event**: its start and end, a day and a time each, the end moving
+  with the start while it lies before it; both in one zone (`timeZone`),
+  a button naming it by its city ("Lisbon time") that opens the zones'
+  menu, this PC's at first.
+- **Transport**: its way (icons), From and Leaves, To and Arrives, each
+  time in its place's zone, a button naming it that opens the zones'
+  menu; a place typed in that the vault's trip events name takes the zone
+  it had last (`placeZone`), else the zone stays (this PC's at first).
+  Its booking. Without a time it is a day only (a held way).
+- **Stay**: its place and nights, from the first night to the morning
+  after the last.
+- **Activity**: its place, and its start and end in the place's zone.
+
+Then where it is (`location`) for each.
 
 ## Preferences <a id="preferences"></a>
 

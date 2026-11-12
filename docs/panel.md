@@ -51,7 +51,8 @@ holds `selected_entity`, `selected_thread`, `selected_booking` and
   the header is the card's drag handle (`panel.md#structural-edits`);
 - for an event its details — when (a day card's occurrence, and where
   Google moved it from), its schedule in words, where, the guests, its
-  calendar, a status other than confirmed — for a task its status, its
+  calendar, a status other than confirmed; a trip's event its trip fields
+  instead (`panel.md#trip-fields`) — for a task its status, its
   due date as seen from today (tagged when overdue), its assignee and when
   it was done (`task.done`), for an email its sender, followed by its kind
   when the email analysis found one ("Stadtwerke · Request",
@@ -61,9 +62,10 @@ holds `selected_entity`, `selected_thread`, `selected_booking` and
   (and how many are pending) and the balance it ends with
   (`vault.md#statement`), and for a recurring payment its fields
   (`panel.md#a-recurring-card`; `renderCardDetails`,
-  `features/panel/details.js`). A task's fields, a document's genre and a
-  recurring payment's fields are editable in place while the host can
-  write the entity (`panel.md#field-edits`); the rest is read-only;
+  `features/panel/details.js`). A task's fields, a document's genre, a
+  trip event's fields and a recurring payment's fields are editable in
+  place while the host can write the entity (`panel.md#field-edits`); the
+  rest is read-only;
 - the blocks other modules add (`registerCardBlock`): after the head or
   after the details, each filled for the card's entity, hidden on a card
   it has nothing for, and refreshed with the chips (a recurring payment's
@@ -677,11 +679,13 @@ one shows them as text:
   category removing its key.
 - **A project's facts** (`#blueprint`): edited in place under the lens
   header, each writing the whole block through `set_project`.
+- **A trip event's fields** (`#trip-fields`): each written by itself as
+  an `{event: {…}}` change.
 
 A field writes when Enter is pressed or it is left, if its value changed;
-Esc puts back what it held (`onEditEnd`, `ui/field.js`). A date input's
+Esc puts back what it held (`editField`, `ui/field.js`). A date input's
 change fires for every digit typed, so it isn't what writes. Each edit of
-a task or a genre is one `edit_entities` for the one entity
+a task, a genre or a trip event is one `edit_entities` for the one entity
 (`editEntityLocal`, `model/structure.js`). It publishes no selection, so the cards aren't
 rebuilt: they follow the entity's push (`refreshCardChips`). While one of
 the block's fields has the focus, that refresh waits until the block is
@@ -692,6 +696,47 @@ in the status bar.
 
 The dashboard's Tasks card sets a task's status the same way, by dragging
 it to another column (`ui.md#dashboard`).
+
+### A trip's event <a id="trip-fields"></a>
+
+An event that says what part of a trip it is (`event.kind`,
+`vault.md#event`), or one in a trip (a project of the `travel` blueprint,
+`isTripEvent`, `model/trip.js`), shows its trip fields in place of when,
+where and the status (`tripFields`, `features/panel/trip-fields.js`); a
+recurring event keeps its own. While the host can write it:
+
+- **Kind**: Transport, Stay or Activity, a segmented button; an event in a
+  trip that is none presses none. The card's icon follows (`docIcon`,
+  `ui/icons.js`: a transport's by its way, a stay a bed, an activity a
+  ticket).
+- **State**: Held (`status: tentative`, it holds the days in the
+  calendar) or Booked (`confirmed`).
+- **A transport**: its **Way** (flight, train, bus, ferry, car) as icons;
+  **From** and **Leaves**, **To** and **Arrives**: a place typed in, the
+  places of the vault's trip events offered (`tripPlaces`), then a day
+  and a time in that place's time zone, the zone named by its city
+  ("Chicago time"), a button that opens the zones' menu (this
+  PC's and those the trip events use, then every other, a filter finding
+  one); Arrives also says how long it takes ("8 h 15 min"). The start is
+  meant in `timeZone`, the end in its own if it has one
+  (`end-time-zone`). Its **Booking**, its reference.
+- **A stay**: its **Place**, and its **Nights**: the first night's day and
+  the day it ends, the morning after the last (an all-day end is
+  excluded), and how many.
+- **An activity**: its **Place**, and when it starts and ends, in the
+  place's zone.
+- **Where**: the address, `location`.
+
+Each writes by itself (`editEntityLocal(id, {event: {…}})`). A time goes
+with its zone: a new start keeps how long the event takes (the end moves
+with it); another zone keeps an end's wall time there, and a transport's
+arrival keeps the zone it had; a place named that had another zone moves
+its end to that zone (`placeZone`: the zone the latest trip event naming
+it had). A held way may be a day only: it has no zone, its arrival no
+time; a time typed into its start makes it a timed event of an hour,
+clearing that time a day-only one again. While the host can't write it,
+the fields show as text. The calendar stays a chip: an event doesn't move
+between calendars.
 
 ## Saving structural edits <a id="saving-structure"></a>
 
@@ -772,6 +817,7 @@ and save their bodies at once.
 | D17 | A booking's recurring payment | a booking's card → its Recurring payment "+" → a recurring payment, or × → `setBookingRecurringPaymentLocal` | `set_booking_recurring_payment {bookings, to}` → `Index::set_booking_recurring_payment` → `entity` (the statement) | the row's icon and chip, the recurring payment's occurrences follow |
 | D18 | New recurring payment | the Recurring payment menu's New recurring payment → `openNewRecurringPayment`; Create or Ctrl+Enter → `createRecurringPayment` | `create_recurring_payment` → `entity`, `ok {id}`; then `set_booking_recurring_payment` → `entity` per statement | the recurring payment selected, its bookings in it |
 | D19 | A recurring payment's fields | a recurring payment's card: a field typed in, Enter or blur; a period; Take it → `setRecurringPaymentLocal` | `set_recurring_payment {id, recurring}` → `entity` | the card's sum, fields and occurrences follow |
+| D20 | A trip event's field | a Kind, State or Way button; a place, day, time or booking typed in, Enter or blur; a zone picked → `editEntityLocal(id, {event: {…}})` | `edit_entities` → `Index::edit_entities` (a new start also the entity's `date`; a recurring event's times refused) → `entity` | the card, the lenses' rows and icons follow; a synced event is pushed by its next sync |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |
 | E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |

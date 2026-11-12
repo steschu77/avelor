@@ -15,7 +15,7 @@ import { store } from '../model/state.js';
 import { projects } from '../model/entities.js';
 import { checksOf, factsOf, hasBlueprint, membersOf } from '../model/blueprint.js';
 import { setProjectLocal } from '../model/structure.js';
-import { KIND_ICONS, getDocIcon, iconEl } from '../ui/icons.js';
+import { KIND_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { factEl } from './facts.js';
 import { TASK_STATUSES } from './panel/details.js';
@@ -163,7 +163,7 @@ function nextRow(next) {
   if (next.doc) {
     const { doc } = next;
     const sub = [STATUS.get(doc.task.status) ?? doc.task.status, !isNaN(doc.due) && doc.due ? t('timeline.due', { day: dayText(doc.due) }) : null];
-    return itemEl(getDocIcon('task'), doc.title || t('untitled'), sub.filter(Boolean).join(' \u00b7 '),
+    return itemEl(KIND_ICONS.task.icon, doc.title || t('untitled'), sub.filter(Boolean).join(' \u00b7 '),
       { open: () => selectDocument(doc.doc_id) });
   }
   const { payment, due } = next;
@@ -184,7 +184,7 @@ function findDocument(anchor, { id, project }, index) {
   const members = membersOf(id).filter(doc => !by.has(doc.doc_id) && !doc.task)
     .sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0));
   const items = members.map(doc => ({
-    label: doc.title || t('untitled'), icon: getDocIcon(doc.kind, doc.genre),
+    label: doc.title || t('untitled'), icon: docIcon(doc),
     desc: doc.date ? DATE_FORMAT.format(doc.date) : '',
     run: () => setProjectLocal(id, {
       ...project,

@@ -197,6 +197,29 @@
   width: var(--w-new-date);
 }
 
+/* a trip event's fields (features/panel/trip-fields.js): a time beside its
+   day, a place, the booking, and the zone a time is in, which opens the
+   zones' menu */
+.props>dd:has(>.props__time) {
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.props__time {
+  flex: none;
+  width: var(--w-new-time);
+}
+
+.props__place,
+.props__booking {
+  flex: 0 1 160px;
+}
+
+.props__zone,
+.props>dd>.meta {
+  white-space: nowrap;
+}
+
 /* Messages (#doc-content, #thread-messages): one card per message on the
  * root-to-active path, each with its own head/tags/toolbar/editor. A lone
  * document is a borderless sheet on card. */

@@ -39,7 +39,7 @@ import {
 } from '../../model/structure.js';
 import { createThreadLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { selectionWithout } from '../../model/structure.js';
-import { fileIcon, getDocIcon, iconEl } from '../../ui/icons.js';
+import { docIcon, fileIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
@@ -242,7 +242,7 @@ export function addChip(has, { onJoin, onAddLabel }) {
 // icon; null if it isn't in the vault.
 export function linkTarget(id) {
   const doc = entities.get(id);
-  if (doc) return { title: doc.title, icon: getDocIcon(doc.kind, doc.genre), date: doc.date };
+  if (doc) return { title: doc.title, icon: docIcon(doc), date: doc.date };
   const thread = threads.get(id);
   if (thread) return { title: thread.title, icon: KIND_ICONS.thread.icon, date: parseDate(thread.date) };
   const project = projects.get(id);
@@ -441,7 +441,7 @@ function renderCardHead(controller) {
     controller.titleEl.textContent = ownTitle ?? doc.title ?? '';
   }
   controller.dateEl.textContent = date ? DATE_FORMAT.format(date) : '';
-  controller.iconEl.firstChild.setAttribute('href', getDocIcon(doc.kind, doc.genre));
+  controller.iconEl.firstChild.setAttribute('href', docIcon(doc));
   controller.renameBtn.hidden = !doc.writable || ownTitle !== undefined;
 }
 
