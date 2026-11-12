@@ -11,11 +11,12 @@ import { DATE_FORMAT, DAY_MONTH, SHORT_MONTH_YEAR, WEEKDAY } from '../core/forma
 import { amountText, dayStart, daysBetween, parseAmount, parseDate } from '../core/format.js';
 import { t } from '../core/text.js';
 import { entities, parseContact } from '../model/entities.js';
-import { withFact } from '../model/blueprint.js';
+import { factsOf, withFact } from '../model/blueprint.js';
 import { setProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { contactChip, entityChip } from './panel/details.js';
+import { fieldInput } from '../ui/field.js';
 
 // The fact `fact` (`factsOf`) of the project `id`, its block `project`, as
 // the header shows it; `meta` a note after its value (what the budget has
@@ -41,6 +42,46 @@ export function factEl(fact, { id, project, writable }, meta = null) {
   };
   show();
   return el;
+}
+
+// "+ Fact" after the project `id`'s facts: a fact the blueprint doesn't
+// name, its name and its value typed in, as a record's + Field
+// (features/panel/details.js); Enter writes it as text (`withFact`), Esc
+// drops it. A name the project has a fact of already isn't written: the
+// fact is edited by its own pencil.
+export function newFactEl({ id, project }) {
+  const add = accEl('button', 'tool label', t('facts.add'));
+  add.type = 'button';
+  add.dataset.focusKey = 'fact-new';
+  add.addEventListener('click', () => {
+    const name = fieldInput('text', 'fact-new:name', '', 'form-input');
+    name.placeholder = t('facts.name');
+    const value = fieldInput('text', 'fact-new:value', '', 'form-input');
+    value.placeholder = t('facts.value');
+    const line = accEl('span', 'bp__new-fact');
+    line.append(name, value);
+    add.replaceWith(line);
+    name.focus();
+    const known = new Set(factsOf(project).map(fact => fact.name));
+    const done = write => {
+      const key = name.value.trim();
+      if (write && known.has(key)) {
+        name.setAttribute('aria-invalid', 'true');
+        name.title = t('facts.exists', { name: key });
+        return;
+      }
+      line.replaceWith(add);
+      if (write && key && value.value.trim()) setProjectLocal(id, withFact(project, key, value.value.trim()));
+    };
+    for (const input of [name, value]) {
+      input.addEventListener('keydown', e => {
+        e.stopPropagation();
+        if (e.key === 'Enter') done(true);
+        else if (e.key === 'Escape') done(false);
+      });
+    }
+  });
+  return add;
 }
 
 // ----------------------------------------------------------------------------

@@ -49,6 +49,13 @@
   min-width: 0;
 }
 
+/* + Fact's name and value, typed in (features/facts.js) */
+.bp__new-fact {
+  display: flex;
+  align-self: center;
+  gap: 4px;
+}
+
 .bp__value {
   display: flex;
   flex-wrap: wrap;

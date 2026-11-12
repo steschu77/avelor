@@ -17,7 +17,7 @@ import { checksOf, factsOf, hasBlueprint, membersOf } from '../model/blueprint.j
 import { setProjectLocal } from '../model/structure.js';
 import { KIND_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
-import { factEl } from './facts.js';
+import { factEl, newFactEl } from './facts.js';
 import { TASK_STATUSES } from './panel/details.js';
 import { selectDocument } from './selection.js';
 
@@ -62,6 +62,7 @@ function renderBlueprint({ id, project, writable }) {
   const facts = accEl('div', 'bp__facts');
   facts.append(...factsOf(project).map(fact =>
     factEl(fact, ctx, fact.name === 'budget' && budget ? t('bp.spent', { amount: amountText(budget.spent) }) : null)));
+  if (writable) facts.append(newFactEl(ctx));
 
   const lists = {
     missing: [t('bp.missing'), result.missing.map(gap => gapRow(gap, ctx)), t('bp.nothing_missing')],

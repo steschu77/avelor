@@ -589,7 +589,11 @@ button is gone.
   leaving the inputs writes the whole block through `set_project`
   (`setProjectLocal`, `model/structure.js`) if the value changed, Esc puts
   it back; empty removes the fact. The budget says what the project's
-  transactions have spent ("3,148.00 spent").
+  transactions have spent ("3,148.00 spent"). + Fact at the end adds one the
+  blueprint doesn't name, while the host can write the project: its name
+  and value typed in, as a record's + Field (`newFactEl`), Enter writing
+  it as text, Esc dropping it; a name the project has a fact of already
+  isn't written, that fact being changed with its own pencil.
 - **A tab line**: Missing and Next, each with its count, then how far the
   project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00").
   One list is open at a time; its tab again folds it, so the lens keeps
