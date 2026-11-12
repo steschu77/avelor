@@ -5,9 +5,10 @@
 // first, a Today line between what is coming and what was; above it a
 // scrubber (features/lenses/scrub.js) with a bar per week over last year
 // and this one, across which a drag picks a range of weeks that the feed
-// keeps to (while the app runs). A row selects its entity and drags like a
-// row of the Documents lens; a card dragged out of its thread onto the
-// lens leaves it. A held event (tentative) is dashed.
+// keeps to (while the app runs), as a click on a trip's stop does
+// (`showWeeks`). A row selects its entity and drags like a row of the
+// Documents lens; a card dragged out of its thread onto the lens leaves it.
+// A held event (tentative) is dashed.
 
 import { $, accEl, placeChildren } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
@@ -96,15 +97,23 @@ let scrollToToday = false;
 
 // ----------------------------------------------------------------------------
 // The scrubber: a bar per week, from the week of 1 January last year to the
-// week of 31 December this year, as high as its entries of the types shown
-// against the busiest week's; the weeks to come lighter, the years under
-// the bars. Today also scrolls the feed to today.
+// week of 31 December this year, or of the latest entry past it (a trip
+// next summer), as high as its entries of the types shown against the
+// busiest week's; the weeks to come lighter, the years under the bars.
+// Today also scrolls the feed to today.
 const scrub = scrubber({ lens: 'timeline', onToday: () => { scrollToToday = true; } });
 feedEl.before(scrub.el);
 
+// Keep the feed to the weeks from `from`'s to `to`'s (a trip's stop,
+// features/route.js).
+export function showWeeks(from, to) {
+  scrub.pick(from, to);
+}
+
 function renderTrack(entries, today, title) {
   const year = today.getFullYear();
-  const weeks = weeksBetween(new Date(year - 1, 0, 1), new Date(year, 11, 31));
+  const last = entries.reduce((latest, doc) => (doc.date > latest ? doc.date : latest), new Date(year, 11, 31));
+  const weeks = weeksBetween(new Date(year - 1, 0, 1), last);
   const counts = weeks.map(() => 0);
   for (const doc of entries) {
     const week = weekOf(weeks, doc.date);

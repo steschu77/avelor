@@ -1,6 +1,7 @@
 // The selection (panel.md#selection): what the panel shows -- an entity, a
-// thread, a booking of a statement, the calendar's day -- and the vault
-// panel's filter, all in the store; every feature selects through it.
+// thread, a booking of a statement, a trip's leg, the calendar's day -- and
+// the vault panel's filter, all in the store; every feature selects
+// through it.
 
 import { setAria } from '../core/dom.js';
 import { rpcCall } from '../core/rpc.js';
@@ -42,12 +43,15 @@ export function selectDocument(doc_id, thread_id = null) {
 }
 
 // The selection of the entity `selected_entity`, see `selectDocument`; a
-// booking selected before isn't any more.
+// booking selected before isn't any more. The leg shown stays if the
+// entity is one of its parts, unless it is asked for in a thread.
 function selectionOf(selected_entity, thread_id = null) {
-  const current = thread_id ?? store.getState().selected_thread;
+  const { selected_thread: shown, selected_leg: leg } = store.getState();
+  const current = thread_id ?? shown;
   const threadsOfDoc = entities.get(selected_entity)?.threads ?? [];
   const selected_thread = threadsOfDoc.includes(current) ? current : (threadOf(selected_entity) ?? null);
-  return { selected_entity, selected_thread, selected_booking: null };
+  const selected_leg = !thread_id && leg?.includes(selected_entity) ? leg : null;
+  return { selected_entity, selected_thread, selected_booking: null, selected_leg };
 }
 
 // Selects the booking `booking` of the statement `statement`: the panel
@@ -56,6 +60,16 @@ function selectionOf(selected_entity, thread_id = null) {
 export function selectBooking(statement, booking) {
   openPanel();
   store.setState({ selected_entity: statement, selected_thread: null, selected_booking: booking });
+}
+
+// Selects a trip's leg, the events `ids` that are its parts
+// (features/route.js): the panel shows their cards as the calendar's does
+// a day's, the first one focused. The calendar's panel shows the first
+// one's day instead.
+export function selectLeg(ids) {
+  if (store.getState().selected_lens === 'calendar') return selectDocument(ids[0]);
+  openPanel();
+  store.setState({ ...selectionOf(ids[0]), selected_leg: ids });
 }
 
 // Selects the day `selected_day` in the calendar; with `doc_id` also that
@@ -182,18 +196,22 @@ export function expandPanel() {
 // ----------------------------------------------------------------------------
 // Which panel shows what, derived from store state alone:
 // - 'day': the calendar lens is active: `selected_day`'s events,
+// - 'booking': `selected_booking` is a booking of `selected_entity`,
+// - 'leg': `selected_entity` is one of the parts of `selected_leg`,
 // - 'thread': `selected_thread` exists and `selected_entity` (if any) is one
 //   of its members,
-// - 'booking': `selected_booking` is a booking of `selected_entity`,
 // - 'document': `selected_entity` is a known entity, shown standalone,
 // - 'none': nothing selected (or the selection was deleted): the empty
 //   preview.
-export function panelMode({ selected_lens, selected_entity, selected_thread, selected_booking }) {
+export function panelMode({ selected_lens, selected_entity, selected_thread, selected_booking, selected_leg }) {
   if (selected_lens === 'calendar') {
     return 'day';
   }
   if (selected_booking && bookingOf(entities.get(selected_entity), selected_booking)) {
     return 'booking';
+  }
+  if (selected_leg?.includes(selected_entity) && entities.has(selected_entity)) {
+    return 'leg';
   }
   if (selected_thread && threads.has(selected_thread)
     && (!selected_entity || entities.get(selected_entity)?.threads?.includes(selected_thread))) {

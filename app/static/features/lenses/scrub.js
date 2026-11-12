@@ -50,7 +50,8 @@ function labelsOf(weeks, by) {
 // (the element it had, kept by its day, or none yet) and the `labels`,
 // 'years' or 'months'. `range()` is the range picked, its first week's
 // first day and the day after its last week, or null; `holds(date)` whether
-// `date` is in it, or there is none.
+// `date` is in it, or there is none; `pick(from, to)` picks the weeks from
+// `from`'s to `to`'s, as a drag across them would.
 export function scrubber({ lens, meta = null, track = null, onToday = null }) {
   const titleEl = accEl('span', 'label');
   const rangeEl = accEl('span', 'label scrub__range');
@@ -153,5 +154,10 @@ export function scrubber({ lens, meta = null, track = null, onToday = null }) {
     invalidateLenses(lens);
   });
 
-  return { el, range: () => range, holds, render };
+  const pick = (from, to) => {
+    range = { from: weekStartOf(from), to: addDays(weekStartOf(to), 7) };
+    invalidateLenses(lens);
+  };
+
+  return { el, range: () => range, holds, pick, render };
 }

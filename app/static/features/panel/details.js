@@ -28,7 +28,7 @@ import { editField, fieldInput } from '../../ui/field.js';
 import { fileIcon, iconEl } from '../../ui/icons.js';
 import { accSeg } from '../../ui/segmented.js';
 import { openOriginal, selectById } from '../selection.js';
-import { tripFields } from './trip-fields.js';
+import { meetsField, tripFields } from './trip-fields.js';
 
 // ----------------------------------------------------------------------------
 // A task's tag: "Due", or "Overdue" and filled -- the only emphasis the grid
@@ -94,6 +94,8 @@ export function renderCardDetails(row, doc, occurrence = null) {
         if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')));
         const work = calendar?.calendar?.['work-of'] || event.work ? workField(doc) : null;
         if (work) add(t('props.work'), ...work);
+        const meets = trip ? meetsField(doc) : null;
+        if (meets) add(t('props.meets'), ...meets);
         const status = { tentative: t('event.tentative'), cancelled: t('event.cancelled') }[event.status];
         if (status && !trip) add(t('props.status'), status);
     }

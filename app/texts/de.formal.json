@@ -57,6 +57,8 @@
   "new.pick_start": "Wählen Sie zuerst ein Startdatum",
   "panel.select_hint": "Wählen Sie ein Dokument aus der Liste.",
   "recurring.none": "Hier gibt es noch keine Dauerzahlung: Legen Sie eine auf der Karte einer Buchung an, in ihrer Zeile Dauerzahlung.",
+  "route.no_way_on": "Kein Weg von {from} nach {to} am {day}: Fügen Sie einen hinzu",
+  "route.no_way_title": "Kein Weg von {from} nach {to}: Fügen Sie einen hinzu",
   "rp_new.choose_first_day": "Wählen Sie den ersten Tag",
   "rp_new.choose_month_day": "Wählen Sie einen Tag des Monats, 1 bis 31",
   "rp_new.enter_amount": "Geben Sie den Betrag ein",

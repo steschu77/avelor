@@ -50,6 +50,9 @@ export const store = createStore({
   // a booking of `selected_entity`, a statement: its card in the panel
   // (`selectBooking`, features/selection.js)
   selected_booking: null,
+  // a trip's leg the panel shows, the ids of its parts (`selectLeg`,
+  // features/selection.js)
+  selected_leg: null,
   selected_day: dayStart(new Date()), // the day the calendar's panel shows (features/lenses/calendar.js)
   selected_lens: 'dashboard', // the lens shown; the one shown last comes back on start (`restoreLens`)
   files_total: 0,

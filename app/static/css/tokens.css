@@ -116,6 +116,8 @@
   --w-occurrence-state: 52px;
   --w-schedule-day: 56px;
   --w-recurring-payment-amount: 96px;
+  /* a trip's route (features/route.js): a stop's box, a leg's line */
+  --h-route: 30px;
 
   /* sidebar and table inset */
   --p-gutter: 12px;

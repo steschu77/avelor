@@ -14,8 +14,9 @@
 }
 
 /* A project's blueprint under its description (features/blueprint.js): its
-   facts on a line, each edited in place, then a tab line, Missing and Next
-   with their counts and how far it is, and the list open. */
+   facts on a line, each edited in place, a trip's route, then a tab line,
+   Missing and Next with their counts and how far it is, and the list
+   open. */
 .bp {
   flex: none;
   display: flex;
@@ -69,6 +70,317 @@
 
 .bp__input[type="text"] {
   width: 12em;
+}
+
+/* A trip's route under its facts (features/route.js): the trip as its
+   nights, home at both ends. A stop is as wide as its nights, an overnight
+   leg as wide as its night, a day's leg a small part of one: width is time,
+   not count, so the strip stays one line however many stops and however
+   narrow the lens. Each stop and leg is its own container and says less as
+   it narrows (its name and nights, its name, its nights alone; a leg's
+   words, then its first icon). */
+.route {
+  container: route / inline-size;
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* a stop, a leg, home: its box or line, and under it its days or words */
+.route__stop,
+.route__leg,
+.route__home {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--c-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* a stop as wide as its nights (--n). The legs share at most 25% of the
+   strip (--legs, how many there are), each up to 96px; an overnight leg
+   grows as a night does (--n: its nights) */
+.route__stop,
+.route__leg {
+  container: route-part / inline-size;
+}
+
+.route__stop {
+  flex: var(--n, 1) 1 0;
+}
+
+.route__leg {
+  flex: var(--n, 0) 1 clamp(24px, calc(25cqi / var(--legs, 3)), 96px);
+  min-width: 24px;
+}
+
+.route__home {
+  flex: none;
+  cursor: default;
+}
+
+.route__box {
+  position: relative;
+  height: var(--h-route);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 3px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.route__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 500 var(--fs-body)/1.2 var(--f-serif);
+}
+
+.route__count {
+  flex: none;
+}
+
+.route__home .route__box {
+  padding: 0 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--c-ink-mute);
+}
+
+.route__home .icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* its nights along its foot, a cell each: booked, held, missing,
+   sketched (a range's maybe faded) */
+.route__nights {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  display: flex;
+  gap: 1px;
+}
+
+.route__nights>i {
+  flex: 1;
+  background: var(--c-ink-mute);
+}
+
+.route__nights>.is-held {
+  background: var(--c-ink-faint);
+}
+
+.route__nights>.is-gap {
+  background: var(--c-danger);
+}
+
+.route__nights>.is-idea {
+  background: var(--c-line);
+}
+
+.route__nights>.is-maybe {
+  opacity: .45;
+}
+
+/* a leg's line: an icon per part, a dot where they meet */
+.route__line {
+  position: relative;
+  height: var(--h-route);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 3px;
+}
+
+.route__line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 13px;
+  border-top: 1px solid var(--c-ink);
+}
+
+.route__line>.icon,
+.route__via {
+  position: relative;
+  background: var(--c-paper);
+}
+
+/* 14px as home's, with paper either side over the line (border-box) */
+.route__line>.icon {
+  width: 20px;
+  height: 14px;
+  padding: 0 3px;
+}
+
+.route__via {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin: 0 1px;
+  border: 1px solid var(--c-ink);
+  border-radius: var(--r-pill);
+}
+
+.route__when {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.route__leg .route__when {
+  text-align: center;
+}
+
+.route__when>.route__short {
+  display: none;
+}
+
+/* the states: sketched, held, missing; a stop with a missing night keeps
+   its box, the cell says which */
+.route__stop[data-state="idea"] .route__box {
+  border: 1px dotted var(--c-ink-mute);
+  background: transparent;
+}
+
+.route__stop[data-state="held"] .route__box {
+  border: 1px dashed var(--c-ink-mute);
+}
+
+.route__stop[data-state="missing"] .route__box {
+  border: 1px dashed var(--c-danger-ink);
+  background: transparent;
+}
+
+.route__stop[data-state="missing"] .route__name {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--c-ink-mute);
+}
+
+.route__stop[data-state="partial"] .route__count {
+  color: var(--c-ink);
+}
+
+.route__leg[data-state="idea"] .route__line::before {
+  border-top: 1px dotted var(--c-ink-mute);
+}
+
+.route__leg[data-state="idea"] .route__line>.icon {
+  color: var(--c-ink-mute);
+}
+
+.route__leg[data-state="held"] .route__line::before {
+  border-top-style: dashed;
+}
+
+.route__leg[data-state="missing"] .route__line::before {
+  border-top: 1px dashed var(--c-danger-ink);
+}
+
+.route__leg[data-state="missing"] .route__line>.icon {
+  color: var(--c-danger-ink);
+}
+
+.route__stop:hover .route__box {
+  border-color: var(--c-ink);
+}
+
+.route__leg:hover .route__when {
+  color: var(--c-ink);
+}
+
+.route__stop[aria-selected="true"] .route__box {
+  background: var(--c-accent-soft);
+  border-color: var(--c-ink);
+}
+
+.route__leg[aria-selected="true"] .route__line::before {
+  border-top-width: 2px;
+  top: 12px;
+}
+
+.route__leg[aria-selected="true"] .route__when {
+  color: var(--c-ink);
+}
+
+/* a narrow stop: its days short, its count goes (the cells count);
+   narrower still, its name goes and the count comes back */
+@container route-part (max-width: 96px) {
+  .route__count {
+    display: none;
+  }
+
+  .route__when>.route__long {
+    display: none;
+  }
+
+  .route__when>.route__short {
+    display: inline;
+  }
+}
+
+@container route-part (max-width: 48px) {
+  .route__box {
+    justify-content: center;
+    padding: 0 2px 3px;
+  }
+
+  .route__name {
+    display: none;
+  }
+
+  .route__count {
+    display: inline;
+  }
+}
+
+/* a narrow leg: its words go, then all but its first part */
+@container route-part (max-width: 56px) {
+  .route__leg .route__when {
+    visibility: hidden;
+  }
+}
+
+@container route-part (max-width: 40px) {
+  .route__line>.icon~.icon,
+  .route__line>.route__via {
+    display: none;
+  }
+}
+
+/* the part of a sketch picked, edited under the strip: a stop's place,
+   nights and note, a leg's ways */
+.route__edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.route__edit>.tool {
+  gap: 4px;
+}
+
+.route__edit>.tool[aria-pressed="true"] {
+  color: var(--c-ink);
+}
+
+.route__nights-input.bp__input[type="text"] {
+  width: 5em;
 }
 
 .bp__tabs {

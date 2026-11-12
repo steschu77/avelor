@@ -2,9 +2,11 @@
 // the day view (the events of `selected_day` as cards in #day-cards, then its
 // tasks due as rows that open into cards, kept by id while entities change), a
 // thread (all members of `selected_thread` as a flat, date-ordered card list
-// in #panel-thread-view, vault.md#thread), or a standalone entity (one card in
+// in #panel-thread-view, vault.md#thread), a trip's leg (its parts as cards
+// in #leg-cards, as a day's), or a standalone entity (one card in
 // #doc-content) -- driven only by store state (`selected_lens`,
-// `selected_day`, `selected_entity`, `selected_thread`, `threads_rev`).
+// `selected_day`, `selected_entity`, `selected_thread`, `selected_leg`,
+// `threads_rev`).
 // Structural edits (drops, the remove-from-thread and delete buttons) are host
 // round trips (`structureCall`, model/structure.js) that end in a published
 // selection, never in a direct render call; the requests (`joinThreadLocal`,
@@ -39,6 +41,7 @@ import {
 } from '../../model/structure.js';
 import { createThreadLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { selectionWithout } from '../../model/structure.js';
+import { routeSpot } from '../../model/trip.js';
 import { docIcon, fileIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
@@ -68,6 +71,7 @@ let renderedDocId = null; // the standalone entity shown in #doc-content, or nul
 let renderedDay = null; // the day shown in the day view, or null
 let renderedDayIds = []; // the entities it lists (cards and rows), in order
 const dayRows = new Map(); // doc_id -> the row of a task it lists, not opened
+let renderedLeg = []; // the parts of the leg shown, in their order on the route
 let renderedRev = -1; // the `threads_rev` the current cards were built for
 let focusedDocId = null; // the card currently marked aria-selected
 
@@ -85,6 +89,10 @@ const panelDocViewEl = $('panel-doc-view');
 const panelDayViewEl = $('panel-day-view');
 const panelThreadViewEl = $('panel-thread-view');
 const panelBookingViewEl = $('panel-booking-view');
+const panelLegViewEl = $('panel-leg-view');
+const legSubEl = $('leg-sub');
+const legTitleEl = $('leg-title');
+const legCardsEl = $('leg-cards');
 let dayEmptyEl = null; // the day view's note for a day without anything, built once
 let dayDueHeadEl = null; // the heads of its tasks due, and of today's overdue ones
 let dayOverdueHeadEl = null;
@@ -496,16 +504,19 @@ function threadChip(doc_id, thread_id) {
 // for that thread, with the card focused and scrolled to -- in the
 // Documents lens, if the calendar showed it in its day.
 function switchThread(doc_id, thread_id) {
-  store.setState({ ...documentsIfCalendar(), selected_entity: doc_id, selected_thread: thread_id, selected_booking: null });
+  store.setState({
+    ...documentsIfCalendar(), selected_entity: doc_id, selected_thread: thread_id, selected_booking: null, selected_leg: null,
+  });
 }
 
 // ----------------------------------------------------------------------------
 // The one panel renderer (subscribed below). Visibility is resolved
 // first, so a panel is never still `hidden` (display:none) when a scroll
 // below runs against it -- scrolling inside a hidden ancestor is a silent
-// no-op. Cards are only rebuilt when the shown day/thread/entity or
+// no-op. Cards are only rebuilt when the shown day/thread/leg/entity or
 // `threads_rev` changed; otherwise a new `selected_entity` within the shown
-// thread or day just moves the focus, keeping editors and scroll position.
+// thread, leg or day just moves the focus, keeping editors and scroll
+// position.
 // The day's cards are re-keyed rather than rebuilt (`refreshDay`). A
 // booking's card renders itself (features/panel/booking.js).
 function renderPanel(state) {
@@ -513,7 +524,8 @@ function renderPanel(state) {
   panelDayViewEl.hidden = mode !== 'day';
   panelThreadViewEl.hidden = mode !== 'thread';
   panelBookingViewEl.hidden = mode !== 'booking';
-  panelDocViewEl.hidden = mode === 'day' || mode === 'thread' || mode === 'booking';
+  panelLegViewEl.hidden = mode !== 'leg';
+  panelDocViewEl.hidden = mode === 'day' || mode === 'thread' || mode === 'booking' || mode === 'leg';
 
   const stale = state.threads_rev !== renderedRev;
 
@@ -530,6 +542,13 @@ function renderPanel(state) {
     } else if (state.selected_entity !== focusedDocId) {
       focusMessage(state.selected_entity);
     }
+  } else if (mode === 'leg') {
+    if (stale || state.selected_leg.join() !== renderedLeg.join()) {
+      renderedRev = state.threads_rev;
+      renderLeg(state.selected_leg, state.selected_entity);
+    } else if (state.selected_entity !== focusedDocId) {
+      focusMessage(state.selected_entity);
+    }
   } else if (mode === 'thread') {
     if (stale || state.selected_thread !== renderedThreadId) {
       renderedRev = state.threads_rev;
@@ -543,7 +562,7 @@ function renderPanel(state) {
       renderDocument(entities.get(state.selected_entity));
     }
   } else if (mode === 'none') {
-    if (renderedDocId || renderedThreadId || !docContentEl.querySelector('.empty')) {
+    if (renderedDocId || renderedThreadId || renderedLeg.length || !docContentEl.querySelector('.empty')) {
       renderedRev = state.threads_rev;
       renderEmpty();
     }
@@ -557,9 +576,11 @@ function destroyRenderedCards() {
   for (const doc of renderedMembers) destroyMessageController(doc.doc_id);
   if (renderedDocId) destroyMessageController(renderedDocId);
   for (const doc_id of renderedDayIds) destroyMessageController(doc_id);
+  for (const doc_id of renderedLeg) destroyMessageController(doc_id);
   docContentEl.replaceChildren();
   threadMessagesEl.replaceChildren();
   dayCardsEl.replaceChildren();
+  legCardsEl.replaceChildren();
   focusedDocId = null;
 
   renderedThreadId = null;
@@ -567,6 +588,7 @@ function destroyRenderedCards() {
   renderedDocId = null;
   renderedDay = null;
   renderedDayIds = [];
+  renderedLeg = [];
   setDayListed([]);
   dayRows.clear();
 }
@@ -734,6 +756,25 @@ function dueRow(doc, inOverdue) {
 // Scrolls the day view to today's overdue tasks (the grid's count).
 export function scrollToOverdue() {
   if (dayOverdueHeadEl?.isConnected) dayOverdueHeadEl.scrollIntoView({ block: 'start', behavior: 'instant' });
+}
+
+// ----------------------------------------------------------------------------
+// Rebuilds the leg view for the parts `ids` of a trip's leg (`selectLeg`):
+// its head ("Leg 1 of 3 \u00b7 via Frankfurt", "Springfield \u2192 Hamburg"), then
+// a card per part still in the vault, `focusDocId`'s focused and scrolled
+// to. Only called by renderPanel.
+function renderLeg(ids, focusDocId) {
+  destroyRenderedCards();
+  renderedLeg = ids;
+  const docs = ids.map(id => entities.get(id)).filter(Boolean);
+  const spot = routeSpot(docs[0]);
+  const vias = docs.slice(0, -1).map(doc => doc.event?.to).filter(Boolean);
+  legSubEl.textContent = [spot ? t('leg.of', { at: spot.index + 1, n: spot.legs }) : t('leg.leg'), vias.length ? t('leg.via', { places: vias.join(', ') }) : '']
+    .filter(Boolean).join(' \u00b7 ');
+  legTitleEl.textContent = `${docs[0].event?.from || t('leg.somewhere_start')} \u2192 ${docs.at(-1).event?.to || t('leg.somewhere')}`;
+  for (const doc of docs) legCardsEl.append(createMessageController(doc, { selectable: true }).card);
+  focusMessage(focusDocId);
+  scrollIntoView(focusDocId);
 }
 
 // ----------------------------------------------------------------------------
@@ -983,12 +1024,13 @@ export function leaveCardEditMode() {
 }
 
 // ----------------------------------------------------------------------------
-// The side panel (day view, thread, or standalone entity) is rendered in
-// exactly one place, `renderPanel` (above), from a single
+// The side panel (day view, thread, leg, or standalone entity) is rendered
+// in exactly one place, `renderPanel` (above), from a single
 // subscription over everything it depends on.
 store.subscribe([
   state => state.selected_lens, state => state.selected_day?.getTime(), state => state.selected_entity,
-  state => state.selected_thread, state => state.selected_booking, state => state.threads_rev,
+  state => state.selected_thread, state => state.selected_booking, state => state.selected_leg,
+  state => state.threads_rev,
 ], (_values, state) => renderPanel(state));
 
 // The cards' heads, event details, links, attachments and threads lines

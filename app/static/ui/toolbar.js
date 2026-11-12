@@ -1,8 +1,9 @@
 // The editors' toolbars, cloned from index.html's templates for a card's
 // editor and preview (features/panel/panel.js) and the project
-// description (features/header.js).
+// description (features/header.js); a tool button with a label
+// (`toolButton`).
 
-import { $ } from '../core/dom.js';
+import { $, accEl } from '../core/dom.js';
 
 // Clones the shared toolbar markup (index.html #editor-toolbar-template),
 // so each editor (a card's, the project description's) gets its own live
@@ -20,4 +21,14 @@ export function createDocPreviewToolbar() {
   const toolbar = template.content.firstElementChild.cloneNode(true);
   toolbar.hidden = false;
   return toolbar;
+}
+
+// A tool button labelled `label`, `title` its tooltip: `run(btn)` on a
+// click.
+export function toolButton(label, title, run) {
+  const btn = accEl('button', 'tool label', label);
+  btn.type = 'button';
+  btn.title = title;
+  btn.addEventListener('click', () => run(btn));
+  return btn;
 }

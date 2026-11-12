@@ -82,13 +82,14 @@ function assistantItemTitle(item) {
 // what is shown
 
 // The item the panel shows: the thread in the thread view, the entity in
-// the document view, the focused card's in the day view. An AI conversation shown
-// in the panel opens in the assistant, with the item it is linked to.
+// the document view, the focused card's in the leg and the day view. An AI
+// conversation shown in the panel opens in the assistant, with the item it is
+// linked to.
 function assistantShow(state) {
   let item = null;
   const mode = panelMode(state);
   if (mode === 'thread') item = state.selected_thread;
-  else if (mode === 'document') item = state.selected_entity;
+  else if (mode === 'document' || mode === 'leg') item = state.selected_entity;
   else if (mode === 'day' && dayShows(state.selected_entity)) item = state.selected_entity;
 
   let open;

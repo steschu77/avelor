@@ -7,15 +7,16 @@
 // (`editEntityLocal`, an `{event: {...}}` change); a time goes with its zone.
 // The place inputs offer the places of the vault's trip events, and a
 // place named turns to the zone it had last (`placeZone`). Also New's
-// place inputs and zone menu (features/new.js).
+// place inputs and zone menu (features/new.js). After its calendar, what it
+// meets on its trip's route (`meetsField`).
 
 import { accEl } from '../../core/dom.js';
-import { DATE_FORMAT, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
+import { DATE_FORMAT, DAY_MONTH, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
 import { daysBetween, timeFormatIn, zonedInstant, zonedTime } from '../../core/format.js';
 import { t } from '../../core/text.js';
 import { editEntityLocal } from '../../model/structure.js';
 import {
-  LOCAL_ZONE, STATES, TRIP_KINDS, WAYS, endZone, isHeld, placeZone, startZone, tripPlaces, zoneName,
+  LOCAL_ZONE, STATES, TRIP_KINDS, WAYS, endZone, isHeld, placeZone, routeSpot, startZone, tripPlaces, zoneName,
 } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { WAY_ICONS } from '../../ui/icons.js';
@@ -201,6 +202,33 @@ function nightFields(doc, edit) {
   editField(until, value => { if (value) edit({ end: value }); });
   return [from, accEl('span', 'meta', t('trip.until')), until,
     accEl('span', 'meta', nights > 0 ? t('trip.nights_count', { n: nights }) : '')];
+}
+
+// What the trip event `doc` meets on its trip's route (`routeSpot`): a
+// transport its leg, where from and to, which leg and part and the night
+// it runs over itself; a stay its stop, which and its nights. None for one
+// the route doesn't take.
+export function meetsField(doc) {
+  const spot = routeSpot(doc);
+  if (!spot) return null;
+  if (spot.leg) {
+    const { leg, index, legs, part, nights } = spot;
+    const which = [`leg ${index + 1} of ${legs}`, leg.parts.length > 1 ? `part ${part + 1} of ${leg.parts.length}` : null];
+    return meets(`${leg.from ?? '?'} \u2192 ${leg.to ?? '?'}`, [which.filter(Boolean).join(', '), nightsText(nights)]);
+  }
+  const { stop, index, stops, nights } = spot;
+  return meets(stop.name ?? '', [t('meets.stop', { at: index + 1, n: stops }), nightsText(nights)]);
+}
+
+function meets(text, notes) {
+  return [accEl('span', '', text), accEl('span', 'meta props__meets', notes.filter(Boolean).join(' \u00b7 '))];
+}
+
+// "the night of 07/08", "the nights of 07/09 \u2013 07/14"; none without one.
+function nightsText(days) {
+  if (!days.length) return null;
+  if (days.length === 1) return t('trip.night_of', { day: DAY_MONTH.format(days[0]) });
+  return t('trip.nights_of', { from: DAY_MONTH.format(days[0]), to: DAY_MONTH.format(days.at(-1)) });
 }
 
 // ----------------------------------------------------------------------------

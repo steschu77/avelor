@@ -37,13 +37,13 @@ export function registerContextTab(tab) {
   selectContextTab(contextTab ?? tab.id);
 }
 
-// What the Task and Linked tabs are about: the selected card (a thread's
-// or a day's focused one, the document shown), else the thread shown; ''
-// for nothing.
+// What the Task and Linked tabs are about: the selected card (a thread's,
+// a leg's or a day's focused one, the document shown), else the thread
+// shown; '' for nothing.
 export function contextTarget(state) {
   const mode = panelMode(state);
   if (mode === 'day') return dayShows(state.selected_entity) ? state.selected_entity : '';
-  if (mode !== 'document' && mode !== 'thread') return '';
+  if (mode !== 'document' && mode !== 'thread' && mode !== 'leg') return '';
   return state.selected_entity ?? state.selected_thread ?? '';
 }
 
