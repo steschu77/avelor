@@ -331,7 +331,35 @@ own file. Every field is optional; a project without one is `project: {}`.
 * `afterwards`: [Afterwards], tasks written when the project is archived:
   `title`, and `due`, a fact plus a span (`handover + 5y`),
 * `labels`: [string], what the project is about, carried by its members
-  and its tasks.
+  and its tasks,
+* `sketch`: a trip, roughly, while its days are open (it has no `days`
+  fact yet):
+  * `window`: `from` and `to` (Date), the days it falls within,
+  * `nights`: how long it takes, a number or text (`~6` about six, `2-3`
+    a range),
+  * `stops`: [Stop], in order, each with `place`, `nights`, `note`, `by`
+    (the way there: one of an event's `way`s, or a list for a via without
+    a night: `[car, ferry]`) and `overnight` (the way there takes a night),
+  * `back`: the way home, its `by`.
+
+  Each part is optional: a sketch may be a window and a length, stops
+  only later. A night on the way is a stop of its own. Fixing the trip's
+  days writes the `days` fact (`{from, to}`), turns the sketch into held
+  events and removes it.
+
+```yaml
+project:
+  blueprint: travel
+  facts:
+    home: Springfield
+  sketch:
+    window: {from: 2028-08-01, to: 2028-08-31}
+    nights: 4-5
+    stops:
+    - {place: Duluth, nights: 1, by: car}
+    - {place: Isle Royale, nights: 3, by: [car, ferry]}
+    back: {by: [ferry, car]}
+```
 
 Keys the app doesn't know stay, at every level. A project made from a
 shipped blueprint keeps in its file what it took (its checks, its labels),
@@ -407,14 +435,16 @@ A contact is a markdown file with the following additional fields:
 The content of the markdown can be used to store additional information
 about the contact.
 
-### Calendar
+### Calendar <a id="calendar"></a>
 
 Block: `calendar:`
 
 A calendar is a YAML file with the following additional fields:
 
 * `color`: ColorRef,
-* `timeZone`: string.
+* `timeZone`: string,
+* `work-of`: ContactRef, whose work calendar it is: its events' `work`
+  says on which days they are off or work remotely.
 
 ### Event <a id="event"></a>
 
@@ -430,6 +460,8 @@ An event is a markdown file with the following additional fields:
   keeps it),
 * `timeZone`: string, the IANA time zone the times are meant in (e.g.
   `Europe/Berlin`); a recurring event repeats in it. Optional,
+* `end-time-zone`: string, the end's own zone, only if it isn't the
+  start's (a flight from Chicago arriving in Berlin). Optional,
 * `schedule`: [string], a recurring event's RFC 5545 lines as Google keeps them
   (`RRULE:FREQ=WEEKLY;BYDAY=MO`, `EXDATE:…`). A recurring event is one entity; the
   calendar shows its occurrences. Optional,
@@ -446,6 +478,38 @@ An event is a markdown file with the following additional fields:
   Taken from Google only and never written back; an occurrence that
   differs in nothing kept here (e.g. only its description or guests) isn't
   listed. Optional.
+
+A trip's events (vault.md#project) say what part of it they are; all
+optional, and the vault's own (never written to Google):
+
+* `kind`: `transport`, `stay` or `activity`; absent for any other event,
+* `way`: a transport's, `flight`, `train`, `bus`, `ferry` or `car`,
+* `from`, `to`: string, where a transport leaves from and arrives (`ORD`,
+  `Hamburg Hbf`),
+* `place`: string, where a stay or an activity is,
+* `booking`: string, a transport's booking reference (`X7K2PL`).
+
+Held or booked is the `status`: `tentative` while it is held, `confirmed`
+once booked. A held way may be date-only.
+
+In a work calendar (`work-of`), an all-day event's `work` is `off` or
+`remote`; other text is kept as it is. A day counts as remote when a remote
+event covers it, else as off when an off event does.
+
+```yaml
+event:
+  calendar: 01a0...
+  status: confirmed
+  start: 2027-07-08T23:05:00Z
+  end: 2027-07-09T12:20:00Z
+  timeZone: America/Chicago
+  end-time-zone: Europe/Berlin
+  kind: transport
+  way: flight
+  from: ORD
+  to: HAM
+  booking: X7K2PL
+```
 
 The markdown content describes the event. The `date` of an event is its
 start.

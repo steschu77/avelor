@@ -6,6 +6,7 @@
 //! through the app never loses user data.
 
 use crate::envelope::BankAccount;
+use crate::envelope::Calendar;
 use crate::envelope::Conversation;
 use crate::envelope::Email;
 use crate::envelope::Event;
@@ -485,6 +486,13 @@ impl Document {
     /// the role.
     pub fn set_event(&mut self, event: Option<Event>) {
         self.envelope_mut().roles.event = event;
+    }
+
+    // ------------------------------------------------------------------------
+    /// Set the entity's `calendar` block (vault.md#calendar); `None` drops
+    /// the role.
+    pub fn set_calendar(&mut self, calendar: Option<Calendar>) {
+        self.envelope_mut().roles.calendar = calendar;
     }
 
     // ------------------------------------------------------------------------

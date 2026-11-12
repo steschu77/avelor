@@ -621,6 +621,15 @@ fn new_refuses_other_types_empty_titles_and_unknown_references() {
         (Roles::default(), "Nothing", vec![], "roles"),
         (roles("task: {}"), "  ", vec![], "title"),
         (roles("event: {}"), "No start", vec![], "event.start"),
+        (
+            roles(&format!(
+                "event: {{start: 2026-10-07, calendar: {}}}",
+                ids[0]
+            )),
+            "Not a calendar",
+            vec![],
+            "event.calendar",
+        ),
         (roles("task: {}"), "Not a project", vec![ids[0]], "projects"),
     ];
     for (roles, title, projects, arg) in refused {

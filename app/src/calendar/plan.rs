@@ -55,7 +55,7 @@ pub(super) fn calendar_entity(app: &mut App, account: Id, source: &CalendarSourc
     let roles = Roles {
         calendar: Some(Calendar {
             color: source.color.as_deref().map(ColorRef::parse),
-            time_zone: None,
+            ..Calendar::default()
         }),
         ..Default::default()
     };

@@ -9,6 +9,7 @@ pub mod id;
 pub mod inflate;
 pub mod logger;
 pub mod mime;
+pub mod patch;
 pub mod random;
 pub mod schedule;
 pub mod secret;

@@ -9,7 +9,8 @@ use av_llm::{Client, Provider};
 use av_utils::cancel::Cancel;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
-use serde::{Deserialize, Deserializer, Serialize};
+use av_utils::patch::present;
+use serde::{Deserialize, Serialize};
 
 use crate::app::App;
 use crate::protocol::Req;
@@ -271,14 +272,6 @@ pub fn list_ai_models(app: &mut App, req: Req, id: Id) {
             }
         },
     );
-}
-
-// ----------------------------------------------------------------------------
-/// A field that may be `null`: absent is `None`, `null` is `Some(None)`.
-fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
-    d: D,
-) -> std::result::Result<Option<T>, D::Error> {
-    T::deserialize(d).map(Some)
 }
 
 // ----------------------------------------------------------------------------

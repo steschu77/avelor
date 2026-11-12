@@ -248,7 +248,7 @@ impl Index {
             .map(|id| {
                 let outcome = match self.get(id) {
                     None => Err(Error::NotFound),
-                    Some(doc) if !change.fits(doc.kind()) => Err(Error::InvalidArgument {
+                    Some(doc) if !change.fits(doc) => Err(Error::InvalidArgument {
                         arg: "change".into(),
                     }),
                     Some(_) => self.edit(id, changes, |d| change.apply(d, now)),

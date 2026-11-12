@@ -470,7 +470,12 @@ mod tests {
         let project = sent[1]["ok"]["id"].clone();
 
         let facts = json!({ "home": "Springfield", "budget": 6000 });
-        let changed = json!({ "blueprint": "travel", "facts": facts, "sketch": { "stops": [] } });
+        let sketch = json!({
+            "window": { "from": "2028-08-01", "to": "2028-08-31" }, "nights": 5,
+            "stops": [{ "place": "Hamburg", "nights": "~6", "by": ["car", "ferry"] }],
+        });
+        let changed =
+            json!({ "blueprint": "travel", "facts": facts, "sketch": sketch, "phase": "kept" });
         let sent = h.call("set_project", json!({ "id": project, "project": changed }));
         assert_eq!(shape(&sent), ["entity", "reply"]);
         assert_eq!(sent[0]["data"]["project"], changed);
@@ -792,6 +797,61 @@ Body
         );
         assert_eq!(shape(&sent), ["reply"]);
         assert!(sent[0]["err"].is_object(), "{}", sent[0]);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_held_flight_is_booked_and_a_recurring_event_keeps_its_times() {
+        let (mut h, _) = notes("edit-event", 1);
+        let mut new_event = |event: serde_json::Value, title: &str| {
+            let args = json!({ "roles": { "event": event }, "title": title });
+            let sent = h.call("create_entity", args);
+            sent[1]["ok"]["id"].as_str().unwrap().to_string()
+        };
+        let flight = new_event(
+            json!({ "start": "2027-07-08", "status": "tentative" }),
+            "HF 229",
+        );
+        let recurring = new_event(
+            json!({ "start": "2026-10-05T08:00:00Z", "schedule": ["RRULE:FREQ=WEEKLY"] }),
+            "Standup",
+        );
+        let times = json!({
+            "start": "2027-07-08T23:05:00Z", "timeZone": "America/Chicago",
+            "end": "2027-07-09T12:20:00Z", "end-time-zone": "Europe/Berlin",
+        });
+        let booked = json!({ "event": {
+            "kind": "transport", "way": "flight", "from": "ORD", "to": "HAM",
+            "booking": "X7K2PL", "status": "confirmed",
+        } });
+        let sent = h.call(
+            "edit_entities",
+            json!({ "ids": [flight], "change": booked }),
+        );
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        let event = &sent[0]["data"]["event"];
+        assert_eq!(
+            (&event["way"], &event["booking"], &event["status"]),
+            (&json!("flight"), &json!("X7K2PL"), &json!("confirmed"))
+        );
+
+        let args = json!({ "ids": [flight, recurring], "change": { "event": times } });
+        let sent = h.call("edit_entities", args);
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["event"]["end-time-zone"], "Europe/Berlin");
+        assert_eq!(sent[0]["data"]["date"], "2027-07-08T23:05:00Z");
+        let skipped = json!([{ "id": recurring, "reason": "invalid_argument" }]);
+        assert_eq!(
+            sent[1]["ok"],
+            json!({ "changed": [flight], "skipped": skipped })
+        );
+
+        let cancelled = json!({ "event": { "status": "cancelled" } });
+        let sent = h.call(
+            "edit_entities",
+            json!({ "ids": [flight], "change": cancelled }),
+        );
+        assert_eq!(sent[0]["err"]["code"], "invalid_argument");
     }
 
     // ------------------------------------------------------------------------

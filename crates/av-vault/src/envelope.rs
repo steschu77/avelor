@@ -114,8 +114,83 @@ pub struct Project {
     /// What the project is about, carried by its members and its tasks.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
+    /// A trip's route while its days are open: where, how long, how.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sketch: Option<Sketch>,
     #[serde(flatten)]
     pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// A trip sketched while its days are open (vault.md#project): when it
+/// may be and how long, its stops in order, and the way back home. Fixing
+/// its days turns it into held events.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Sketch {
+    /// The days it falls within.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<Window>,
+    /// How long it takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nights: Option<Nights>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stops: Vec<Stop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back: Option<Back>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// The days a sketched trip falls within, the first and the last.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Window {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<DateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<DateTime>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// A sketched stop, and the way that leads to it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Stop {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nights: Option<Nights>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The way there: one, or several for a via without a night.
+    #[serde(default, skip_serializing_if = "OneOrMany::is_none")]
+    pub by: OneOrMany<String>,
+    /// The way there takes a night.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub overnight: bool,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// A sketched trip's way back home.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Back {
+    #[serde(default, skip_serializing_if = "OneOrMany::is_none")]
+    pub by: OneOrMany<String>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// How many nights a sketched trip or stop takes: a count, or as text
+/// about one (`~6`) or a range (`2-3`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Nights {
+    Count(u32),
+    Text(String),
 }
 
 // ----------------------------------------------------------------------------
@@ -192,6 +267,10 @@ pub struct Calendar {
     pub color: Option<ColorRef>,
     #[serde(rename = "timeZone", default, skip_serializing_if = "Option::is_none")]
     pub time_zone: Option<String>,
+    /// Whose work calendar it is: its events' `work` say when they are off
+    /// or work remotely.
+    #[serde(rename = "work-of", default, skip_serializing_if = "Option::is_none")]
+    pub work_of: Option<ContactRef>,
 }
 
 // ----------------------------------------------------------------------------
@@ -401,9 +480,18 @@ pub struct Event {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end: Option<DateTime>,
     /// The IANA time zone the event's times are meant in (e.g.
-    /// `Europe/Berlin`); a recurring event repeats in it.
+    /// `Europe/Berlin`), the end's too unless it has its own; a recurring event
+    /// repeats in it.
     #[serde(rename = "timeZone", default, skip_serializing_if = "Option::is_none")]
     pub time_zone: Option<String>,
+    /// The end's own time zone, if it isn't the start's (a flight's
+    /// arrival).
+    #[serde(
+        rename = "end-time-zone",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub end_time_zone: Option<String>,
     /// A recurring event's RFC 5545 lines (`RRULE:…`, `EXDATE:…`); empty for a single
     /// event.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -416,6 +504,26 @@ pub struct Event {
     /// cancelled in Google), by their original start.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exceptions: Vec<Exception>,
+    /// What part of a trip it is: `transport`, `stay` or `activity`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// A transport's way: `flight`, `train`, `bus`, `ferry` or `car`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub way: Option<String>,
+    /// Where a transport leaves from and arrives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// Where a stay or an activity is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<String>,
+    /// A transport's booking reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub booking: Option<String>,
+    /// In a work calendar: `off` or `remote`; other text is kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work: Option<String>,
 }
 
 // ----------------------------------------------------------------------------
@@ -1189,8 +1297,8 @@ project:
   facts:
     budget: 15000
     days:
-      from: 2027-07-01
-      nights: 9-11
+      from: 2027-07-08
+      to: 2027-07-18
     where: Neue Str. 2, Hamburg
   documents:
   - name: quotes
@@ -1219,8 +1327,27 @@ project:
   labels:
   - bathroom
   sketch:
+    window:
+      from: 2028-08-01
+      to: 2028-08-31
+    nights: 4-5
     stops:
     - place: Hamburg
+      nights: ~6
+      note: at Oma's
+      by: flight
+      overnight: true
+      hint: kept
+    - place: Isle Royale
+      nights: 2-3
+      by:
+      - car
+      - ferry
+    - place: Duluth
+      nights: 1
+    back:
+      by: train
+  phase: kept
 "
         );
         let env = Envelope::parse(&yaml).unwrap();
@@ -1236,7 +1363,17 @@ project:
         assert_eq!(project.payments[0].for_entity, Some(Id::parse(ID).unwrap()));
         assert_eq!(project.checks, ["documents", "budget"]);
         assert_eq!(project.afterwards[0].due.as_deref(), Some("handover + 5y"));
-        assert!(project.extra.contains_key("sketch"));
+        let sketch = project.sketch.as_ref().unwrap();
+        let window = sketch.window.as_ref().unwrap();
+        assert_eq!(window.to.unwrap().as_iso8601(), "2028-08-31");
+        assert_eq!(sketch.nights, Some(Nights::Text("4-5".into())));
+        let stops = &sketch.stops;
+        assert_eq!(stops[0].nights, Some(Nights::Text("~6".into())));
+        assert!(stops[0].overnight && stops[0].extra.contains_key("hint"));
+        assert_eq!(stops[1].by.as_slice(), ["car", "ferry"]);
+        assert_eq!(stops[2].nights, Some(Nights::Count(1)));
+        assert_eq!(sketch.back.as_ref().unwrap().by.as_slice(), ["train"]);
+        assert!(project.extra.contains_key("phase"));
         assert!(project.documents[0].extra.contains_key("hint"));
         assert!(project.payments[0].extra.contains_key("note"));
         assert!(project.afterwards[0].extra.contains_key("labels"));
@@ -1249,6 +1386,54 @@ project:
         let env = Envelope::parse("title: P\nproject: {}\n").unwrap();
         assert_eq!(env.roles.project, Some(Project::default()));
         assert_eq!(env.compose().unwrap(), "title: P\nproject: {}\n");
+    }
+
+    #[test]
+    fn a_trip_event_and_a_work_calendar_round_trip() {
+        let yaml = format!(
+            "event:
+  calendar: {ID}
+  status: tentative
+  start: 2027-07-08T23:05:00Z
+  end: 2027-07-09T12:20:00Z
+  timeZone: America/Chicago
+  end-time-zone: Europe/Berlin
+  kind: transport
+  way: flight
+  from: ORD
+  to: HAM
+  booking: X7K2PL
+"
+        );
+        let env = Envelope::parse(&yaml).unwrap();
+        let event = env.roles.event.as_ref().unwrap();
+        assert_eq!(event.end_time_zone.as_deref(), Some("Europe/Berlin"));
+        assert_eq!(
+            (event.kind.as_deref(), event.way.as_deref()),
+            (Some("transport"), Some("flight"))
+        );
+        assert_eq!(event.booking.as_deref(), Some("X7K2PL"));
+        assert!(env.extra.is_empty());
+        assert_eq!(env.compose().unwrap(), yaml);
+
+        let yaml = format!(
+            "calendar:
+  work-of: '@{ID}'
+"
+        );
+        let env = Envelope::parse(&yaml).unwrap();
+        let calendar = env.roles.calendar.as_ref().unwrap();
+        assert_eq!(
+            calendar.work_of,
+            Some(ContactRef::Id(Id::parse(ID).unwrap()))
+        );
+        assert_eq!(env.compose().unwrap(), yaml);
+        let day = "event:
+  start: 2027-07-08
+  end: 2027-07-19
+  work: off
+";
+        assert_eq!(Envelope::parse(day).unwrap().compose().unwrap(), day);
     }
 
     #[test]
