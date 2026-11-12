@@ -2,10 +2,11 @@
 // statement or recurring payment (panel.md#cards):
 // the details grid (`renderCardDetails`) with the contacts, the calendar
 // and the account as chips that select what they name, a task's fields, a
-// document's genre and a trip event's fields (features/panel/trip-fields.js)
-// editable where the host can write them (`edit_entities`), a recurring
-// payment's too (`set_recurring_payment`), and a task's tag (`taskTag`), which the
-// day view's task rows and the calendar's grid show too.
+// document's genre, a trip event's fields (features/panel/trip-fields.js)
+// and a work calendar's event's Work editable where the host can write them
+// (`edit_entities`), a recurring payment's too (`set_recurring_payment`), and a
+// task's tag (`taskTag`), which the day view's task rows and the calendar's
+// grid show too.
 
 import { accEl } from '../../core/dom.js';
 import { DATE_FORMAT, amountText, fileSize, money, parseAmount, parseDate } from '../../core/format.js';
@@ -47,17 +48,19 @@ export function dueTag(text) {
 // What a card shows of its event, task, email or document
 // (features/panel/panel.js): `row`, a `.props` grid, filled with when an
 // event is (`occurrence`'s times on a day card), how it repeats, where, the
-// guests, its calendar, and a status other than confirmed -- a trip's event
-// its trip fields instead of when, where and the status (`tripFields`, but
-// for a recurring event); a task's status,
+// guests, its calendar, in a work calendar whether it is a day off or a
+// remote one (`workField`), and a status other than confirmed -- a trip's
+// event its trip fields instead of when, where and the status
+// (`tripFields`, but for a recurring event); a task's status,
 // when it is due (from today, marked when overdue), its assignee and when
 // it was done; an email's sender and its kind (the email analysis's,
 // `EMAIL_KINDS`); a document's genre, and the file it stands for
 // (`originalField`); a bank account's bank, number, balance and owner; a
 // statement's account, its bookings and the balance it ends with
-// (vault.md#statement). A task's fields and a document's genre are editable
-// while the host can write the entity (`taskFields`, `genreField`). Rows
-// without a value are left out; hidden for an entity with none of them.
+// (vault.md#statement). A task's fields, a document's genre and an
+// event's Work are editable while the host can write the entity
+// (`taskFields`, `genreField`, `workField`). Rows without a value are left
+// out; hidden for an entity with none of them.
 //
 // Drawn again on every entity change: while one of its fields has the focus,
 // that waits until the block is left, so what is typed stays (as a title
@@ -89,6 +92,8 @@ export function renderCardDetails(row, doc, occurrence = null) {
         if (event.attendees?.length) add(t('props.guests'), ...event.attendees.map(contactChip));
         const calendar = entities.get(event.calendar);
         if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')));
+        const work = calendar?.calendar?.['work-of'] || event.work ? workField(doc) : null;
+        if (work) add(t('props.work'), ...work);
         const status = { tentative: t('event.tentative'), cancelled: t('event.cancelled') }[event.status];
         if (status && !trip) add(t('props.status'), status);
     }
@@ -212,6 +217,34 @@ function dueOn(day, doc) {
     const at = new Date(doc.due);
     at.setFullYear(y, m - 1, d);
     return isoInstant(at);
+}
+
+// ----------------------------------------------------------------------------
+// An event's Work in a work calendar (`work`, vault.md#event), while the host
+// can write it: Off or Remote, another value as text after them, and an x
+// that makes it neither (a meeting, say), written by itself
+// (`editEntityLocal`); else as text, none without a value.
+const WORK_DAYS = [['off', t('work.off')], ['remote', t('work.remote')]];
+
+function workField(doc) {
+    const { doc_id: id, event } = doc;
+    const words = Object.fromEntries(WORK_DAYS)[event.work];
+    if (!doc.writable) return event.work ? [words ?? event.work] : null;
+    const edit = work => editEntityLocal(id, { event: { work } });
+    const seg = accSeg(WORK_DAYS, event.work ?? null, edit);
+    [...seg.children].forEach((option, i) => { option.dataset.focusKey = `work:${WORK_DAYS[i][0]}`; });
+    const parts = [seg];
+    if (event.work && !words) parts.push(accEl('span', 'meta', event.work));
+    if (event.work) {
+        const clear = accEl('button', 'tool');
+        clear.type = 'button';
+        clear.append(iconEl('#i-dismiss'));
+        clear.title = t('work.neither');
+        clear.dataset.focusKey = 'work:clear';
+        clear.addEventListener('click', () => edit(null));
+        parts.push(clear);
+    }
+    return parts;
 }
 
 // ----------------------------------------------------------------------------

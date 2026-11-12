@@ -185,9 +185,26 @@ export function sourceKeyOf(doc) {
   if (doc.kind === 'event') {
     const calendar = entities.get(doc.event?.calendar);
     const calendarAccount = calendar?.source?.remote?.account;
-    const calendarId = calendar?.source?.remote?.remote
-      ?.find(property => property?.['calendar-id'])?.['calendar-id'];
+    const calendarId = remoteCalendarId(calendar);
     if (calendarAccount && calendarId) return `${calendarAccount}\ncalendar\n${calendarId}`;
+  }
+  return null;
+}
+
+// The Google calendar a calendar entity syncs with, by its remote block's
+// `calendar-id`; null for one that doesn't.
+function remoteCalendarId(calendar) {
+  return calendar?.source?.remote?.remote
+    ?.find(property => property?.['calendar-id'])?.['calendar-id'] ?? null;
+}
+
+// The vault's calendar entity of the account's Google calendar
+// `calendarId`, once a sync made it; null before.
+export function calendarEntityOf(account, calendarId) {
+  for (const doc of entities.values()) {
+    if (doc.kind === 'calendar' && doc.source?.remote?.account === account && remoteCalendarId(doc) === calendarId) {
+      return doc;
+    }
   }
   return null;
 }

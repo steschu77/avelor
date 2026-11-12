@@ -4,7 +4,8 @@
 // trip's days (from and to), or picked from a menu (contacts, a calendar, a
 // choice). An edit writes the whole block through `set_project`
 // (`setProjectLocal`), if the value changed; empty removes the fact. While
-// a trip's days aren't fixed, they show what its sketch says of them.
+// a trip's days aren't fixed, they show what its sketch says of them. The
+// menus of calendars and contacts serve New and the Accounts page too.
 
 import { accEl } from '../core/dom.js';
 import { DATE_FORMAT, DAY_MONTH, SHORT_MONTH_YEAR, WEEKDAY } from '../core/format.js';
@@ -166,12 +167,10 @@ function editInPlace(value, inputs, read, save, show) {
 function pickContacts(fact, anchor, save) {
   const refs = [].concat(fact.value ?? []).map(String);
   const toggle = ref => save(refs.includes(ref) ? refs.filter(r => r !== ref) : [...refs, ref]);
-  const contacts = [...entities.values()].filter(doc => doc.kind === 'contact')
-    .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   const items = [
     ...refs.filter(ref => !parseContact(ref).id)
       .map(ref => ({ label: parseContact(ref).name, checked: true, run: () => toggle(ref) })),
-    ...contacts.map(doc => ({
+    ...vaultContacts().map(doc => ({
       label: doc.title || t('untitled'), checked: refs.includes(`@${doc.doc_id}`), run: () => toggle(`@${doc.doc_id}`),
     })),
   ];
@@ -179,6 +178,25 @@ function pickContacts(fact, anchor, save) {
     head: fact.label,
     filter: { placeholder: t('facts.filter_contacts'), extra: text => [{ label: t('facts.add_named', { name: text }), run: () => toggle(text) }] },
   });
+}
+
+// The vault's contacts at `anchor`, to pick one of (`onPick('@id')`) or
+// nobody (null), `current` ticked (a name the vault has no contact for
+// too); also the Accounts page's Work of (features/workspace/accounts.js).
+export function contactMenu(anchor, current, onPick, head) {
+  const named = current && !parseContact(current).id ? [{ label: parseContact(current).name, checked: true, run: () => {} }] : [];
+  showMenu(anchor, [
+    { label: t('facts.nobody'), checked: !current, run: () => onPick(null) },
+    ...named,
+    ...vaultContacts().map(doc => ({
+      label: doc.title || t('untitled'), checked: current === `@${doc.doc_id}`, run: () => onPick(`@${doc.doc_id}`),
+    })),
+  ], { head, filter: { placeholder: t('facts.filter_contacts') } });
+}
+
+function vaultContacts() {
+  return [...entities.values()].filter(doc => doc.kind === 'contact')
+    .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
 }
 
 function pickCalendar(fact, anchor, save) {

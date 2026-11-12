@@ -83,6 +83,7 @@
   "accounts.no_local_models": "Noch keine Modelle auf diesem Computer. Hol dir eines mit `ollama pull`, dann Liste aktualisieren.",
   "accounts.no_longer_listed": "nicht mehr gelistet",
   "accounts.no_vault": "Konten werden im Tresor aufbewahrt: Öffne einen Tresor, um sie zu sehen.",
+  "accounts.nobody": "niemand",
   "accounts.not_connected": "Das Konto ist nicht verbunden.",
   "accounts.not_offered": "nicht angeboten",
   "accounts.not_on_google": "bei Google nicht gefunden",
@@ -138,6 +139,8 @@
   "accounts.used_fetch": "E-Mails abrufen · {email} · {steps}",
   "accounts.used_sync": "Auto-Sync · {email} · {steps}",
   "accounts.where_answers": "wo {name} antwortet",
+  "accounts.work_of": "Arbeit von",
+  "accounts.work_of_title": "Wessen Arbeitskalender das ist",
   "accounts.works": {
     "one": "Funktioniert · {n} Modell",
     "other": "Funktioniert · {n} Modelle"
@@ -718,6 +721,7 @@
     "other": "in {n} Tagen"
   },
   "facts.nights_text": "{nights} Nächte",
+  "facts.nobody": "Niemand",
   "facts.not_fixed": "nicht festgelegt",
   "feature.conversations": "Unterhaltungen",
   "feature.email_analysis": "die E-Mail-Analyse",
@@ -1018,6 +1022,7 @@
   "props.way": "Weg",
   "props.when": "Wann",
   "props.where": "Wo",
+  "props.work": "Arbeit",
   "reader.blank": "Das Modell hat keinen Text gelesen.",
   "reader.encrypted": "Das PDF ist verschlüsselt; es wird an kein Modell geschickt.",
   "reader.failed": "Das Lesen ist fehlgeschlagen: {error}",
@@ -1546,6 +1551,9 @@
   "week.of": "Woche vom {day} · {what}",
   "words.clear": "Filter leeren (Esc)",
   "words.placeholder": "Nach Wörtern filtern",
+  "work.neither": "Weder frei noch remote",
+  "work.off": "Frei",
+  "work.remote": "Remote",
   "workspace.accounts": "Konten",
   "workspace.folders": "Ordner",
   "workspace.trash": "Papierkorb",

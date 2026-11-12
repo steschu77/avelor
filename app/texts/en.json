@@ -83,6 +83,7 @@
   "accounts.no_local_models": "No models on this computer yet. Pull one with `ollama pull`, then Refresh list.",
   "accounts.no_longer_listed": "no longer listed",
   "accounts.no_vault": "Accounts are kept in the vault: open a vault to see them.",
+  "accounts.nobody": "nobody",
   "accounts.not_connected": "The account isn't connected.",
   "accounts.not_offered": "not offered",
   "accounts.not_on_google": "not found on Google",
@@ -138,6 +139,8 @@
   "accounts.used_fetch": "Fetch email · {email} · {steps}",
   "accounts.used_sync": "Auto-sync · {email} · {steps}",
   "accounts.where_answers": "where {name} answers",
+  "accounts.work_of": "Work of",
+  "accounts.work_of_title": "Whose work calendar this is",
   "accounts.works": {
     "one": "Works · {n} model",
     "other": "Works · {n} models"
@@ -718,6 +721,7 @@
     "other": "in {n} days"
   },
   "facts.nights_text": "{nights} nights",
+  "facts.nobody": "Nobody",
   "facts.not_fixed": "not fixed",
   "feature.conversations": "conversations",
   "feature.email_analysis": "the email analysis",
@@ -1023,6 +1027,7 @@
   "props.way": "Way",
   "props.when": "When",
   "props.where": "Where",
+  "props.work": "Work",
   "reader.blank": "The model read no text.",
   "reader.encrypted": "The PDF is encrypted; it isn't sent to a model.",
   "reader.failed": "The read failed: {error}",
@@ -1551,6 +1556,9 @@
   "week.of": "Week of {day} · {what}",
   "words.clear": "Clear the filter (Esc)",
   "words.placeholder": "Filter by words",
+  "work.neither": "Neither off nor remote",
+  "work.off": "Off",
+  "work.remote": "Remote",
   "workspace.accounts": "Accounts",
   "workspace.folders": "Folders",
   "workspace.trash": "Trash",

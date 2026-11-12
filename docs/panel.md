@@ -51,8 +51,9 @@ holds `selected_entity`, `selected_thread`, `selected_booking` and
   the header is the card's drag handle (`panel.md#structural-edits`);
 - for an event its details — when (a day card's occurrence, and where
   Google moved it from), its schedule in words, where, the guests, its
-  calendar, a status other than confirmed; a trip's event its trip fields
-  instead (`panel.md#trip-fields`) — for a task its status, its
+  calendar, in a work calendar whether it is a day off or a remote one, a
+  status other than confirmed; a trip's event its trip fields instead
+  (`panel.md#trip-fields`) — for a task its status, its
   due date as seen from today (tagged when overdue), its assignee and when
   it was done (`task.done`), for an email its sender, followed by its kind
   when the email analysis found one ("Stadtwerke · Request",
@@ -63,9 +64,9 @@ holds `selected_entity`, `selected_thread`, `selected_booking` and
   (`vault.md#statement`), and for a recurring payment its fields
   (`panel.md#a-recurring-card`; `renderCardDetails`,
   `features/panel/details.js`). A task's fields, a document's genre, a
-  trip event's fields and a recurring payment's fields are editable in
-  place while the host can write the entity (`panel.md#field-edits`); the
-  rest is read-only;
+  trip event's fields, an event's Work and a recurring payment's fields
+  are editable in place while the host can write the entity
+  (`panel.md#field-edits`); the rest is read-only;
 - the blocks other modules add (`registerCardBlock`): after the head or
   after the details, each filled for the card's entity, hidden on a card
   it has nothing for, and refreshed with the chips (a recurring payment's
@@ -673,6 +674,12 @@ one shows them as text:
 - **Done**: when the task was marked done (`task.done`), shown only.
 - **Genre** (a document): typed in, with the genres the vault's documents
   use offered (`#genre-list`); empty removes it. The card's icon follows.
+- **Work** (an event in a work calendar, one whose `work-of` names whose
+  it is, `vault.md#calendar`; set on the Accounts page,
+  `accounts.md#accounts-page`): Off or Remote, segmented buttons
+  (`workField`); another value of `work` (`vault.md#event`) presses none
+  and shows as text after them; an × makes it neither (a meeting, say). A
+  click writes it. Read-only, it shows only with a value.
 - **A recurring payment's fields** (`#a-recurring-card`): typed in, the
   period a segmented button; each writes the whole role through
   `set_recurring_payment` (`setRecurringPaymentLocal`), an empty Until, Varies by or
@@ -685,9 +692,9 @@ one shows them as text:
 A field writes when Enter is pressed or it is left, if its value changed;
 Esc puts back what it held (`editField`, `ui/field.js`). A date input's
 change fires for every digit typed, so it isn't what writes. Each edit of
-a task, a genre or a trip event is one `edit_entities` for the one entity
-(`editEntityLocal`, `model/structure.js`). It publishes no selection, so the cards aren't
-rebuilt: they follow the entity's push (`refreshCardChips`). While one of
+a task, a genre, an event's Work or a trip event is one `edit_entities`
+for the one entity (`editEntityLocal`, `model/structure.js`). It
+publishes no selection, so the cards aren't rebuilt: they follow the entity's push (`refreshCardChips`). While one of
 the block's fields has the focus, that refresh waits until the block is
 left, so what is typed stays; a button that had the focus gets it back.
 An entity the host skipped because its file changed outside the app opens
@@ -818,6 +825,7 @@ and save their bodies at once.
 | D18 | New recurring payment | the Recurring payment menu's New recurring payment → `openNewRecurringPayment`; Create or Ctrl+Enter → `createRecurringPayment` | `create_recurring_payment` → `entity`, `ok {id}`; then `set_booking_recurring_payment` → `entity` per statement | the recurring payment selected, its bookings in it |
 | D19 | A recurring payment's fields | a recurring payment's card: a field typed in, Enter or blur; a period; Take it → `setRecurringPaymentLocal` | `set_recurring_payment {id, recurring}` → `entity` | the card's sum, fields and occurrences follow |
 | D20 | A trip event's field | a Kind, State or Way button; a place, day, time or booking typed in, Enter or blur; a zone picked → `editEntityLocal(id, {event: {…}})` | `edit_entities` → `Index::edit_entities` (a new start also the entity's `date`; a recurring event's times refused) → `entity` | the card, the lenses' rows and icons follow; a synced event is pushed by its next sync |
+| D21 | An event's Work | an Off or Remote button, the × → `editEntityLocal(id, {event: {work}})` | `edit_entities` → `Index::edit_entities` → `entity` | the card follows; `work` stays the vault's, not Google's (`calendar.md`) |
 | E1 | Show a thread | select a member → `threadOf` → `renderThread` | — | members by date, then id; focused and scrolled |
 | E2 | Join | drop a row on `#thread-messages`, or a row or card on a thread's row in Documents → `joinThreadLocal` | `join_thread` → `entity` | card appears in date position |
 | E3 | Create a thread | drop a row on a standalone card → `createThreadLocal` | `create_thread` → `Index::create_thread` writes a `thd` beside the target → `entity` ×3 (the thread, its two members) | target selected in the new thread |

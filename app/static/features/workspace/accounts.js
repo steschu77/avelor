@@ -6,7 +6,8 @@
 // input until the host has checked it; then it shows as text with a pencil.
 // A model picker's way here is the `accounts.open` action
 // (`openAccountsPage`). The Email row's auto-sync is Fetch email's
-// (`renderEmailSync`). The sidebar follows `accounts_rev` (app.js).
+// (`renderEmailSync`); a synced calendar's Work of is its vault entity's
+// (`renderWorkOf`). The sidebar follows `accounts_rev` (app.js).
 
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { titled } from '../../core/dom.js';
@@ -19,6 +20,9 @@ import { accounts } from '../../model/entities.js';
 import { vaultSettings } from '../../model/entities.js';
 import { entities } from '../../model/entities.js';
 import { watches } from '../../model/entities.js';
+import { calendarEntityOf, parseContact } from '../../model/entities.js';
+import { editEntityLocal } from '../../model/structure.js';
+import { kindName } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
 import {
@@ -33,7 +37,7 @@ import { aiLimitReached } from './models.js';
 import { isAiAccount } from './models.js';
 import { WATCH_READ_STEP, watchType } from './folders.js';
 import { renderEmailSync } from '../import/email.js';
-import { kindName } from '../../ui/icons.js';
+import { contactMenu } from '../facts.js';
 
 // The access rows shown; `tasks` stays in the account (and in every
 // reconnect request) without a row.
@@ -317,8 +321,8 @@ function renderAccessRows(account) {
 }
 
 // Checkboxes for the account's calendars: checked ones show as sources in
-// the sidebar, each with its auto-sync. Loaded once per account (and again
-// after a reconnect).
+// the sidebar, each with its auto-sync, and once synced its Work of. Loaded
+// once per account (and again after a reconnect).
 function renderCalendarSources(account) {
   const list = accEl('div', 'accounts__sub');
   list.append(accEl('span', 'label', t('accounts.calendars_shown')));
@@ -355,7 +359,11 @@ function renderCalendarSources(account) {
     if (calendar.primary) pick.append(accEl('span', 'label', t('accounts.primary')));
     if (missing.includes(calendar)) pick.append(accEl('span', 'label', t('accounts.not_on_google')));
     row.append(pick);
-    if (source && !calendarToggles.has(toggle)) row.append(renderCalendarSync(account, source));
+    if (source && !calendarToggles.has(toggle)) {
+      const entity = calendarEntityOf(account, source.id);
+      if (entity) row.append(renderWorkOf(entity));
+      row.append(renderCalendarSync(account, source));
+    }
     list.append(row);
   }
   if (!calendars.length && !missing.length) {
@@ -376,6 +384,29 @@ function renderCalendarSync(account, source) {
   check.addEventListener('click', () => setCalendarSync(account, source.id, !on));
   auto.append(check, accEl('span', 'label', t('accounts.auto_sync')));
   return auto;
+}
+
+// A synced calendar's Work of: whose work calendar it is, its events then
+// telling their days off and remote days (`work-of`, vault.md#calendar). A
+// menu of the vault's contacts writes it to the vault's calendar entity
+// (`edit_entities`), whose push redraws the page.
+function renderWorkOf(calendar) {
+  const owner = calendar.calendar?.['work-of'] ?? null;
+  const name = owner ? parseContact(owner).name : t('accounts.nobody');
+  const work = accEl('span', 'accounts__work');
+  work.append(accEl('span', 'label', t('accounts.work_of')));
+  if (!calendar.writable) {
+    work.append(accEl('span', '', name));
+    return work;
+  }
+  const button = accEl('button', 'tool', name);
+  button.type = 'button';
+  button.title = t('accounts.work_of_title');
+  button.addEventListener('click', () => contactMenu(button, owner, ref => {
+    if (ref !== owner) editEntityLocal(calendar.doc_id, { calendar: { 'work-of': ref } });
+  }, t('accounts.work_of')));
+  work.append(button);
+  return work;
 }
 
 // "Continue in your browser..." with Cancel, or the last error, if any.
