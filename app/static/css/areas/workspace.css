@@ -197,6 +197,7 @@
 
 .accounts__calendar,
 .accounts__pick,
+.accounts__work,
 .accounts__auto,
 .accounts__sync {
   display: flex;
@@ -208,14 +209,19 @@
   font: 400 var(--fs-body)/1.3 var(--f-serif);
 }
 
-/* a checked calendar's auto-sync, at the end of its row */
+/* a checked calendar's Work of and auto-sync, at the end of its row */
 .accounts__pick,
 .accounts__auto {
   cursor: pointer;
 }
 
+.accounts__work,
 .accounts__auto {
   margin-left: auto;
+}
+
+.accounts__work+.accounts__auto {
+  margin-left: 16px;
 }
 
 .accounts__pick>input {

@@ -1,9 +1,9 @@
 import { equal, test } from './harness.js';
 import { entity, vault } from './vault.js';
 import {
-  NO_PROJECT, assistantConversations, entities, entityOf, knownThreads, matchesFilter, parseContact, projectNames, projectScope,
-  projects, projectsFor, projectsInOrder, projectsOf, sourceKeyOf, threadMatchesFilter, threadMembers, threadOf, threadProjects,
-  threads, watches,
+  NO_PROJECT, assistantConversations, calendarEntityOf, entities, entityOf, knownThreads, matchesFilter, parseContact,
+  projectNames, projectScope, projects, projectsFor, projectsInOrder, projectsOf, sourceKeyOf, threadMatchesFilter, threadMembers,
+  threadOf, threadProjects, threads, watches,
 } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
 
@@ -133,6 +133,14 @@ test("the source of a statement is its account's watch, whichever imported it", 
   watches.set('w3', { id: 'w3', type: 'statements', account: 'bank' });
   const imported = account => sourceKeyOf({ statement: { account }, source: { import: { watch: 'w2' } } });
   equal([imported('bank'), imported('other')], ['watch:w3', 'watch:w2']);
+});
+
+test("the calendar of the vault that syncs with one of Google's", () => {
+  vault(
+    { id: 'other', kind: 'calendar', source: { remote: { account: 'h', remote: [{ 'calendar-id': 'fam@google' }] } } },
+    { id: 'family', kind: 'calendar', source: { remote: { account: 'g', remote: [{ 'sync-token': 'x' }, { 'calendar-id': 'fam@google' }] } } },
+  );
+  equal([calendarEntityOf('g', 'fam@google')?.id, calendarEntityOf('g', 'work@google')], ['family', null]);
 });
 
 test('the conversations with an AI on an entity, the newest first', () => {

@@ -227,9 +227,13 @@ accounts with a detail pane.
   account's `id` (and with it every document's `remote:` link). Removing
   a disconnected account deletes its file. The pane lists the account's
   calendars, one Google lets the account only see marked read-only; a
-  checked one becomes a source (`calendar.md`) and gets its calendar entity, with its
-  Auto-sync check beside it; the Email row has its own Auto-sync check and
-  filter (`email.md#email-auto-sync`).
+  checked one becomes a source (`calendar.md`) and gets its calendar
+  entity, with its Auto-sync check beside it and its **Work of**: whose
+  work calendar it is, a menu of the vault's contacts (or Nobody) written
+  to the vault's calendar entity (`work-of`, `vault.md#calendar`;
+  `edit_entities`), its events then telling that person's days off and
+  remote days (`panel.md#field-edits`); the Email row has its own Auto-sync
+  check and filter (`email.md#email-auto-sync`).
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
   and Gemini with an API key, and Ollama by its address. A key or an
   address is checked by listing the provider's models before it is stored;
@@ -300,6 +304,7 @@ why (`aiMissingHint`), with a button to Accounts where the fix is there.
 | H4 | Cancel sign-in | Cancel | `cancel_connect` → `ok`; the connect answers `cancelled` | — |
 | H5 | Calendars as sources | account pane renders → `list_calendars`; checkbox → `set_calendar_source {account, calendar, selected}` | `ok {calendars}` (after `entity` per calendar entity made, `account` if names changed); `entity` for one made, `account`, `ok` | checked calendars become sources, each with its calendar entity |
 | H6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` (revoke on a worker, file marked `disconnected`, token deleted) → `account`, `ok`; `remove_account` (file and token deleted) → `account_removed`, `ok` | — |
+| H7 | A work calendar | a checked calendar's Work of → a contact, or Nobody → `editEntityLocal(id, {calendar: {"work-of": …}})` | `edit_entities` → `Index::edit_entities` → `entity` | the row names the owner; the calendar's events show Work on their cards |
 | I1 | Add an AI provider | "AI provider" menu → draft pane → key or address → Save → `aiConnect` | `connect_ai {provider, key \| address}` (channel `connect_ai`) → models listed with the new values on a worker → only then stored in `.avelor/accounts/` (the key as `<id>.key`) → `account`, `ok {id, models}` | card with models |
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |
 | I3 | Offer a model | tick | `set_ai_settings {account, offered}` → `account`, `ok` | pickers offer it |
