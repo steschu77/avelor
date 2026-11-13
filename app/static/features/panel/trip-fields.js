@@ -16,7 +16,7 @@ import { daysBetween, timeFormatIn, zonedInstant, zonedTime } from '../../core/f
 import { t } from '../../core/text.js';
 import { editEntityLocal } from '../../model/structure.js';
 import {
-  LOCAL_ZONE, STATES, TRIP_KINDS, WAYS, endZone, isHeld, issueText, nightsText, placeZone, routeSpot, startZone, tripPlaces, zoneIssuesOf,
+  LOCAL_ZONE, STATES, TRIP_KINDS, WAYS, byNights, endZone, isHeld, issueText, nightsText, placeZone, routeSpot, startZone, tripPlaces, zoneIssuesOf,
   zoneName,
 } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
@@ -48,7 +48,7 @@ export function tripFields(doc, add) {
     booking.placeholder = t('trip.booking_ref');
     editField(booking, value => edit({ booking: value.trim() || null }));
     add(t('props.booking'), booking);
-  } else if (event.kind === 'stay') {
+  } else if (byNights(event)) {
     add(t('props.place'), placeField('place', event.place, place => edit({ place })));
     add(t('props.nights'), ...nightFields(doc, edit));
   } else {
@@ -77,7 +77,7 @@ function tripText(doc, add) {
     if (event.booking) add(t('props.booking'), accEl('span', 'mono', event.booking));
   } else {
     if (event.place) add(t('props.place'), event.place);
-    add(event.kind === 'stay' ? t('props.nights') : t('props.when'), whenIn(doc, 'start'));
+    add(byNights(event) ? t('props.nights') : t('props.when'), whenIn(doc, 'start'));
   }
   if (event.location) add(t('props.where'), event.location);
 }
@@ -87,7 +87,7 @@ function whenIn(doc, end) {
   const date = end === 'start' ? doc.date : doc.end;
   if (doc.all_day) {
     const nights = doc.end ? daysBetween(doc.date, doc.end) : 0;
-    return end === 'start' && doc.event.kind === 'stay' && nights > 0
+    return end === 'start' && byNights(doc.event) && nights > 0
       ? `${DATE_FORMAT.format(doc.date)} \u2013 ${DATE_FORMAT.format(doc.end)} \u00b7 ${t('trip.nights_count', { n: nights })}`
       : DATE_FORMAT.format(end === 'end' ? new Date(date - DAY) : date);
   }
@@ -215,7 +215,8 @@ export function meetsField(doc) {
   if (!spot) return null;
   if (spot.leg) {
     const { leg, index, legs, part, nights } = spot;
-    const which = [`leg ${index + 1} of ${legs}`, leg.parts.length > 1 ? `part ${part + 1} of ${leg.parts.length}` : null];
+    const which = [t('meets.leg', { at: index + 1, n: legs }), spot.layover ? t('meets.layover')
+      : leg.parts.length > 1 ? t('meets.part', { at: part + 1, n: leg.parts.length }) : null];
     return meets(`${leg.from ?? '?'} \u2192 ${leg.to ?? '?'}`, [which.filter(Boolean).join(', '), nightsText(nights)]);
   }
   const { stop, index, stops, nights } = spot;

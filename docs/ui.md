@@ -488,8 +488,8 @@ into its type's folder (`vault.md#vault-layout`); the area closes and
 the new entity is selected. A failure stays on the page; Esc cancels. The
 Task tab of the context column uses the same form (`panel.md#context-column`).
 
-An event asks what it is (Kind: Event, or a trip's Transport, Stay or
-Activity; another builds the page's rows again), whether it is held or
+An event asks what it is (Kind: Event, or a trip's Transport, Stay,
+Activity or Layover; another builds the page's rows again), whether it is held or
 booked (`status`), and its calendar, a menu of the vault's; opened while
 a trip is selected, its calendar is the trip's (its `calendar` fact), if
 that calendar is still in the vault.
@@ -504,8 +504,8 @@ Then by its kind (`panel.md#trip-fields`):
   menu; a place typed in that the vault's trip events name takes the zone
   it had last (`placeZone`), else the zone stays (this PC's at first).
   Its booking. Without a time it is a day only (a held way).
-- **Stay**: its place and nights, from the first night to the morning
-  after the last.
+- **Stay**, **Layover**: its place and nights, from the first night to
+  the morning after the last.
 - **Activity**: its place, and its start and end in the place's zone.
 
 Then where it is (`location`) for each.

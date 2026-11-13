@@ -6,7 +6,7 @@
 
 import { $ } from '../core/dom.js';
 import { addDays, dayStart, parseDate } from '../core/format.js';
-import { entities, projectsOf } from './entities.js';
+import { entities, projects, projectsOf } from './entities.js';
 import { bookingInProject, cents, pairOf } from './bank.js';
 import { tripGaps } from './trip.js';
 
@@ -57,6 +57,13 @@ export function withFact(project, name, value) {
   const next = { ...project, facts };
   if (!Object.keys(facts).length) delete next.facts;
   return next;
+}
+
+// The calendar the project `id` names (a trip's `calendar` fact), if it is
+// still in the vault.
+export function projectCalendar(id) {
+  const calendar = projects.get(id)?.project?.facts?.calendar;
+  return entities.get(calendar)?.kind === 'calendar' ? calendar : null;
 }
 
 // The entities in the project `id`.

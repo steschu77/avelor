@@ -11,8 +11,13 @@ import { entities, projects, projectsOf } from './entities.js';
 // ----------------------------------------------------------------------------
 // The parts of a trip (`event.kind`), a transport's ways (`event.way`), and
 // held or booked (`event.status`), as the vault keeps them and in words.
-export const TRIP_KINDS = [['transport', t('trip_kind.transport')], ['stay', t('trip_kind.stay')], ['activity', t('trip_kind.activity')]];
-export const WAYS = [['flight', t('way.flight')], ['train', t('way.train')], ['bus', t('way.bus')], ['ferry', t('way.ferry')], ['car', t('way.car')]];
+export const TRIP_KINDS = [
+  ['transport', t('trip_kind.transport')], ['stay', t('trip_kind.stay')], ['activity', t('trip_kind.activity')],
+  ['layover', t('trip_kind.layover')],
+];
+export const WAYS = [
+  ['flight', t('way.flight')], ['train', t('way.train')], ['bus', t('way.bus')], ['ferry', t('way.ferry')], ['car', t('way.car')],
+];
 export const STATES = [
   ['tentative', t('trip.held'), { title: t('trip.held_title') }],
   ['confirmed', t('trip.booked'), { title: t('trip.booked_title') }],
@@ -24,6 +29,10 @@ export const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 // ----------------------------------------------------------------------------
 // Whether `event` (a block) is held: tentative; else it counts as booked.
 export const isHeld = event => event?.status === 'tentative';
+
+// Whether `event` is a part of a trip by its nights, its days a stay's: a
+// stay, or a layover (a night on the way between two ways).
+export const byNights = event => event?.kind === 'stay' || event?.kind === 'layover';
 
 // The zone each end of `event` is meant in: the start's `timeZone`, the
 // end's own if it has one (`end-time-zone`); none: this PC's.
@@ -89,14 +98,15 @@ export function zoneName(zone) {
 // ----------------------------------------------------------------------------
 // What a row tells of the trip event `doc` (the Timeline): held; a
 // transport's times, each in its own place's zone, the places and the
-// booking; a stay's place and nights; an activity's place and time.
+// booking; a stay's or a layover's place and nights; an activity's place
+// and time.
 export function tripSummary(doc) {
   const event = doc.event;
   const parts = [isHeld(event) ? t('trip.held') : null];
   if (event.kind === 'transport') {
     if (!doc.all_day) parts.push(waysText(doc));
     parts.push(event.booking);
-  } else if (event.kind === 'stay') {
+  } else if (byNights(event)) {
     const nights = doc.end ? daysBetween(doc.date, doc.end) : 0;
     parts.push(event.place, nights > 0 ? t('trip.nights', { n: nights }) : null);
   } else {
@@ -149,10 +159,11 @@ export function nightsOf(value) {
 //   a cell per night (`{ day, state, stays }`), the stays covering them,
 //   its first night's day and the morning after its last; sketched,
 //   `count` (`nightsOf`), `note` and `index`, its place in the sketch;
-// - a leg, `{ type: 'leg', state, parts, ways, from, to, nights, day }`:
-//   its transports, their ways, where it leaves from and arrives, the
-//   nights it runs over and the day it leaves; one missing has its places
-//   and its day only; sketched, its ways and `index`, the stop it leads to
+// - a leg, `{ type: 'leg', state, parts, layovers, ways, from, to, nights,
+//   day }`: its transports, the layovers it runs over (a night on the way
+//   between two of them), their ways, where it leaves from and arrives,
+//   the nights it runs over and the day it leaves; one missing has its
+//   places and its day only; sketched, its ways and `index`, the stop it leads to
 //   (the number of stops for the way back).
 // Dated, a stop and a leg also have `issues`: where the trip doesn't go on
 // as it arrived (`meetings`).
@@ -206,16 +217,22 @@ function datedParts(id, home, from, to) {
   const at = day => daysBetween(from, day);
   const events = tripEvents(id);
 
+  // A layover's nights don't part the ways around them: they stay one leg,
+  // which runs over them.
+  const layovers = events.filter(doc => doc.event.kind === 'layover');
+  const layoverOn = night => layovers.find(doc => startDay(doc) <= night && night < endDay(doc));
   const legs = [];
   for (const doc of events.filter(doc => doc.event.kind === 'transport').sort((a, b) => a.date - b.date)) {
     const day = startDay(doc);
     if (day < from || day > to) continue;
     const last = legs.at(-1);
-    if (last && day <= last.arrives) {
+    const between = last ? Array.from({ length: Math.max(0, daysBetween(last.arrives, day)) }, (_, i) => layoverOn(addDays(last.arrives, i))) : [];
+    if (last && (day <= last.arrives || between.every(Boolean))) {
       last.parts.push(doc);
+      last.layovers.push(...new Set(between.filter(doc => !last.layovers.includes(doc))));
       if (arrivalDay(doc) > last.arrives) last.arrives = arrivalDay(doc);
     } else {
-      legs.push({ type: 'leg', parts: [doc], day, arrives: arrivalDay(doc) });
+      legs.push({ type: 'leg', parts: [doc], layovers: [], day, arrives: arrivalDay(doc) });
     }
   }
 
@@ -231,7 +248,7 @@ function datedParts(id, home, from, to) {
       leg.nights.push({ day: nights[i].day, state: leg.state, stays: [] });
     }
   }
-  for (const doc of events.filter(doc => doc.event.kind === 'stay')) {
+  for (const doc of events.filter(doc => byNights(doc.event))) {
     for (let i = Math.max(0, at(startDay(doc))); i < Math.min(count, at(endDay(doc))); i++) {
       if (!nights[i].leg) nights[i].stays.push(doc);
     }
@@ -378,9 +395,10 @@ function sketchedParts(home, sketch) {
 }
 
 // Where the trip event `doc` is on its trip's route (the card's Meets): the
-// leg a transport is a part of, `{ leg, index, legs, part, nights }`; the
-// stop a stay covers nights of, `{ stop, index, stops, nights }`, `nights`
-// the days of those it covers itself; null if the route doesn't take it.
+// leg a transport is a part of, `{ leg, index, legs, part, nights }`, or a
+// layover it runs over (`layover: true`, no `part`); the stop a stay
+// covers nights of, `{ stop, index, stops, nights }`; `nights` the days of
+// those it covers itself; null if the route doesn't take it.
 export function routeSpot(doc) {
   for (const id of tripsOf(doc)) {
     const route = routeOf(id, projects.get(id).project);
@@ -388,7 +406,11 @@ export function routeSpot(doc) {
     const legs = route.parts.filter(part => part.type === 'leg');
     const stops = route.parts.filter(part => part.type === 'stop');
     const same = other => other.doc_id === doc.doc_id;
-    const leg = legs.find(l => l.parts.some(same));
+    const leg = legs.find(l => l.parts.some(same) || l.layovers?.some(same));
+    if (leg && !leg.parts.some(same)) {
+      const nights = leg.nights.map(night => night.day).filter(day => day >= startDay(doc) && day < endDay(doc));
+      return { leg, index: legs.indexOf(leg), legs: legs.length, layover: true, nights };
+    }
     if (leg) {
       const own = leg.parts.find(same);
       const nights = leg.nights.map(night => night.day).filter(day => day >= startDay(own) && day < arrivalDay(own));
@@ -473,7 +495,7 @@ export function tripGaps(id, project) {
     gaps.push({ rule: 'tickets', kind: 'ticket', doc });
   }
   const outside = doc => startDay(doc) < route.from || startDay(doc) > route.to
-    || (doc.event.kind === 'stay' && endDay(doc) > route.to);
+    || (byNights(doc.event) && endDay(doc) > route.to);
   for (const doc of events.filter(outside).sort((a, b) => a.date - b.date)) {
     gaps.push({ rule: 'nights', kind: 'outside', doc });
   }

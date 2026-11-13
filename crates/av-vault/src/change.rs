@@ -16,7 +16,7 @@ use crate::shared::{ContactRef, Genre};
 
 // ----------------------------------------------------------------------------
 /// What part of a trip an event is (vault.md#event).
-const KINDS: [&str; 3] = ["transport", "stay", "activity"];
+const KINDS: [&str; 4] = ["transport", "stay", "activity", "layover"];
 /// An event's status as the app sets it: booked, or held.
 const STATUSES: [&str; 2] = ["confirmed", "tentative"];
 
@@ -328,6 +328,7 @@ mod tests {
         }
         let cleared = event_change("{status: null, kind: ''}");
         assert!(cleared.check().is_ok());
+        assert!(event_change("{kind: layover}").check().is_ok());
         let unknown = serde_yaml_ng::from_str::<EventChange>("{title: x}");
         assert!(unknown.is_err());
     }

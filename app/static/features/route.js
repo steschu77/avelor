@@ -69,7 +69,7 @@ export function routeEls(ctx, render) {
     const el = part.type === 'stop' ? stopEl(part, route.sketched) : legEl(part);
     const on = route.sketched
       ? picked && picked.type === part.type && picked.index === part.index
-      : [...part.stays ?? [], ...part.parts ?? []].some(doc => doc.doc_id === selected);
+      : [...part.stays ?? [], ...part.parts ?? [], ...part.layovers ?? []].some(doc => doc.doc_id === selected);
     if (on) el.setAttribute('aria-selected', 'true');
     el.addEventListener('click', () => {
       if (route.sketched) {
@@ -183,7 +183,8 @@ function legEl(leg) {
       text = leg.state === 'held' ? t('route.not_booked')
         : vias.length ? t('route.via', { places: vias.join(', ') })
           : !first.all_day && last.end ? durationText(last.end - first.date) : wayWord(first.event.way ?? 'way');
-      title = leg.parts.map(doc => `${doc.title} \u00b7 ${tripSummary(doc)}`).join('\n');
+      title = [...leg.parts, ...leg.layovers].sort((a, b) => a.date - b.date)
+        .map(doc => `${doc.title} \u00b7 ${tripSummary(doc)}`).join('\n');
     }
   }
   const issues = leg.issues ?? [];
@@ -201,12 +202,12 @@ function legEl(leg) {
 // A click on the part `part` (its element `el`) of the dated route of the
 // trip `id`: a gap opens the menu that fills it, a stop selects its first
 // stay and keeps the Timeline to its days, a leg of parts selects them all
-// (`selectLeg`), one of one part that one.
+// with the layovers it runs over (`selectLeg`), one of one part that one.
 function openPart(part, el, id) {
   if (part.type === 'leg' && part.state === 'missing') {
     fillGap(el, id, { kind: 'missing', leg: part });
-  } else if (part.type === 'leg' && part.parts.length > 1) {
-    selectLeg(part.parts.map(doc => doc.doc_id));
+  } else if (part.type === 'leg' && part.parts.length + part.layovers.length > 1) {
+    selectLeg([...part.parts, ...part.layovers].sort((a, b) => a.date - b.date).map(doc => doc.doc_id));
   } else if (part.type === 'leg') {
     selectDocument(part.parts[0].doc_id);
   } else if (!part.stays.length) {

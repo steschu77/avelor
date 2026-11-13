@@ -1,13 +1,16 @@
 // A gap of a trip's route filled (panel.md#route): one menu at the gap --
 // on the route, a Missing row of the blueprint, a gap's row on the
-// Timeline -- with New first, what is missing filled in (`openNew`), then
-// the events outside the trip at that time, and a filter finding any
-// other. A picked event joins the trip, takes the gap's kind if it has
+// Timeline -- with New first, what is missing filled in (`openNew`), a
+// single night marked a layover, then the events outside the trip at that
+// time, and a filter finding any other. A picked event joins the trip, takes the gap's kind if it has
 // none and the places it lacks, and its card shows, to finish there.
 
 import { DATE_FORMAT, TIME_FORMAT, addDays, dayStart, localDay } from '../core/format.js';
+import { rpcCall } from '../core/rpc.js';
 import { t } from '../core/text.js';
+import { projectCalendar } from '../model/blueprint.js';
 import { entities } from '../model/entities.js';
+import { showError } from '../model/state.js';
 import { nightsText } from '../model/trip.js';
 import { editEntityLocal, joinProjectLocal } from '../model/structure.js';
 import { docIcon } from '../ui/icons.js';
@@ -37,8 +40,10 @@ export function fillGap(anchor, trip, gap) {
       .sort((a, b) => Math.abs(a.date - from) - Math.abs(b.date - from)).slice(0, MORE);
     return found.length ? [{ head: t('gaps.other_events'), separator: true }, ...found.map(item)] : [];
   };
+  const single = need.kind === 'stay' && addDays(need.from, 1).getTime() === need.to.getTime();
   showMenu(anchor, [
     newItem(need),
+    ...(single ? [{ label: t('gaps.mark_layover'), icon: '#i-hourglass-half', run: () => markLayover(trip, need) }] : []),
     { head: t('gaps.at_that_time'), separator: true },
     ...(near.length ? near.map(item) : [{ label: t('gaps.no_other_event'), dim: true }]),
   ], { head: gapText(gap).title, filter: { placeholder: t('gaps.filter_events'), extra: more } });
@@ -71,6 +76,18 @@ function newItem(need) {
     label: t('gaps.new_way'), icon: '#i-add',
     run: () => openNew('event', { eventKind: 'transport', from: need.from ?? '', to: need.to ?? '', start: day, end: day, startTime: '', endTime: '' }),
   };
+}
+
+// The night of `need` a layover, at once: a night on the way between two
+// ways, which the route takes into their leg; in the trip and its
+// calendar, booked, and shown.
+function markLayover(trip, need) {
+  const calendar = projectCalendar(trip);
+  const event = { ...(calendar && { calendar }), status: 'confirmed', start: localDay(need.from), end: localDay(need.to), kind: 'layover' };
+  if (need.place) event.place = need.place;
+  const title = need.place ? t('gaps.layover_in', { place: need.place }) : t('trip_kind.layover');
+  rpcCall('create_entity', { roles: { event }, title, projects: [trip], labels: [] })
+    .then(({ id }) => selectDocument(id), e => showError(e.message));
 }
 
 // Whether the event `doc` lies on a day from `from` to before `to`.

@@ -21,7 +21,8 @@ import { registerAction } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store } from '../model/state.js';
 import { entities, projectScope, projects, projectsFor } from '../model/entities.js';
-import { LOCAL_ZONE, STATES, TRIP_KINDS, WAYS, placeZone } from '../model/trip.js';
+import { projectCalendar } from '../model/blueprint.js';
+import { LOCAL_ZONE, STATES, TRIP_KINDS, WAYS, byNights, placeZone } from '../model/trip.js';
 import { WAY_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import {
@@ -111,7 +112,7 @@ function newDraft(kind, { page = false, linked = null, projects = [], scope = nu
     way: 'flight', // a transport's
     from: '',
     to: '',
-    place: '', // a stay's, an activity's
+    place: '', // a stay's, a layover's, an activity's
     booking: '',
     fromZone: LOCAL_ZONE, // the zones of its times: the start's (a plain event's and an activity's both)
     toZone: LOCAL_ZONE, // a transport's arrival's
@@ -173,8 +174,7 @@ export function openNew(kind, fields = {}) {
       selectDocument(id);
     },
   });
-  const calendar = scope && projects.get(scope)?.project?.facts?.calendar;
-  d.calendar = entities.get(calendar)?.kind === 'calendar' ? calendar : null;
+  d.calendar = scope ? projectCalendar(scope) : null;
   Object.assign(d, fields);
   for (const [key, zoneKey] of [['from', 'fromZone'], ['to', 'toZone'], ['place', 'fromZone']]) {
     if (fields[key]) d[zoneKey] = placeZone(fields[key]) ?? d[zoneKey];
@@ -321,18 +321,19 @@ function newRoles(d) {
   }
 }
 
-// An event's block: its calendar and status; a stay's days, the morning
-// after the last night its end; a held way without a time its day only;
-// else its times, each in its zone (a trip's in its place's). Then where it
-// is, and the trip fields of its kind.
+// An event's block: its calendar and status; a stay's or a layover's
+// days, the morning after the last night its end; a held way without a
+// time its day only; else its times, each in its zone (a trip's in its
+// place's). Then where it is, and the trip fields of its kind.
 function newEvent(d) {
   const kind = d.eventKind;
   const event = {};
   if (d.calendar) event.calendar = d.calendar;
   if (kind || d.status === 'tentative') event.status = d.status;
-  if (kind === 'stay' || (kind === 'transport' && !d.startTime)) {
+  const nightly = byNights({ kind });
+  if (nightly || (kind === 'transport' && !d.startTime)) {
     event.start = d.start;
-    const last = kind === 'stay' ? d.end : newNextDay(d.end || d.start);
+    const last = nightly ? d.end : newNextDay(d.end || d.start);
     event.end = last > d.start ? last : newNextDay(d.start);
   } else {
     const zone = d.fromZone;
@@ -477,14 +478,14 @@ function renderNewTypeRows(d, row) {
 
 // An event's rows: its Kind (another builds the sheet again), held or
 // booked, its calendar; then by its kind a transport's way, places and
-// times, a stay's place and nights, an activity's place and times, a plain
-// event's times; and where it is.
+// times, a stay's or a layover's place and nights, an activity's place
+// and times, a plain event's times; and where it is.
 function renderNewEventRows(d, row) {
   d.els.zones = [];
   const kind = row(t('props.kind'));
   kind.append(accSeg(NEW_EVENT_KINDS, d.eventKind, value => {
     d.eventKind = value;
-    if (value === 'stay' && d.end <= d.start) d.end = newNextDay(d.start);
+    if (byNights({ kind: value }) && d.end <= d.start) d.end = newNextDay(d.start);
     renderNewSheet(d);
     d.els.kind.querySelector('[aria-pressed="true"]')?.focus();
   }));
@@ -501,7 +502,7 @@ function renderNewEventRows(d, row) {
     newTimeRows(d, row, [t('props.leaves'), t('props.arrives')], ['fromZone', 'toZone'],
       () => newPlaceRow(d, row(t('props.to')), 'to', 'toZone'));
     row(t('props.booking'), newTextInput(d, 'booking', t('new.its_reference'), { className: 'form-input mono' }));
-  } else if (d.eventKind === 'stay') {
+  } else if (byNights({ kind: d.eventKind })) {
     newPlaceRow(d, row(t('props.place')), 'place', null);
     newNightsRow(d, row(t('props.nights')));
   } else if (d.eventKind === 'activity') {
