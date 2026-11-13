@@ -144,6 +144,10 @@ mod tests {
                 ("budget", FactType::Amount),
             ]
         );
+        assert_eq!(
+            trip.checks,
+            ["budget", "deadlines", "nights", "ways", "tickets"]
+        );
         assert_eq!(trip.labels, ["travel"]);
         let json: serde_json::Value = serde_json::from_str(&json()).unwrap();
         assert_eq!(json[0]["name"], "travel");

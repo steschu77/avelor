@@ -11,12 +11,13 @@
 // meets on its trip's route (`meetsField`).
 
 import { accEl } from '../../core/dom.js';
-import { DATE_FORMAT, DAY_MONTH, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
+import { DATE_FORMAT, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
 import { daysBetween, timeFormatIn, zonedInstant, zonedTime } from '../../core/format.js';
 import { t } from '../../core/text.js';
 import { editEntityLocal } from '../../model/structure.js';
 import {
-  LOCAL_ZONE, STATES, TRIP_KINDS, WAYS, endZone, isHeld, placeZone, routeSpot, startZone, tripPlaces, zoneName,
+  LOCAL_ZONE, STATES, TRIP_KINDS, WAYS, endZone, isHeld, issueText, nightsText, placeZone, routeSpot, startZone, tripPlaces, zoneIssuesOf,
+  zoneName,
 } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { WAY_ICONS } from '../../ui/icons.js';
@@ -128,9 +129,10 @@ function timeFields(doc, end, edit) {
   if (doc.all_day && end === 'end') time.disabled = true;
   const parts = [day, time];
   if (!doc.all_day) {
+    const issue = zoneIssuesOf(doc)[end];
     parts.push(zoneButton(`${end}:zone`, zone, next => {
       if (next !== zone) edit(zoneChange(doc, end, next));
-    }));
+    }, issue ? issueText(issue) : null));
     if (end === 'end' && doc.end) parts.push(accEl('span', 'meta', durationText(doc.end - doc.date)));
   }
   return parts;
@@ -224,13 +226,6 @@ function meets(text, notes) {
   return [accEl('span', '', text), accEl('span', 'meta props__meets', notes.filter(Boolean).join(' \u00b7 '))];
 }
 
-// "the night of 07/08", "the nights of 07/09 \u2013 07/14"; none without one.
-function nightsText(days) {
-  if (!days.length) return null;
-  if (days.length === 1) return t('trip.night_of', { day: DAY_MONTH.format(days[0]) });
-  return t('trip.nights_of', { from: DAY_MONTH.format(days[0]), to: DAY_MONTH.format(days.at(-1)) });
-}
-
 // ----------------------------------------------------------------------------
 // The segmented control `seg` of `options`, its buttons found again once
 // the block is drawn anew.
@@ -266,11 +261,13 @@ export function placeInput(input) {
 }
 
 // A button naming `zone` that opens the zones' menu (`zoneMenu`); `key`
-// finds it again once the block is drawn anew.
-export function zoneButton(key, zone, onPick) {
+// finds it again once the block is drawn anew. With `warning`, the zone
+// isn't the one the trip arrived in (`zoneIssuesOf`), marked and said.
+export function zoneButton(key, zone, onPick, warning = null) {
   const button = accEl('button', 'tool label props__zone', zoneLabel(zone));
   button.type = 'button';
-  button.title = t('zone.another', { zone: zone.replace(/_/g, ' ') });
+  button.title = [t('zone.another', { zone: zone.replace(/_/g, ' ') }), warning].filter(Boolean).join('\n');
+  button.classList.toggle('tool--danger', Boolean(warning));
   if (key) button.dataset.focusKey = key;
   button.addEventListener('click', () => zoneMenu(button, zone, onPick));
   return button;

@@ -8,8 +8,12 @@ import { $ } from '../core/dom.js';
 import { addDays, dayStart, parseDate } from '../core/format.js';
 import { entities, projectsOf } from './entities.js';
 import { bookingInProject, cents, pairOf } from './bank.js';
+import { tripGaps } from './trip.js';
 
 export const BLUEPRINTS = JSON.parse($('blueprints')?.textContent || '[]');
+
+// The checks a trip's route answers (`tripGaps`).
+const TRIP_CHECKS = ['nights', 'ways', 'tickets'];
 
 // The shipped blueprint `name`, if there is one.
 export function blueprintOf(name) {
@@ -97,18 +101,29 @@ const isOpenTask = doc => doc.task && doc.task.status !== 'done';
 const byDay = day => item => day(item)?.getTime() ?? Infinity;
 
 // What the checks of the project `id` (its block `project`) find on `today`:
-// - `missing`: the gaps by their `rule` -- `documents`, an expected one not
-//   met or too old (`expected`, its `index` for Find, `stale`); `payments`,
-//   one past its day not paid (`payment`, `due`); `budget`, spent beyond it
-//   (`spent`, `budget`); `deadlines`, an open task past its due day (`doc`);
+// - `missing`: the gaps by their `rule` -- a trip's `nights`, `ways` and
+//   `tickets` first, in the order of its route (`tripGaps`, model/trip.js);
+//   `documents`, an expected one not met or too old (`expected`, its
+//   `index` for Find, `stale`); `payments`, one past its day not paid
+//   (`payment`, `due`); `budget`, spent beyond it (`spent`, `budget`);
+//   `deadlines`, an open task past its due day (`doc`);
 // - `next`: the open tasks by their due days, those without one last, then
 //   the payments awaited by their days, `{ doc }` or `{ payment, due }`;
-// - `progress`: how far it is, by check: `documents` and `payments` as
-//   `[met, all]`, `budget` as `{ spent, budget }`, `steps` as `[done, all]`.
+// - `progress`: how far it is, by check: a trip's `nights` covered and
+//   `ways` booked, `documents` and `payments` as `[met, all]`, `budget` as
+//   `{ spent, budget }`, `steps` as `[done, all]`;
+// - `later`: while a trip's days are open, what its sketch will need.
 export function checksOf(id, project, today = dayStart(new Date())) {
   const checks = new Set(project?.checks ?? []);
   const missing = [];
   const progress = {};
+  const trip = TRIP_CHECKS.some(check => checks.has(check)) ? tripGaps(id, project) : null;
+  if (trip) {
+    missing.push(...trip.gaps.filter(gap => checks.has(gap.rule)));
+    for (const check of ['nights', 'ways']) {
+      if (checks.has(check) && trip.progress[check]?.[1]) progress[check] = trip.progress[check];
+    }
+  }
   const tasks = membersOf(id).filter(doc => doc.task);
   const open = tasks.filter(isOpenTask);
   const dueOf = doc => (isNaN(doc.due) ? null : doc.due);
@@ -157,5 +172,5 @@ export function checksOf(id, project, today = dayStart(new Date())) {
     if (tasks.length) progress.steps = [tasks.length - open.length, tasks.length];
   }
 
-  return { missing, next: [...open.map(doc => ({ doc })), ...awaited], progress };
+  return { missing, next: [...open.map(doc => ({ doc })), ...awaited], progress, later: trip?.later ?? null };
 }

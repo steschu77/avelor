@@ -327,7 +327,8 @@ own file. Every field is optional; a project without one is `project: {}`.
   pay: `name`, `amount`, `from` or `to` (ContactRef), `due` (Date), `for`
   (the ID of the entity it is about; a booking linked to it meets it),
 * `checks`: [string], the gaps the header shows, by their kind
-  (`documents`, `payments`, `budget`, `deadlines`),
+  (`documents`, `payments`, `budget`, `deadlines`; a trip's `nights`,
+  `ways` and `tickets`, `panel.md#route-gaps`),
 * `afterwards`: [Afterwards], tasks written when the project is archived:
   `title`, and `due`, a fact plus a span (`handover + 5y`),
 * `labels`: [string], what the project is about, carried by its members

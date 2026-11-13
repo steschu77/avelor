@@ -317,6 +317,13 @@
   color: var(--c-ink);
 }
 
+/* where the trip doesn't go on as it arrived (`issues`): a leg's parts
+   apart, a zone not the one arrived in; the tooltip says which */
+.route__leg[data-warn] .route__when,
+.route__stop[data-warn] .route__when {
+  color: var(--c-danger-ink);
+}
+
 /* a narrow stop: its days short, its count goes (the cells count);
    narrower still, its name goes and the count comes back */
 @container route-part (max-width: 96px) {

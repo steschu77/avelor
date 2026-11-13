@@ -104,6 +104,31 @@
   color: var(--c-ink-mute);
 }
 
+/* a trip's gap on its day (features/gaps.js): nothing to select, Add at
+   its end */
+.tl__row--gap {
+  margin: 2px -8px;
+  border: 1px dashed var(--c-danger-ink);
+  cursor: default;
+}
+
+.tl__row--gap:hover {
+  background: none;
+}
+
+.tl__row--gap>.icon {
+  color: var(--c-danger-ink);
+}
+
+.tl__row--gap .tl__title {
+  font-style: italic;
+  color: var(--c-ink-mute);
+}
+
+.tl__row--gap>.tool {
+  align-self: center;
+}
+
 .tl__row[aria-selected="true"] {
   background: var(--c-card);
   box-shadow: inset 2px 0 0 var(--c-accent-line);

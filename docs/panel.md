@@ -575,12 +575,15 @@ unfolded (`features/blueprint.js`):
   bookings have spent ("3,148.00 booked").
 - **A trip's route** (`#route`), under its facts.
 - **A tab line**: Missing and Next, each with its count, then how far the
-  project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00").
+  project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00"; a
+  trip's nights covered and ways booked first, "nights 9 of 10 · ways 2 of
+  3 booked").
   One list is open at a time; its tab again folds it, so the lens keeps
   its room.
 - **Missing**: what the project's checks find (`checksOf`), each with the
-  check that found it: an expected document no entity meets yet, or none
-  recent enough (`within`), with Find, a menu of the project's entries
+  check that found it: first a trip's (`#route-gaps`); an expected
+  document no entity meets yet, or none recent enough (`within`), with
+  Find, a menu of the project's entries
   whose pick is written into its `by`; a payment past its day that no
   booking linked to what it is `for` pays; the bookings beyond the
   budget (`spentIn`: money out less money in of the bookings linked into
@@ -635,10 +638,16 @@ at both ends, named in their tooltips (`routeOf`, `model/trip.js`).
   part, its parts, their cards in the panel as a day's events in the
   calendar's, the first focused (`selectLeg`, `#panel-state`), under the
   calendar lens the first one's day; on one of one part, that part.
-  The part the panel shows is marked. A gap opens New with what is
-  missing filled in (`openNew`, `features/new.js`), in the trip and its
-  calendar: a stop without a stay a stay at its place for its nights; a
-  leg missing a transport between its places on its day, a day only.
+  The part the panel shows is marked. A gap, a stop without a stay or a
+  leg missing, opens the menu that fills it (`#route-gaps`).
+- **Where the trip goes on** at a place, at a via or at the stop between
+  two legs, it leaves in the zone it arrived in, and an activity at the
+  stop is in that zone; the parts of a leg meet at the same place
+  (`meetings`). A leg that doesn't says "zones differ" or "places differ"
+  in danger, its tooltip which (`issueText`: "Zones differ in Davao:
+  arrived in Manila time, leaves in Berlin time"); a stop with an activity
+  in another zone says it in its tooltip. Stays are whole days, without a
+  zone. The ends' zone buttons on the cards say it too (`#trip-fields`).
 - **The sketch, edited in place** while the host can write the project: a
   click picks a stop or a leg, edited in a line under the strip. A stop's
   place, nights (a number, about one `~6`, a range `2-3`; what reads as
@@ -650,6 +659,48 @@ at both ends, named in their tooltips (`routeOf`, `model/trip.js`).
 
 An event of the route says on its card what it meets there
 (`#trip-fields`).
+
+### A trip's gaps <a id="route-gaps"></a>
+
+While its days are fixed, what a trip lacks (`tripGaps`, `model/trip.js`)
+is listed under Missing in the order of its route, by the check that finds
+it (`vault.md#project`), each with what acts on it:
+
+- **Nights** (`nights`): a run of a stop's nights without a stay ("No stay
+  in Berlin", "the night of 07/17"), with Add; an event of the trip outside
+  its days (Days), which a click opens.
+- **Ways** (`ways`): a change of place without a leg ("No way from Hamburg
+  to Berlin"), with Add; a part held ("Train Hamburg → Berlin not booked"),
+  or the open task linked to it, named instead ("Book the train"), which a
+  click opens; parts that don't meet, or a zone not the one arrived in
+  ("Zones differ in Frankfurt"), which open the part that leaves.
+- **Tickets** (`tickets`): an event with a `booking` but no document
+  linked to it or from it (a confirmation, a ticket), which a click opens.
+
+How far it is: its nights covered by a stay or a leg that runs over them,
+and its legs booked, missing ones counted ("nights 9 of 10 · ways 2 of 3
+booked"). While the days are open nothing is missing yet; Missing says what
+the sketch will need ("Once the days are fixed: about 5 nights to cover, 3
+ways to find.").
+
+**Add**, on the route (a stop without a stay, a leg missing), on a Missing
+row and on a gap's row on the Timeline (`ui.md#timeline`), opens one menu
+(`fillGap`, `features/gaps.js`) under what is missing ("No stay in
+Berlin"):
+
+- **New stay…** or **New way…** first: New with what is missing filled in
+  (`openNew`, `features/new.js`), in the trip and its calendar: a stay at
+  its place for its nights; a transport between its places on its day, a
+  day only.
+- **At that time**: the events outside the trip on the gap's days (a way's:
+  the day before to the day after), by their starts.
+- A filter over them, which also finds any other event outside the trip by
+  its title ("Other events").
+
+A picked event joins the trip (`join_project`); if it says no part of a
+trip, it becomes the gap's (a stay, a transport, `edit_entities`), and of
+that kind it takes the place, or from and to, it lacks. Its card shows, to
+finish there (its way, its zones).
 
 ## Membership and structural edits <a id="structural-edits"></a>
 
@@ -790,7 +841,9 @@ recurring event keeps its own. While the host can write it:
   and a time in that place's time zone, the zone named by its city
   ("Chicago time"), a button that opens the zones' menu (this
   PC's and those the trip events use, then every other, a filter finding
-  one); Arrives also says how long it takes ("8 h 15 min"). The start is
+  one), in danger while its trip's route finds the zone isn't the one the
+  trip arrived in, its tooltip saying so (`zoneIssuesOf`, `#route`);
+  Arrives also says how long it takes ("8 h 15 min"). The start is
   meant in `timeZone`, the end in its own if it has one
   (`end-time-zone`). Its **Booking**, its reference.
 - **A stay**: its **Place**, and its **Nights**: the first night's day and
@@ -911,5 +964,6 @@ and save their bodies at once.
 | C6 | Description | fold chevron → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
 | C7 | Archive | header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |
 | C8 | Delete a project | header Delete, two clicks within 3 s → description saved first → `structureCall('delete_entity')` | `Index::delete`: members leave the project, file to `.trash/` → `entity` per member, `entity_deleted`, the answer | filter back to all documents |
-| C9 | A trip's route | a stop of a dated route → `selectDocument` (its first stay) and `showWeeks`; a leg → `selectLeg` (its parts), one of one part `selectDocument`; a gap → `openNew('event', {…})` | — | the card and its Meets; the Timeline kept to the stop's weeks; New filled in |
+| C9 | A trip's route | a stop of a dated route → `selectDocument` (its first stay) and `showWeeks`; a leg → `selectLeg` (its parts), one of one part `selectDocument`; a gap → `fillGap` (C11) | — | the card and its Meets; the Timeline kept to the stop's weeks; the gap's menu |
 | C10 | A trip's sketch | a sketched stop or leg picked; a place, nights or note typed in, Enter or blur; a way picked, Via, Over night; Add a stop, Remove → `setProjectLocal(id, {…, sketch})` | `set_project {id, project}` → `entity` | the route follows |
+| C11 | A trip's gap filled | Add (a gap of the route, a Missing row, a gap's row on the Timeline) → `fillGap` (`features/gaps.js`); New stay… / New way… → `openNew('event', {…})`; an event picked → `joinProjectLocal`, `editEntityLocal(id, {event: {kind, place}})` (a way's `from` and `to`), `selectDocument` | `join_project {id, project}`, `edit_entities {ids, change}` → `entity` | New filled in; or the event in the trip, its card shown, the route and Missing following |
