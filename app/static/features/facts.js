@@ -4,7 +4,8 @@
 // trip's days (from and to), or picked from a menu (contacts, a calendar, a
 // choice). An edit writes the whole block through `set_project`
 // (`setProjectLocal`), if the value changed; empty removes the fact. While
-// a trip's days aren't fixed, they show what its sketch says of them. The
+// a trip's days aren't fixed, they show what its sketch says of them, and
+// fixing them opens Fix dates (features/fixdates.js) instead. The
 // menus of calendars and contacts serve New and the Accounts page too.
 
 import { accEl } from '../core/dom.js';
@@ -16,6 +17,7 @@ import { withFact } from '../model/blueprint.js';
 import { setProjectLocal } from '../model/structure.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
+import { openFixDates } from './fixdates.js';
 import { contactChip, entityChip } from './panel/details.js';
 
 // The fact `fact` (`factsOf`) of the project `id`, its block `project`, as
@@ -26,9 +28,9 @@ export function factEl(fact, { id, project, writable }, meta = null) {
   const value = accEl('span', 'bp__value');
   el.append(accEl('span', 'label', fact.label), value);
   const save = next => {
-    if (JSON.stringify(next ?? null) !== JSON.stringify(fact.value ?? null)) {
-      setProjectLocal(id, withFact(project, fact.name, next));
-    }
+    if (JSON.stringify(next ?? null) === JSON.stringify(fact.value ?? null)) return;
+    if (fact.type === 'days' && project.sketch && parseDate(next?.to) > parseDate(next?.from)) return openFixDates(id, next);
+    setProjectLocal(id, withFact(project, fact.name, next));
   };
   const show = () => {
     value.replaceChildren(...valueParts(fact, project), ...(meta ? [accEl('span', 'meta', meta)] : []));

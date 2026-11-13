@@ -567,7 +567,8 @@ unfolded (`features/blueprint.js`):
   shows on hover and edits it in place by its type (`features/facts.js`):
   a text or an amount typed in, a date, a trip's days (from and to; while
   they aren't fixed, what its sketch says of them: "Aug 2028 · 4–5 nights
-  · not fixed"), or a pick from a menu (the vault's contacts, with a name
+  · not fixed"; fixing them opens Fix dates instead, `ui.md#fix-dates`),
+  or a pick from a menu (the vault's contacts, with a name
   typed that has none; the vault's calendars; a choice's values). Enter or
   leaving the inputs writes the whole block through `set_project`
   (`setProjectLocal`, `model/structure.js`) if the value changed, Esc puts

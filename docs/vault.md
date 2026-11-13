@@ -346,7 +346,7 @@ own file. Every field is optional; a project without one is `project: {}`.
   Each part is optional: a sketch may be a window and a length, stops
   only later. A night on the way is a stop of its own. Fixing the trip's
   days writes the `days` fact (`{from, to}`), turns the sketch into held
-  events and removes it.
+  events and removes it, what is proposed ticked first (`ui.md#fix-dates`).
 
 ```yaml
 project:

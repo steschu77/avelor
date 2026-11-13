@@ -4,9 +4,9 @@
 // (panel.md#route): its nights, the stops and the legs between them, and
 // what it lacks (`tripGaps`).
 
-import { DAY_MONTH, addDays, dayStart, daysBetween, parseDate, timeFormatIn, zonedTime } from '../core/format.js';
+import { DAY_MONTH, addDays, dayStart, daysBetween, localDay, parseDate, timeFormatIn, zonedTime } from '../core/format.js';
 import { t } from '../core/text.js';
-import { entities, projects, projectsOf } from './entities.js';
+import { entities, parseContact, projects, projectsOf } from './entities.js';
 
 // ----------------------------------------------------------------------------
 // The parts of a trip (`event.kind`), a transport's ways (`event.way`), and
@@ -532,4 +532,100 @@ function hasTicket(doc) {
     if (other.linked_to === doc.doc_id && isTicket(other)) return true;
   }
   return false;
+}
+
+// ----------------------------------------------------------------------------
+// What fixing the days `{ from, to }` of the trip `id` (its block `project`)
+// proposes from its sketch (ui.md#fix-dates), each a row `{ key, title,
+// event, why, from, to }` (the event's block, held; `to` the morning after):
+// - `ways`: a way per way of each leg, a day only on its day, from where
+//   the trip is to the stop (home at both ends); over night it takes the
+//   night;
+// - `stays`: a stay per stop for its nights, in order: a stop takes the
+//   nights sketched (a range its fewest, none sketched one), the last what
+//   is left; one left without a night is none;
+// - `off`: a day off range over the trip's days in the work calendar of
+//   each traveler who has one (`work-of`).
+// `calendar`: the trip's (its events'). `nights`: how many the days have,
+// `sketched` what the sketch said (`nightsOf`).
+export function fixDatesProposal(id, project, days, calendar) {
+  const from = parseDate(days.from);
+  const to = parseDate(days.to);
+  const sketch = project.sketch ?? {};
+  const stops = sketch.stops ?? [];
+  const home = project.facts?.home ? String(project.facts.home) : null;
+  const held = block => ({ ...(calendar && { calendar }), status: 'tentative', ...block });
+  const ways = [];
+  const stays = [];
+  const wayRows = (by, a, b, day, overnight) => {
+    const list = [].concat(by ?? []).map(String);
+    const parts = list.length ? list : [null];
+    const end = addDays(day, overnight ? 2 : 1);
+    parts.forEach((way, i) => {
+      const first = i === 0;
+      const last = i === parts.length - 1;
+      const word = WAYS.find(([value]) => value === way)?.[1] ?? t('trip.way');
+      const title = last ? t('trip.way_to', { way: word, place: b ?? t('trip.somewhere') })
+        : first ? t('trip.way_from', { way: word, place: a ?? t('trip.somewhere') }) : word;
+      const event = held({ start: localDay(day), end: localDay(end), kind: 'transport', ...(way && { way }) });
+      if (first && a) event.from = a;
+      if (last && b) event.to = b;
+      const route = `${a ?? t('trip.somewhere_first')} \u2192 ${b ?? t('trip.somewhere')}`;
+      const why = [route, parts.length > 1 ? t('trip.part_of', { at: i + 1, n: parts.length }) : null,
+        overnight ? t('trip.over_night') : null].filter(Boolean).join(' \u00b7 ');
+      ways.push({ key: `way:${ways.length}`, title, event, why, from: day, to: end });
+    });
+  };
+  let day = from;
+  let left = daysBetween(from, to);
+  stops.forEach((stop, i) => {
+    const place = stop.place ? String(stop.place) : null;
+    const before = i ? (stops[i - 1].place ? String(stops[i - 1].place) : null) : home;
+    const overnight = Boolean(stop.overnight) && left > 0;
+    wayRows(stop.by, before, place, day, overnight);
+    if (overnight) {
+      day = addDays(day, 1);
+      left--;
+    }
+    const count = nightsOf(stop.nights);
+    const last = i === stops.length - 1;
+    const n = last ? left : Math.min(left, count ? count.min : 1);
+    if (n <= 0) return;
+    const sketched = !count ? t('trip.sketch_none') : count.min !== count.max ? `${count.min}\u2013${count.max}`
+      : count.about ? t('trip.about_n', { n: count.min }) : String(count.min);
+    const fits = count && n >= count.min && n <= count.max;
+    const as = fits ? t('trip.as_sketched') : last ? t('trip.left_sketch_said', { sketched }) : t('trip.sketch_said', { sketched });
+    const note = stop.note ? String(stop.note) : null;
+    stays.push({
+      key: `stay:${i}`, title: note ? note[0].toUpperCase() + note.slice(1) : place ? t('trip.stay_in', { place }) : t('trip.stay_somewhere'),
+      event: held({ start: localDay(day), end: localDay(addDays(day, n)), kind: 'stay', ...(place && { place }) }),
+      why: [place, t('trip.nights', { n }), as].filter(Boolean).join(' \u00b7 '),
+      from: day, to: addDays(day, n),
+    });
+    day = addDays(day, n);
+    left -= n;
+  });
+  if (stops.length) wayRows(sketch.back?.by, stops.at(-1).place ? String(stops.at(-1).place) : home, home, to, false);
+
+  const travelers = [].concat(project.facts?.travelers ?? []).map(String);
+  const off = [];
+  for (const calendarDoc of entities.values()) {
+    const owner = calendarDoc.kind === 'calendar' ? calendarDoc.calendar?.['work-of'] : null;
+    const traveler = owner && travelers.find(ref => sameContact(ref, owner));
+    if (!traveler) continue;
+    off.push({
+      key: `off:${calendarDoc.doc_id}`, title: t('trip.off', { name: projects.get(id)?.name ?? t('trip.the_trip') }),
+      event: { calendar: calendarDoc.doc_id, status: 'tentative', start: localDay(from), end: localDay(addDays(to, 1)), work: 'off' },
+      why: t('trip.work_calendar_of', { traveler: parseContact(traveler).name, title: calendarDoc.title || t('untitled') }),
+      from, to: addDays(to, 1),
+    });
+  }
+  return { nights: daysBetween(from, to), sketched: nightsOf(sketch.nights), ways, stays, off };
+}
+
+// Whether the contact refs `a` and `b` name the same person: the same
+// contact, or the same name.
+function sameContact(a, b) {
+  const [x, y] = [parseContact(a), parseContact(b)];
+  return x.id && y.id ? x.id === y.id : x.name.trim().toLowerCase() === y.name.trim().toLowerCase();
 }

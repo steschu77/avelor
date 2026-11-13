@@ -47,6 +47,8 @@
   "email.press_update": "Drücken Sie Aktualisieren, um die Treffer zu lesen.",
   "email.reading_blocked": "Das Lesen der Anhänge ist an: Wählen Sie ein Modell, das dafür funktioniert, oder schalten Sie es aus.",
   "email.truncated": "Nur die neuesten {n} werden gelistet; grenzen Sie den Filter ein, um den Rest zu sehen.",
+  "fix.writes": "Nichts wird geschrieben, bevor Sie übernehmen: {what}, dann die Tage; die Skizze entfällt.",
+  "fix.writes_days": "Nichts wird geschrieben, bevor Sie übernehmen: die Tage; die Skizze entfällt.",
   "google.page.connected_line": "Sie können diesen Tab schließen.",
   "google.page.failed_line": "Kehren Sie zu Avelor zurück und versuchen Sie es erneut.",
   "google.page.outdated_line": "Eine neuere wartet: Schließen Sie sie in ihrem eigenen Tab ab oder beginnen Sie in Avelor neu.",

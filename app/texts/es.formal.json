@@ -58,6 +58,8 @@
   },
   "email.truncated": "Solo se listan los {n} más recientes; acote el filtro para ver el resto.",
   "email.updates_as_you_edit": "se actualiza mientras edita",
+  "fix.writes": "No se escribe nada hasta que aplica: {what} y luego los días; el esbozo desaparece.",
+  "fix.writes_days": "No se escribe nada hasta que aplica: los días; el esbozo desaparece.",
   "google.page.connected_line": "Puede cerrar esta pestaña.",
   "google.page.failed_line": "Vuelva a Avelor e inténtelo de nuevo.",
   "google.page.outdated_line": "Hay uno más reciente esperando: termínelo en su propia pestaña o empiece de nuevo en Avelor.",
