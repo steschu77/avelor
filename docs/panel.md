@@ -758,15 +758,17 @@ finish there (its journey, its zones).
 While a trip's days are open, When is the first list of its tab line
 (`features/when.js`): the days the trip could take (`whenOf`,
 `model/when.js`). Its head names the sketch's window and length ("Tue
-08/01 – Thu 08/31 · 4–5 nights"); a sketch without a window says so.
+08/01 – Thu 08/31 · 4–5 nights"); a sketch without a window says so. Then
+Edit and + Lane (below).
 
 - **The window's days** in columns, a Monday's date over its week (the
   month's name on its first), a line down each week.
 - **A lane per thing that limits them**: the block's `lanes`
   (`vault.md#project`) in their order, then each traveler's work calendar
-  not among them ("Alex's work"). A lane's name opens what it comes from
-  in the panel, a calendar's card or an event's; one typed in has none. Its
-  spans lie on its days, each with its title and days in its tooltip:
+  not among them ("Alex's work"). A lane's name opens its menu (below);
+  in a trip that can't be written, what it comes from in the panel. Its
+  spans lie on its days, each with its title and days in its tooltip; an
+  event's opens it, one typed in its menu:
   - **can't**, hatched: a calendar's all-day events (a timed one limits no
     day), one event, or spans typed in, counted `cant`; with `only`, the
     window's days outside its events ("after Summer break");
@@ -791,6 +793,25 @@ While a trip's days are open, When is the first list of its tab line
   (`openSetDates`, `ui.md#set-the-dates`), saying what it then proposes ("then
   proposes 2 planned stays, 5 planned journeys, the days off · nothing is written
   before Apply"). None fitting says so instead.
+
+Each edit writes the block through `set_project` (`setProjectLocal`):
+
+- **Edit** (Add a window, without one): an edit line under the head with
+  the window's first and last day and the length (`n`, `~n`, `n-m`), each
+  written by itself on Enter or leaving it (the sketch's `window` and
+  `nights`); Done closes it.
+- **+ Lane**: **A calendar…** (the vault's calendars; one left out comes
+  back in its place), **An event…** (the window's events outside the
+  trip, a filter finding any other: `eventMenu`, `features/gaps.js`), or
+  **Days typed in…**, a lane named in the edit line, then its first days
+  (from, to and a note; Enter or Add). Each counts `cant` at first.
+- **A lane's menu**: Open the calendar or the event; how its days count
+  (a work calendar's other days; `only` a calendar's or an event's; a
+  lane typed in sets it for all its days); Rename, in the edit line;
+  Add days, for one typed in; Leave out: a work calendar's stays listed,
+  `none`, any other goes.
+- **A span typed in**, its menu: how it counts, by itself; Edit, its days
+  and note in the edit line; Remove.
 
 ## Membership and structural edits <a id="structural-edits"></a>
 
@@ -1066,5 +1087,6 @@ and save their bodies at once.
 | C9 | A trip's route | a stop of a dated route → `selectDocument` (its first stay) and `showWeeks`; a leg → `selectLeg` (its parts), one of one part `selectDocument`; a gap → `fillGap` (C11) | — | the card and its Meets; the Timeline kept to the stop's weeks; the gap's menu |
 | C10 | A trip's sketch | a sketched stop or leg picked; a place, nights or note typed in, Enter or blur; a means picked, Via, Over night; Add a stop, Remove → `setProjectLocal(id, {…, sketch})` | `set_project {id, project}` → `entity` | the route follows |
 | C11 | A trip's gap filled | Add (a gap of the route, a Missing row, a gap's row on the Timeline) → `fillGap` (`features/gaps.js`); New stay… / New journey… → `openNew('event', {…})`; an event picked → `joinProjectLocal`, `editEntityLocal(id, {event: {type, place}})` (a journey's `from` and `to`), `selectDocument` | `join_project {id, project}`, `edit_entities {ids, change}` → `entity` | New filled in; or the event in the trip, its card shown, the route and Missing following |
-| C12 | A trip's When | When (the tab); a fit or its radio chosen; a lane's name → `selectDocument` (its calendar or event); Set the dates A → `openSetDates(id, {from, to})` (D8) | — | the window chosen, its band and its foot; the source's card; Set the dates with its days |
+| C12 | A trip's When | When (the tab); a fit or its radio chosen; a lane's name → its menu, Open → `selectDocument` (its calendar or event); an event's span → `selectDocument`; Set the dates A → `openSetDates(id, {from, to})` (D8) | — | the window chosen, its band and its foot; the source's card; Set the dates with its days |
+| C13 | When's lanes edited | Edit: the window's days or the length typed in, Enter or blur → `writeSketch`; + Lane: a calendar or an event picked, a lane named and its days added; a lane's or a span's menu: how it counts, Rename, Add days, Edit, Remove, Leave out → `setProjectLocal(id, {…, lanes})` | `set_project {id, project}` → `entity` | the lanes, the fits and their costs follow |
 | C14 | A blueprint for a project | Blueprint (the project toolbar, a project without one) → a shipped blueprint → `setProjectLocal(id, withBlueprint(…))` | `set_project {id, project}` → `entity` | the blueprint's block under the description, its facts and checks |

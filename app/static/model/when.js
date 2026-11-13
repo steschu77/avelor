@@ -14,7 +14,7 @@ import { entities } from './entities.js';
 import { nightsOf, workCalendarsOf } from './trip.js';
 
 // How a lane's days count (`counts`), in words.
-const COUNTS = [
+export const COUNTS = [
   ['cant', t('when.counts.cant')],
   ['worse', t('when.counts.worse')],
   ['reason', t('when.counts.reason')],

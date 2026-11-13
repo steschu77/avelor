@@ -317,7 +317,7 @@ function countValue({ count }) {
 }
 
 // `object` with `key` set to `value`; null removes it.
-function withKey(object, key, value) {
+export function withKey(object, key, value) {
   const next = { ...object };
   if (value === null || value === undefined) delete next[key];
   else next[key] = value;
@@ -326,8 +326,9 @@ function withKey(object, key, value) {
 
 // Write the sketch of the trip `id` as `change(sketch)` makes it, from its
 // block as the host last pushed it (an edit line outlives one write); a
-// sketch left empty goes, a journey home without a means too.
-function writeSketch(id, change) {
+// sketch left empty goes, a journey home without a means too. Also When's
+// window and length (features/when.js).
+export function writeSketch(id, change) {
   const project = projects.get(id)?.project;
   if (!project) return;
   let sketch = change(project.sketch ?? {});
@@ -336,7 +337,9 @@ function writeSketch(id, change) {
   setProjectLocal(id, withKey(project, 'sketch', Object.keys(sketch).length ? sketch : null));
 }
 
-function editInput(value, label, key) {
+// A text input of an edit line; `key` finds it again once it is drawn
+// anew. Also When's (features/when.js).
+export function editInput(value, label, key) {
   const input = accEl('input', 'form-input bp__input');
   input.type = 'text';
   input.value = value;
