@@ -3,11 +3,12 @@
 // (`showBlueprint`, features/header.js): its facts on a line, each edited in
 // place (features/facts.js); a trip's route (features/route.js); then a tab
 // line, Missing and Next with their counts and how far it is (`checksOf`,
-// model/blueprint.js). One list is open at a time, its tab again folds it,
-// so the lens keeps its room. A row's task opens on a click; an expected
-// document's gap has Find, which picks one of the project's members to meet
-// it; a trip's nights and journeys missing have Add (features/gaps.js), its
-// other gaps open the event they are about.
+// model/blueprint.js); while a trip's days are open, its When first
+// (features/when.js), open once the trip is shown. One list is open at a
+// time, its tab again folds it, so the lens keeps its room. A row's task
+// opens on a click; an expected document's gap has Find, which picks one of
+// the project's members to meet it; a trip's nights and journeys missing have
+// Add (features/gaps.js), its other gaps open the event they are about.
 
 import { $, accEl, oncePerFrame } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
@@ -18,6 +19,7 @@ import { projects } from '../model/entities.js';
 import { checksOf, factsOf, hasBlueprint, membersOf } from '../model/blueprint.js';
 import { setProjectLocal } from '../model/structure.js';
 import { zoneName } from '../model/trip.js';
+import { whenOf } from '../model/when.js';
 import { KIND_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { toolButton } from '../ui/toolbar.js';
@@ -26,13 +28,16 @@ import { fillGap, gapText } from './gaps.js';
 import { TASK_STATUSES } from './panel/details.js';
 import { routeEls } from './route.js';
 import { selectDocument } from './selection.js';
+import { whenEls } from './when.js';
 
 const bpEl = $('project-bp');
 
 // The project shown, null while the details are folded or none is picked;
-// the list open (`missing`, `next`), null for none.
+// the list open (`when`, `missing`, `next`), null for none, and the project
+// it was opened for.
 let shownId = null;
 let openList = 'missing';
+let openedFor = null;
 
 // Show the blueprint of the project `id`, null to hide it.
 export function showBlueprint(id) {
@@ -40,9 +45,11 @@ export function showBlueprint(id) {
   render();
 }
 
-// A render waits while a fact is typed in, and runs once the facts are left.
+// A render waits while a fact is typed in, and runs once the facts are left;
+// a radio picked (When's windows) is no typing.
 function typing() {
-  return bpEl.contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
+  const el = document.activeElement;
+  return bpEl.contains(el) && el.tagName === 'INPUT' && el.type !== 'radio' && el.type !== 'checkbox';
 }
 
 const render = oncePerFrame(() => {
@@ -75,16 +82,25 @@ function renderBlueprint({ id, project, writable }) {
     factEl(fact, ctx, fact.name === 'budget' && budget ? t('bp.spent', { amount: amountText(budget.spent) }) : null)));
   if (writable) facts.append(newFactEl(ctx));
 
+  const when = whenOf(project);
+  if (when && openedFor !== id) openList = 'when';
+  if (!when && openList === 'when') openList = 'missing';
+  openedFor = id;
+  const missing = result.missing.map(gap => gapRow(gap, ctx));
+  const next = result.next.map(nextRow);
+  const rowsOr = (rows, none) => () => (rows.length ? rows : [accEl('p', 'note bp__none', none)]);
+  // each list: its tab's label and count, and its rows
   const lists = {
-    missing: [t('bp.missing'), result.missing.map(gap => gapRow(gap, ctx)), result.later ? laterText(result.later) : t('bp.nothing_missing')],
-    next: [t('props.next'), result.next.map(nextRow), t('bp.nothing_next')],
+    ...(when && { when: [t('props.when'), when.fits.length, () => whenEls(ctx, when, render)] }),
+    missing: [t('bp.missing'), missing.length, rowsOr(missing, result.later ? laterText(result.later) : t('bp.nothing_missing'))],
+    next: [t('props.next'), next.length, rowsOr(next, t('bp.nothing_next'))],
   };
   const tabs = accEl('div', 'bp__tabs');
-  for (const [key, [label, rows]] of Object.entries(lists)) {
+  for (const [key, [label, count]] of Object.entries(lists)) {
     const tab = accEl('button', 'tool label', label);
     tab.type = 'button';
     tab.setAttribute('aria-pressed', String(openList === key));
-    tab.append(accEl('span', 'meta', String(rows.length)));
+    tab.append(accEl('span', 'meta', String(count)));
     tab.addEventListener('click', () => {
       openList = openList === key ? null : key;
       render();
@@ -95,9 +111,8 @@ function renderBlueprint({ id, project, writable }) {
 
   const parts = [facts, ...routeEls(ctx, render), tabs];
   if (openList) {
-    const [, rows, none] = lists[openList];
     const list = accEl('div', 'bp__list');
-    list.append(...(rows.length ? rows : [accEl('p', 'note bp__none', none)]));
+    list.append(...lists[openList][2]());
     parts.push(list);
   }
   return parts;

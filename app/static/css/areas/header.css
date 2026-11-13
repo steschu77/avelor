@@ -484,6 +484,193 @@
   color: var(--c-ink);
 }
 
+/* a trip's When (features/when.js): the window and the length over it */
+.when__head {
+  margin: 6px 0 0;
+}
+
+/* the window's days in columns after the lanes' names, a row per lane,
+   the windows that fit in the last */
+.when {
+  display: grid;
+  grid-template-columns: var(--w-when-name) repeat(var(--days), minmax(0, 1fr));
+  grid-template-rows: 16px repeat(var(--lanes), var(--h-when-lane)) 26px;
+  padding-top: 4px;
+}
+
+/* a Monday's date over its week, the month's name on its first */
+.when__mon {
+  grid-row: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  padding-left: 2px;
+}
+
+/* a week's line under the lanes, on its Monday */
+.when__week {
+  grid-row: 2 / -1;
+  border-left: 1px solid var(--c-line);
+}
+
+.when__name {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 6px 0 0;
+  border: none;
+  border-bottom: 1px solid var(--c-line);
+  background: none;
+  font: 400 var(--fs-small)/1 var(--f-serif);
+  color: var(--c-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+button.when__name {
+  cursor: pointer;
+}
+
+button.when__name:hover {
+  text-decoration: underline;
+}
+
+.when__name>.icon {
+  flex: none;
+  color: var(--c-ink-mute);
+}
+
+.when__name.label {
+  grid-row: -2;
+  border-bottom: none;
+  font: 400 var(--fs-label)/1 var(--f-chrome);
+  color: var(--c-label);
+}
+
+/* the lane's line under its spans */
+.when__lane {
+  grid-column: 2 / -1;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.when__span {
+  position: relative;
+  z-index: 1;
+  margin: 3px 0;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font: 400 var(--fs-meta)/1 var(--f-chrome);
+  color: var(--c-ink-soft);
+}
+
+/* can't: hatched */
+.when__span.is-block {
+  border: 1px solid var(--c-ink-faint);
+  background: repeating-linear-gradient(-45deg, var(--c-ink-faint) 0 1px, var(--c-paper) 1px 5px);
+}
+
+.when__span.is-block>span {
+  background: var(--c-paper);
+  padding: 0 2px;
+}
+
+/* a span too short for its word keeps it in its tooltip */
+.when__span.is-block,
+.when__span.is-soft {
+  container-type: inline-size;
+}
+
+@container (max-width: 56px) {
+  .when__span>span {
+    display: none;
+  }
+}
+
+/* possible, but worse: tinted */
+.when__span.is-soft {
+  background: var(--c-tint);
+  color: var(--c-label);
+}
+
+/* a reason to be there: a star on its day, its word after it */
+.when__span.is-mark {
+  overflow: visible;
+  padding: 0;
+  justify-content: center;
+}
+
+.when__span.is-mark>.icon {
+  color: var(--c-ink);
+}
+
+.when__span.is-mark>span {
+  position: absolute;
+  left: calc(100% + 2px);
+}
+
+/* the windows that fit; the chosen one's band shades every lane */
+.when__fit {
+  position: relative;
+  z-index: 1;
+  grid-row: -2;
+  margin: 5px 0 2px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--c-ink-mute);
+  background: var(--c-card);
+  font: 500 var(--fs-small)/1 var(--f-serif);
+  color: var(--c-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.when__fit[aria-selected="true"] {
+  border-color: var(--c-ink);
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+}
+
+.when__band {
+  grid-row: 2 / -1;
+  background: var(--c-accent-soft);
+  border-left: 1px solid var(--c-accent-line);
+  border-right: 1px solid var(--c-accent-line);
+}
+
+/* each window: its days and nights, its why, its cost at the right (the
+   proposal's rows, with a radio) */
+.when__choices {
+  margin-top: 8px;
+}
+
+.when__choices .proposal__row {
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+}
+
+.when__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 0 4px;
+}
+
+.when__foot>.meta:last-child {
+  margin-left: auto;
+  text-align: right;
+}
+
 /* the active labels after the project's name in the lens header, on one
    line: what doesn't fit is cut off at the right */
 .label-filter {

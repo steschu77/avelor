@@ -1136,7 +1136,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 /* an unticked row steps back: it won't be written */
-.proposal__row:has(input:not(:checked)) .proposal__text {
+.proposal__row:has(input[type="checkbox"]:not(:checked)) .proposal__text {
   color: var(--c-ink-faint);
 }
 

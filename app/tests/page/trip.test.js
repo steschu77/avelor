@@ -4,7 +4,7 @@ import { localDay, parseDate } from '../../static/core/format.js';
 import { entities, projects } from '../../static/model/entities.js';
 import {
   byNights, setDatesProposal, isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripGaps,
-  tripPlaces, tripSummary, zoneIssuesOf, zoneName,
+  tripPlaces, tripSummary, workCalendarsOf, zoneIssuesOf, zoneName,
 } from '../../static/model/trip.js';
 
 // A trip from Springfield, from `from` to `to`, and its events on days:
@@ -202,6 +202,8 @@ test('what a sketch will need once its dates are set', () => {
   equal([later({ stops: [{ nights: 2 }, {}] }), later({}), later(undefined)], [{ nights: null, journeys: 3 }, { nights: null, journeys: 0 }, { nights: null, journeys: 0 }]);
 });
 
+const TRAVELERS = { travelers: ['@maya', 'Alex Yahnek', 'A friend'] };
+
 const WORK = { id: 'work', kind: 'calendar', title: 'Work', calendar: { 'work-of': '@maya' } };
 
 test('setting the dates proposes the journeys, the stays and the days off', () => {
@@ -229,6 +231,11 @@ test('a journey over night takes a night of the days, and a stop left without on
   const found = setDatesProposal('trip', projects.get('trip').project, DAYS, null);
   equal(found.journeys.map(row => [row.event.start, row.event.end, row.event.by ?? null]), [['2027-07-08', '2027-07-10', 'ferry'], ['2027-07-12', '2027-07-13', null], ['2027-07-12', '2027-07-13', null]]);
   equal(found.stays.map(row => [row.event.start, row.event.end, row.event.calendar, row.why]), [['2027-07-09', '2027-07-12', undefined, 'Hamburg \u00b7 trip.nights \u00b7 trip.sketch_said']]);
+});
+
+test("the travelers' work calendars", () => {
+  vault(WORK, { ...WORK, id: 'hers', calendar: { 'work-of': 'alex yahnek' } }, { ...WORK, id: 'other', calendar: { 'work-of': 'Bob' } }, { id: 'maya', kind: 'contact', title: 'Maya' });
+  equal(workCalendarsOf({ facts: TRAVELERS }).map(one => [one.calendar.id, one.traveler]), [['work', 'Maya'], ['hers', 'Alex Yahnek']]);
 });
 
 test('where an event is on the route', () => {
