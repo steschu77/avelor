@@ -26,6 +26,7 @@ import { toolButton } from '../ui/toolbar.js';
 import { factEl, newFactEl } from './facts.js';
 import { fillGap, gapText } from './gaps.js';
 import { TASK_STATUSES } from './panel/details.js';
+import { linkChip, linkTarget } from './panel/panel.js';
 import { routeEls } from './route.js';
 import { selectDocument } from './selection.js';
 import { whenEls } from './when.js';
@@ -85,6 +86,7 @@ function renderBlueprint({ id, project, writable }) {
   const when = whenOf(project);
   if (when && openedFor !== id) openList = 'when';
   if (!when && openList === 'when') openList = 'missing';
+  if (!project.documents?.length && openList === 'documents') openList = 'missing';
   openedFor = id;
   const missing = result.missing.map(gap => gapRow(gap, ctx));
   const next = result.next.map(nextRow);
@@ -94,6 +96,9 @@ function renderBlueprint({ id, project, writable }) {
     ...(when && { when: [t('props.when'), when.fits.length, () => whenEls(ctx, when, render)] }),
     missing: [t('bp.missing'), missing.length, rowsOr(missing, result.later ? laterText(result.later) : t('bp.nothing_missing'))],
     next: [t('props.next'), next.length, rowsOr(next, t('bp.nothing_next'))],
+    ...(project.documents?.length && {
+      documents: [t('types.documents'), project.documents.length, () => documentRows(ctx, result.missing)],
+    }),
   };
   const tabs = accEl('div', 'bp__tabs');
   for (const [key, [label, count]] of Object.entries(lists)) {
@@ -157,13 +162,49 @@ function itemEl(icon, title, sub, { gap = false, rule = null, action = null, ope
 const WARNING = '#i-warning';
 const dayText = day => (day ? DATE_FORMAT.format(day) : '');
 
+// How to know an expected document (vault.md#project): its type, its
+// label, how recent it must be.
+function howToKnow(expected) {
+  return [expected.type, expected.label, expected.within && t('bp.within', { within: expected.within })]
+    .filter(Boolean).join(', ');
+}
+
+// The Documents list: each expected document, met while it has a pick and
+// the checks find no gap of it (`missing`), its name and how to know one, the entries Find picked for
+// it as chips with an x that takes the pick off again (`by` without it, the
+// key gone once empty), and Find; picks no longer in the vault left out.
+function documentRows(ctx, missing) {
+  const { id, project, writable } = ctx;
+  const gaps = new Set(missing.filter(gap => gap.rule === 'documents').map(gap => gap.index));
+  const unpick = (index, pick) => setProjectLocal(id, {
+    ...project,
+    documents: project.documents.map((expected, i) => {
+      if (i !== index) return expected;
+      const next = { ...expected, by: (expected.by ?? []).filter(other => other !== pick) };
+      if (!next.by.length) delete next.by;
+      return next;
+    }),
+  });
+  return project.documents.map((expected, index) => {
+    const name = expected.name || t('bp.document');
+    const action = accEl('span', 'bp__picks');
+    const picks = (expected.by ?? []).filter(linkTarget);
+    for (const pick of picks) {
+      action.append(linkChip(pick, { onRemove: writable ? () => unpick(index, pick) : null }));
+    }
+    if (writable) action.append(toolButton(t('bp.find'), t('bp.find_title', { name }), btn => findDocument(btn, ctx, index)));
+    const met = picks.length > 0 && !gaps.has(index);
+    return itemEl(met ? '#i-checkmark' : WARNING, name, howToKnow(expected), { gap: !met, action });
+  });
+}
+
 // A gap the checks found (`checksOf`'s `missing`).
 function gapRow(gap, ctx) {
   if (TRIP_RULES[gap.rule]) return tripGapRow(gap, ctx);
   if (gap.rule === 'documents') {
     const { expected, index, stale } = gap;
     const name = expected.name || t('bp.document');
-    const how = [expected.type, expected.label, expected.within && t('bp.within', { within: expected.within })].filter(Boolean).join(', ');
+    const how = howToKnow(expected);
     const action = ctx.writable
       ? toolButton(t('bp.find'), t('bp.find_title', { name }), btn => findDocument(btn, ctx, index))
       : null;

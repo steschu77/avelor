@@ -614,7 +614,8 @@ button is gone.
   isn't written, that fact being changed with its own pencil.
 - **A trip's route** (`#route`), under its facts.
 - **A tab line**: Missing and Next, each with its count, while a trip's
-  days are open its When first (`#when`), then how far the project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00"; a
+  days are open its When first (`#when`), Documents after them while the
+  project expects documents, then how far the project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00"; a
   trip's nights covered and journeys booked first, "nights 9 of 10 · journeys 2 of
   3 booked").
   One list is open at a time; its tab again folds it, so the lens keeps
@@ -631,6 +632,12 @@ button is gone.
 - **Next**: the project's open tasks by their due days, those without one
   last, each opened by a click; then the payments it awaits, by their
   days.
+- **Documents**: every document the project expects, met or not (a check
+  while it has a pick and the checks find no gap of it, else a warning),
+  with how to know one, the entries Find picked for it as
+  chips (picks no longer in the vault left out), each with × while the host
+  can write the project, which takes the pick off again (its `by` without
+  it, `set_project`), and Find (`documentRows`).
 
 While one of its inputs has the focus, the blueprint isn't drawn again;
 it is once they are left.

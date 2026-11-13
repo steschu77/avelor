@@ -50,6 +50,16 @@
   min-width: 0;
 }
 
+/* an expected document's picks and Find in the Documents list
+   (features/blueprint.js) */
+.bp__picks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+
 /* + Fact's name and value, typed in (features/facts.js) */
 .bp__new-fact {
   display: flex;
