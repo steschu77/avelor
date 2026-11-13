@@ -209,9 +209,9 @@ export function setRecurringPaymentLocal(id, recurring) {
 // Write the project `id`'s block as `project` (vault.md#project): its facts,
 // the documents that meet what it expects, ...; the host pushes the project
 // back, which its header follows. No selection is published, so the cards
-// aren't rebuilt.
-export function setProjectLocal(id, project) {
-  structureCall('set_project', { id, project });
+// aren't rebuilt. `step`: the group it is one step with (`newGroup`).
+export function setProjectLocal(id, project, step = undefined) {
+  structureCall('set_project', { id, project }, null, step);
 }
 
 // Write `change` to the entity `id` (`edit_entities`, api.md#structure): a

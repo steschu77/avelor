@@ -649,6 +649,38 @@ becomes `prefs` in the store, so the layout is right from the first frame.
 The half-open panel is `panel_width` plus `context_width`. The panel's mode
 (`panel_size`: closed, normal, chat, expanded) isn't kept.
 
+## Set the dates <a id="set-the-dates"></a>
+
+Days typed into the Days fact of a trip that has a sketch (`vault.md#project`)
+aren't written at once: they open Set the dates in the expanded vault area
+(`openSetDates`, `features/set-dates.js`, op `set-dates`), what they make of the
+sketch (`setDatesProposal`, `model/trip.js`). The trip and its days head
+it ("Tue 08/01 – Sat 08/05 · 4 nights", and what the sketch said if that
+differs), then a part each, its head saying how many of its rows are
+ticked, with All or None:
+
+- **Journeys**: a journey per means of each of the sketch's legs, planned and a day
+  only, in the trip's calendar: from where the trip is to the stop ("Car
+  to Duluth"), a via's means each a part ("Car from Duluth", "Ferry to
+  Isle Royale"), the journey home on the last day; an overnight one takes the
+  night.
+- **Stays**: a stay per stop, planned, for its nights in order: a stop takes
+  those sketched (a range its fewest, none sketched one), the last what
+  is left; one left without a night is none. Titled by its note ("At
+  Oma's"), else its place; its why says whether the nights are as
+  sketched.
+- **Days off**: a day off range over the trip's days (`work: off`, planned)
+  in the work calendar of each traveler who has one (`work-of`,
+  `accounts.md`).
+
+Each row is ticked at first: its title, why (italic) and its days; an
+unticked one steps back and isn't written. Apply (Ctrl+Enter) creates the
+ticked rows' events one after the other, each in the trip
+(`create_entity`), then writes the days and drops the sketch
+(`set_project`); nothing is written before it. A failure stops there:
+what was made stays made, Apply again makes the rest. Esc or Cancel leaves
+the days as they were.
+
 ## Flows
 
 | # | Flow | Trigger → page | Host → events | Result |
@@ -665,6 +697,7 @@ The half-open panel is `panel_width` plus `context_width`. The panel's mode
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | B6 | Filter by words | typing in the box (`features/words.js`) → `selectFilter({words})`, at most every 120 ms `search` on the channel `search`; the chip's ×, the box's × or Esc → `NO_WORDS` | `search {text}` → `ok {terms, hits}` | the lenses keep what holds every word, its words marked, an excerpt where the title lacks some; the chip in the lens head; the find strip in the panel |
 | D7 | New | New item, the "+" of "Created Here" or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
+| D8 | Set the dates | the Days fact of a trip with a sketch typed in, Enter or blur (`features/facts.js`) → `openSetDates` (op `set-dates`); a row ticked, All, None; Apply or Ctrl+Enter → `apply` | `create_entity {roles, title, projects}` per row ticked → `entity`; then `set_project {id, project}` (the days, no sketch) → `entity` | the route from the planned events; a failure stays on the page |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
 | F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Payments, Recent files or Recent conversations → `selectDocument`; a transaction of Payments → `selectTransaction` | — | the entity (or the transaction) in the panel, its rows marked on the dashboard; a conversation in the assistant, beside what it is about |
 | F4 | Dashboard layout | a card's ×, the Cards menu, Show all cards, a card's head dropped on another, Reset layout; the Week card's gear | `set_prefs {prefs}` (`dashboard_cards`, `dashboard_closed`, `week_start`) | the cards in their order, the closed ones hidden and counted on the Cards button; kept across restarts |

@@ -76,6 +76,8 @@
   "scans.proposed_title": "Vorgeschlagener Titel · bearbeiten Sie ihn vor dem Import",
   "scans.read_running": "Ein anderer Ordner wird noch gelesen; stoppen Sie ihn oder warten Sie darauf.",
   "search.catalog_behind": "Die Suche ist nicht verfügbar: Der Katalog ist nicht aktuell; öffnen Sie den Tresor erneut.",
+  "set_dates.writes": "Nichts wird geschrieben, bevor Sie übernehmen: {what}, dann die Tage; die Skizze entfällt.",
+  "set_dates.writes_days": "Nichts wird geschrieben, bevor Sie übernehmen: die Tage; die Skizze entfällt.",
   "settings.intro": "Wie Avelor für Sie auf diesem PC arbeitet. Eine Änderung gilt sofort; was auf den nächsten Start wartet, sagt es. Was alle teilen, die den Tresor öffnen, steht auf seinen eigenen Seiten.",
   "watch.choose_account": "Wählen Sie das Bankkonto.",
   "watch.choose_folder_first": "Wählen Sie zuerst den Ordner seiner Kontoauszüge",

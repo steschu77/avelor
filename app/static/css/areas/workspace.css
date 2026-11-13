@@ -114,6 +114,16 @@
   margin-top: 16px;
 }
 
+/* Set the dates (features/set-dates.js): the trip, its days and nights, on the
+   line under the head */
+.set-dates__days {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
 /* the task the Task tab made before, with a button that shows it */
 .new__created {
   margin-top: 16px;

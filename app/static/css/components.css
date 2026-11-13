@@ -1094,3 +1094,76 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .doc-head__kind-name {
   color: var(--c-ink);
 }
+
+/* a proposal (features/set-dates.js): a row each with what it writes and
+   why; ticked, it is written on Apply, unticked it is dropped. Nothing is
+   written before Apply */
+.proposal {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--c-line);
+}
+
+.proposal__row {
+  display: grid;
+  grid-template-columns: 14px 16px minmax(0, 1fr) auto;
+  gap: 0 8px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--c-line);
+  cursor: pointer;
+}
+
+.proposal__row input {
+  margin: 0;
+  accent-color: var(--c-ink);
+  transform: translateY(2px);
+}
+
+.proposal__row>.icon {
+  align-self: center;
+  color: var(--c-ink-mute);
+}
+
+.proposal__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font: 400 var(--fs-body)/1.4 var(--f-serif);
+  color: var(--c-ink);
+}
+
+/* an unticked row steps back: it won't be written */
+.proposal__row:has(input:not(:checked)) .proposal__text {
+  color: var(--c-ink-faint);
+}
+
+/* why it is proposed: a short serif note under the row's line */
+.proposal__why {
+  font: italic 400 var(--fs-ui)/1.4 var(--f-serif);
+  color: var(--c-label);
+}
+
+/* at the row's end: its days */
+.proposal__end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+/* a part's head: its name, how many rows are ticked, its own toggle */
+.proposal-head {
+  margin-top: 22px;
+  padding-bottom: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.proposal-head>.tool {
+  margin-left: auto;
+}

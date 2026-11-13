@@ -328,9 +328,10 @@ leaving edit mode: its saves name the editing session
 back into the editor (`content`). Ctrl+Z outside the editor leaves edit
 mode first, saving, so the session is the last step.
 One step too are New recurring payment's Create, the payment and the
-transactions ticked for it (`newGroup`, `core/rpc.js`), and an event picked
-to fill a trip's gap, joining the trip with the gap's kind and places
-(`features/gaps.js`).
+transactions ticked for it (`newGroup`, `core/rpc.js`); an event picked to
+fill a trip's gap, joining the trip with the gap's kind and places
+(`features/gaps.js`); and Set the dates' Apply, the events it makes and the
+trip's days (`features/set-dates.js`).
 What the app writes on its own is no step: a conflict copy
 (`#held-saves`), what a job writes (Fetch email, with the attachments it
 saves and reads, `email.md#fetch-email`, `email.md#attachments`; a

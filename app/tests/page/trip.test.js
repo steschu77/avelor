@@ -3,8 +3,8 @@ import { vault } from './vault.js';
 import { localDay, parseDate } from '../../static/core/format.js';
 import { entities, projects } from '../../static/model/entities.js';
 import {
-  byNights, isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripGaps, tripPlaces,
-  tripSummary, zoneIssuesOf, zoneName,
+  byNights, setDatesProposal, isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripGaps,
+  tripPlaces, tripSummary, zoneIssuesOf, zoneName,
 } from '../../static/model/trip.js';
 
 // A trip from Springfield, from `from` to `to`, and its events on days:
@@ -202,6 +202,35 @@ test('what a sketch will need once its dates are set', () => {
   equal([later({ stops: [{ nights: 2 }, {}] }), later({}), later(undefined)], [{ nights: null, journeys: 3 }, { nights: null, journeys: 0 }, { nights: null, journeys: 0 }]);
 });
 
+const WORK = { id: 'work', kind: 'calendar', title: 'Work', calendar: { 'work-of': '@maya' } };
+
+test('setting the dates proposes the journeys, the stays and the days off', () => {
+  const sketch = { nights: 4, stops: [{ place: 'Hamburg', nights: '1-2', by: ['flight', 'train'] }, { place: 'Berlin', note: 'anna\u2019s flat', by: 'train' }], back: { by: 'flight' } };
+  vault(trip({ days: undefined, travelers: ['@maya'] }, { sketch }), { id: 'maya', kind: 'contact', title: 'Maya' }, WORK);
+  const found = setDatesProposal('trip', projects.get('trip').project, DAYS, 'family');
+  equal(found.journeys.map(row => [row.event.start, row.event.by, row.event.from ?? null, row.event.to ?? null]), [
+    ['2027-07-08', 'flight', 'Springfield', null], ['2027-07-08', 'train', null, 'Hamburg'], ['2027-07-09', 'train', 'Hamburg', 'Berlin'], ['2027-07-12', 'flight', 'Berlin', 'Springfield'],
+  ]);
+  equal(found.stays.map(row => [row.title, row.event.start, row.event.end, row.event.place, row.event.status, row.event.calendar]), [
+    ['trip.stay_in', '2027-07-08', '2027-07-09', 'Hamburg', 'tentative', 'family'], ['Anna\u2019s flat', '2027-07-09', '2027-07-12', 'Berlin', 'tentative', 'family'],
+  ]);
+  equal(found.off.map(row => row.event), [{ calendar: 'work', status: 'tentative', start: '2027-07-08', end: '2027-07-13', work: 'off' }]);
+  equal([found.nights, found.sketched.min], [4, 4]);
+  equal(found.journeys.map(row => [row.title, row.why]), [
+    ['trip.journey_from', 'Springfield \u2192 Hamburg \u00b7 trip.part_of'], ['trip.journey_to', 'Springfield \u2192 Hamburg \u00b7 trip.part_of'],
+    ['trip.journey_to', 'Hamburg \u2192 Berlin'], ['trip.journey_to', 'Berlin \u2192 Springfield'],
+  ]);
+  equal(found.stays.map(row => row.why), ['Hamburg \u00b7 trip.nights \u00b7 trip.as_sketched', 'Berlin \u00b7 trip.nights \u00b7 trip.left_sketch_said']);
+});
+
+test('a journey over night takes a night of the days, and a stop left without one none', () => {
+  const sketch = { stops: [{ place: 'Hamburg', nights: 9, by: 'ferry', overnight: true }, { place: 'Berlin', nights: 2 }] };
+  vault(trip({ days: undefined }, { sketch }));
+  const found = setDatesProposal('trip', projects.get('trip').project, DAYS, null);
+  equal(found.journeys.map(row => [row.event.start, row.event.end, row.event.by ?? null]), [['2027-07-08', '2027-07-10', 'ferry'], ['2027-07-12', '2027-07-13', null], ['2027-07-12', '2027-07-13', null]]);
+  equal(found.stays.map(row => [row.event.start, row.event.end, row.event.calendar, row.why]), [['2027-07-09', '2027-07-12', undefined, 'Hamburg \u00b7 trip.nights \u00b7 trip.sketch_said']]);
+});
+
 test('where an event is on the route', () => {
   vault(
     trip(), journey('a', '2027-07-08', 'Springfield', 'Paris'), part('layover', 'layover', '2027-07-08', '2027-07-09', { place: 'Paris' }),
@@ -343,4 +372,11 @@ test('the tickets and what is outside come by their days', () => {
     stay('early', '2027-07-06', '2027-07-07', 'Hamburg'), HOTEL, { id: 'ticket', kind: 'document', title: '' }, { id: 'task', kind: 'task', title: '', task: { status: 'open' } },
   );
   equal(gaps().gaps.filter(gap => gap.doc).map(gap => [gap.kind, gap.doc.id]), [['ticket', 'there'], ['ticket', 'back'], ['outside', 'early'], ['outside', 'late']]);
+});
+
+test('a sketch without places is somewhere', () => {
+  vault(trip({ home: undefined, days: undefined }, { sketch: { stops: [{ nights: 2 }] } }));
+  const found = setDatesProposal('trip', projects.get('trip').project, DAYS, null);
+  equal(found.journeys.map(row => [row.title, row.why]), [['trip.journey_to', 'trip.somewhere_first \u2192 trip.somewhere'], ['trip.journey_to', 'trip.somewhere_first \u2192 trip.somewhere']]);
+  equal(found.stays.map(row => [row.title, row.why]), [['trip.stay_somewhere', 'trip.nights \u00b7 trip.left_sketch_said']]);
 });
