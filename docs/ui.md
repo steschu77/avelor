@@ -576,24 +576,30 @@ into its type's folder (`vault.md#vault-layout`); the area closes and
 the new entity is selected. A failure stays on the page; Esc cancels. The
 Task tab of the context column uses the same form (`panel.md#context-column`).
 
-An event asks what it is (Kind: Event, or a trip's Journey, Stay or
-Activity; another builds the page's rows again), whether it is planned or
-posted (`status`), and its calendar, a menu of the vault's; opened while
-a trip is selected, its calendar is the trip's (its `calendar` fact), if
-that calendar is still in the vault.
+An event asks what it is (Kind: Event, or a trip's Journey, Stay,
+Activity or Layover; another builds the page's rows again), its status
+(`status`: an Event's Confirmed or Tentative, a trip's Planned or Booked),
+and its calendar, a menu of the vault's but those read-only in Google
+(`calendar.md#two-way-sync`); opened while a trip is selected, its
+calendar is the trip's (its `calendar` fact), if that calendar is still in
+the vault and not read-only, else none until one is picked. The day
+view's New event opens it on that day (`panel.md#the-day-view`).
 Then by its kind (`panel.md#trip-fields`):
 
 - **Event**: its start and end, a day and a time each, the end moving
   with the start while it lies before it; both in one zone (`tz`),
   a button naming it by its city ("Lisbon time") that opens the zones'
-  menu, this PC's at first.
+  menu, this PC's at first. Without a start time it is all day: its days
+  only, the end's time off; All day, a check, clears the time or gives it
+  9:00 to 10:00 again. Its Schedule, Once at first, as on its card
+  (`panel.md#field-edits`).
 - **Journey**: its way (icons), From and Leaves, To and Arrives, each
   time in its place's zone, a button naming it that opens the zones'
   menu; a place typed in that the vault's trip events name takes the zone
   it had last (`placeZone`), else the zone stays (this PC's at first).
   Its booking. Without a time it is a day only (a planned journey).
-- **Stay**: its place and nights, from the first night to the morning
-  after the last.
+- **Stay**, **Layover**: its place and nights, from the first night to
+  the morning after the last.
 - **Activity**: its place, and its start and end in the place's zone; all
   day without a start time, as an Event.
 

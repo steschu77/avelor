@@ -33,6 +33,13 @@ export function googleKept(doc) {
   return KEPT_TYPES.includes(googleType(doc));
 }
 
+// The calendar `id` for a new event, if it is one of the vault's and Google
+// doesn't keep it as it is; else none.
+export function writableCalendar(id) {
+  const calendar = id ? entities.get(id) : null;
+  return calendar?.kind === 'calendar' && calendar.access !== 'read-only' ? id : null;
+}
+
 // ----------------------------------------------------------------------------
 function compareEventsByDate(a, b) {
     return a.date.getTime() - b.date.getTime();

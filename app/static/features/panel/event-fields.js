@@ -9,7 +9,9 @@ import { accEl, titled } from '../../core/dom.js';
 import { DATE_FORMAT, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
 import { addDays, daysBetween, timeFormatIn, zonedInstant, zonedTime } from '../../core/format.js';
 import { t } from '../../core/text.js';
-import { LOCAL_ZONE, endZone, issueText, startZone, tripPlaces, zoneIssuesOf, zoneName } from '../../model/trip.js';
+import {
+  LOCAL_ZONE, byNights, endZone, issueText, startZone, tripPlaces, zoneIssuesOf, zoneName,
+} from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { showMenu } from '../../ui/menu.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
@@ -58,7 +60,7 @@ export function whenIn(doc, end) {
   const date = end === 'start' ? doc.date : doc.end;
   if (doc.all_day) {
     const nights = doc.end ? daysBetween(doc.date, doc.end) : 0;
-    return end === 'start' && doc.event.type === 'stay' && nights > 0
+    return end === 'start' && byNights(doc.event) && nights > 0
       ? `${DATE_FORMAT.format(doc.date)} \u2013 ${DATE_FORMAT.format(doc.end)} \u00b7 ${t('trip.nights_count', { n: nights })}`
       : DATE_FORMAT.format(end === 'end' ? addDays(date, -1) : date);
   }

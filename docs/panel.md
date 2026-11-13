@@ -646,8 +646,10 @@ at both ends, named in their tooltips (`routeOf`, `model/trip.js`).
   at one place is a **stop**; a night without a stay is where the trip was
   the night before (its stay's place, or where a journey arrived
   since), else where the next one leaves from. Journeys with no night
-  between them are one **leg**, each a part of it, a via where they meet;
-  a change of place without one is a leg missing: between two stops, a
+  between them, or only a layover's (`type: layover`), are one **leg**,
+  each a part of it, a via where they meet, the leg running over the
+  layover's night; a layover without a journey on both sides covers its night
+  as a stay does. A change of place without a leg is a leg missing: between two stops, a
   leg leaving from elsewhere than the trip is, one arriving elsewhere than
   the next stop, home at both ends too (a place not known differs from
   none). Each night and each leg is booked, planned
@@ -730,6 +732,9 @@ Berlin"):
   (`openNew`, `features/new.js`), in the trip and its calendar: a stay at
   its place for its nights; a journey between its places on its day, a
   day only.
+- **Mark as layover**, for a single night: a layover at its place for that
+  night at once (`create_entity`), booked, in the trip and its calendar,
+  and its card shows; the route takes it into the leg around it.
 - **At that time**: the events outside the trip on the gap's days (a journey's:
   the day before to the day after), by their starts.
 - A filter over them, which also finds any other event outside the trip by
@@ -871,10 +876,11 @@ An event that says what part of a trip it is (`event.type`,
 where and the status (`tripFields`, `features/panel/trip-fields.js`); a
 recurring event keeps its own. While the host can write it:
 
-- **Kind**: Journey, Stay or Activity, a segmented button; an event in a
-  trip that is none presses none. The card's icon follows (`docIcon`,
-  `ui/icons.js`: a journey's by its means, a stay a bed, an activity a
-  ticket).
+- **Type**: Event, Journey, Stay, Activity or Layover, a segmented
+  button (`eventTypeField`, `#field-edits`); an event in a trip that is none
+  presses Event. The card's icon follows
+  (`docIcon`, `ui/icons.js`: a journey's by its means, a stay a bed, an
+  activity a ticket, a layover an hourglass).
 - **State**: Planned (`status: tentative`, it holds the days in the
   calendar) or Booked (`confirmed`).
 - **A journey**: its **By** (flight, train, bus, ferry, car) as icons;
@@ -888,9 +894,9 @@ recurring event keeps its own. While the host can write it:
   Arrives also says how long it takes ("8 h 15 min"). The start is
   meant in `tz`, the end in its own if it has one
   (`end-tz`). Its **Booking**, its reference.
-- **A stay**: its **Place**, and its **Nights**: the first night's day and
-  the day it ends, the morning after the last (an all-day end is
-  excluded), and how many.
+- **A stay**, **a layover**: its **Place**, and its **Nights**: the first
+  night's day and the day it ends, the morning after the last (an all-day
+  end is excluded), and how many.
 - **An activity**: its **Place**, and when it starts and ends, in the
   place's zone.
 - **Where**: the address, `location`.

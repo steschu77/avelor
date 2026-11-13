@@ -17,7 +17,7 @@ use crate::shared::{ContactRef, DocType};
 
 // ----------------------------------------------------------------------------
 /// What part of a trip an event is (vault.md#event).
-const TYPES: [&str; 3] = ["journey", "stay", "activity"];
+const TYPES: [&str; 4] = ["journey", "stay", "activity", "layover"];
 /// An event's status as the app sets it: booked, or planned.
 const STATUSES: [&str; 2] = ["confirmed", "tentative"];
 
@@ -389,6 +389,7 @@ mod tests {
         }
         let cleared = event_change("{status: null, type: ''}");
         assert!(cleared.check().is_ok());
+        assert!(event_change("{type: layover}").check().is_ok());
         let unknown = serde_yaml_ng::from_str::<EventChange>("{title: x}");
         assert!(unknown.is_err());
     }

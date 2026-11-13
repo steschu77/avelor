@@ -20,8 +20,11 @@ import { isoInstant, localDay, localTime, parseDate, relativeDay, zonedInstant }
 import { registerAction, shortcutText } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store, vaultOpen } from '../model/state.js';
-import { entities, projectScope, projects, projectsFor } from '../model/entities.js';
-import { LOCAL_ZONE, STATES, TRIP_TYPES, MEANS, placeZone } from '../model/trip.js';
+import { entities, projectScope, projectsFor } from '../model/entities.js';
+import { projectCalendar } from '../model/blueprint.js';
+import { eventScheduleLines } from '../model/schedule.js';
+import { writableCalendar } from '../model/calendar.js';
+import { LOCAL_ZONE, STATES, TRIP_TYPES, MEANS, byNights, placeZone } from '../model/trip.js';
 import { MEANS_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import {
@@ -40,6 +43,7 @@ import {
   addChip, linkChip, linkTarget, projectChips, labelChips,
 } from './panel/panel.js';
 import { EVENT_STATUSES, zoneButton } from './panel/event-fields.js';
+import { eventScheduleField } from './panel/schedule-field.js';
 import { placeInput } from './panel/trip-fields.js';
 import { watchFormGrid } from './workspace/folders.js';
 
@@ -107,12 +111,13 @@ function newDraft(kind, { page = false, linked = null, projects = [], scope = nu
     endTime: '10:00',
     location: '',
     eventType: '', // what part of a trip it is, if any
+    schedule: { period: 'once', days: null, until: null, count: null, rest: [] }, // a plain event's
     eventStatus: 'confirmed', // planned (tentative) or booked
     calendar: null, // its calendar entity
     by: 'flight', // a journey's
     from: '',
     to: '',
-    place: '', // a stay's, an activity's
+    place: '', // a stay's, a layover's, an activity's
     booking: '',
     fromZone: LOCAL_ZONE, // the zones of its times: the start's (a plain event's and an activity's both)
     toZone: LOCAL_ZONE, // a journey's arrival's
@@ -188,8 +193,7 @@ export function openNew(kind, fields = {}) {
       selectDocument(id);
     },
   });
-  const calendar = scope && projects.get(scope)?.project?.facts?.calendar;
-  d.calendar = entities.get(calendar)?.kind === 'calendar' ? calendar : null;
+  d.calendar = scope ? writableCalendar(projectCalendar(scope)) : null;
   Object.assign(d, fields);
   for (const [key, zoneKey] of [['from', 'fromZone'], ['to', 'toZone'], ['place', 'fromZone']]) {
     if (fields[key]) d[zoneKey] = placeZone(fields[key]) ?? d[zoneKey];
@@ -336,18 +340,21 @@ function newRoles(d) {
   }
 }
 
-// An event's block: its calendar and status; a stay's days, the morning
-// after the last night its end; a planned journey without a time its day only;
-// else its times, each in its zone (a trip's in its place's). Then where it
-// is, and the trip fields of its type.
+// An event's block: its calendar and status; a stay's or a layover's
+// days, the morning after the last night its end; one without a start time
+// its days only, the day after the last its end (an all-day event, a planned
+// journey); else its times, each in its zone (a trip's in its place's). A plain
+// event's schedule, if it repeats. Then where it is, and the trip fields of
+// its type.
 function newEvent(d) {
   const type = d.eventType;
   const event = {};
   if (d.calendar) event.calendar = d.calendar;
   if (type || d.eventStatus === 'tentative') event.status = d.eventStatus;
-  if (type === 'stay' || (type === 'journey' && !d.startTime)) {
+  const nightly = byNights({ type });
+  if (nightly || !d.startTime) {
     event.start = d.start;
-    const last = type === 'stay' ? d.end : newNextDay(d.end || d.start);
+    const last = nightly ? d.end : newNextDay(d.end || d.start);
     event.end = last > d.start ? last : newNextDay(d.start);
   } else {
     const zone = d.fromZone;
@@ -356,6 +363,12 @@ function newEvent(d) {
     if (d.end) event.end = isoInstant(zonedInstant(d.end, d.endTime, endZone));
     event.tz = zone;
     if (endZone !== zone) event['end-tz'] = endZone;
+  }
+  if (!type && d.schedule.period !== 'once') {
+    const allDay = !d.startTime;
+    const zone = allDay ? null : d.fromZone;
+    const start = allDay ? parseDate(d.start) : zonedInstant(d.start, d.startTime, zone);
+    event.schedule = eventScheduleLines(d.schedule, start, zone, allDay);
   }
   if (d.location.trim()) event.location = d.location.trim();
   if (type) event.type = type;
@@ -492,14 +505,14 @@ function renderNewTypeRows(d, row) {
 
 // An event's rows: its Type (another builds the sheet again), planned or
 // booked, its calendar; then by its type a journey's means, places and
-// times, a stay's place and nights, an activity's place and times, a plain
-// event's times; and where it is.
+// times, a stay's or a layover's place and nights, an activity's place
+// and times, a plain event's times; and where it is.
 function renderNewEventRows(d, row) {
   d.els.zones = [];
   const type = row(t('props.type'));
   type.append(accSeg(NEW_EVENT_TYPES, d.eventType, value => {
     d.eventType = value;
-    if (value === 'stay' && d.end <= d.start) d.end = newNextDay(d.start);
+    if (byNights({ type: value }) && d.end <= d.start) d.end = newNextDay(d.start);
     renderNewSheet(d);
     d.els.type.querySelector('[aria-pressed="true"]')?.focus();
   }));
@@ -517,7 +530,7 @@ function renderNewEventRows(d, row) {
     newTimeRows(d, row, [t('props.leaves'), t('props.arrives')], ['fromZone', 'toZone'],
       () => newPlaceRow(d, row(t('props.to')), 'to', 'toZone'));
     row(t('props.booking'), newTextInput(d, 'booking', t('new.its_reference'), { className: 'form-input mono' }));
-  } else if (d.eventType === 'stay') {
+  } else if (byNights({ type: d.eventType })) {
     newPlaceRow(d, row(t('props.place')), 'place', null);
     newNightsRow(d, row(t('props.nights')));
   } else if (d.eventType === 'activity') {
@@ -525,8 +538,23 @@ function renderNewEventRows(d, row) {
     newTimeRows(d, row, [t('props.starts'), t('props.ends')], ['fromZone', null]);
   } else {
     newTimeRows(d, row, [t('props.starts'), t('props.ends')], ['fromZone', null]);
+    newScheduleRow(d, row(t('props.schedule')));
   }
   row(t('new.location'), newTextInput(d, 'location', t('new.address_or_place')));
+}
+
+// A plain event's schedule (`eventScheduleField`): once at first, drawn
+// again on each pick; a week starts on the start's weekday.
+function newScheduleRow(d, field) {
+  const render = () => field.replaceChildren(eventScheduleField(d.schedule, {
+    from: parseDate(d.start) ?? new Date(), key: 'new:schedule',
+    bind: (input, set) => input.addEventListener('change', () => set(input.value)),
+    onChange: rule => {
+      d.schedule = rule;
+      render();
+    },
+  }));
+  render();
 }
 
 // The draft's calendar: a button naming it, which opens the vault's.

@@ -2,7 +2,7 @@ import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import { projects } from '../../static/model/entities.js';
 import {
-  checksOf, factsOf, hasBlueprint, membersOf, newProjectBlock, withBlueprint, withFact,
+  checksOf, factsOf, hasBlueprint, membersOf, newProjectBlock, projectCalendar, withBlueprint, withFact,
 } from '../../static/model/blueprint.js';
 
 const TODAY = new Date(2027, 2, 15);
@@ -39,6 +39,13 @@ test('a fact is set, changed and, empty, removed', () => {
   equal(withFact({ blueprint: 'move' }, 'rent', 1150), { blueprint: 'move', facts: { rent: 1150 } });
   equal(withFact({ facts: { rent: 1150, a: 1 } }, 'rent', 0).facts, { rent: 0, a: 1 });
   equal(['', null, undefined, []].map(value => withFact({ facts: { rent: 1150 } }, 'rent', value)), [{}, {}, {}, {}]);
+});
+
+test("a project's calendar is one of the vault's", () => {
+  vault(project({ facts: { calendar: 'c' } }), { id: 'c', kind: 'calendar', title: 'C' });
+  equal(projectCalendar('p'), 'c');
+  vault(project({ facts: { calendar: 'c' } }), doc('c'));
+  equal([projectCalendar('p'), projectCalendar('gone')], [null, null]);
 });
 
 test('the members of a project', () => {

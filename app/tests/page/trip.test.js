@@ -3,8 +3,8 @@ import { vault } from './vault.js';
 import { localDay, parseDate } from '../../static/core/format.js';
 import { entities, projects } from '../../static/model/entities.js';
 import {
-  isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripGaps, tripPlaces, tripSummary,
-  zoneIssuesOf, zoneName,
+  byNights, isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripGaps, tripPlaces,
+  tripSummary, zoneIssuesOf, zoneName,
 } from '../../static/model/trip.js';
 
 // A trip from Springfield, from `from` to `to`, and its events on days:
@@ -89,6 +89,15 @@ test('journeys that go on the same day are one leg', () => {
   vault(trip(), journey('a', '2027-07-08', 'Springfield', 'Frankfurt', { by: 'flight' }), journey('b', '2027-07-08', 'Frankfurt', 'Hamburg'), HOTEL, BACK);
   equal(shape()[0], 'booked Springfield > Hamburg');
   equal([route().parts[0].means, route().parts[0].parts.map(doc => doc.id)], [['flight', 'train'], ['a', 'b']]);
+});
+
+test('a layover keeps the journeys around it one leg, over its night', () => {
+  vault(
+    trip(), journey('a', '2027-07-08', 'Springfield', 'Paris'), part('layover', 'layover', '2027-07-08', '2027-07-09', { place: 'Paris' }),
+    journey('b', '2027-07-09', 'Paris', 'Hamburg'), stay('hotel', '2027-07-09', '2027-07-12', 'Hamburg'), BACK,
+  );
+  equal(shape(), ['booked Springfield > Hamburg', 'booked Hamburg 3', 'booked Hamburg > Springfield']);
+  equal([route().parts[0].layovers.map(doc => doc.id), route().parts[0].nights.length], [['layover'], 1]);
 });
 
 test('a night between two journeys without a layover parts them', () => {
@@ -193,6 +202,21 @@ test('what a sketch will need once its dates are set', () => {
   equal([later({ stops: [{ nights: 2 }, {}] }), later({}), later(undefined)], [{ nights: null, journeys: 3 }, { nights: null, journeys: 0 }, { nights: null, journeys: 0 }]);
 });
 
+test('where an event is on the route', () => {
+  vault(
+    trip(), journey('a', '2027-07-08', 'Springfield', 'Paris'), part('layover', 'layover', '2027-07-08', '2027-07-09', { place: 'Paris' }),
+    journey('b', '2027-07-09', 'Paris', 'Hamburg'), stay('hotel', '2027-07-09', '2027-07-12', 'Hamburg'), BACK, part('tour', 'activity', '2027-07-10', '2027-07-11', {}),
+  );
+  const spot = id => {
+    const { leg, stop, ...rest } = routeSpot(entities.get(id)) ?? {};
+    return leg || stop ? { at: leg ? 'leg' : 'stop', ...rest, nights: rest.nights.map(localDay) } : null;
+  };
+  equal(spot('b'), { at: 'leg', index: 0, legs: 2, part: 1, nights: [] });
+  equal(spot('layover'), { at: 'leg', index: 0, legs: 2, layover: true, nights: ['2027-07-08'] });
+  equal(spot('hotel'), { at: 'stop', index: 0, stops: 1, nights: ['2027-07-09', '2027-07-10', '2027-07-11'] });
+  equal(spot('tour'), null);
+});
+
 test('the zone a place had last, and the places and zones named', () => {
   vault(
     flight('old', '2026-07-08T10:00:00Z', '2026-07-08T12:00:00Z', 'Springfield', 'Hamburg', 'America/Chicago', 'Europe/London'),
@@ -208,6 +232,10 @@ test("a trip's event says what part it is, or is in a trip", () => {
   vault(trip(), { id: 'other', kind: 'project', title: 'Other', project: { blueprint: 'move' } });
   const event = (type, ...ids) => isTripEvent({ kind: 'event', event: { type }, projects: ids });
   equal([event('stay'), event(undefined, 'trip'), event(undefined, 'other'), event(undefined), isTripEvent({ kind: 'document', projects: ['trip'] })], [true, true, false, false, false]);
+});
+
+test('a stay and a layover are by their nights', () => {
+  equal(['stay', 'layover', 'journey', 'activity'].map(type => byNights({ type })), [true, true, false, false]);
 });
 
 test('what a row tells of a stay', () => {
@@ -246,6 +274,14 @@ test('a leg is planned with one of its parts, a stop with one of its nights', ()
     stay('hold', '2027-07-08', '2027-07-10', 'Hamburg', PLANNED), stay('hotel', '2027-07-10', '2027-07-12', 'Hamburg'), BACK,
   );
   equal(shape(), ['planned Springfield > Hamburg', 'planned Hamburg 4', 'booked Hamburg > Springfield']);
+});
+
+test('a layover that ends before the next journey parts them', () => {
+  vault(
+    trip(), journey('a', '2027-07-08', 'Springfield', 'Paris'), part('layover', 'layover', '2027-07-08', '2027-07-09', { place: 'Paris' }),
+    journey('b', '2027-07-10', 'Paris', 'Hamburg'), stay('hotel', '2027-07-10', '2027-07-12', 'Hamburg'), BACK,
+  );
+  equal(shape(), ['booked Springfield > Paris', 'partial Paris 2', 'booked Paris > Hamburg', 'booked Hamburg 2', 'booked Hamburg > Springfield']);
 });
 
 test('a journey on a day only, or after a leg missing, says nothing of zones', () => {

@@ -3,7 +3,7 @@ import { vault } from './vault.js';
 import { addDays, dayStart, isoInstant, localDay, parseDate } from '../../static/core/format.js';
 import {
   calendarDayOf, dayOccurrences, dayTasks, eventsBetween, eventsOnDay, getDueTasks, getEvents, googleKept, googleLocked,
-  googleType, isOverdue,
+  googleType, isOverdue, writableCalendar,
 } from '../../static/model/calendar.js';
 import { entities } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
@@ -146,6 +146,15 @@ test('Google keeps the events of a read-only calendar and of its own kinds', () 
   equal(of(googleKept), [false, true, false, false]);
   equal(of(googleType), [null, 'birthday', 'fromGmail', null]);
   equal([googleLocked(null), googleLocked(entities.get('family'))], [false, false]);
+});
+
+test('a new event goes into a calendar of the vault Google does not keep', () => {
+  vault(
+    { id: 'holidays', kind: 'calendar', title: 'Holidays', access: 'read-only', calendar: {} },
+    { id: 'family', kind: 'calendar', title: 'Family', calendar: {} },
+    { id: 'letter', kind: 'document', title: '' },
+  );
+  equal(['family', 'holidays', 'letter', 'gone', null].map(writableCalendar), ['family', null, null, null, null]);
 });
 
 test('an occurrence is not expanded again', () => {

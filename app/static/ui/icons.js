@@ -59,8 +59,8 @@ const DOC_SUB_ICONS = {
 };
 
 // ----------------------------------------------------------------------------
-// A trip's events (vault.md#event): a journey's by its means, a stay's, an
-// activity's.
+// A trip's events (vault.md#event): a journey's by its means, a stay's, a
+// layover's, an activity's.
 export const MEANS_ICONS = {
   flight: '#i-airplane',
   train: '#i-vehicle-subway',
@@ -68,7 +68,7 @@ export const MEANS_ICONS = {
   ferry: '#i-vehicle-ship',
   car: '#i-vehicle-car',
 };
-const TYPE_ICONS = { stay: '#i-bed', activity: '#i-ticket-diagonal' };
+const TYPE_ICONS = { stay: '#i-bed', activity: '#i-ticket-diagonal', layover: '#i-hourglass-half' };
 
 // ----------------------------------------------------------------------------
 // The icon of an entity `doc` (its `kind`, `type`, `event`): a trip's event

@@ -495,11 +495,12 @@ An event is a markdown file with the following additional fields:
 A trip's events (vault.md#project) say what part of it they are; all
 optional, and the vault's own (never written to Google):
 
-* `kind`: `journey`, `stay` or `activity`; absent for any other event,
+* `type`: `journey`, `stay`, `activity` or `layover` (a night on the
+  way between two journeys, without a stay); absent for any other event,
 * `by`: a journey's, `flight`, `train`, `bus`, `ferry` or `car`,
 * `from`, `to`: string, where a journey leaves from and arrives (`ORD`,
   `Hamburg Hbf`),
-* `place`: string, where a stay or an activity is,
+* `place`: string, where a stay, a layover or an activity is,
 * `booking`: string, a journey's booking reference (`X7K2PL`).
 
 Planned or booked is the `status`: `tentative` while it is planned, `confirmed`

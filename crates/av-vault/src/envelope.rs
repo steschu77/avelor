@@ -518,7 +518,8 @@ pub struct Event {
     /// cancelled in Google), by their original start.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exceptions: Vec<Exception>,
-    /// What part of a trip it is: `journey`, `stay` or `activity`.
+    /// What part of a trip it is: `journey`, `stay`, `activity` or
+    /// `layover`.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
     pub event_type: Option<String>,
     /// What a journey is by: `flight`, `train`, `bus`, `ferry` or `car`.

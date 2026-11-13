@@ -18,7 +18,9 @@ import { addDays, daysBetween, localDay, parseDate } from '../../core/format.js'
 import { t } from '../../core/text.js';
 import { googleLocked } from '../../model/calendar.js';
 import { editEntityLocal } from '../../model/structure.js';
-import { EVENT_TYPES, STATES, TRIP_TYPES, MEANS, isPlanned, nightsText, placeZone, routeSpot, tripPlaces } from '../../model/trip.js';
+import {
+  EVENT_TYPES, STATES, TRIP_TYPES, MEANS, byNights, isPlanned, nightsText, placeZone, routeSpot, tripPlaces,
+} from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { MEANS_ICONS } from '../../ui/icons.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
@@ -53,7 +55,7 @@ export function tripFields(doc, add) {
     booking.placeholder = t('trip.booking_ref');
     editField(booking, value => edit({ booking: value.trim() || null }));
     add(t('props.booking'), booking);
-  } else if (event.type === 'stay') {
+  } else if (byNights(event)) {
     add(t('props.place'), placeField('place', event.place, place => edit({ place })));
     add(t('props.nights'), ...(locked ? [whenIn(doc, 'start')] : nightFields(doc, edit)));
   } else {
@@ -83,7 +85,7 @@ function tripText(doc, add) {
     if (event.booking) add(t('props.booking'), accEl('span', 'mono', event.booking));
   } else {
     if (event.place) add(t('props.place'), event.place);
-    add(event.type === 'stay' ? t('props.nights') : t('props.when'), whenIn(doc, 'start'));
+    add(byNights(event) ? t('props.nights') : t('props.when'), whenIn(doc, 'start'));
   }
   if (event.location) add(t('props.where'), event.location);
 }
@@ -132,7 +134,8 @@ export function meetsField(doc) {
   if (!spot) return null;
   if (spot.leg) {
     const { leg, index, legs, part, nights } = spot;
-    const which = [`leg ${index + 1} of ${legs}`, leg.parts.length > 1 ? `part ${part + 1} of ${leg.parts.length}` : null];
+    const which = [t('meets.leg', { at: index + 1, n: legs }), spot.layover ? t('meets.layover')
+      : leg.parts.length > 1 ? t('meets.part', { at: part + 1, n: leg.parts.length }) : null];
     return meets(`${leg.from ?? '?'} \u2192 ${leg.to ?? '?'}`, [which.filter(Boolean).join(', '), nightsText(nights)]);
   }
   const { stop, index, stops, nights } = spot;
