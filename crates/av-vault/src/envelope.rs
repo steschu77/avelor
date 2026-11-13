@@ -117,6 +117,9 @@ pub struct Project {
     /// A trip's route while its days are open: where, how long, how.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sketch: Option<Sketch>,
+    /// What limits a trip's days: a lane each, shown in its When.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lanes: Vec<Lane>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -179,6 +182,44 @@ pub struct Stop {
 pub struct Back {
     #[serde(default, skip_serializing_if = "OneOrMany::is_none")]
     pub by: OneOrMany<String>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// A lane of a trip's When: the all-day events of a calendar, one event, or
+/// spans typed in, and how they count (`cant`, `worse`, `reason`; a
+/// calendar's also `only`, the days outside its events can't; `none`
+/// leaves the lane out).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Lane {
+    /// Its name; else its calendar's or event's title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calendar: Option<Id>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<Id>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub counts: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spans: Vec<Span>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
+/// Days of a lane typed in, the first and the last, and how they count.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Span {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<DateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<DateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub counts: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -1446,6 +1487,22 @@ project:
       nights: 1
     back:
       by: train
+  lanes:
+  - name: Lisa · school
+    calendar: {ID}
+    counts: only
+  - event: {ID}
+    counts: cant
+  - name: Oma
+    spans:
+    - from: 2028-08-14
+      to: 2028-08-20
+      counts: cant
+      note: away
+      hint: kept
+    - from: 2028-08-11
+      to: 2028-08-11
+      counts: reason
   phase: kept
 "
         );
@@ -1472,6 +1529,14 @@ project:
         assert_eq!(stops[1].by.as_slice(), ["car", "ferry"]);
         assert_eq!(stops[2].nights, Some(Nights::Count(1)));
         assert_eq!(sketch.back.as_ref().unwrap().by.as_slice(), ["train"]);
+        let lanes = &project.lanes;
+        assert_eq!(lanes[0].calendar, Some(Id::parse(ID).unwrap()));
+        assert_eq!(lanes[0].counts.as_deref(), Some("only"));
+        assert_eq!(lanes[1].event, Some(Id::parse(ID).unwrap()));
+        let span = &lanes[2].spans[0];
+        assert_eq!(span.to.unwrap().as_iso8601(), "2028-08-20");
+        assert_eq!(span.note.as_deref(), Some("away"));
+        assert!(span.extra.contains_key("hint"));
         assert!(project.extra.contains_key("phase"));
         assert!(project.documents[0].extra.contains_key("hint"));
         assert!(project.payments[0].extra.contains_key("note"));

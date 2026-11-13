@@ -355,6 +355,23 @@ own file. Every field is optional; a project without one is `project: {}`.
   only later. A night on the way is a stop of its own. Fixing the trip's
   days writes the `days` fact (`{from, to}`), turns the sketch into planned
   events and removes it, what is proposed ticked first (`ui.md#set-the-dates`).
+* `lanes`: [Lane], what limits a trip's days, a lane each; they stay
+  once the dates are set:
+  * `name`: string, else its calendar's or event's title,
+  * `calendar`: ID, a calendar whose all-day events it shows, or `event`:
+    ID, one event, or neither, its `spans` typed in: [Span], each with
+    `from` and `to` (Date, the first day and the last), `counts` and
+    `note`,
+  * `counts`: string, how its days count: `cant`, `worse` (possible but
+    worse), `reason` (a reason to be there), a calendar's or an event's
+    also `only` (the days outside its events can't, a school's breaks);
+    `none` leaves the lane out. A span's own `counts` goes before its lane's. A value the
+    app doesn't know counts as `cant`.
+
+  In a work calendar (`work-of`, `#calendar`) an event's `work` goes
+  before the lane's `counts`: a day off is a reason, a remote day worse. A
+  traveler's work calendar is a lane without being listed; listed, its
+  `counts` is how its other events count, `none` leaves it out.
 
 ```yaml
 project:
@@ -368,6 +385,12 @@ project:
     - {place: Duluth, nights: 1, by: car}
     - {place: Isle Royale, nights: 3, by: [car, ferry]}
     back: {by: [ferry, car]}
+  lanes:
+  - {name: Lisa's school, calendar: 01a0…, counts: only}
+  - {event: 01a0…, counts: cant}
+  - name: Grandma
+    spans:
+    - {from: 2028-08-14, to: 2028-08-20, counts: cant, note: visiting}
 ```
 
 Keys the app doesn't know stay, at every level. A project made from a
