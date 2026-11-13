@@ -47,6 +47,8 @@
   --c-danger-soft: light-dark(rgba(222, 145, 147, 0.26), rgba(222, 145, 147, 0.22));
   /* hover tint */
   --c-hover: light-dark(rgba(10, 10, 11, 0.04), oklch(0.935 0.008 80 / 0.05));
+  /* days possible, but worse: a tint in a trip's When */
+  --c-tint: light-dark(rgba(10, 10, 11, 0.07), oklch(0.935 0.008 80 / 0.09));
   /* the shade over the app behind a dialog */
   --c-scrim: light-dark(rgba(22, 22, 26, 0.22), rgba(0, 0, 0, 0.5));
   --shadow-pop: inset 0 1px 0 light-dark(transparent, oklch(1 0 0 / 0.05)),
@@ -118,6 +120,9 @@
   --w-recurring-payment-amount: 96px;
   /* a trip's route (features/route.js): a stop's box, a leg's line */
   --h-route: 30px;
+  /* a trip's When (features/when.js): the names of its lanes, a lane */
+  --w-when-name: 104px;
+  --h-when-lane: 20px;
 
   /* sidebar and table inset */
   --p-gutter: 12px;

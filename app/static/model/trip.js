@@ -607,20 +607,26 @@ export function fixDatesProposal(id, project, days, calendar) {
   });
   if (stops.length) wayRows(sketch.back?.by, stops.at(-1).place ? String(stops.at(-1).place) : home, home, to, false);
 
-  const travelers = [].concat(project.facts?.travelers ?? []).map(String);
-  const off = [];
-  for (const calendarDoc of entities.values()) {
-    const owner = calendarDoc.kind === 'calendar' ? calendarDoc.calendar?.['work-of'] : null;
-    const traveler = owner && travelers.find(ref => sameContact(ref, owner));
-    if (!traveler) continue;
-    off.push({
-      key: `off:${calendarDoc.doc_id}`, title: t('trip.off', { name: projects.get(id)?.name ?? t('trip.the_trip') }),
-      event: { calendar: calendarDoc.doc_id, status: 'tentative', start: localDay(from), end: localDay(addDays(to, 1)), work: 'off' },
-      why: t('trip.work_calendar_of', { traveler: parseContact(traveler).name, title: calendarDoc.title || t('untitled') }),
-      from, to: addDays(to, 1),
-    });
-  }
+  const off = workCalendarsOf(project).map(({ calendar: calendarDoc, traveler }) => ({
+    key: `off:${calendarDoc.doc_id}`, title: t('trip.off', { name: projects.get(id)?.name ?? t('trip.the_trip') }),
+    event: { calendar: calendarDoc.doc_id, status: 'tentative', start: localDay(from), end: localDay(addDays(to, 1)), work: 'off' },
+    why: t('trip.work_calendar_of', { traveler, title: calendarDoc.title || t('untitled') }),
+    from, to: addDays(to, 1),
+  }));
   return { nights: daysBetween(from, to), sketched: nightsOf(sketch.nights), ways, stays, off };
+}
+
+// The work calendars of the trip's travelers (`work-of`,
+// vault.md#calendar), `{ calendar, traveler }`, the traveler by name.
+export function workCalendarsOf(project) {
+  const travelers = [].concat(project.facts?.travelers ?? []).map(String);
+  const found = [];
+  for (const calendar of entities.values()) {
+    const owner = calendar.kind === 'calendar' ? calendar.calendar?.['work-of'] : null;
+    const traveler = owner && travelers.find(ref => sameContact(ref, owner));
+    if (traveler) found.push({ calendar, traveler: parseContact(traveler).name });
+  }
+  return found;
 }
 
 // Whether the contact refs `a` and `b` name the same person: the same

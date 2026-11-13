@@ -575,12 +575,12 @@ unfolded (`features/blueprint.js`):
   it back; empty removes the fact. The budget says what the project's
   bookings have spent ("3,148.00 booked").
 - **A trip's route** (`#route`), under its facts.
-- **A tab line**: Missing and Next, each with its count, then how far the
-  project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00"; a
+- **A tab line**: Missing and Next, each with its count, while a trip's
+  days are open its When first (`#when`), then how far the project is ("documents 1 of 3 · steps 2 of 5 · 3,148.00 of 6,000.00"; a
   trip's nights covered and ways booked first, "nights 9 of 10 · ways 2 of
   3 booked").
   One list is open at a time; its tab again folds it, so the lens keeps
-  its room.
+  its room. When opens once a trip with its days open is shown.
 - **Missing**: what the project's checks find (`checksOf`), each with the
   check that found it: first a trip's (`#route-gaps`); an expected
   document no entity meets yet, or none recent enough (`within`), with
@@ -707,6 +707,45 @@ A picked event joins the trip (`join_project`); if it says no part of a
 trip, it becomes the gap's (a stay, a transport, `edit_entities`), and of
 that kind it takes the place, or from and to, it lacks. Its card shows, to
 finish there (its way, its zones).
+
+### When <a id="when"></a>
+
+While a trip's days are open, When is the first list of its tab line
+(`features/when.js`): the days the trip could take (`whenOf`,
+`model/when.js`). Its head names the sketch's window and length ("Tue
+08/01 – Thu 08/31 · 4–5 nights"); a sketch without a window says so.
+
+- **The window's days** in columns, a Monday's date over its week (the
+  month's name on its first), a line down each week.
+- **A lane per thing that limits them**: the block's `lanes`
+  (`vault.md#project`) in their order, then each traveler's work calendar
+  not among them ("Alex's work"). A lane's name opens what it comes from
+  in the panel, a calendar's card or an event's; one typed in has none. Its
+  spans lie on its days, each with its title and days in its tooltip:
+  - **can't**, hatched: a calendar's all-day events (a timed one limits no
+    day), one event, or spans typed in, counted `cant`; with `only`, the
+    window's days outside its events ("after Summer break");
+  - **worse**, tinted, and **a reason to be there**, a star with its
+    title after it;
+  - in a work calendar a day off is a reason (it costs no leave), a remote
+    day worse, its other events as the lane counts them.
+- **Fits**, the last row: a window per stretch of days no hatched span
+  touches that holds the sketch's fewest nights, as long as the sketch
+  allows there, placed to hold the most reasons, then the fewest worse
+  days, then the fewest workdays, then the earliest; lettered A, B, …. The
+  one chosen (the first at first) is filled, its band shading the lanes; a
+  click chooses another. The tab counts them.
+- **The windows**, as rows to choose with a radio: the letter, the days and
+  the nights; why ("Duluth folk festival · after Team offsite, before
+  Lisa's school": the reasons in it, the worse days, the hatched spans
+  around it); and at the end what it costs each traveler with a work
+  calendar: the workdays, Monday to Friday, from its first day to its last
+  that are neither off already nor remote, and those that are ("Alex: 3
+  workdays · 1 off, 1 remote").
+- **Fix dates A** opens Fix dates with the chosen window's days
+  (`openFixDates`, `ui.md#fix-dates`), saying what it then proposes ("then
+  proposes 2 held stays, 5 held ways, the days off · nothing is written
+  before Apply"). None fitting says so instead.
 
 ## Membership and structural edits <a id="structural-edits"></a>
 
@@ -973,3 +1012,4 @@ and save their bodies at once.
 | C9 | A trip's route | a stop of a dated route → `selectDocument` (its first stay) and `showWeeks`; a leg → `selectLeg` (its parts), one of one part `selectDocument`; a gap → `fillGap` (C11) | — | the card and its Meets; the Timeline kept to the stop's weeks; the gap's menu |
 | C10 | A trip's sketch | a sketched stop or leg picked; a place, nights or note typed in, Enter or blur; a way picked, Via, Over night; Add a stop, Remove → `setProjectLocal(id, {…, sketch})` | `set_project {id, project}` → `entity` | the route follows |
 | C11 | A trip's gap filled | Add (a gap of the route, a Missing row, a gap's row on the Timeline) → `fillGap` (`features/gaps.js`); New stay… / New way… → `openNew('event', {…})`; an event picked → `joinProjectLocal`, `editEntityLocal(id, {event: {kind, place}})` (a way's `from` and `to`), `selectDocument` | `join_project {id, project}`, `edit_entities {ids, change}` → `entity` | New filled in; or the event in the trip, its card shown, the route and Missing following |
+| C12 | A trip's When | When (the tab); a fit or its radio chosen; a lane's name → `selectDocument` (its calendar or event); Fix dates A → `openFixDates(id, {from, to})` (D8) | — | the window chosen, its band and its foot; the source's card; Fix dates with its days |
