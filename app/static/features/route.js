@@ -4,26 +4,28 @@
 // legs share at most a quarter of the strip, so it keeps to one line at any
 // width, each part saying less as it narrows (header.css). A cell per night
 // along a stop's foot, and a leg's line, say booked, planned, missing or
-// sketched. A click on a stop selects its first stay and keeps the
-// Timeline to its weeks; on a leg, its parts, their cards in the panel; on
-// a gap, New with what is missing filled in. While the days are open the route is the sketch,
+// sketched; a leg whose parts don't meet, or that leaves in another zone
+// than the trip arrived in, is marked (`issues`). A click on a stop selects
+// its first stay and keeps the Timeline to its weeks; on a leg, its parts,
+// their cards in the panel; on a gap, the menu that fills it (`fillGap`,
+// features/gaps.js). While the days are open the route is the sketch,
 // its parts picked to edit in a line under the strip: a stop's place,
 // nights and note, a leg's means, a stop added or removed, each written
 // through `set_project`.
 
 import { accEl } from '../core/dom.js';
-import { DAY_MONTH, WEEKDAY, durationText, localDay } from '../core/format.js';
+import { DAY_MONTH, WEEKDAY, durationText } from '../core/format.js';
 import { t } from '../core/text.js';
 import { projects } from '../model/entities.js';
 import { store } from '../model/state.js';
 import { setProjectLocal } from '../model/structure.js';
-import { MEANS, nightsOf, routeOf, tripSummary } from '../model/trip.js';
+import { MEANS, issueText, nightsOf, routeOf, tripSummary } from '../model/trip.js';
 import { MEANS_ICONS, iconEl } from '../ui/icons.js';
 import { editField } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { toolButton } from '../ui/toolbar.js';
 import { showWeeks } from './lenses/timeline.js';
-import { openNew } from './new.js';
+import { fillGap } from './gaps.js';
 import { selectDocument, selectLeg } from './selection.js';
 
 // A means within a sentence: "flight, train?".
@@ -73,7 +75,7 @@ export function routeEls(ctx, render) {
       if (route.sketched) {
         if (ctx.writable) pick({ type: part.type, index: part.index });
       } else {
-        openPart(part);
+        openPart(part, el, ctx.id);
       }
     });
     strip.append(el);
@@ -140,9 +142,11 @@ function stopEl(stop, sketched) {
       partial: t('route.nights_partial', { at: covered, n }), missing: t('route.nights_missing', { n }),
     }[stop.state];
     title = [name, stop.stays.map(doc => doc.title).join(', '), long, state].filter(Boolean).join(' \u00b7 ');
+    title = [title, ...(stop.issues ?? []).map(issueText)].join('\n');
   }
   const weight = sketched ? (stop.count ? (stop.count.min + stop.count.max) / 2 : 1) : n;
   const el = partEl('route__stop', stop, weight, title);
+  if (stop.issues?.length) el.dataset.warn = '';
   const box = accEl('span', 'route__box');
   box.append(accEl('span', 'route__name', name), accEl('span', 'meta route__count', count), nightsEl(stop.nights));
   const whenEl = accEl('span', 'meta route__when');
@@ -182,25 +186,31 @@ function legEl(leg) {
       title = leg.parts.map(doc => `${doc.title} \u00b7 ${tripSummary(doc)}`).join('\n');
     }
   }
+  const issues = leg.issues ?? [];
+  if (issues.length) {
+    text = issues.some(issue => issue.kind === 'apart') ? t('route.places_differ') : t('route.zones_differ');
+    title = [title, ...issues.map(issueText)].join('\n');
+  }
   if (leg.nights.length) line.append(nightsEl(leg.nights));
   const el = partEl('route__leg', leg, leg.nights.length, title);
+  if (issues.length) el.dataset.warn = '';
   el.append(line, accEl('span', 'meta route__when', text));
   return el;
 }
 
-// A click on a part of a dated route: a gap opens New with what it lacks,
-// a stop selects its first stay and keeps the Timeline to its days, a leg
-// of parts selects them all (`selectLeg`), one of one part that one.
-function openPart(part) {
+// A click on the part `part` (its element `el`) of the dated route of the
+// trip `id`: a gap opens the menu that fills it, a stop selects its first
+// stay and keeps the Timeline to its days, a leg of parts selects them all
+// (`selectLeg`), one of one part that one.
+function openPart(part, el, id) {
   if (part.type === 'leg' && part.state === 'missing') {
-    const day = localDay(part.day);
-    openNew('event', { eventKind: 'journey', from: part.from ?? '', to: part.to ?? '', start: day, end: day, startTime: '', endTime: '' });
+    fillGap(el, id, { kind: 'missing', leg: part });
   } else if (part.type === 'leg' && part.parts.length > 1) {
     selectLeg(part.parts.map(doc => doc.doc_id));
   } else if (part.type === 'leg') {
     selectDocument(part.parts[0].doc_id);
   } else if (!part.stays.length) {
-    openNew('event', { eventKind: 'stay', place: part.place ?? '', start: localDay(part.from), end: localDay(part.to) });
+    fillGap(el, id, { kind: 'night', place: part.place, from: part.from, to: part.to });
   } else {
     selectDocument(part.stays[0].doc_id);
     showWeeks(part.from, part.to);

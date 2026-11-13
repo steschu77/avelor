@@ -8,19 +8,22 @@
 // keeps to (while the app runs), as a click on a trip's stop does
 // (`showWeeks`). A row selects its entity and drags like a row of the
 // Documents lens; a card dragged out of its thread onto the lens leaves it.
-// A planned event (tentative) is dashed.
+// A planned event (tentative) is dashed. While a trip is the filter, its
+// nights and journeys missing show as rows of their own on their days, with
+// Add (features/gaps.js).
 
 import { $, accEl, placeChildren } from '../../core/dom.js';
 import { pressable } from '../../core/dom.js';
 import { t } from '../../core/text.js';
 import { DAY_MONTH_YEAR, LONG_DAY, MONTH_YEAR, SHORT_MONTH_YEAR, TIME_FORMAT, WEEKDAY, dayStart, everyMidnight, localDay, shortDate } from '../../core/format.js';
 import { store } from '../../model/state.js';
-import { entities, matchesFilter, parseContact, projectNames } from '../../model/entities.js';
+import { entities, matchesFilter, parseContact, projectNames, projects } from '../../model/entities.js';
 import { leaveThreadLocal } from '../../model/structure.js';
-import { isPlanned, tripSummary } from '../../model/trip.js';
+import { isPlanned, tripGaps, tripSummary } from '../../model/trip.js';
 import { docIcon, iconEl } from '../../ui/icons.js';
 import { excerptNodes, markedNodes } from '../../ui/marks.js';
 import { endDragPreview, startDragPreview, takeMemberDrops } from '../../ui/dropzone.js';
+import { fillGap, gapText } from '../gaps.js';
 import { TASK_STATUSES } from '../panel/details.js';
 import { scheduleText } from '../panel/schedule-field.js';
 import { markSelection, selectDocument } from '../selection.js';
@@ -200,9 +203,33 @@ function rowEl(doc, fill, word_filter) {
   return el;
 }
 
+// A gap of the trip `trip` on its day (`tripGaps`): what is missing, and
+// Add, the menu that fills it. Built anew on every render.
+function gapRowEl({ gap, trip }) {
+  const el = accEl('div', 'tl__row tl__row--gap');
+  const { title, when } = gapText(gap);
+  const text = accEl('span', 'tl__text');
+  text.append(accEl('span', 'tl__title', title), accEl('span', 'meta tl__meta', when));
+  const add = accEl('button', 'tool label', t('timeline.add'));
+  add.type = 'button';
+  add.title = gap.kind === 'night' ? t('timeline.add_stay') : t('timeline.add_journey');
+  add.addEventListener('click', () => fillGap(add, trip, gap));
+  el.append(iconEl('#i-warning', 'table__icon'), text, add);
+  return el;
+}
+
+// The gaps of the trip `id`, the filter, while its dates are set, each
+// on its day: `{ gap, trip, date }`.
+function tripGapItems(id) {
+  const project = projects.get(id)?.project;
+  const gaps = project ? tripGaps(id, project)?.gaps ?? [] : [];
+  return gaps.filter(gap => gap.kind === 'night' || gap.kind === 'missing')
+    .map(gap => ({ gap, trip: id, date: gap.kind === 'night' ? gap.from : gap.leg.day }));
+}
+
 // The entries, newest first, as day blocks under their months' headings;
 // the Today line before the first day that isn't to come, while today is
-// in the range.
+// in the range. An entry is an entity or a trip's gap (`tripGapItems`).
 function renderFeed(listed, today, fill, word_filter) {
   const days = [];
   for (const doc of listed) {
@@ -226,7 +253,7 @@ function renderFeed(listed, today, fill, word_filter) {
     }
     const block = dayEl(day);
     block.classList.toggle('tl__day--future', future);
-    placeChildren(block.lastChild, docs.map(doc => rowEl(doc, fill, word_filter)));
+    placeChildren(block.lastChild, docs.map(item => (item.gap ? gapRowEl(item) : rowEl(item, fill, word_filter))));
     nodes.push(block);
   }
   if (!todayPlaced) nodes.push(todayEl);
@@ -258,10 +285,12 @@ function renderTimeline() {
     if (shown.has(type)) listed.push(doc);
   }
   listed.sort((a, b) => b.date - a.date);
+  const gaps = shown.has('events') ? tripGapItems(state.selected_project).filter(item => scrub.holds(item.date)) : [];
+  const feed = [...listed, ...gaps].sort((a, b) => b.date - a.date);
 
   for (const id of rowEls.keys()) if (!entities.has(id)) rowEls.delete(id);
   renderTrack(onTrack, today, t('timeline.time', { entries: t('count.entries', { n: listed.length }) }));
-  renderFeed(listed, today, `${state.projects_rev}\n${state.selected_project}`, state.word_filter);
+  renderFeed(feed, today, `${state.projects_rev}\n${state.selected_project}`, state.word_filter);
   markRows();
   if (scrollToToday && listed.length) {
     feedEl.scrollTop = todayEl.isConnected ? todayEl.offsetTop : 0;
@@ -280,7 +309,7 @@ function renderTimeline() {
 // panel.
 feedEl.addEventListener('click', ev => {
   const row = ev.target.closest('.tl__row');
-  if (row) selectDocument(row.dataset.id);
+  if (row?.dataset.id) selectDocument(row.dataset.id);
 });
 
 feedEl.addEventListener('dragstart', ev => {

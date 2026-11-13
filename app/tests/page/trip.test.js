@@ -3,7 +3,8 @@ import { vault } from './vault.js';
 import { localDay, parseDate } from '../../static/core/format.js';
 import { entities, projects } from '../../static/model/entities.js';
 import {
-  isPlanned, isTripEvent, nightsOf, placeZone, routeOf, routeSpot, tripPlaces, tripSummary, zoneName,
+  isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripGaps, tripPlaces, tripSummary,
+  zoneIssuesOf, zoneName,
 } from '../../static/model/trip.js';
 
 // A trip from Springfield, from `from` to `to`, and its events on days:
@@ -19,6 +20,7 @@ const nextDay = day => localDay(new Date(parseDate(day).getFullYear(), parseDate
 const PLANNED = { status: 'tentative' };
 
 const route = () => routeOf('trip', projects.get('trip').project);
+const gaps = () => tripGaps('trip', projects.get('trip').project);
 
 // The route in short: a leg by its state and ends, a stop by its state,
 // place and nights.
@@ -121,6 +123,76 @@ test('while its days are open the route is the sketch', () => {
 // A timed journey, its ends in their own zones.
 const flight = (id, start, end, from, to, zone, endZone) => part(id, 'journey', start, end, { from, to, by: 'flight', tz: zone, 'end-tz': endZone });
 
+test('a place left in another zone than it was reached in is told', () => {
+  vault(
+    trip(), flight('there', '2027-07-08T10:00:00Z', '2027-07-08T12:00:00Z', 'Springfield', 'Hamburg', 'America/Chicago', 'Europe/Berlin'), HOTEL,
+    flight('back', '2027-07-12T10:00:00Z', '2027-07-12T20:00:00Z', 'Hamburg', 'Springfield', 'Europe/London', 'America/Chicago'),
+  );
+  const [issue] = route().parts[2].issues;
+  equal([issue.kind, issue.place, issue.arrive.zone, issue.leave.zone], ['zones', 'Hamburg', 'Europe/Berlin', 'Europe/London']);
+  equal([zoneIssuesOf(entities.get('back')).start?.kind, zoneIssuesOf(entities.get('there')).end?.kind, zoneIssuesOf(entities.get('there')).start], ['zones', 'zones', undefined]);
+  equal(issueText(issue), 'trip.issue.zones_leaves_at');
+});
+
+test('a leg goes on from where it arrived, else its parts are apart', () => {
+  vault(
+    trip(), flight('a', '2027-07-08T10:00:00Z', '2027-07-08T12:00:00Z', 'Springfield', 'Frankfurt', 'America/Chicago', 'Europe/Berlin'),
+    flight('b', '2027-07-08T14:00:00Z', '2027-07-08T15:00:00Z', 'Munich', 'Hamburg', 'Europe/Berlin', 'Europe/Berlin'), HOTEL, BACK,
+  );
+  const [issue] = route().parts[0].issues;
+  equal([issue.kind, issue.arrive.place, issue.leave.place], ['apart', 'Frankfurt', 'Munich']);
+  equal(issueText(issue), 'trip.issue.apart');
+});
+
+test('an activity at a stop is in the zone the trip is in', () => {
+  vault(
+    trip(), flight('there', '2027-07-08T10:00:00Z', '2027-07-08T12:00:00Z', 'Springfield', 'Hamburg', 'America/Chicago', 'Europe/Berlin'), HOTEL, BACK,
+    part('tour', 'activity', '2027-07-09T10:00:00Z', '2027-07-09T12:00:00Z', { place: 'Hamburg', tz: 'America/Chicago' }),
+  );
+  equal(route().parts[1].issues.map(issue => [issue.kind, issue.leave.doc.id]), [['zones', 'tour']]);
+});
+
+test('what a trip lacks, in the order of its route', () => {
+  vault(
+    trip(), journey('there', '2027-07-08', 'Springfield', 'Hamburg', PLANNED), stay('hotel', '2027-07-08', '2027-07-10', 'Hamburg'),
+    { id: 'book', kind: 'task', title: 'Book the train', linked_to: 'there', task: { status: 'open' } },
+    { id: 'old', kind: 'task', title: 'Ask', linked_to: 'there', task: { status: 'done' } },
+  );
+  const found = gaps();
+  equal(found.gaps.map(gap => [gap.rule, gap.kind]), [['journeys', 'planned'], ['nights', 'night'], ['journeys', 'missing']]);
+  equal([found.gaps[0].task.id, localDay(found.gaps[1].from), localDay(found.gaps[1].to), found.gaps[1].place], ['book', '2027-07-10', '2027-07-12', 'Hamburg']);
+  equal([found.progress.nights, found.progress.journeys, found.later], [[2, 4], [0, 2], null]);
+});
+
+test('a booking without a document is a ticket missing', () => {
+  const booked = { booking: 'X7K2PL' };
+  vault(
+    trip(), journey('there', '2027-07-08', 'Springfield', 'Hamburg', booked), HOTEL, journey('back', '2027-07-12', 'Hamburg', 'Springfield', booked),
+    { id: 'ticket', kind: 'document', title: 'Ticket', linked_to: 'there' }, { id: 'task', kind: 'task', title: 'Print', linked_to: 'back', task: { status: 'open' } },
+  );
+  equal(gaps().gaps.map(gap => [gap.kind, gap.doc.id]), [['ticket', 'back']]);
+});
+
+test("a trip's event outside its days is told", () => {
+  vault(trip(), THERE, HOTEL, BACK, stay('early', '2027-07-06', '2027-07-07', 'Hamburg'), part('party', 'activity', '2027-07-12', '2027-07-13', { place: 'Springfield' }));
+  equal(gaps().gaps.map(gap => [gap.kind, gap.doc.id]), [['outside', 'early']]);
+});
+
+test('a trip with nothing missing', () => {
+  vault(trip(), THERE, HOTEL, BACK);
+  equal([gaps().gaps, gaps().progress.nights, gaps().progress.journeys], [[], [4, 4], [2, 2]]);
+});
+
+test('what a sketch will need once its dates are set', () => {
+  const later = (sketch, facts = { days: undefined }) => {
+    vault(trip(facts, { sketch }));
+    return gaps().later;
+  };
+  equal(later({ nights: '6-8', stops: [{ place: 'Hamburg', nights: 2 }] }), { nights: 7, journeys: 2 });
+  equal(later({ stops: [{ nights: '2-3' }, { nights: '~4' }] }), { nights: 7, journeys: 3 });
+  equal([later({ stops: [{ nights: 2 }, {}] }), later({}), later(undefined)], [{ nights: null, journeys: 3 }, { nights: null, journeys: 0 }, { nights: null, journeys: 0 }]);
+});
+
 test('the zone a place had last, and the places and zones named', () => {
   vault(
     flight('old', '2026-07-08T10:00:00Z', '2026-07-08T12:00:00Z', 'Springfield', 'Hamburg', 'America/Chicago', 'Europe/London'),
@@ -141,6 +213,10 @@ test("a trip's event says what part it is, or is in a trip", () => {
 test('what a row tells of a stay', () => {
   vault(stay('hotel', '2027-07-08', '2027-07-12', 'Hamburg', PLANNED), part('tour', 'activity', '2027-07-10', '2027-07-11', { place: 'Altona' }), journey('train', '2027-07-08', 'a', 'b', { booking: 'X7' }));
   equal(['hotel', 'tour', 'train'].map(id => tripSummary(entities.get(id))), ['trip.planned \u00b7 Hamburg \u00b7 trip.nights', 'Altona', 'X7']);
+});
+
+test('nights in words', () => {
+  equal([nightsText([]), nightsText([new Date(2027, 6, 8)]), nightsText([new Date(2027, 6, 8), new Date(2027, 6, 9)])], [null, 'trip.night_of', 'trip.nights_of']);
 });
 
 test('only the events of the trip that are a part of it are on the route', () => {
@@ -172,6 +248,43 @@ test('a leg is planned with one of its parts, a stop with one of its nights', ()
   equal(shape(), ['planned Springfield > Hamburg', 'planned Hamburg 4', 'booked Hamburg > Springfield']);
 });
 
+test('a journey on a day only, or after a leg missing, says nothing of zones', () => {
+  const back = flight('back', '2027-07-12T10:00:00Z', '2027-07-12T20:00:00Z', 'Hamburg', 'Springfield', 'Europe/London', 'America/Chicago');
+  vault(trip(), THERE, HOTEL, back);
+  equal(route().parts[2].issues, []);
+  vault(
+    trip(), flight('there', '2027-07-08T10:00:00Z', '2027-07-08T12:00:00Z', 'Springfield', 'Berlin', 'America/Chicago', 'Europe/Berlin'), HOTEL, back,
+  );
+  equal(route().parts.filter(one => one.issues?.length), []);
+});
+
+test("an activity is a stop's on its days and at its place, or without one", () => {
+  const activity = (id, start, place) => part(id, 'activity', start, start, { place, tz: 'America/Chicago' });
+  vault(
+    trip(), flight('there', '2027-07-08T10:00:00Z', '2027-07-08T12:00:00Z', 'Springfield', 'Hamburg', 'America/Chicago', 'Europe/Berlin'), HOTEL, BACK,
+    activity('first', '2027-07-08T18:00:00Z', 'Hamburg'), activity('last', '2027-07-12T18:00:00Z'), activity('elsewhere', '2027-07-09T18:00:00Z', 'Berlin'),
+    activity('before', '2027-07-07T18:00:00Z'), activity('after', '2027-07-13T18:00:00Z', 'Hamburg'),
+  );
+  equal(route().parts[1].issues.map(issue => issue.leave.doc.id), ['first', 'last']);
+});
+
+test("a leg arrives in its last part's zone", () => {
+  vault(
+    trip(), flight('a', '2027-07-08T10:00:00Z', '2027-07-08T12:00:00Z', 'Springfield', 'Frankfurt', 'America/Chicago', 'Europe/Berlin'),
+    flight('b', '2027-07-08T14:00:00Z', '2027-07-08T15:00:00Z', 'Frankfurt', 'London', 'Europe/Berlin', 'Europe/London'), stay('hotel', '2027-07-08', '2027-07-12', 'London'),
+    flight('back', '2027-07-12T10:00:00Z', '2027-07-12T20:00:00Z', 'London', 'Springfield', 'Europe/Berlin', 'America/Chicago'),
+  );
+  equal([route().parts[0].issues, route().parts[2].issues.map(issue => issue.arrive.zone)], [[], ['Europe/London']]);
+});
+
+test('parts of a leg without their places are not apart', () => {
+  vault(
+    trip(), flight('a', '2027-07-08T10:00:00Z', '2027-07-08T12:00:00Z', 'Springfield', undefined, 'America/Chicago', 'Europe/Berlin'),
+    flight('b', '2027-07-08T14:00:00Z', '2027-07-08T15:00:00Z', 'Munich', 'Hamburg', 'Europe/Berlin', 'Europe/Berlin'), HOTEL, BACK,
+  );
+  equal(route().parts[0].issues, []);
+});
+
 test("a spot's nights are its own", () => {
   vault(
     trip(), journey('night', '2027-07-08', 'Springfield', 'Hamburg', { end: '2027-07-10' }), stay('hotel', '2027-07-09', '2027-07-10', 'Hamburg'),
@@ -184,4 +297,14 @@ test("a spot's nights are its own", () => {
   equal(['night', 'hotel', 'inn', 'flat', 'back'].map(spot), [
     [0, 3, ['2027-07-08']], [0, 2, ['2027-07-09']], [0, 2, ['2027-07-10']], [1, 2, ['2027-07-11']], [2, 3, []],
   ]);
+});
+
+test('the tickets and what is outside come by their days', () => {
+  const booked = { booking: 'X7K2PL' };
+  vault(
+    trip(), journey('back', '2027-07-12', 'Hamburg', 'Springfield', booked), { ...journey('there', '2027-07-08', 'Springfield', 'Hamburg', booked), linked_to: 'task' },
+    { ...journey('tour', '2027-07-10', 'Hamburg', 'Hamburg', booked), linked_to: 'ticket' }, stay('late', '2027-07-11', '2027-07-14', 'Hamburg'),
+    stay('early', '2027-07-06', '2027-07-07', 'Hamburg'), HOTEL, { id: 'ticket', kind: 'document', title: '' }, { id: 'task', kind: 'task', title: '', task: { status: 'open' } },
+  );
+  equal(gaps().gaps.filter(gap => gap.doc).map(gap => [gap.kind, gap.doc.id]), [['ticket', 'there'], ['ticket', 'back'], ['outside', 'early'], ['outside', 'late']]);
 });

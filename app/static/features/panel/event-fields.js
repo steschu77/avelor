@@ -9,7 +9,7 @@ import { accEl, titled } from '../../core/dom.js';
 import { DATE_FORMAT, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
 import { addDays, daysBetween, timeFormatIn, zonedInstant, zonedTime } from '../../core/format.js';
 import { t } from '../../core/text.js';
-import { LOCAL_ZONE, endZone, startZone, tripPlaces, zoneName } from '../../model/trip.js';
+import { LOCAL_ZONE, endZone, issueText, startZone, tripPlaces, zoneIssuesOf, zoneName } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { showMenu } from '../../ui/menu.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
@@ -102,9 +102,10 @@ export function timeFields(doc, end, edit) {
   if (doc.all_day && end === 'end') time.disabled = true;
   const parts = [day, time];
   if (!doc.all_day) {
+    const issue = zoneIssuesOf(doc)[end];
     parts.push(zoneButton(`${end}:zone`, zone, next => {
       if (next !== zone) edit(zoneChange(doc, end, next));
-    }));
+    }, issue ? issueText(issue) : null));
     if (end === 'end' && doc.end) parts.push(accEl('span', 'meta', durationText(doc.end - doc.date)));
   }
   return parts;
@@ -168,11 +169,13 @@ export function whereField(event, edit) {
 
 // ----------------------------------------------------------------------------
 // A button naming `zone` that opens the zones' menu (`zoneMenu`); `key`
-// finds it again once the block is drawn anew.
-export function zoneButton(key, zone, onPick) {
+// finds it again once the block is drawn anew. With `warning`, the zone
+// isn't the one the trip arrived in (`zoneIssuesOf`), marked and said.
+export function zoneButton(key, zone, onPick, warning = null) {
   const button = accEl('button', 'tool label props__zone', zoneLabel(zone));
   button.type = 'button';
-  button.title = t('zone.another', { zone: zone.replace(/_/g, ' ') });
+  button.title = [t('zone.another', { zone: zone.replace(/_/g, ' ') }), warning].filter(Boolean).join('\n');
+  button.classList.toggle('tool--danger', Boolean(warning));
   if (key) button.dataset.focusKey = key;
   button.addEventListener('click', () => zoneMenu(button, zone, onPick));
   return button;

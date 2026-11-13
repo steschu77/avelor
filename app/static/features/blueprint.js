@@ -6,7 +6,8 @@
 // model/blueprint.js). One list is open at a time, its tab again folds it,
 // so the lens keeps its room. A row's task opens on a click; an expected
 // document's gap has Find, which picks one of the project's members to meet
-// it.
+// it; a trip's nights and journeys missing have Add (features/gaps.js), its
+// other gaps open the event they are about.
 
 import { $, accEl, oncePerFrame } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
@@ -16,10 +17,12 @@ import { store } from '../model/state.js';
 import { projects } from '../model/entities.js';
 import { checksOf, factsOf, hasBlueprint, membersOf } from '../model/blueprint.js';
 import { setProjectLocal } from '../model/structure.js';
+import { zoneName } from '../model/trip.js';
 import { KIND_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { toolButton } from '../ui/toolbar.js';
 import { factEl, newFactEl } from './facts.js';
+import { fillGap, gapText } from './gaps.js';
 import { TASK_STATUSES } from './panel/details.js';
 import { routeEls } from './route.js';
 import { selectDocument } from './selection.js';
@@ -73,7 +76,7 @@ function renderBlueprint({ id, project, writable }) {
   if (writable) facts.append(newFactEl(ctx));
 
   const lists = {
-    missing: [t('bp.missing'), result.missing.map(gap => gapRow(gap, ctx)), t('bp.nothing_missing')],
+    missing: [t('bp.missing'), result.missing.map(gap => gapRow(gap, ctx)), result.later ? laterText(result.later) : t('bp.nothing_missing')],
     next: [t('props.next'), result.next.map(nextRow), t('bp.nothing_next')],
   };
   const tabs = accEl('div', 'bp__tabs');
@@ -101,13 +104,21 @@ function renderBlueprint({ id, project, writable }) {
 }
 
 // How far the project is, a part per check.
-function progressText({ documents, payments, budget, steps }) {
+function progressText({ nights, journeys, documents, payments, budget, steps }) {
   return [
+    nights && `nights ${nights[0]} of ${nights[1]}`,
+    journeys && `journeys ${journeys[0]} of ${journeys[1]} booked`,
     documents && `documents ${documents[0]} of ${documents[1]}`,
     payments && `payments ${payments[0]} of ${payments[1]}`,
     steps && `steps ${steps[0]} of ${steps[1]}`,
     budget && `${amountText(budget.spent)} of ${amountText(budget.budget)}`,
   ].filter(Boolean).join(' \u00b7 ');
+}
+
+// What a trip's sketch will need, while its days are open.
+function laterText({ nights, journeys }) {
+  const parts = [nights && t('bp.later.nights', { n: nights }), journeys && t('bp.later.journeys', { n: journeys })].filter(Boolean);
+  return parts.length ? t('bp.later', { parts: parts.join(', ') }) : t('bp.later_none');
 }
 
 // ----------------------------------------------------------------------------
@@ -133,6 +144,7 @@ const dayText = day => (day ? DATE_FORMAT.format(day) : '');
 
 // A gap the checks found (`checksOf`'s `missing`).
 function gapRow(gap, ctx) {
+  if (TRIP_RULES[gap.rule]) return tripGapRow(gap, ctx);
   if (gap.rule === 'documents') {
     const { expected, index, stale } = gap;
     const name = expected.name || t('bp.document');
@@ -155,6 +167,51 @@ function gapRow(gap, ctx) {
   const { doc } = gap;
   return itemEl(WARNING, doc.title || t('untitled'), t('timeline.due', { day: dayText(doc.due) }),
     { gap: true, rule: t('bp.rule.deadlines'), open: () => selectDocument(doc.doc_id) });
+}
+
+const TRIP_RULES = { nights: t('props.nights'), journeys: t('bp.rule.journeys'), tickets: t('bp.rule.tickets') };
+
+// A gap of a trip (`tripGaps`, model/trip.js): nights or a journey missing,
+// with Add, the menu that fills it (`fillGap`); else what it is about a
+// click away: the event, or the open task linked to a planned journey, which the
+// row names instead.
+function tripGapRow(gap, { id }) {
+  const rule = gap.kind === 'outside' ? t('bp.rule.days') : TRIP_RULES[gap.rule];
+  const opens = doc => ({ gap: true, rule, open: () => selectDocument(doc.doc_id) });
+  const adds = title => ({ gap: true, rule, action: toolButton(t('timeline.add'), title, btn => fillGap(btn, id, gap)) });
+  const name = doc => doc.title || t('untitled');
+  switch (gap.kind) {
+    case 'night':
+    case 'missing': {
+      const { title, when } = gapText(gap);
+      return itemEl(WARNING, title, when, adds(gap.kind === 'night' ? t('timeline.add_stay') : t('timeline.add_journey')));
+    }
+    case 'planned': {
+      const { doc, task } = gap;
+      if (task) {
+        const due = !isNaN(task.due) && task.due ? t('timeline.due', { day: dayText(task.due) }) : null;
+        return itemEl(KIND_ICONS.task.icon, name(task), [t('bp.for_planned', { name: name(doc) }), due].filter(Boolean).join(' \u00b7 '),
+          opens(task));
+      }
+      return itemEl(WARNING, t('bp.not_booked', { name: name(doc) }), t('bp.planned_on', { day: dayText(doc.date) }), opens(doc));
+    }
+    case 'apart': {
+      const { arrive, leave } = gap.issue;
+      return itemEl(WARNING, t('bp.dont_meet', { a: name(arrive.doc), b: name(leave.doc) }),
+        t('bp.arrives_leaves', { to: arrive.place, from: leave.place }), opens(leave.doc));
+    }
+    case 'zones': {
+      const { place, arrive, leave } = gap.issue;
+      const args = { a: name(arrive.doc), arrived: zoneName(arrive.zone), b: name(leave.doc), zone: zoneName(leave.zone) };
+      return itemEl(WARNING, place ? t('bp.zones_differ_in', { place }) : t('bp.zones_differ'),
+        leave.doc.event.type === 'activity' ? t('bp.zones_is', args) : t('bp.zones_leaves', args),
+        opens(leave.doc));
+    }
+    case 'ticket':
+      return itemEl(WARNING, t('bp.no_ticket', { name: name(gap.doc) }), t('bp.booking_ref', { reference: gap.doc.event.booking }), opens(gap.doc));
+    default:
+      return itemEl(WARNING, name(gap.doc), t('bp.outside_days', { day: dayText(gap.doc.date) }), opens(gap.doc));
+  }
 }
 
 const STATUS = new Map(TASK_STATUSES);

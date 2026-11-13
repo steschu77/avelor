@@ -14,11 +14,11 @@
 // (features/panel/event-fields.js).
 
 import { accEl } from '../../core/dom.js';
-import { DAY_MONTH, addDays, daysBetween, localDay, parseDate } from '../../core/format.js';
+import { addDays, daysBetween, localDay, parseDate } from '../../core/format.js';
 import { t } from '../../core/text.js';
 import { googleLocked } from '../../model/calendar.js';
 import { editEntityLocal } from '../../model/structure.js';
-import { EVENT_TYPES, STATES, TRIP_TYPES, MEANS, isPlanned, placeZone, routeSpot, tripPlaces } from '../../model/trip.js';
+import { EVENT_TYPES, STATES, TRIP_TYPES, MEANS, isPlanned, nightsText, placeZone, routeSpot, tripPlaces } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { MEANS_ICONS } from '../../ui/icons.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
@@ -141,13 +141,6 @@ export function meetsField(doc) {
 
 function meets(text, notes) {
   return [accEl('span', '', text), accEl('span', 'meta props__meets', notes.filter(Boolean).join(' \u00b7 '))];
-}
-
-// "the night of 07/08", "the nights of 07/09 \u2013 07/14"; none without one.
-function nightsText(days) {
-  if (!days.length) return null;
-  if (days.length === 1) return t('trip.night_of', { day: DAY_MONTH.format(days[0]) });
-  return t('trip.nights_of', { from: DAY_MONTH.format(days[0]), to: DAY_MONTH.format(days.at(-1)) });
 }
 
 // ----------------------------------------------------------------------------

@@ -125,12 +125,13 @@ export function leaveThreadLocal(doc_id, thread_id) {
 
 // ----------------------------------------------------------------------------
 // Adds `doc_id` to the project `project_id` (dropped on its sidebar pill
-// or its group row in the Documents lens); the selection stays.
-export function joinProjectLocal(doc_id, project_id) {
+// or its group row in the Documents lens); the selection stays. `step`: the
+// group it is one step with (`newGroup`).
+export function joinProjectLocal(doc_id, project_id, step = undefined) {
   const doc = entities.get(doc_id);
   if (!doc || doc.projects?.includes(project_id)) return;
 
-  structureCall('join_project', { id: doc_id, project: project_id }, () => store.getState());
+  structureCall('join_project', { id: doc_id, project: project_id }, () => store.getState(), step);
 }
 
 // ----------------------------------------------------------------------------
@@ -219,9 +220,9 @@ export function setProjectLocal(id, project) {
 // calendar's `work`), or a calendar's `{calendar: {"work-of"}}` (the
 // Accounts page), null removing it. The host pushes the entity back, which
 // the cards, the lenses and the dashboard follow; the selection stays as it
-// is.
-export function editEntityLocal(id, change) {
-  structureCall('edit_entities', { ids: [id], change });
+// is. `step`: the group it is one step with (`newGroup`).
+export function editEntityLocal(id, change, step = undefined) {
+  structureCall('edit_entities', { ids: [id], change }, null, step);
 }
 
 // Why `edit_entities` skipped an entity, by the reason it names.

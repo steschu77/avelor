@@ -111,6 +111,14 @@ test('what is next: the open tasks by their day, those without one last, then th
   equal(check().next.map(item => item.doc?.id ?? item.payment.name), ['a', 'b', 'whenever', 'Rent']);
 });
 
+test("a trip's checks are among a project's, only those it has", () => {
+  const facts = { home: 'Springfield', days: { from: '2027-07-08', to: '2027-07-10' } };
+  vault(project({ blueprint: 'travel', checks: ['nights'], facts }));
+  equal([check().missing.map(gap => gap.rule), check().progress.nights], [['nights'], [0, 2]]);
+  vault(project({ blueprint: 'travel', checks: ['journeys'], sketch: { nights: 3 } }));
+  equal([check().missing, check().later], [[], { nights: 3, journeys: 0 }]);
+});
+
 test('a budget spent to its end is kept', () => {
   vault(project({ checks: ['budget'], facts: { budget: 70 } }), statement({ id: 'a', date: '2027-03-01', amount: -70, 'linked-to': 'p' }));
   equal([check().missing, check().progress.budget], [[], { spent: 70, budget: 70 }]);

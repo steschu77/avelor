@@ -1,9 +1,10 @@
 // A trip's events (vault.md#event, panel.md#trip-fields): what part of a
 // trip each is and how, planned or booked, the places they name and the time
 // zones those had last, and what a row tells of one. A trip's route
-// (panel.md#route): its nights, the stops and the legs between them.
+// (panel.md#route): its nights, the stops and the legs between them, and
+// what it lacks (`tripGaps`).
 
-import { addDays, dayStart, daysBetween, parseDate, timeFormatIn, zonedTime } from '../core/format.js';
+import { DAY_MONTH, addDays, dayStart, daysBetween, parseDate, timeFormatIn, zonedTime } from '../core/format.js';
 import { t } from '../core/text.js';
 import { entities, projects, projectsOf } from './entities.js';
 
@@ -120,6 +121,14 @@ function waysText(doc) {
   return later ? `${leaves} \u2192 ${arrives}, ${later}` : `${leaves} \u2192 ${arrives}`;
 }
 
+// Nights in words: "the night of 07/08", "the nights of 07/09 \u2013 07/14"; none
+// without one.
+export function nightsText(days) {
+  if (!days.length) return null;
+  if (days.length === 1) return t('trip.night_of', { day: DAY_MONTH.format(days[0]) });
+  return t('trip.nights_of', { from: DAY_MONTH.format(days[0]), to: DAY_MONTH.format(days.at(-1)) });
+}
+
 // ----------------------------------------------------------------------------
 // A sketch's nights (vault.md#project): `n`, about `~n`, a range `n-m`, as
 // `{ min, max, about }`; null if it names none.
@@ -148,6 +157,8 @@ export function nightsOf(value) {
 //   nights it runs over and the day it leaves; one missing has its places
 //   and its day only; sketched, its means and `index`, the stop it leads to
 //   (the number of stops for the journey back).
+// Dated, a stop and a leg also have `issues`: where the trip doesn't go on
+// as it arrived (`meetings`).
 // The states: `booked`, `planned` (tentative), `missing` (a night without a
 // stay, a change of place without a leg), `partial` (a stop with nights
 // missing), `idea` (sketched). Null for a project that is no trip.
@@ -180,11 +191,23 @@ function arrivalDay(doc) {
   return day < startDay(doc) ? startDay(doc) : day;
 }
 
+// The zone an end of the trip event `doc` is meant in (this PC's if it
+// names none); none for a day-only one.
+function zoneAt(doc, end) {
+  if (doc.all_day) return null;
+  return (end === 'start' ? startZone(doc.event) : endZone(doc.event)) ?? LOCAL_ZONE;
+}
+
+// The events of the trip `id` that say what part of it they are.
+function tripEvents(id) {
+  return [...entities.values()].filter(doc => doc.kind === 'event' && doc.event?.type
+    && doc.event.status !== 'cancelled' && !isNaN(doc.date) && projectsOf(doc).includes(id));
+}
+
 function datedParts(id, home, from, to) {
   const count = daysBetween(from, to);
   const at = day => daysBetween(from, day);
-  const events = [...entities.values()].filter(doc => doc.kind === 'event' && doc.event?.type
-    && doc.event.status !== 'cancelled' && !isNaN(doc.date) && projectsOf(doc).includes(id));
+  const events = tripEvents(id);
 
   const legs = [];
   for (const doc of events.filter(doc => doc.event.type === 'journey').sort((a, b) => a.date - b.date)) {
@@ -263,7 +286,65 @@ function datedParts(id, home, from, to) {
     place = part.type === 'stop' ? part.place : part.to;
   }
   if (place && home && placeKey(place) !== placeKey(home)) route.push(bridge(place, home, to));
+  meetings(route, events.filter(doc => doc.event.type === 'activity'));
   return route;
+}
+
+// Where the trip goes on at a place, at a via or at the stop between two
+// legs, it leaves in the zone it arrived in, and an activity at the stop
+// is in that zone too; the parts of a leg meet at the same place. What
+// doesn't is noted on the leg, or the stop of the activity, as
+// `issues`: `{ kind: 'zones', place, arrive, leave }` (each `{ doc, zone }`)
+// or `{ kind: 'apart', arrive, leave }` (each `{ doc, place }`). A leg
+// missing leaves the trip nowhere in particular.
+function meetings(route, activities) {
+  let arrival = null;
+  const zones = (place, arrive, leave) => (arrive.zone && leave.zone && arrive.zone !== leave.zone
+    ? [{ kind: 'zones', place, arrive, leave }] : []);
+  for (const part of route) {
+    if (part.type === 'stop') {
+      const here = arrival && placeKey(arrival.place) === placeKey(part.place) ? arrival : null;
+      part.issues = !here ? [] : activities
+        .filter(doc => startDay(doc) >= part.from && startDay(doc) <= part.to && (!doc.event.place || placeKey(doc.event.place) === placeKey(part.place)))
+        .flatMap(doc => zones(part.place, here, { doc, zone: zoneAt(doc, 'start') }));
+      continue;
+    }
+    if (part.state === 'missing') {
+      arrival = null;
+      continue;
+    }
+    part.issues = [];
+    part.parts.forEach((doc, i) => {
+      const before = i ? { doc: part.parts[i - 1], zone: zoneAt(part.parts[i - 1], 'end'), place: part.parts[i - 1].event.to ?? null } : arrival;
+      if (!before) return;
+      const leaves = doc.event.from ?? null;
+      if (i && placeKey(before.place) && placeKey(leaves) && placeKey(before.place) !== placeKey(leaves)) {
+        part.issues.push({ kind: 'apart', arrive: { doc: before.doc, place: before.place }, leave: { doc, place: leaves } });
+      } else {
+        part.issues.push(...zones(leaves ?? before.place, before, { doc, zone: zoneAt(doc, 'start') }));
+      }
+    });
+    const last = part.parts.at(-1);
+    arrival = { doc: last, zone: zoneAt(last, 'end'), place: last.event.to ?? null };
+  }
+}
+
+// An issue of the route in words: "Zones differ in Davao: arrived in
+// Manila time, leaves in Berlin time".
+export function issueText(issue) {
+  if (issue.kind === 'apart') {
+    return t('trip.issue.apart', {
+      arrives: issue.arrive.doc.title || t('trip.a_part'), to: issue.arrive.place,
+      leaves: issue.leave.doc.title || t('trip.the_next'), from: issue.leave.place,
+    });
+  }
+  const { doc, zone } = issue.leave;
+  const args = { place: issue.place, arrived: zoneName(issue.arrive.zone), zone: zoneName(zone) };
+  if (doc.event.type === 'activity') {
+    const title = doc.title || t('trip.an_activity');
+    return issue.place ? t('trip.issue.zones_activity_at', { ...args, title }) : t('trip.issue.zones_activity', { ...args, title });
+  }
+  return issue.place ? t('trip.issue.zones_leaves_at', args) : t('trip.issue.zones_leaves', args);
 }
 
 function stopState(nights) {
@@ -323,4 +404,113 @@ export function routeSpot(doc) {
     }
   }
   return null;
+}
+
+// What the route says of the zones of the trip event `doc`'s ends (the
+// card's zone buttons): `{ start, end }`, the issue each end is in.
+export function zoneIssuesOf(doc) {
+  const found = {};
+  for (const id of tripsOf(doc)) {
+    const route = routeOf(id, projects.get(id).project);
+    for (const part of route?.parts ?? []) {
+      for (const issue of part.issues ?? []) {
+        if (issue.kind !== 'zones') continue;
+        if (issue.leave.doc.doc_id === doc.doc_id) found.start = issue;
+        if (issue.arrive.doc.doc_id === doc.doc_id) found.end = issue;
+      }
+    }
+  }
+  return found;
+}
+
+// ----------------------------------------------------------------------------
+// What the trip `id` (its block `project`) lacks, by the check that finds
+// it (vault.md#project, panel.md#blueprint), in the order of its route:
+// - `nights`: a run of a stop's nights without a stay (`night`: `stop`,
+//   `place`, `from`, the morning after `to`), an event of the trip outside
+//   its days (`outside`: `doc`);
+// - `journeys`: a change of place without a leg (`missing`: `leg`), a part of
+//   one planned (`planned`: `leg`, `doc`, the open `task` linked to it), parts
+//   that don't meet or a zone that isn't the one arrived in (`apart`,
+//   `zones`: `issue`, and `leg` unless an activity's);
+// - `tickets`: a booking without a document linked to it or from it
+//   (`ticket`: `doc`).
+// `progress`: its nights covered `[covered, all]` and its journeys booked
+// `[booked, all]`. While its days are open nothing is missing yet:
+// `later`, the nights (about) and the journeys the sketch will need.
+export function tripGaps(id, project) {
+  const route = routeOf(id, project);
+  if (!route) return null;
+  if (route.sketched) return { gaps: [], progress: {}, later: laterOf(project.sketch) };
+  const gaps = [];
+  const nights = [0, 0];
+  const journeys = [0, 0];
+  const events = tripEvents(id);
+  for (const part of route.parts) {
+    if (part.type === 'stop') {
+      nights[1] += part.nights.length;
+      nights[0] += part.nights.filter(night => night.state !== 'missing').length;
+      part.nights.forEach(night => {
+        if (night.state !== 'missing') return;
+        const run = gaps.at(-1);
+        if (run?.kind === 'night' && run.stop === part && run.to.getTime() === night.day.getTime()) run.to = addDays(night.day, 1);
+        else gaps.push({ rule: 'nights', kind: 'night', stop: part, place: part.place, from: night.day, to: addDays(night.day, 1) });
+      });
+      gaps.push(...(part.issues ?? []).map(issue => ({ rule: 'journeys', kind: issue.kind, issue, leg: null })));
+      continue;
+    }
+    nights[1] += part.nights.length;
+    nights[0] += part.nights.length;
+    journeys[1]++;
+    if (part.state === 'booked') journeys[0]++;
+    if (part.state === 'missing') {
+      gaps.push({ rule: 'journeys', kind: 'missing', leg: part });
+      continue;
+    }
+    for (const doc of part.parts.filter(doc => isPlanned(doc.event))) {
+      gaps.push({ rule: 'journeys', kind: 'planned', leg: part, doc, task: openTaskFor(doc) });
+    }
+    gaps.push(...part.issues.map(issue => ({ rule: 'journeys', kind: issue.kind, issue, leg: part })));
+  }
+  for (const doc of events.filter(doc => doc.event.booking && !hasTicket(doc)).sort((a, b) => a.date - b.date)) {
+    gaps.push({ rule: 'tickets', kind: 'ticket', doc });
+  }
+  const outside = doc => startDay(doc) < route.from || startDay(doc) > route.to
+    || (doc.event.type === 'stay' && endDay(doc) > route.to);
+  for (const doc of events.filter(outside).sort((a, b) => a.date - b.date)) {
+    gaps.push({ rule: 'nights', kind: 'outside', doc });
+  }
+  return { gaps, progress: { nights, journeys }, later: null };
+}
+
+// The nights and the journeys a sketch will need once the dates are set: its
+// length, else its stops' (a range or about one by its middle); a journey to
+// each stop and one home.
+function laterOf(sketch) {
+  const stops = sketch?.stops ?? [];
+  const counts = [nightsOf(sketch?.nights)].filter(Boolean);
+  if (!counts.length) counts.push(...stops.map(stop => nightsOf(stop.nights)));
+  const known = counts.length && counts.every(Boolean);
+  const nights = known ? Math.round(counts.reduce((sum, c) => sum + (c.min + c.max) / 2, 0)) : null;
+  return { nights, journeys: stops.length ? stops.length + 1 : 0 };
+}
+
+// The open task linked to the entity `doc` (a planned journey's "Book the
+// train"), if there is one.
+function openTaskFor(doc) {
+  for (const other of entities.values()) {
+    if (other.task && other.task.status !== 'done' && other.linked_to === doc.doc_id) return other;
+  }
+  return null;
+}
+
+// Whether a document is linked to the booked event `doc`, or it to one:
+// its ticket, a confirmation. Not a task, a conversation or another event.
+function hasTicket(doc) {
+  const isTicket = other => other && other.kind !== 'event' && !other.task && !other.conversation;
+  if (isTicket(entities.get(doc.linked_to))) return true;
+  for (const other of entities.values()) {
+    if (other.linked_to === doc.doc_id && isTicket(other)) return true;
+  }
+  return false;
 }

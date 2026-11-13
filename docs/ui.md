@@ -297,7 +297,11 @@ day — a recurring event on its first start, a task on its own date — but cal
   they are instead of what its kind tells (`.tl__hit`). A click or Enter
   selects it, the selected one
   marked (`markSelection`). A planned event (tentative) is dashed
-  (`.tl__row--planned`). It drags as a Documents row does; the lens
+  (`.tl__row--planned`). While a trip is the filter, its nights and journeys
+  missing are rows of their own on their days, dashed in danger
+  (`.tl__row--gap`: "No stay in Berlin", "the night of 07/17"), each with
+  Add, the menu that fills it (`fillGap`, `panel.md#route-gaps`). A row
+  drags as a Documents row does; the lens
   takes a card dragged out of a thread, which leaves it
   (`takeMemberDrops`, `panel.md#structural-edits`).
 - **Kept parts**: rows by entity, day blocks by day, month headings by
