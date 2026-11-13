@@ -30,23 +30,36 @@ export function fillGap(anchor, trip, gap) {
     ? { kind: 'stay', place: gap.place, from: gap.from, to: gap.to }
     : { kind: 'transport', from: gap.leg.from, to: gap.leg.to, day: gap.leg.day };
   const [from, to] = need.kind === 'stay' ? [need.from, need.to] : [addDays(need.day, -1), addDays(need.day, 2)];
+  const single = need.kind === 'stay' && addDays(need.from, 1).getTime() === need.to.getTime();
+  eventMenu(anchor, {
+    items: [newItem(need), ...(single ? [{ label: t('gaps.mark_layover'), icon: '#i-hourglass-half', run: () => markLayover(trip, need) }] : [])],
+    head: gapText(gap).title, near: t('gaps.at_that_time'), none: t('gaps.no_other_event'), from, to,
+    skip: doc => (doc.projects ?? []).includes(trip),
+    pick: doc => pickFor(doc, trip, need),
+  });
+}
+
+// A menu at `anchor` (`head` over it): `items`, then under the head `near`
+// the events on the days `from` to before `to` by their starts (`none`
+// without one), and a filter that also finds any other by its title;
+// `skip(doc)` leaves an event out, `pick(doc)` takes the one picked. Also
+// When's An event\u2026 (features/when.js).
+export function eventMenu(anchor, { items = [], head, near: nearHead, none, from, to, skip, pick }) {
   const others = [...entities.values()].filter(doc => doc.kind === 'event' && !isNaN(doc.date)
-    && doc.event?.status !== 'cancelled' && !(doc.projects ?? []).includes(trip));
+    && doc.event?.status !== 'cancelled' && !skip(doc));
   const near = others.filter(doc => overlaps(doc, from, to)).sort((a, b) => a.date - b.date);
-  const item = doc => ({ label: doc.title || t('untitled'), icon: docIcon(doc), desc: whenText(doc), run: () => pickFor(doc, trip, need) });
+  const item = doc => ({ label: doc.title || t('untitled'), icon: docIcon(doc), desc: whenText(doc), run: () => pick(doc) });
   const more = text => {
     const needle = text.toLowerCase();
     const found = others.filter(doc => !near.includes(doc) && (doc.title ?? '').toLowerCase().includes(needle))
       .sort((a, b) => Math.abs(a.date - from) - Math.abs(b.date - from)).slice(0, MORE);
     return found.length ? [{ head: t('gaps.other_events'), separator: true }, ...found.map(item)] : [];
   };
-  const single = need.kind === 'stay' && addDays(need.from, 1).getTime() === need.to.getTime();
   showMenu(anchor, [
-    newItem(need),
-    ...(single ? [{ label: t('gaps.mark_layover'), icon: '#i-hourglass-half', run: () => markLayover(trip, need) }] : []),
-    { head: t('gaps.at_that_time'), separator: true },
-    ...(near.length ? near.map(item) : [{ label: t('gaps.no_other_event'), dim: true }]),
-  ], { head: gapText(gap).title, filter: { placeholder: t('gaps.filter_events'), extra: more } });
+    ...items,
+    { head: nearHead, separator: items.length > 0 },
+    ...(near.length ? near.map(item) : [{ label: none, dim: true }]),
+  ], { head, filter: { placeholder: t('gaps.filter_events'), extra: more } });
 }
 
 // A gap in words, its title and when: "No stay in Berlin", "the night of

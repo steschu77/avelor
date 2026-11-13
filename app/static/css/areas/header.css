@@ -468,9 +468,21 @@
   color: var(--c-ink);
 }
 
-/* a trip's When (features/when.js): the window and the length over it */
+/* a trip's When (features/when.js): the window and the length over it,
+   Edit and + Lane after them; the edit line under it */
 .when__head {
-  margin: 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.when__head>.tool {
+  gap: 4px;
+}
+
+.when__edit {
+  padding-top: 6px;
 }
 
 /* the window's days in columns after the lanes' names, a row per lane,
@@ -575,6 +587,11 @@ button.when__name:hover {
   .when__span>span {
     display: none;
   }
+}
+
+/* an event's span opens it, one typed in its menu */
+.when__span.is-open {
+  cursor: pointer;
 }
 
 /* possible, but worse: tinted */
