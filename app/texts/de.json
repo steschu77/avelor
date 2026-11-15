@@ -646,8 +646,8 @@
   "email.all_must_match": "alle Bedingungen müssen passen",
   "email.all_of": "alle davon",
   "email.analysis_blocked": "Die Analyse ist an: Wähle ein Modell, das dafür funktioniert, oder schalte sie aus.",
-  "email.analysis_lite": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor. Der gelesene Text ihrer Anhänge geht mit, und jeder bekommt einen sauberen Titel, sein eigenes Datum, seine Art, Labels und Projekte.",
-  "email.analysis_medium": "Sendet jede neue E-Mail an {picker} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor; und für eine E-Mail, die danach fragt, eine kurze Antwort, Prüfpunkte und Fragen als mit der E-Mail verknüpfte Unterhaltung. Der gelesene Text ihrer Anhänge geht mit, und jeder bekommt einen sauberen Titel, sein eigenes Datum, seine Art, Labels und Projekte.",
+  "email.analysis_lite": "Sendet jede neue E-Mail an {model} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor. Der gelesene Text ihrer Anhänge geht mit, und jeder bekommt einen sauberen Titel, sein eigenes Datum, seine Art, Labels und Projekte.",
+  "email.analysis_medium": "Sendet jede neue E-Mail an {model} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor; und für eine E-Mail, die danach fragt, eine kurze Antwort, Prüfpunkte und Fragen als mit der E-Mail verknüpfte Unterhaltung. Der gelesene Text ihrer Anhänge geht mit, und jeder bekommt einen sauberen Titel, sein eigenes Datum, seine Art, Labels und Projekte.",
   "email.analysis_off": "Neue E-Mails behalten ihren Betreff als Titel; nichts wird an eine KI gesendet.",
   "email.any_of": "eines davon",
   "email.as_it_came": "Wie die E-Mail kam; schreibgeschützt",
@@ -708,7 +708,7 @@
   "email.reading": "wird gelesen …",
   "email.reading_blocked": "Das Lesen der Anhänge ist an: Wähle ein Modell, das dafür funktioniert, oder schalte es aus.",
   "email.reading_matches": "Treffer werden gelesen …",
-  "email.reads_with": "Liest jede gespeicherte Datei in ihr Dokument: Bilder und gescannte PDFs mit {picker}, den eigenen Text eines PDFs und Textdateien so, wie sie sind.",
+  "email.reads_with": "Liest jede gespeicherte Datei in ihr Dokument: Bilder und gescannte PDFs mit {model}, den eigenen Text eines PDFs und Textdateien so, wie sie sind.",
   "email.replace_again": {
     "one": "Erneut klicken, um {n} Inhalt zu ersetzen",
     "other": "Erneut klicken, um {n} Inhalte zu ersetzen"

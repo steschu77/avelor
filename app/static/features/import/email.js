@@ -21,7 +21,7 @@ import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { isoInstant, localDay, shortMonthDate } from '../../core/format.js';
 import { pageDate } from '../../core/format.js';
 import { shortcutText } from '../../core/actions.js';
-import { parts, t } from '../../core/text.js';
+import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { accounts } from '../../model/entities.js';
 import { dropBox, showMenu } from '../../ui/menu.js';
@@ -616,7 +616,7 @@ export function renderEmailSync(account, rerender) {
   if (on) {
     box.append(renderEmailFilterForm(form));
     box.append(renderEmailSyncAttachments(form, { ...EMAIL_ATTACHMENTS_OFF, ...sync.attachments }));
-    box.append(renderEmailSyncAnalysis(account.id, { ...AI_ANALYSIS_OFF, ...sync.analysis }));
+    box.append(renderEmailSyncAnalysis(form, { ...AI_ANALYSIS_OFF, ...sync.analysis }));
   }
   if (form.error) box.append(accEl('div', 'error-note', form.error));
   return box;
@@ -704,21 +704,34 @@ function renderEmailAttachments(owner, attachments, onChange, rerender) {
   grid.append(accEl('span', 'label', t('watch.file_types')), types, accEl('span', 'label', t('email.up_to')), size,
     accEl('span', 'label', t('watch.label.read')), read);
   body.append(grid, accEl('div', 'page-text email__text', t('email.attachments_on')));
-  if (attachments.read) body.append(renderEmailReading(attachments, onChange));
+  if (attachments.read) {
+    const { model, text } = renderEmailReading(owner, attachments, onChange);
+    grid.append(...model);
+    body.append(text);
+  }
   return { seg, body };
 }
 
-// While the attachments are read: the picker of the model that reads them,
-// and what keeps the pick from working (`aiPickerWithHint`).
-function renderEmailReading(attachments, onChange) {
+// While the attachments are read: the row of the model that reads them
+// (`emailModelRow`, its box's focus key after `owner`), and the sentence of
+// what it reads with that model while the pick works, else what keeps it
+// from working (`aiPickerWithHint`).
+function renderEmailReading(owner, attachments, onChange) {
   const pick = attachments.models?.[WATCH_READ_STEP] ?? null;
   const { picker, hint } = aiPickerWithHint(pick,
     model => onChange({ ...attachments, models: { ...attachments.models, [WATCH_READ_STEP]: model } }),
-    t('feature.reading_attachments'));
-  const body = accEl('div', 'page-text email__text');
-  body.append(...parts('email.reads_with', { picker }));
-  if (hint) body.append(hint);
-  return body;
+    t('feature.reading_attachments'), { box: true, focusKey: `${owner}-reading-model` });
+  const text = accEl('div', 'page-text email__text');
+  text.append(hint ?? t('email.reads_with', { model: pick.model }));
+  return { model: emailModelRow(picker), text };
+}
+
+// The row of a model's box (`aiModelPicker`) in a form grid: its label and
+// its field.
+function emailModelRow(picker) {
+  const field = accEl('div', 'form-field');
+  field.append(picker);
+  return [accEl('span', 'label', t('accounts.model')), field];
 }
 
 // Whether `attachments` are saved and read, but the reading's pick wouldn't
@@ -759,23 +772,25 @@ function renderEmailSyncAttachments(form, attachments) {
 // the analysis of new email (email.md#analysis), of Fetch email and of an
 // account's auto-sync: a level, and the model it runs with
 
-// `analysis` ({ level, model }) as a seg of its levels and a body: with the
-// analysis on, the picker of its model, and what keeps the pick from working
+// `analysis` ({ level, model }) as a seg of its levels, the row of its
+// model while it is on (`emailModelRow`, its box's focus key after
+// `owner`; none while off), and a body: the sentence of what it sends to
+// that model while the pick works, else what keeps it from working
 // (`aiPickerWithHint`). `onChange` gets the analysis as changed.
-function renderEmailAnalysis(analysis, onChange) {
+function renderEmailAnalysis(owner, analysis, onChange) {
   const seg = accSeg([['off', t('watch.off')], ['lite', t('watch.level.lite')], ['medium', t('watch.level.medium')]], analysis.level,
     level => onChange({ ...analysis, level }));
   const body = accEl('div', 'page-text email__text');
   if (analysis.level === 'off') {
     body.append(t('email.analysis_off'));
-    return { seg, body };
+    return { seg, model: [], body };
   }
-  const { picker, hint } = aiPickerWithHint(analysis.model,
-    model => onChange({ ...analysis, model }), t('feature.email_analysis'));
-  body.append(...(analysis.level === 'medium'
-    ? parts('email.analysis_medium', { picker }) : parts('email.analysis_lite', { picker })));
-  if (hint) body.append(hint);
-  return { seg, body };
+  const { picker, hint } = aiPickerWithHint(analysis.model, model => onChange({ ...analysis, model }),
+    t('feature.email_analysis'), { box: true, focusKey: `${owner}-analysis-model` });
+  const model = analysis.model?.model;
+  body.append(hint ?? (analysis.level === 'medium'
+    ? t('email.analysis_medium', { model }) : t('email.analysis_lite', { model })));
+  return { seg, model: emailModelRow(picker), body };
 }
 
 // Whether `analysis` is on but its pick wouldn't work (the host refuses a
@@ -785,25 +800,30 @@ function emailAnalysisBlocked(analysis) {
 }
 
 // Fetch email's third section, Analysis: built again on its changes, and
-// when the accounts change (the pick's problems).
+// when the accounts change (the pick's problems), the focus kept on its
+// model's box.
 function renderEmailAnalysisSection() {
-  const { seg, body } = renderEmailAnalysis(email.analysis, analysis => {
+  const block = email.els.analysis;
+  const { seg, model, body } = renderEmailAnalysis('email-fetch', email.analysis, analysis => {
     email.analysis = analysis;
     renderEmailAnalysisSection();
     scheduleRenderEmailMatches();
   });
   const head = accEl('div', 'section-head', t('email.section.analysis'));
   head.append(seg);
-  email.els.analysis.replaceChildren(head, body);
+  const grid = accEl('div', 'form-grid');
+  grid.append(...model);
+  keepingFocus(block, () => block.replaceChildren(head, grid, body));
 }
 
 // The auto-sync's analysis, under its filter; saved at once.
-function renderEmailSyncAnalysis(account, analysis) {
-  const { seg, body } = renderEmailAnalysis(analysis, next => emailSetSync(account, { analysis: next }));
+function renderEmailSyncAnalysis(form, analysis) {
+  const { seg, model, body } = renderEmailAnalysis(form.focusKey, analysis,
+    next => emailSetSync(form.account, { analysis: next }));
   const grid = accEl('div', 'form-grid');
   const field = accEl('div', 'form-field');
   field.append(seg);
-  grid.append(accEl('span', 'label', t('watch.step.analysis')), field);
+  grid.append(accEl('span', 'label', t('watch.step.analysis')), field, ...model);
   const box = accEl('div', 'email__filter');
   box.append(grid, body);
   return box;
@@ -961,8 +981,8 @@ function renderEmailFooter() {
   fetch.title = shortcutText('Ctrl+Enter');
   fetch.disabled = !emailCanFetch();
   // Replacing bodies takes a second click; another selection to replace
-  // asks again (the key).
-  if (replacing) {
+  // asks again (the key). Red only while it can run.
+  if (replacing && !fetch.disabled) {
     fetch.classList.add('btn--danger');
     armedButton(fetch, t('email.replace_again', { n: replacing }), emailFetch,
       `email_fetch ${replace.join(' ')}`);

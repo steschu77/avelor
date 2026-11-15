@@ -26,15 +26,16 @@ the expanded vault area, filled with the account's last filter
   the end — and writes it as an email entity to `Email/` in the vault. A
   selected email that is already in the vault gets its body replaced,
   keeping its frontmatter; the page asks for a second click before doing
-  that. The fetch is a job (`ui.md#jobs-panel`); the page closes, and
+  that, Fetch red while it can run. The fetch is a job (`ui.md#jobs-panel`); the page closes, and
   Fetch email reads its matches again when the job ends. Esc closes the
   page.
 - **Attachments** (section 2): Off or On, the file types, the size they
   are saved up to, and whether they are read, with the model that reads
-  them; on, the fetch saves the emails' attached files
+  them in a Model row; on, the fetch saves the emails' attached files
   (`email.md#attachments`).
 - **Analysis** (section 3): Off, Lite or Medium, with the model it runs
-  with; the new emails are analysed after the fetch (`email.md#analysis`).
+  with in a Model row; the new emails are analysed after the fetch
+  (`email.md#analysis`).
 
 ## Email auto-sync <a id="email-auto-sync"></a>
 
@@ -105,9 +106,13 @@ types listed (`*.pdf *.jpg *.jpeg *.png` at first; patterns as a watch's,
   notice names the first failure. Stop ends it, and so does a vault
   switch; the analysis starts when it ends, unless it was stopped, and
   takes the attachments read too (`email.md#analysis`).
-- **Explicit picks**: with Read on, Fetch waits for a pick that works,
-  and the host refuses `email_fetch` before anything is fetched, as for the
-  analysis. An auto-sync's pick is checked when a run saved files; refused,
+- **Explicit picks**: with Read on, the model is a row of its own under
+  Read, a drop-down box (`aiModelPicker`, `accounts.md#model-choice`).
+  Until a pick works, what keeps it shows in red under the attachments'
+  text ("For reading attachments, pick a model."); once it does, the
+  sentence of what is read with it, naming the model. Fetch waits for a
+  pick that works, and the host refuses `email_fetch` before anything is
+  fetched, as for the analysis. An auto-sync's pick is checked when a run saved files; refused,
   a notice says why, and the files stay unread.
 - **Read later**: a fetch with Replace also reads the replaced email's
   attachments still without text: those saved while reading was off, or
@@ -130,9 +135,13 @@ auto-sync's (under its filter, `fetch-email.auto-sync.analysis`;
 a level, Off, Lite or Medium, and the model it runs with, picked as every
 feature picks its model (`accounts.md#model-choice`).
 
-- **Explicit picks**: with the analysis on, Fetch waits for a pick that
-  works; the page says why, and the host refuses `email_fetch` too, before
-  anything is fetched. An auto-sync's pick is checked when a run has new
+- **Explicit picks**: with the analysis on, its model is a row of its
+  own, a drop-down box as the reading's (`email.md#attachments`); until a
+  pick works, what keeps it shows in red ("For the email analysis, pick a
+  model."), and the sentence of what is sent to the model, naming it, only
+  once it does. Fetch waits for a pick that works; the page says why under
+  it, and the host refuses `email_fetch` too, before anything is
+  fetched. An auto-sync's pick is checked when a run has new
   email; refused, a notice says why, and the emails stay fetched without it.
 - **The job**: when a fetch ends (not when it was stopped), the emails it
   created go to "Analysing email · <email>", after the attachments' reading

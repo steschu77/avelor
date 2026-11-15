@@ -400,7 +400,7 @@ function renderAssistant(scrollDown) {
 }
 
 function renderAssistantHead() {
-  aiModelPicker(vaultSettings().chat_model, assistantPickModel, assistantModelEl);
+  aiModelPicker(vaultSettings().chat_model, assistantPickModel, { button: assistantModelEl });
 
   const conversations = assistantConversations(assistantItem);
   const index = conversations.findIndex(conversation => conversation.doc_id === assistantOpen);

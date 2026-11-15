@@ -669,7 +669,8 @@ mark {
 }
 
 /* a drop-down box in a field: what is picked, a hint, the caret at its
-   end; a click opens its menu (the email filter's date, a setting). */
+   end; a click opens its menu (the email filter's date, a feature's model,
+   a setting). Marked while the pick can't be used. */
 .drop-box {
   width: 240px;
   max-width: 100%;
@@ -696,6 +697,11 @@ mark {
 
 .drop-box__caret {
   color: var(--c-label);
+}
+
+.drop-box[aria-invalid="true"] {
+  border-color: var(--c-danger-ink);
+  color: var(--c-danger-ink);
 }
 
 /* a text input in a field, without a box of its own; it fills the rest of

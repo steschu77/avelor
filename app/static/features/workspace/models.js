@@ -7,7 +7,7 @@ import { accEl } from '../../core/dom.js';
 import { locale, t } from '../../core/text.js';
 import { runAction } from '../../core/actions.js';
 import { accounts } from '../../model/entities.js';
-import { showMenu } from '../../ui/menu.js';
+import { dropBox, showMenu } from '../../ui/menu.js';
 import { notice } from '../../ui/page.js';
 
 export const AI_PROVIDERS = [
@@ -97,30 +97,40 @@ export function aiMissingHint(ai, feature) {
 // the model kept while it is off).
 export const AI_ANALYSIS_OFF = { level: 'off', model: null };
 
-// The picker of `choice` (`aiModelPicker`, calling `onPick`) and, when the
-// pick wouldn't work, why, for `feature` (`aiMissingHint`), as a hint -- not
-// for a plain "pick a model", which the picker says itself: `{ picker, hint }`,
-// `hint` null without one.
-export function aiPickerWithHint(choice, onPick, feature) {
-  const picker = aiModelPicker(choice, onPick);
+// The picker of `choice` (`aiModelPicker`, calling `onPick`, as a `box`
+// with its `focusKey`) and, when the pick wouldn't work, why, for `feature`
+// (`aiMissingHint`): `{ picker, hint }`, `hint` null without one. Beside a
+// box the hint is red, a plain "pick a model" too; beside a tool there is
+// none for a plain "pick a model", which the tool says itself.
+export function aiPickerWithHint(choice, onPick, feature, { box = false, focusKey } = {}) {
+  const picker = aiModelPicker(choice, onPick, { box, focusKey });
   const ai = aiModelOf(choice);
   const plainPick = ai.problem === 'pick' && aiAnyOffered();
-  const hint = ai.problem && !plainPick ? notice('hint', ...aiMissingHint(ai, feature)) : null;
+  if (!ai.problem || (plainPick && !box)) return { picker, hint: null };
+  const hint = notice('hint', ...aiMissingHint(ai, feature));
+  if (box) hint.classList.add('ai-missing');
   return { picker, hint };
 }
 
-// The picker of a feature's model: a button naming the model `choice` picks
+// The picker of a feature's model: a tool naming the model `choice` picks
 // (the provider in its title), or "Pick a model", marked while the pick has
-// a problem (`aiModelOf`). A click opens the menu of the models every AI
-// account offers, by account; picking one calls `onPick({ account, model })`.
-// Fills `button` (one the page keeps, as the assistant's head does), or a
-// new one.
-export function aiModelPicker(choice, onPick, button = accEl('button')) {
+// a problem (`aiModelOf`); as a `box`, a drop-down box of a form's row. A
+// click opens the menu of the models every AI account offers, by account;
+// picking one calls `onPick({ account, model })`. Fills `button` (one the
+// page keeps, as the assistant's head does), or a new one; `focusKey` finds
+// it again when the page draws it anew (`keepingFocus`).
+export function aiModelPicker(choice, onPick, { button = accEl('button'), box = false, focusKey } = {}) {
   const ai = aiModelOf(choice);
-  button.type = 'button';
-  button.className = 'tool ai-pick';
-  button.replaceChildren(accEl('span', 'ai-pick__name', choice?.model ?? t('models.pick')),
-    accEl('span', '', '\u2304'));
+  const name = choice?.model ?? t('models.pick');
+  if (box) {
+    dropBox(button, name);
+  } else {
+    button.type = 'button';
+    button.className = 'tool ai-pick';
+    button.setAttribute('aria-haspopup', 'menu');
+    button.replaceChildren(accEl('span', 'ai-pick__name', name), accEl('span', '', '\u2304'));
+  }
+  if (focusKey) button.dataset.focusKey = focusKey;
   if (ai.problem) button.setAttribute('aria-invalid', 'true');
   else button.removeAttribute('aria-invalid');
   button.title = ai.account ? t('models.change', { name: aiTitle(ai.account.kind, ai.account) }) : t('models.pick');

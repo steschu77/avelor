@@ -321,6 +321,11 @@
   color: var(--c-danger-ink);
 }
 
+/* what keeps a pick beside a box from working, in red */
+.notice.ai-missing {
+  color: var(--c-danger-ink);
+}
+
 .ai-sends {
   padding-top: 8px;
   display: grid;
