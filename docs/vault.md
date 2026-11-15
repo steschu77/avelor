@@ -234,9 +234,17 @@ and everything else kept verbatim.
 * `starred`: boolean,
 * `archived`: boolean,
 * `tags`: [string],
-* `linked-to`: Entity ID.
+* `linked-to`: Entity ID,
+* `classification`: string, which models may read it.
 
 `tags` are the labels the user sees.
+
+`classification` says which AI models may read the entity: `open` any,
+`masked` and `local` only one on this PC, `sealed` none; a value the app
+doesn't know counts as `sealed`. An entity's own wins; without one, the
+stricter of its kind's and the vault's default (`open`) applies, in the
+order open, masked, local, sealed: a bank account and its statements are
+`masked` by their kind.
 
 `starred` marks a favorite. It is only written as `starred: true`; a
 missing key means not starred.

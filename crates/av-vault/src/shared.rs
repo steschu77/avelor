@@ -221,9 +221,108 @@ impl<'de> Deserialize<'de> for DocType {
     }
 }
 
+// ----------------------------------------------------------------------------
+/// Which models may read an entity (vault.md#metadata): `open` any,
+/// `local` and `masked` one on this PC only, `sealed` none. A
+/// value the app doesn't know is kept, and reaches as little as
+/// `sealed`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Classification {
+    Open,
+    Masked,
+    Local,
+    Sealed,
+    Other(String),
+}
+
+// ----------------------------------------------------------------------------
+const CLASSIFICATIONS: [(&str, Classification); 4] = [
+    ("open", Classification::Open),
+    ("masked", Classification::Masked),
+    ("local", Classification::Local),
+    ("sealed", Classification::Sealed),
+];
+
+// ----------------------------------------------------------------------------
+impl Classification {
+    /// A known value (case-insensitive), or `Other`.
+    pub fn parse(s: &str) -> Classification {
+        CLASSIFICATIONS
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(s))
+            .map(|(_, class)| class.clone())
+            .unwrap_or_else(|| Classification::Other(s.to_string()))
+    }
+
+    /// The value as written to disk.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Classification::Other(s) => s,
+            known => CLASSIFICATIONS
+                .iter()
+                .find(|(_, class)| class == known)
+                .map(|(name, _)| *name)
+                .unwrap_or_default(),
+        }
+    }
+
+    /// How little it lets reach a model: `open` 0, `masked` 1 (a cloud
+    /// model gets placeholders), `local` 2 (a local model only),
+    /// `sealed` and anything unknown 3 (none). The stricter of two
+    /// wins where both apply.
+    pub fn rank(&self) -> u8 {
+        match self {
+            Classification::Open => 0,
+            Classification::Masked => 1,
+            Classification::Local => 2,
+            Classification::Sealed | Classification::Other(_) => 3,
+        }
+    }
+
+    /// The stricter of `self` and `other`.
+    pub fn stricter(self, other: Classification) -> Classification {
+        if other.rank() > self.rank() {
+            other
+        } else {
+            self
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl Serialize for Classification {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl<'de> Deserialize<'de> for Classification {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(Classification::parse(&s))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_classification_keeps_what_it_doesnt_know_and_ranks_it_strictest() {
+        assert_eq!(Classification::parse("MASKED"), Classification::Masked);
+        let secret = Classification::parse("secret");
+        assert_eq!(secret.as_str(), "secret");
+        assert_eq!(secret.rank(), Classification::Sealed.rank());
+        assert_eq!(
+            Classification::Open.stricter(Classification::Masked),
+            Classification::Masked
+        );
+        assert_eq!(
+            Classification::Local.stricter(Classification::Masked),
+            Classification::Local
+        );
+    }
 
     #[test]
     fn contact_ref_round_trips_id() {
