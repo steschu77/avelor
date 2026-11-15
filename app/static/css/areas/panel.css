@@ -332,6 +332,17 @@
   color: var(--c-danger-ink);
 }
 
+/* one that runs out before a trip its holder travels on ends (the trip's
+   ID documents check): the warning for its icon, the trip and the task to renew
+   it named, Open at its end */
+.id-document--gap>.icon {
+  color: var(--c-danger-ink);
+}
+
+.id-document__gap {
+  color: var(--c-ink);
+}
+
 /* its fields under it, a label over each, then Link..., Remove and Done */
 .id-document__form {
   display: grid;

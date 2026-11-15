@@ -689,10 +689,21 @@ it (`vault.md#project`), each with what acts on it:
   ("Zones differ in Frankfurt"), which open the part that leaves.
 - **Tickets** (`tickets`): an event with a `booking` but no document
   linked to it or from it (a confirmation, a ticket), which a click opens.
+- **ID documents** (`id-documents`): a traveler's ID document (`#id-documents`) that
+  runs out before the trip's last day, or while its days are open before
+  its sketch's window ends ("Maya Yahnek's passport runs out 07/12/2027,
+  before the trip ends"), which a click opens on the holder's card, its
+  row saying so too (`#id-documents`); or the open task the document
+  links to, named instead ("Renew Maya's passport"). The Travelers fact's
+  chips say it too: a check where a traveler's documents all hold, a
+  warning where one runs out first, each document in the chip's tooltip
+  ("Passport, to 04/30/2031"). Whether a trip needs a passport at all, and
+  how long past the stay, the entry rules say later (X17).
 
 How far it is: its nights covered by a stay or a leg that runs over them,
-and its legs booked, missing ones counted ("nights 9 of 10 · ways 2 of 3
-booked"). While the days are open nothing is missing yet; Missing says what
+its legs booked, missing ones counted, and of the travelers with ID
+documents those whose documents all hold ("nights 9 of 10 · ways 2 of 3
+booked · ID documents 1 of 2"). While the days are open nothing is missing yet; Missing says what
 the sketch will need ("Once the days are fixed: about 5 nights to cover, 3
 ways to find.").
 
@@ -919,7 +930,13 @@ kind's icon and the kind ("Passport", `idDocumentKind`,
 - what it is linked to, a chip each that selects it, x unlinking it;
 - at its end the expiry ("to 09/02/2027", "ran out" after it), under it
   "runs out in 30 days" once 90 days are left (`idDocumentState`), else
-  when it was issued.
+  when it was issued;
+- one that runs out before a trip its holder travels on ends (a trip not
+  over whose `id-documents` check finds it, `#route-gaps`; `tripsShortOf`,
+  `model/trip.js`): the warning for its icon, the soonest trip and the
+  task it links to ("Runs out before Summer with Oma 2027 ends 07/18/2027
+  · Renew Maya's passport, due 03/15/2027"), and at its end Open, which
+  selects the task, else the trip.
 
 While the host can write the contact a click on a row opens its fields
 under it, another closes them: the kind (the app's offered as it is

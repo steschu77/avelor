@@ -14,6 +14,7 @@ import { $, accEl, oncePerFrame } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
 import { DATE_FORMAT, amountText } from '../core/format.js';
 import { t } from '../core/text.js';
+import { idDocumentOf, idDocumentState } from '../model/id-documents.js';
 import { store } from '../model/state.js';
 import { projects } from '../model/entities.js';
 import { checksOf, factsOf, hasBlueprint, membersOf } from '../model/blueprint.js';
@@ -106,14 +107,15 @@ function renderBlueprint({ id, project, writable }) {
 }
 
 // How far the project is, a part per check.
-function progressText({ nights, ways, documents, payments, budget, steps }) {
+function progressText({ nights, ways, 'id-documents': idDocuments, documents, payments, budget, steps }) {
   return [
-    nights && `nights ${nights[0]} of ${nights[1]}`,
-    ways && `ways ${ways[0]} of ${ways[1]} booked`,
-    documents && `documents ${documents[0]} of ${documents[1]}`,
-    payments && `payments ${payments[0]} of ${payments[1]}`,
-    steps && `steps ${steps[0]} of ${steps[1]}`,
-    budget && `${amountText(budget.spent)} of ${amountText(budget.budget)}`,
+    nights && t('bp.progress.nights', { at: nights[0], n: nights[1] }),
+    ways && t('bp.progress.ways', { at: ways[0], n: ways[1] }),
+    idDocuments && t('bp.progress.id_documents', { at: idDocuments[0], n: idDocuments[1] }),
+    documents && t('bp.progress.documents', { at: documents[0], n: documents[1] }),
+    payments && t('bp.progress.payments', { at: payments[0], n: payments[1] }),
+    steps && t('bp.progress.steps', { at: steps[0], n: steps[1] }),
+    budget && t('count.of_total', { at: amountText(budget.spent), n: amountText(budget.budget) }),
   ].filter(Boolean).join(' \u00b7 ');
 }
 
@@ -171,7 +173,9 @@ function gapRow(gap, ctx) {
     { gap: true, rule: t('bp.rule.deadlines'), open: () => selectDocument(doc.doc_id) });
 }
 
-const TRIP_RULES = { nights: t('props.nights'), ways: t('bp.rule.ways'), tickets: t('bp.rule.tickets') };
+const TRIP_RULES = {
+  nights: t('props.nights'), ways: t('bp.rule.ways'), tickets: t('bp.rule.tickets'), 'id-documents': t('bp.rule.id_documents'),
+};
 
 // A gap of a trip (`tripGaps`, model/trip.js): nights or a way missing,
 // with Add, the menu that fills it (`fillGap`); else what it is about a
@@ -211,6 +215,15 @@ function tripGapRow(gap, { id }) {
     }
     case 'ticket':
       return itemEl(WARNING, t('bp.no_ticket', { name: name(gap.doc) }), t('bp.booking_ref', { reference: gap.doc.event.booking }), opens(gap.doc));
+    case 'id-document': {
+      const { holder, item, task } = gap;
+      const what = idDocumentOf(item.kind, holder.title || t('untitled'));
+      if (task) {
+        const due = !isNaN(task.due) && task.due ? t('timeline.due', { day: dayText(task.due) }) : null;
+        return itemEl(KIND_ICONS.task.icon, name(task), [t('bp.for', { what }), due].filter(Boolean).join(' \u00b7 '), opens(task));
+      }
+      return itemEl(WARNING, t('bp.runs_out', { what, date: DATE_FORMAT.format(idDocumentState(item).expiry) }), null, opens(holder));
+    }
     default:
       return itemEl(WARNING, name(gap.doc), t('bp.outside_days', { day: dayText(gap.doc.date) }), opens(gap.doc));
   }

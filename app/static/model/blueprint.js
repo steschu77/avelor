@@ -12,8 +12,8 @@ import { tripGaps } from './trip.js';
 
 export const BLUEPRINTS = JSON.parse($('blueprints')?.textContent || '[]');
 
-// The checks a trip's route answers (`tripGaps`).
-const TRIP_CHECKS = ['nights', 'ways', 'tickets'];
+// The checks a trip's route and its travelers' ID documents answer (`tripGaps`).
+const TRIP_CHECKS = ['nights', 'ways', 'tickets', 'id-documents'];
 
 // The shipped blueprint `name`, if there is one.
 export function blueprintOf(name) {
@@ -109,15 +109,16 @@ const byDay = day => item => day(item)?.getTime() ?? Infinity;
 
 // What the checks of the project `id` (its block `project`) find on `today`:
 // - `missing`: the gaps by their `rule` -- a trip's `nights`, `ways` and
-//   `tickets` first, in the order of its route (`tripGaps`, model/trip.js);
+//   `tickets` first, in the order of its route, then its `id-documents`
+//   (`tripGaps`, model/trip.js);
 //   `documents`, an expected one not met or too old (`expected`, its
 //   `index` for Find, `stale`); `payments`, one past its day not paid
 //   (`payment`, `due`); `budget`, spent beyond it (`spent`, `budget`);
 //   `deadlines`, an open task past its due day (`doc`);
 // - `next`: the open tasks by their due days, those without one last, then
 //   the payments awaited by their days, `{ doc }` or `{ payment, due }`;
-// - `progress`: how far it is, by check: a trip's `nights` covered and
-//   `ways` booked, `documents` and `payments` as `[met, all]`, `budget` as
+// - `progress`: how far it is, by check: a trip's `nights` covered,
+//   `ways` booked and travelers whose `id-documents` hold, `documents` and `payments` as `[met, all]`, `budget` as
 //   `{ spent, budget }`, `steps` as `[done, all]`;
 // - `later`: while a trip's days are open, what its sketch will need.
 export function checksOf(id, project, today = dayStart(new Date())) {
@@ -127,7 +128,7 @@ export function checksOf(id, project, today = dayStart(new Date())) {
   const trip = TRIP_CHECKS.some(check => checks.has(check)) ? tripGaps(id, project) : null;
   if (trip) {
     missing.push(...trip.gaps.filter(gap => checks.has(gap.rule)));
-    for (const check of ['nights', 'ways']) {
+    for (const check of ['nights', 'ways', 'id-documents']) {
       if (checks.has(check) && trip.progress[check]?.[1]) progress[check] = trip.progress[check];
     }
   }
