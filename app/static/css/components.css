@@ -242,6 +242,34 @@ mark {
   color: var(--c-ink-mute);
 }
 
+/* a list of texts as a field (ui/text-list.js): a contact's emails, a
+   list's items; an item's x shows where the pointer or the focus is. It
+   takes its row, each item's text as wide as the row, + Add as its own */
+.text-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.text-list__item {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.text-list__remove {
+  opacity: 0;
+}
+
+.text-list__item:hover .text-list__remove,
+.text-list__item:focus-within .text-list__remove {
+  opacity: 1;
+}
+
 /* a recurring payment's fields, on its card and in New recurring payment
    (features/panel/details.js, features/recurring-payment-new.js): the schedule, its
    period then its day; an amount typed in */

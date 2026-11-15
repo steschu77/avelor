@@ -446,10 +446,11 @@ pub fn reload_entity(app: &mut App, req: Req, id: Id) {
 mod tests {
     use crate::testing::parse;
     use crate::testing::trashed;
-    use crate::testing::{Harness, notes, shape, shown, undoes};
+    use crate::testing::{Harness, notes, reply, shape, shown, undoes};
     use av_utils::error::Error;
     use av_utils::id::Id;
     use av_vault::vault::SaveOutcome;
+    use serde_json::Value;
     use serde_json::json;
     use std::fs;
 
@@ -975,6 +976,47 @@ Body
         let sent = h.call("undo", json!({}));
         let notice = sent.iter().find(|m| m["ev"] == "notice").unwrap();
         assert_eq!(shown(&notice["data"]["text"]), "Undone: Changed 2 items");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_contacts_fields_are_written_by_their_paths() {
+        let (mut h, _) = notes("edit-contact", 1);
+        let new = json!({ "roles": { "contact": { "type": "person" } }, "title": "Ann" });
+        let sent = h.call("create_entity", new);
+        let id = reply(&sent)["ok"]["id"].as_str().unwrap().to_string();
+        let mut edit = |fields: Value| {
+            let sent = h.call(
+                "edit_entities",
+                json!({ "ids": [id], "change": { "fields": fields } }),
+            );
+            assert_eq!(reply(&sent)["ok"]["changed"], json!([id]), "{sent:?}");
+            sent[0]["data"]["contact"].clone()
+        };
+        let emails = json!(["ann@example.com", "ann@work.example"]);
+        let contact = edit(json!({ "contact.email": emails, "contact.type": "org" }));
+        assert_eq!(contact["email"], emails);
+        assert_eq!(contact["type"], "org");
+        let contact = edit(json!({ "contact.birthday": "1990-05-01", "contact.iban": "DE00123" }));
+        assert_eq!(
+            (&contact["birthday"], &contact["iban"]),
+            (&json!("1990-05-01"), &json!("DE00123"))
+        );
+        let contact = edit(json!({ "contact.email": null }));
+        assert!(contact.get("email").is_none(), "{contact}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_lists_items_are_written_whole() {
+        let (mut h, _) = notes("edit-list", 1);
+        let new = json!({ "roles": { "list": { "items": ["Passport"] } }, "title": "Packing" });
+        let sent = h.call("create_entity", new);
+        let id = reply(&sent)["ok"]["id"].as_str().unwrap().to_string();
+        let items = json!(["Passport", "Charger"]);
+        let change = json!({ "fields": { "list.items": items } });
+        let sent = h.call("edit_entities", json!({ "ids": [id], "change": change }));
+        assert_eq!(sent[0]["data"]["list"]["items"], items);
     }
 
     // ------------------------------------------------------------------------

@@ -26,8 +26,10 @@ import { editField, fieldInput } from '../../ui/field.js';
 import { fileIcon, iconEl } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
+import { textListField } from '../../ui/text-list.js';
 import { CLASSIFICATIONS } from '../workspace/models.js';
 import { openOriginal, selectById } from '../selection.js';
+import { contactFields } from './contact-fields.js';
 import { plainEventFields, statusField } from './event-fields.js';
 import { eventScheduleField, scheduleField, scheduleText } from './schedule-field.js';
 import { eventTypeField, meetsField, tripFields } from './trip-fields.js';
@@ -47,19 +49,22 @@ export function dueTag(text) {
 }
 
 // ----------------------------------------------------------------------------
-// What a card shows of its entity (features/panel/panel.js): `row`, a `.props`
-// grid, filled with its kinds' rows in this order: an event's (`eventFields`,
-// `occurrence`'s times on a day card), a task's (`taskFields`, or `taskText`
-// while the host can't write it), an email's (`emailFields`), its date (any
-// entity's but an event's, whose start it is: `dateField`), a document's type
-// and the file it stands for (`originalField`), a bank account's
-// (`bankAccountFields`), a statement's (`statementFields`), a recurring
-// payment's (`recurringPaymentFields`), a record's own fields
-// (`recordFields`), and which models may read it (`classificationField`). A
-// task's fields, the date, a document's type, an event's Work, a record's
-// fields and the classification are editable while the host can write the
-// entity (`taskFields`, `docTypeField`, `workField`). Rows without a value are
-// left out; hidden for an entity with none of them.
+// What a card shows of its entity (features/panel/panel.js): `row`, a
+// `.props` grid, filled with its kinds' rows in this order: an event's
+// (`eventFields`, `occurrence`'s times on a day card), a task's
+// (`taskFields`, or `taskText` while the host can't write it), an email's
+// (`emailFields`), a message's (`messageFields`), its date (any entity's but an event's, whose start it
+// is: `dateField`), a document's author, type and the file it stands for
+// (`originalField`), a contact's (`contactFields`), a list's items
+// (`listFields`), a bank account's (`bankAccountFields`), a
+// statement's (`statementFields`), a recurring payment's
+// (`recurringPaymentFields`), a record's own fields (`recordFields`), and
+// which models may read it (`classificationField`). A task's fields, the
+// date, a document's author and type, a message's sender and recipient, an
+// event's Work, a record's fields and the classification are editable while
+// the host can write the entity (`taskFields`, `contactField`, `docTypeField`,
+// `workField`). Rows without a value are left
+// out; hidden for an entity with none of them.
 //
 // Drawn again on every entity change: while one of its fields has the focus,
 // that waits until the block is left, so what is typed stays (as a title
@@ -79,10 +84,15 @@ export function renderCardDetails(row, doc, occurrence = null) {
     if (doc?.task && doc.writable) taskFields(doc, add);
     else if (doc?.task) taskText(doc, add);
     if (doc?.email) emailFields(doc, add);
+    if (doc?.message && !doc.email) messageFields(doc, add);
     if (doc && !doc.event && !isNaN(doc.date)) add(t('props.date'), doc.writable ? dateField(doc) : DATE_FORMAT.format(doc.date));
+    if (doc?.kind === 'document' && doc.writable) add(t('props.author'), authorField(doc));
+    else if (doc?.kind === 'document' && doc.document?.author) add(t('props.author'), contactChip(doc.document.author));
     if (doc?.kind === 'document' && doc.writable) add(t('props.type'), docTypeField(doc));
     else if (doc?.kind === 'document' && doc.type) add(t('props.type'), doc.type);
     if (doc?.document?.original) add(t('props.file'), ...originalField(doc));
+    if (doc?.contact) contactFields(doc, add);
+    if (doc?.list) listFields(doc, add);
     if (doc?.['bank-account']) bankAccountFields(doc, add);
     if (doc?.statement) statementFields(doc, add);
     if (doc?.['recurring-payment']) recurringPaymentFields(doc, add);
@@ -261,11 +271,7 @@ function taskFields(doc, add) {
     }
     add(t('props.due'), ...dueParts);
 
-    const name = task.assignee ? parseContact(task.assignee).name : '';
-    const assignee = fieldInput('text', 'assignee', name, 'form-input');
-    assignee.placeholder = t('task.nobody');
-    editField(assignee, value => edit({ assignee: value.trim() || null }));
-    add(t('props.assignee'), assignee);
+    add(t('props.assignee'), contactField('assignee', task.assignee, t('task.nobody'), assignee => edit({ assignee })));
 
     if (!isNaN(doc.done)) add(t('props.done'), DATE_FORMAT.format(doc.done));
 }
@@ -293,6 +299,25 @@ function dateField(doc) {
     editField(input, day => {
         if (day) editEntityLocal(doc.doc_id, { date: doc.all_day || !doc.date ? day : sameTimeOn(day, doc.date) });
     });
+    return input;
+}
+
+// ----------------------------------------------------------------------------
+// A document's author (`document.author`, vault.md#document), a name until
+// the vault's contacts are picked there.
+function authorField(doc) {
+    return contactField('author', doc.document?.author, t('contact.unknown'),
+        author => setFieldsLocal(doc.doc_id, { 'document.author': author }));
+}
+
+// A contact typed in (a ContactRef, vault.md#shared-types), `key` its
+// focus key: a contact of the vault (`@id`) shows its name and stays the
+// contact until the text is changed; `write(ref)` with the text, null for
+// none.
+function contactField(key, ref, placeholder, write) {
+    const input = fieldInput('text', key, ref ? parseContact(ref).name : '', 'form-input');
+    input.placeholder = placeholder;
+    editField(input, value => write(value.trim() || null));
     return input;
 }
 
@@ -326,6 +351,21 @@ function emailFields(doc, add) {
         if (email[key]?.length) asItCame(add(label, ...email[key].map(contactChip)));
     }
     if (email.subject) asItCame(add(t('props.subject'), email.subject));
+}
+
+// ----------------------------------------------------------------------------
+// The sender and recipient of a message that isn't a mail (vault.md#message:
+// a letter, a document in a thread), as a document's author: typed in while
+// the host can write it, else as chips.
+const MESSAGE_PEOPLE = [['sender', t('props.from')], ['recipient', t('props.to')]];
+
+function messageFields(doc, add) {
+    for (const [key, label] of MESSAGE_PEOPLE) {
+        const ref = doc.message[key];
+        const write = value => setFieldsLocal(doc.doc_id, { [`message.${key}`]: value });
+        if (doc.writable) add(label, contactField(key, ref, t('contact.unknown'), write));
+        else if (ref) add(label, contactChip(ref));
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -475,6 +515,20 @@ function classificationField(doc) {
 }
 
 // ----------------------------------------------------------------------------
+// A list's items (vault.md#list): while the host can write it, a list of
+// texts (ui/text-list.js) written whole through `edit_entities`' `fields`
+// (`list.items`); else one under the other.
+function listFields(doc, add) {
+    const items = doc.list.items ?? [];
+    if (!doc.writable) {
+        if (items.length) add(t('list.items'), accEl('span', 'text-list', ...items.map(item => accEl('span', '', item))));
+        return;
+    }
+    const write = values => setFieldsLocal(doc.doc_id, { 'list.items': values.length ? values : null });
+    add(t('list.items'), textListField(items, 'list-item', write, { placeholder: t('list.item') }));
+}
+
+// ----------------------------------------------------------------------------
 // A bank account's bank, number, balance and holder.
 function bankAccountFields(doc, add) {
     const account = doc['bank-account'];
@@ -536,10 +590,7 @@ function recurringPaymentFields(doc, add) {
             for (const key of Object.keys(next)) if (next[key] == null) delete next[key];
             setRecurringPaymentLocal(id, next);
         };
-        const party = fieldInput('text', 'party', recurring.party ? parseContact(recurring.party).name : '', 'form-input');
-        party.placeholder = t('recurring.party_placeholder');
-        editField(party, value => write({ party: value.trim() || null }));
-        add(t('props.party'), party);
+        add(t('props.party'), contactField('party', recurring.party, t('recurring.party_placeholder'), party => write({ party })));
 
         if (schedule) {
             const from = parseDate(recurring.from) ?? new Date();

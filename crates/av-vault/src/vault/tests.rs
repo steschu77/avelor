@@ -8,6 +8,7 @@ use crate::envelope::{Bare, Project, Roles};
 use crate::schema::layout;
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
+use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime};
 
 fn fixture_vault() -> (PathBuf, Id, Id, Id, Id, Id, Id) {
@@ -524,6 +525,34 @@ fn create_new(index: &mut Index, new: NewEntity) -> (Id, PathBuf, String) {
 /// The roles of `yaml`, a frontmatter fragment.
 fn roles(yaml: &str) -> Roles {
     serde_yaml_ng::from_str(yaml).unwrap()
+}
+
+#[test]
+fn a_new_record_comes_with_its_own_fields_but_not_the_core() {
+    let (root, _) = thread_vault();
+    let mut index = Index::build(&root);
+    let fields: BTreeMap<String, serde_yaml_ng::Value> =
+        serde_yaml_ng::from_str("{plate: HH-AB 12, seats: 5}").unwrap();
+    let new = NewEntity {
+        roles: roles("record: {}"),
+        title: "Car".into(),
+        fields: fields.clone(),
+        ..NewEntity::default()
+    };
+    let (_, _, text) = create_new(&mut index, new);
+    assert!(
+        text.contains("plate: HH-AB 12") && text.contains("seats: 5"),
+        "{text}"
+    );
+
+    let core = NewEntity {
+        roles: roles("record: {}"),
+        title: "Car".into(),
+        fields: serde_yaml_ng::from_str("{title: Other}").unwrap(),
+        ..NewEntity::default()
+    };
+    let refused = index.create_new(core, &mut Changes::default());
+    assert!(matches!(refused, Err(Error::InvalidArgument { .. })));
 }
 
 #[test]

@@ -461,7 +461,7 @@ result as an envelope before it writes, and the id, title, date, labels,
 projects, link, flags and source stay (`edit_entities`' `fields`,
 `api.md`).
 
-### List
+### List <a id="list"></a>
 
 Block: `list:`
 
@@ -469,12 +469,13 @@ A list is a pure YAML file with the following additional fields:
 
 * `items`: [string].
 
-### Contact
+### Contact <a id="contact"></a>
 
 Block: `contact:`
 
 A contact is a markdown file with the following additional fields:
 
+* `type`: `person` or `org`,
 * `email`: [string],
 * `phone`: [string],
 * `address`: [string],

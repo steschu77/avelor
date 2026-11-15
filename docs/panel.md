@@ -65,9 +65,16 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   due date as seen from today (tagged when overdue), its assignee and when
   it was done (`task.done`), for an email its sender, followed by its type
   when the email analysis found one ("Stadtwerke · notification",
-  `email.md#analysis`), for any entity but an event (whose start it is)
-  its date, for a document its type and the file it stands for, with Open (`vault.md#document`), for a bank account its bank,
-  number, balance and holder, for a statement its account, its transactions
+  `email.md#analysis`), whom it went to (To, Cc, Bcc) and its subject as
+  it came where the analysis gave it another title, read only, each row's
+  label saying so, for another message (a letter, a document in a thread)
+  its sender and recipient, for any
+  entity but an event (whose start it is) its date, for a document its
+  author, its type and the file it stands for, with Open
+  (`vault.md#document`), for a bank account its bank,
+  number, balance and holder, for a contact its type, emails, phones,
+  addresses, birthday and IBAN, for a list its items, for a statement its
+  account, its transactions
   (and how many are pending) and the balance it ends with
   (`vault.md#statement`), for a recurring payment its fields
   (`panel.md#a-recurring-card`), for a record its own fields, a row each by
@@ -78,10 +85,14 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   type", and the vault's, "Open · the vault's"; a menu sets its own or none,
   `vault.md#metadata`; `renderCardDetails`,
   `features/panel/details.js`). A task's fields, a document's type, a
-  trip event's fields, an event's Work, a recurring payment's fields, a
+  trip event's fields, a plain event's times, where, status and schedule,
+  an event's Work, a recurring payment's fields, a
   record's fields and the classification are editable in place while the
   host can write the entity (`panel.md#field-edits`), the last two
-  through `edit_entities`' `fields`; the rest is read-only;
+  through `edit_entities`' `fields`; the rest is read-only. An event of a
+  calendar read-only in Google (`calendar.md#two-way-sync`,
+  `googleLocked`) shows what it syncs as text, its title without the pen,
+  and neither Edit nor Delete, whose tooltip says why;
 - the blocks other modules add (`registerCardBlock`): after the head or
   after the details, each filled for the card's entity, hidden on a card
   it has nothing for, and refreshed with the chips (a recurring payment's
@@ -911,8 +922,50 @@ one shows them as text:
   typed in (`dateField`), a scan's or a mail's wrong date corrected; a
   time of day it has is kept. Through `edit_entities`' `{date}`; as text
   while the host can't write the entity.
+- **Author** (a document, `document.author`): typed in as the Assignee
+  is (`contactField`), "Unknown" while there is none; through
+  `edit_entities`' `{fields}`; a chip while the host can't write it.
+- **From** and **To** (a message that isn't a mail, a letter or a
+  document in a thread: `message.sender`, `message.recipient`): as the
+  Author, each through `edit_entities`' `{fields}`, into the message block
+  it has; a document outside a thread has none.
 - **Type** (a document): typed in, with the types the vault's documents
   use offered (`#type-list`); empty removes it. The card's icon follows.
+- **A contact's fields** (`contactFields`,
+  `features/panel/contact-fields.js`, `vault.md#contact`): Type, Person
+  or Organization; Email, Phone and Address, each a list (`textListField`,
+  `ui/text-list.js`: each typed in, Enter adding an empty one after it,
+  Backspace in an empty one removing it, x removing one, + Add one at the
+  end), written whole, empty ones left out; Birthday, a day; IBAN, its
+  spaces dropped and in capitals, + Add while empty. Through `edit_entities`' `fields`
+  (`contact.email`, ...), an empty value removing its key.
+- **A list's items** (`listFields`, `vault.md#list`): a list of texts as a
+  contact's emails are, written whole as `list.items`.
+- **An event's Type** (`eventTypeField`, `features/panel/trip-fields.js`):
+  Event, or a trip's Journey, Stay, Activity or Layover, segmented; a
+  trip's kind turns a plain event's card to its trip fields
+  (`#trip-fields`), Event back (`type` removed; an event in a trip still
+  shows them). The vault's own field, so also where Google keeps the event
+  as it is.
+- **A plain event's times, where and status** (one that isn't a trip's
+  event, `#trip-fields`, nor a recurring one; `plainEventFields`,
+  `features/panel/event-fields.js`): Starts and Ends, each a day, a time
+  and its zone as a trip's are (`#trip-fields`): an empty start time makes
+  it an all-day event, the end then its last day, a time typed into it a
+  timed one of an hour; a new start keeps how long it takes. All day, a
+  check on a line of its own above Starts, does the same: checked its
+  first day only, unchecked 9:00 to 10:00 on it. Where, typed
+  in, empty removing it. Status, Confirmed or Tentative (`statusField`); a
+  cancelled one shows it as text. Schedule (`eventScheduleField`,
+  `features/panel/schedule-field.js`): Once, or every Day, Week (then its
+  days, any of them), Month or Year on the start's date, ending never,
+  Until a day typed in or after a number of Times; a timed one repeats in
+  its zone (`tz`, this PC's if it had none), and a schedule the field
+  doesn't write (an interval, a month's weekday) shows in words. A
+  recurring event's times are its first occurrence's and move them all; on
+  a day card the occurrence's own When stays above them. Each writes by
+  itself through `edit_entities`, an end before its start refused
+  (`api.md#structure`).
 - **Work** (an event in a work calendar, one whose `work-of` names whose
   it is, `vault.md#calendar`; set on the Accounts page,
   `accounts.md#accounts-page`): Off or Remote, segmented buttons

@@ -652,6 +652,50 @@ mod tests {
     }
 
     #[test]
+    fn a_messages_sender_and_recipient_are_set_by_path() {
+        let thread = "01a0e1cc-a24c-7490-82fe-e75669985b42";
+        let mut letter = entity(&format!(
+            "title: Pickup\nmessage:\n  threads: [{thread}]\n  sender: Office\n  recipient: Jane\n"
+        ));
+        let change = fields("message.sender: City Hall\nmessage.recipient: null\n");
+        assert!(change.fits(&letter));
+        change.apply(&mut letter, date(NOW));
+        let message = letter.roles().message.clone().unwrap();
+        assert_eq!(message.sender, Some(ContactRef::parse("City Hall")));
+        assert_eq!((message.recipient, message.threads.len()), (None, 1));
+
+        let mut alone = entity("title: Note\nmessage:\n  sender: Office\n");
+        fields("message.sender: null").apply(&mut alone, date(NOW));
+        assert_eq!(alone.kind(), DocumentType::Message, "still a letter");
+
+        let mut in_thread = entity(&format!(
+            "title: D\ndocument: {{}}\nmessage:\n  threads: [{thread}]\n"
+        ));
+        let change = fields("message.sender: Office");
+        assert!(change.fits(&in_thread), "a document in a thread");
+        change.apply(&mut in_thread, date(NOW));
+        let sender = in_thread.roles().message.as_ref().unwrap().sender.clone();
+        assert_eq!(sender, Some(ContactRef::parse("Office")));
+
+        let mail =
+            format!("title: M\nemail:\n  from: a@example.com\nmessage:\n  threads: [{thread}]\n");
+        for (yaml, change) in [
+            (
+                &format!("title: L\nmessage:\n  threads: [{thread}]\n"),
+                "message.threads: []",
+            ),
+            (
+                &format!("title: L\nmessage:\n  threads: [{thread}]\n"),
+                "message: {sender: X}",
+            ),
+            (&"title: D\ndocument: {}\n".to_string(), "message.sender: X"),
+            (&mail, "message.recipient: X"),
+        ] {
+            assert!(!fields(change).fits(&entity(yaml)), "{change} on {yaml}");
+        }
+    }
+
+    #[test]
     fn fields_dont_reach_what_has_its_own_command_or_doesnt_read() {
         let doc = entity("title: T\nmessage:\n  threads: []\nevent:\n  start: 2026-01-01\n");
         for change in [

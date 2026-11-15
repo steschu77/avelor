@@ -141,59 +141,6 @@ fn a_sync_is_refused_before_any_job() {
 
 // ------------------------------------------------------------------------
 #[test]
-fn googles_kind_of_event_is_kept_and_a_kept_one_locked() {
-    let mut h = with_google("calendar-kinds", FULL, &[calendar_file(), event_file()]);
-    let id = Id::parse(EV).unwrap();
-    let entry = h.app.vault.index().entry(&id).unwrap();
-    let path = entry.local.clone();
-    let planned = calendar_sync::snapshot(&payload_of(&entry.doc));
-    let set_remote = |h: &mut Harness, kind: Option<&str>| {
-        let job_id = begin(h, HashMap::from([(path.clone(), (id, planned.clone()))]));
-        let remote = GoogleEvent {
-            event_type: kind.map(str::to_string),
-            ..google_event()
-        };
-        let output = SyncOutput {
-            effects: vec![Effect::SetRemote {
-                path: path.clone(),
-                remote_event_id: "abc".into(),
-                etag: Some("\"2\"".into()),
-                snapshot: planned.clone(),
-                remote_calendar_id: "cal1".into(),
-                remote: Box::new(remote),
-            }],
-            report: Report::default(),
-        };
-        apply(&mut h.app, job_id, Ok(output));
-        h.run_queue();
-        h.take();
-        fs::read_to_string(h.vault().join(&path)).unwrap()
-    };
-    let text = set_remote(&mut h, Some("birthday"));
-    assert!(text.contains("event-type: birthday"), "{text}");
-
-    let change = json!({ "event": { "location": "Room 2" } });
-    let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
-    assert_eq!(
-        reply(&sent)["ok"]["skipped"][0]["reason"],
-        "read_only_in_google"
-    );
-    let sent = h.call("delete_entity", json!({ "id": EV }));
-    assert_eq!(reply(&sent)["err"]["code"], "not_writable");
-    let sent = h.call("set_labels", json!({ "id": EV, "labels": ["family"] }));
-    assert!(reply(&sent).get("ok").is_some(), "{sent:?}");
-
-    let text = set_remote(&mut h, Some("default"));
-    assert!(
-        !text.contains("event-type"),
-        "a plain one records none: {text}"
-    );
-    let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
-    assert_eq!(reply(&sent)["ok"]["changed"], json!([EV]));
-}
-
-// ------------------------------------------------------------------------
-#[test]
 fn a_sync_writes_its_events_and_finishes_the_accounts_sync() {
     let mut h = with_google("calendar-apply", FULL, &[calendar_file()]);
     let source = find_source(&h.app, connected(), "cal1").unwrap();
@@ -694,6 +641,132 @@ fn a_move_pushed_since_is_undone_and_waits_to_be_moved_back() {
     let back = local(&h);
     assert_eq!(back.remote_calendar_id.as_deref(), Some("cal2"));
     assert!(back.wants_push("cal1"), "its old calendar's sync moves it");
+}
+
+// ------------------------------------------------------------------------
+/// An account whose `cal1` Google lets it only see.
+const READER: &str = "  scopes:\n    - calendar: full\n  calendars:\n  - id: cal1\n    name: Personal\n    access: reader\n";
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_read_only_calendars_event_keeps_googles_fields() {
+    let mut h = with_google("calendar-kept", READER, &[calendar_file(), event_file()]);
+    let mut edit = |change: Value| {
+        let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
+        reply(&sent)["ok"].clone()
+    };
+    let kept = edit(json!({ "event": { "location": "Room 2" } }));
+    assert_eq!(
+        kept,
+        json!({ "changed": [], "skipped": [{ "id": EV, "reason": "read_only_in_google" }] })
+    );
+    let kept = edit(json!({ "event": { "start": "2026-10-05T09:00:00Z" } }));
+    assert_eq!(kept["skipped"][0]["reason"], "read_only_in_google");
+    let own = edit(json!({ "event": { "type": "activity" } }));
+    assert_eq!(
+        own["changed"],
+        json!([EV]),
+        "a trip's fields are the vault's"
+    );
+    let own = edit(json!({ "fields": { "classification": "masked" } }));
+    assert_eq!(own["changed"], json!([EV]));
+    let sent = h.call(
+        "edit_entities",
+        json!({ "ids": [EV], "change": { "fields": { "event.location": "x" } } }),
+    );
+    assert_eq!(
+        reply(&sent)["ok"]["skipped"][0]["reason"],
+        "invalid_argument"
+    );
+
+    let sent = h.call("set_labels", json!({ "id": EV, "labels": ["dentist"] }));
+    assert!(reply(&sent).get("ok").is_some(), "{sent:?}");
+    let sent = h.call("set_title", json!({ "id": EV, "title": "Dentist at 11" }));
+    assert_eq!(reply(&sent)["err"]["code"], "not_writable");
+    let args = json!({ "id": EV, "markdown": "Other body\n", "overwrite": false });
+    let sent = h.call("save_doc_content", args);
+    assert_eq!(reply(&sent)["err"]["code"], "not_writable");
+
+    let text = fs::read_to_string(h.vault().join("Calendar/Personal/dentist.evt.md")).unwrap();
+    assert!(
+        text.contains("title: Dentist at 10") && text.contains("Local body"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("Room 2") && text.contains("type: activity"),
+        "{text}"
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn googles_kind_of_event_is_kept_and_a_kept_one_locked() {
+    let mut h = with_google("calendar-kinds", FULL, &[calendar_file(), event_file()]);
+    let id = Id::parse(EV).unwrap();
+    let entry = h.app.vault.index().entry(&id).unwrap();
+    let path = entry.local.clone();
+    let planned = calendar_sync::snapshot(&payload_of(&entry.doc));
+    let set_remote = |h: &mut Harness, kind: Option<&str>| {
+        let job_id = begin(h, HashMap::from([(path.clone(), (id, planned.clone()))]));
+        let remote = GoogleEvent {
+            event_type: kind.map(str::to_string),
+            ..google_event()
+        };
+        let output = SyncOutput {
+            effects: vec![Effect::SetRemote {
+                path: path.clone(),
+                remote_event_id: "abc".into(),
+                etag: Some("\"2\"".into()),
+                snapshot: planned.clone(),
+                remote_calendar_id: "cal1".into(),
+                remote: Box::new(remote),
+            }],
+            report: Report::default(),
+        };
+        apply(&mut h.app, job_id, Ok(output));
+        h.run_queue();
+        h.take();
+        fs::read_to_string(h.vault().join(&path)).unwrap()
+    };
+    let text = set_remote(&mut h, Some("birthday"));
+    assert!(text.contains("event-type: birthday"), "{text}");
+
+    let change = json!({ "event": { "location": "Room 2" } });
+    let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
+    assert_eq!(
+        reply(&sent)["ok"]["skipped"][0]["reason"],
+        "read_only_in_google"
+    );
+    let sent = h.call("delete_entity", json!({ "id": EV }));
+    assert_eq!(reply(&sent)["err"]["code"], "not_writable");
+    let sent = h.call("set_labels", json!({ "id": EV, "labels": ["family"] }));
+    assert!(reply(&sent).get("ok").is_some(), "{sent:?}");
+
+    let text = set_remote(&mut h, Some("default"));
+    assert!(
+        !text.contains("event-type"),
+        "a plain one records none: {text}"
+    );
+    let sent = h.call("edit_entities", json!({ "ids": [EV], "change": change }));
+    assert_eq!(reply(&sent)["ok"]["changed"], json!([EV]));
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_read_only_calendars_event_isnt_deleted_or_made() {
+    let mut h = with_google(
+        "calendar-kept-delete",
+        READER,
+        &[calendar_file(), event_file()],
+    );
+    let sent = h.call("delete_entity", json!({ "id": EV }));
+    assert_eq!(reply(&sent)["err"]["code"], "not_writable");
+    assert!(h.vault().join("Calendar/Personal/dentist.evt.md").exists());
+
+    let event = json!({ "calendar": CAL, "start": "2026-10-06T08:00:00Z" });
+    let new = json!({ "roles": { "event": event }, "title": "Dentist again" });
+    let sent = h.call("create_entity", new);
+    assert_eq!(reply(&sent)["err"]["code"], "invalid_argument");
 }
 
 // ------------------------------------------------------------------------

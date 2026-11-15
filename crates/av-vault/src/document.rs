@@ -642,14 +642,18 @@ impl Document {
     /// `None` if a path leads nowhere, if the result doesn't read as an
     /// envelope, or if it touches more than the entity's own fields: its
     /// id, title, date, labels, projects, link, flags and source stay, and
-    /// its threads, conversation and project block have their own commands.
+    /// its threads, conversation, project and event blocks have their own
+    /// commands, but for the sender and recipient of a message that isn't a
+    /// mail (vault.md#message), the block it has already.
     pub fn with_fields(&self, fields: &BTreeMap<String, Value>) -> Option<Envelope> {
-        const OWN_COMMANDS: [&str; 4] = ["message", "thread", "conversation", "project"];
+        const OWN_COMMANDS: [&str; 5] = ["message", "thread", "conversation", "project", "event"];
+        let letter = self.roles().message.is_some() && self.roles().email.is_none();
         let before = self.envelope.clone().unwrap_or_default();
         let mut value = serde_yaml_ng::to_value(&before).ok()?;
         for (path, new) in fields {
             let keys: Vec<&str> = path.split('.').collect();
-            if keys.iter().any(|k| k.is_empty()) || OWN_COMMANDS.contains(&keys[0]) {
+            let person = letter && matches!(keys[..], ["message", "sender" | "recipient"]);
+            if keys.iter().any(|k| k.is_empty()) || (OWN_COMMANDS.contains(&keys[0]) && !person) {
                 return None;
             }
             set_at(&mut value, &keys, new.clone())?;

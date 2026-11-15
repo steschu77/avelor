@@ -1,6 +1,7 @@
 //! New entities written: a thread, a project, a document with its original
 //! file.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -41,6 +42,8 @@ pub struct NewEntity {
     /// Its own classification (vault.md#metadata); none, the vault's
     /// default.
     pub classification: Option<Classification>,
+    /// Its own fields by path (`Document::with_fields`): a record's keys.
+    pub fields: BTreeMap<String, serde_yaml_ng::Value>,
 }
 
 // ----------------------------------------------------------------------------
@@ -132,7 +135,8 @@ impl Index {
     /// ([`layout`]). Its `date` is an event's start, else the one given,
     /// else now. Nothing is written if the title is empty, an event has no
     /// start or names a calendar that isn't one of the vault's, one of
-    /// `projects` isn't a project, or `linked_to` isn't in the vault.
+    /// `projects` isn't a project, `linked_to` isn't in the vault, or its
+    /// `fields` reach more than its own fields.
     pub fn create_new(&mut self, new: NewEntity, changes: &mut Changes) -> Result<Id> {
         let invalid = |arg: &str| Error::InvalidArgument { arg: arg.into() };
         let (format, folder) = match new.roles.derived_type() {
@@ -178,6 +182,12 @@ impl Index {
         doc.set_labels(unique_trimmed(new.labels));
         doc.set_link(new.linked_to);
         doc.set_classification(new.classification);
+        if !new.fields.is_empty() {
+            let envelope = doc
+                .with_fields(&new.fields)
+                .ok_or_else(|| invalid("fields"))?;
+            doc.set_envelope(envelope);
+        }
         let body = new.content.trim_end();
         if format == FileFormat::Markdown && !body.is_empty() {
             doc.set_content(format!("{body}\n"));
