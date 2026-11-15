@@ -4,6 +4,8 @@
 //! vault.md#metadata. Unknown
 //! keys are preserved verbatim in `extra` so round-tripping a document
 //! through the app never loses user data.
+
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde_yaml_ng::Value;
@@ -618,6 +620,47 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// The envelope with `fields` set (vault.md#record): each a path of
+    /// keys by dots, a list's item by its `id` (or its index), to a value,
+    /// null removing it, a map under an item id not there adding the item.
+    /// `None` if a path leads nowhere, if the result doesn't read as an
+    /// envelope, or if it touches more than the entity's own fields: its
+    /// id, title, date, labels, projects, link, flags and source stay, and
+    /// its threads, conversation and project block have their own commands.
+    pub fn with_fields(&self, fields: &BTreeMap<String, Value>) -> Option<Envelope> {
+        const OWN_COMMANDS: [&str; 4] = ["message", "thread", "conversation", "project"];
+        let before = self.envelope.clone().unwrap_or_default();
+        let mut value = serde_yaml_ng::to_value(&before).ok()?;
+        for (path, new) in fields {
+            let keys: Vec<&str> = path.split('.').collect();
+            if keys.iter().any(|k| k.is_empty()) || OWN_COMMANDS.contains(&keys[0]) {
+                return None;
+            }
+            set_at(&mut value, &keys, new.clone())?;
+        }
+        let after: Envelope = serde_yaml_ng::from_value(value).ok()?;
+        let core = |e: &Envelope| {
+            (
+                e.id,
+                e.title.clone(),
+                e.date,
+                e.projects.clone(),
+                e.labels.clone(),
+                e.linked_to,
+                (e.rename, e.starred, e.archived),
+                e.source.clone(),
+            )
+        };
+        (core(&after) == core(&before)).then_some(after)
+    }
+
+    // ------------------------------------------------------------------------
+    /// Replace the entity's envelope (one `with_fields` gave).
+    pub fn set_envelope(&mut self, envelope: Envelope) {
+        self.envelope = Some(envelope);
+    }
+
+    // ------------------------------------------------------------------------
     /// The envelope to change; a file without frontmatter gets one.
     fn envelope_mut(&mut self) -> &mut Envelope {
         self.envelope.get_or_insert_default()
@@ -625,8 +668,59 @@ impl Document {
 }
 
 // ----------------------------------------------------------------------------
-/// How a path into an entity's fields names a list's
-/// item: by its `id`, else by its index.
+/// `value` with `keys` set to `new` (null removes): a map's key, made if
+/// missing on the way; a list's item by its `id`, else its index; a map
+/// under an item id the list hasn't, added as that item. `None` if a key
+/// leads into something else.
+fn set_at(value: &mut Value, keys: &[&str], new: Value) -> Option<()> {
+    let (key, rest) = keys.split_first()?;
+    if value.is_null() {
+        *value = Value::Mapping(Default::default());
+    }
+    match value {
+        Value::Mapping(map) => {
+            if rest.is_empty() {
+                if new.is_null() {
+                    map.remove(*key);
+                } else {
+                    map.insert(Value::from(*key), new);
+                }
+                return Some(());
+            }
+            let inner = map.entry(Value::from(*key)).or_insert(Value::Null);
+            set_at(inner, rest, new)
+        }
+        Value::Sequence(items) => {
+            let found = item_position(items, key);
+            match (found, rest.is_empty()) {
+                (Some(i), true) if new.is_null() => {
+                    items.remove(i);
+                    Some(())
+                }
+                (Some(i), true) => {
+                    items[i] = new;
+                    Some(())
+                }
+                (Some(i), false) => set_at(&mut items[i], rest, new),
+                (None, true) if new.is_mapping() => {
+                    let mut item = new;
+                    if let Value::Mapping(map) = &mut item {
+                        map.insert(Value::from("id"), Value::from(*key));
+                    }
+                    items.push(item);
+                    Some(())
+                }
+                (None, true) if new.is_null() => Some(()),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// How a path into an entity's fields names a list's item
+/// (vault.md#record): by its `id`, else by its index.
 pub fn item_key(item: &Value, index: usize) -> String {
     item.get("id")
         .and_then(Value::as_str)

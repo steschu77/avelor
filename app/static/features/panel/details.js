@@ -2,16 +2,17 @@
 // statement or recurring payment (panel.md#cards):
 // the details grid (`renderCardDetails`) with the contacts, the calendar
 // and the account as chips that select what they name, a task's fields, a
-// document's genre, a trip event's fields (features/panel/trip-fields.js)
-// and a work calendar's event's Work editable where the host can write them
-// (`edit_entities`), a recurring payment's too (`set_recurring_payment`), and a
-// task's tag (`taskTag`), which the day view's task rows and the calendar's
-// grid show too.
+// document's genre, a trip event's fields (features/panel/trip-fields.js),
+// a work calendar's event's Work, a record's own fields and every entity's
+// classification editable where the host can write them (`edit_entities`),
+// a recurring payment's too (`set_recurring_payment`), and a task's tag
+// (`taskTag`), which the day view's task rows and the calendar's grid show
+// too.
 
 import { accEl } from '../../core/dom.js';
 import { DATE_FORMAT, amountText, fileSize, money, parseAmount, parseDate } from '../../core/format.js';
 import { TIME_FORMAT, isoInstant, localDay, relativeDay } from '../../core/format.js';
-import { entities, parseContact } from '../../model/entities.js';
+import { entities, parseContact, vaultSettings } from '../../model/entities.js';
 import {
     byDay, icalDate, parseSchedule, ruleSupported,
 } from '../../model/schedule.js';
@@ -22,11 +23,13 @@ import { PERIODS, scheduleLine, periodOf } from '../../model/schedule.js';
 import {
     CATEGORIES, amountsOf, nextOccurrence, withAmount,
 } from '../../model/bank.js';
-import { editEntityLocal, setRecurringPaymentLocal } from '../../model/structure.js';
+import { editEntityLocal, setFieldsLocal, setRecurringPaymentLocal } from '../../model/structure.js';
 import { isTripEvent } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { fileIcon, iconEl } from '../../ui/icons.js';
+import { showMenu } from '../../ui/menu.js';
 import { accSeg } from '../../ui/segmented.js';
+import { CLASSIFICATIONS } from '../workspace/models.js';
 import { openOriginal, selectById } from '../selection.js';
 import { meetsField, tripFields } from './trip-fields.js';
 
@@ -57,8 +60,10 @@ export function dueTag(text) {
 // `EMAIL_KINDS`); a document's genre, and the file it stands for
 // (`originalField`); a bank account's bank, number, balance and owner; a
 // statement's account, its bookings and the balance it ends with
-// (vault.md#statement). A task's fields, a document's genre and an
-// event's Work are editable while the host can write the entity
+// (vault.md#statement); a record's own fields (`recordFields`); and
+// which models may read it (`classificationField`). A task's fields, a
+// document's genre, an event's Work, a record's fields and the
+// classification are editable while the host can write the entity
 // (`taskFields`, `genreField`, `workField`). Rows without a value are left
 // out; hidden for an entity with none of them.
 //
@@ -136,6 +141,8 @@ export function renderCardDetails(row, doc, occurrence = null) {
         if (statement.balance != null) add(t('props.balance'), money(statement.balance, holder?.['bank-account']?.currency));
     }
     if (doc?.['recurring-payment']) recurringPaymentFields(doc, add);
+    if (doc?.kind === 'record') recordFields(doc, add);
+    if (doc?.doc_id) add(t('props.classification'), classificationField(doc));
     row.replaceChildren(...parts);
     row.hidden = !parts.length;
     if (focusKey) row.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true });
@@ -271,6 +278,98 @@ function genreField(doc) {
     });
     editField(input, value => editEntityLocal(doc.doc_id, { genre: value.trim() || null }));
     return input;
+}
+
+// ----------------------------------------------------------------------------
+// A record's own fields (vault.md#record), a row each by its key: a value
+// typed in (text, a number, yes or no) edited in place, empty removing it;
+// a list or a map shown as it is; x removes it. + Field adds one, its name
+// and its value typed in.
+function recordFields(doc, add) {
+    for (const [key, value] of Object.entries(doc.fields ?? {})) add(key, ...recordValue(doc, key, value));
+    if (doc.writable) add('', newRecordField(doc));
+}
+
+function recordValue(doc, key, value) {
+    const scalar = value === null || ['string', 'number', 'boolean'].includes(typeof value);
+    if (!scalar) return [JSON.stringify(value)];
+    if (!doc.writable) return [String(value ?? '')];
+    const input = fieldInput('text', `field:${key}`, value == null ? '' : String(value), 'form-input');
+    editField(input, typed => setFieldsLocal(doc.doc_id, { [key]: typedAs(typed.trim(), value) }));
+    const remove = accEl('button', 'icon-btn icon-btn--quiet');
+    remove.type = 'button';
+    remove.title = t('record.remove_field', { key });
+    remove.dataset.focusKey = `field-remove:${key}`;
+    remove.append(iconEl('#i-dismiss'));
+    remove.addEventListener('click', () => setFieldsLocal(doc.doc_id, { [key]: null }));
+    return [input, remove];
+}
+
+// `text` as a field's value: none if empty, a number or yes/no as the value
+// `before` was, else text.
+function typedAs(text, before) {
+    if (!text) return null;
+    if (typeof before === 'number' && !isNaN(Number(text))) return Number(text);
+    if (typeof before === 'boolean' && ['true', 'false'].includes(text)) return text === 'true';
+    return text;
+}
+
+function newRecordField(doc) {
+    const add = accEl('button', 'tool label', t('record.add_field'));
+    add.type = 'button';
+    add.dataset.focusKey = 'field-new';
+    add.addEventListener('click', () => {
+        const name = fieldInput('text', 'field-new:name', '', 'form-input');
+        name.placeholder = t('record.field_name');
+        const value = fieldInput('text', 'field-new:value', '', 'form-input');
+        value.placeholder = t('record.field_value');
+        const line = accEl('span', 'props__new-field');
+        line.append(name, value);
+        add.replaceWith(line);
+        name.focus();
+        const done = write => {
+            const key = name.value.trim();
+            line.replaceWith(add);
+            if (write && key && !/[.\s]/.test(key) && value.value.trim()) {
+                setFieldsLocal(doc.doc_id, { [key]: value.value.trim() });
+            }
+        };
+        for (const input of [name, value]) {
+            input.addEventListener('keydown', e => {
+                e.stopPropagation();
+                if (e.key === 'Enter') done(true);
+                else if (e.key === 'Escape') done(false);
+            });
+        }
+    });
+    return add;
+}
+
+// ----------------------------------------------------------------------------
+// Which models may read the entity (vault.md#metadata): its own
+// classification, else its kind's (a bank account, a statement: PII), else
+// the vault's; a menu sets its own, or none.
+function classificationField(doc) {
+    const own = doc.classification ?? null;
+    const kind = doc['bank-account'] || doc.statement ? 'pii' : null;
+    const fallback = kind ?? vaultSettings().classification ?? 'public';
+    const name = value => CLASSIFICATIONS.find(([v]) => v === value)?.[1] ?? value;
+    const means = value => CLASSIFICATIONS.find(([v]) => v === value)?.[2] ?? t('class.no_model');
+    const shown = own ? name(own)
+        : kind ? t('class.default_kind', { name: name(fallback) }) : t('class.default_vault', { name: name(fallback) });
+    if (!doc.writable) return shown;
+    const btn = accEl('button', 'tool label', shown);
+    btn.type = 'button';
+    btn.title = means(own ?? fallback);
+    btn.dataset.focusKey = 'classification';
+    const set = value => {
+        if (value !== own) setFieldsLocal(doc.doc_id, { classification: value });
+    };
+    btn.addEventListener('click', () => showMenu(btn, [
+        { label: kind ? t('class.kind_s', { name: name(fallback) }) : t('class.vault_s', { name: name(fallback) }), checked: !own, run: () => set(null) },
+        ...CLASSIFICATIONS.map(([value, label, what]) => ({ label, desc: what, checked: own === value, run: () => set(value) })),
+    ], { head: t('class.which_models') }));
+    return btn;
 }
 
 // ----------------------------------------------------------------------------
