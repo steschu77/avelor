@@ -1,7 +1,8 @@
 //! The vault's own settings (vault.md#vault-config): `.avelor/vault.yaml`,
 //! beside the vault's accounts and watches, read when the vault opens. The
-//! model the assistant answers with (accounts.md#model-choice). Keys the
-//! app doesn't know are kept.
+//! model the assistant answers with (accounts.md#model-choice), and the
+//! classification of what has none of its own (vault.md#metadata). Keys
+//! the app doesn't know are kept.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -10,6 +11,7 @@ use std::path::{Path, PathBuf};
 
 use av_utils::error::{Error, Result};
 use av_vault::schema::{VAULT_FORMAT, layout};
+use av_vault::shared::Classification;
 use serde::{Deserialize, Serialize};
 use serde_yaml_ng::Value;
 
@@ -31,6 +33,9 @@ struct SettingsFile {
     /// The model the assistant answers with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     chat_model: Option<ModelChoice>,
+    /// The classification of an entity without one of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    classification: Option<Classification>,
     #[serde(flatten)]
     rest: BTreeMap<String, Value>,
 }
@@ -50,6 +55,7 @@ pub struct VaultSettings {
 #[derive(Serialize)]
 struct SettingsMeta<'a> {
     chat_model: Option<&'a ModelChoice>,
+    classification: Classification,
 }
 
 impl VaultSettings {
@@ -79,9 +85,20 @@ impl VaultSettings {
     }
 
     // ------------------------------------------------------------------------
+    /// The classification of an entity without one of its own: `public`
+    /// unless the vault says otherwise.
+    pub fn classification(&self) -> Classification {
+        self.file
+            .classification
+            .clone()
+            .unwrap_or(Classification::Public)
+    }
+
+    // ------------------------------------------------------------------------
     fn meta(&self) -> SettingsMeta<'_> {
         SettingsMeta {
             chat_model: self.chat_model(),
+            classification: self.classification(),
         }
     }
 
@@ -136,6 +153,8 @@ fn post(app: &App) {
 pub(crate) struct SettingsChange {
     #[serde(default)]
     chat_model: Option<ModelChoice>,
+    #[serde(default)]
+    classification: Option<Classification>,
 }
 
 // ----------------------------------------------------------------------------
@@ -146,6 +165,9 @@ pub fn set_vault_settings(app: &mut App, req: Req, change: SettingsChange) {
     let updated = app.settings.update(|file| {
         if let Some(model) = change.chat_model {
             file.chat_model = Some(model);
+        }
+        if let Some(class) = change.classification {
+            file.classification = (class != Classification::Public).then_some(class);
         }
     });
     match updated {

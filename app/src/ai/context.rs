@@ -2,16 +2,22 @@
 //! (assistant.md#context, the context builder): the linked document,
 //! or a thread's members, each as its file -- YAML frontmatter, then its
 //! text, an email's followed by its attachments' -- the way the model should
-//! see it, within a budget.
+//! see it, within a budget. Each entity as far as its classification
+//! reaches the model (`ai::policy`): whole, its values as placeholders, or
+//! left out, which the reply names.
 
 use std::borrow::Cow;
+use std::fmt::Display;
 
 use av_utils::id::Id;
 use av_utils::text::cut_marked;
 use av_vault::document::Document;
 use av_vault::envelope::Envelope;
-
+use av_vault::shared::Classification;
 use av_vault::vault::Index;
+
+use crate::ai::policy::{self, Placeholders, Reach};
+use crate::texts::Text;
 
 /// The characters of text (bodies) one context may hold, about 10k tokens.
 pub const BUDGET: usize = 40_000;
@@ -26,46 +32,165 @@ const LEFT_OUT: &str = "(left out: the thread is long)";
 const FILES: &str = "(YAML frontmatter, then its text). Answer about it unless they ask \
 about something else.";
 
+/// What the model is told of placeholders, when it got any.
+const PLACEHOLDERS: &str = "Values in braces, like {checking-iban}, stand for personal data \
+the user's PC keeps from you: where such a value belongs, write its placeholder as it is, \
+and the user sees the value.";
+
+/// What stands for the body of an entity given as placeholders.
+const WITHHELD: &str = "(left out: personal, kept on the user's PC)";
+
+/// What stands for a thread member its classification keeps out.
+const MEMBER_LEFT_OUT: (&str, &str) = ("left-out: true\n", "(left out: its classification)");
+
 // ----------------------------------------------------------------------------
-/// What the AI is told about the entity `id` a conversation is linked to:
-/// a thread's members, or the entity itself (a project its own
-/// description), each body with its attachments' (`body_of`); `None` if
-/// it is gone.
-pub fn describe(index: &Index, id: Id) -> Option<String> {
-    let doc = &index.entry(&id)?.doc;
-    let titles = |doc: &Document| -> Vec<String> {
-        let projects = doc.projects().iter().filter_map(|p| index.entry(p));
-        projects.map(|e| e.doc.title().to_string()).collect()
-    };
-    if doc.roles().thread.is_none() {
-        let body = body_of(index, doc);
-        return Some(document_context(doc, &titles(doc), &body, BUDGET));
-    }
-    let members = index.thread_members(&id);
-    let bodies: Vec<Cow<str>> = members.iter().map(|e| body_of(index, &e.doc)).collect();
-    let members: Vec<(String, &str)> = members
-        .iter()
-        .zip(&bodies)
-        .map(|(e, body)| (frontmatter(&e.doc, &titles(&e.doc)), body.as_ref()))
-        .collect();
-    Some(thread_context(doc.title(), &members, BUDGET))
+/// What a request may carry (`ai::policy`): whether its model runs on this
+/// PC, and the vault's default classification.
+pub struct Gate<'a> {
+    pub local: bool,
+    pub default: &'a Classification,
 }
 
 // ----------------------------------------------------------------------------
-/// The body of `doc` as the model sees it: its text, then its attachments'
-/// (`Index::attachments_of`) that were read, each under a line naming its
-/// file and title (`with_attachments`).
-fn body_of<'a>(index: &Index, doc: &'a Document) -> Cow<'a, str> {
-    let attached: Vec<(String, &str, &str)> = index
-        .attachments_of(doc.id())
-        .filter_map(|e| {
+/// The context of a conversation: its text, the placeholders it gave, and
+/// what it left out (each by its title and why), for the reply to name.
+pub struct Described {
+    pub text: String,
+    pub placeholders: Placeholders,
+    pub left_out: Vec<String>,
+}
+
+// ----------------------------------------------------------------------------
+/// What the AI is told about the entity `id` a conversation is linked to:
+/// a thread's members, or the entity itself (a project its own
+/// description), each body with its attachments' (`Seen::body_of`), as far
+/// as `gate` lets each reach; `None` if it is gone.
+pub fn describe(index: &Index, id: Id, gate: &Gate) -> Option<Described> {
+    let doc = &index.entry(&id)?.doc;
+    let mut seen = Seen {
+        gate,
+        placeholders: Placeholders::new(),
+        left_out: Vec::new(),
+    };
+    let mut text = if doc.roles().thread.is_none() {
+        match seen.file(index, doc) {
+            Some((frontmatter, body)) => document_context(doc.kind(), &frontmatter, &body, BUDGET),
+            None => left_out_context(doc.kind()),
+        }
+    } else {
+        let members = index.thread_members(&id);
+        let files: Vec<(String, Cow<str>)> = members
+            .iter()
+            .map(|e| {
+                seen.file(index, &e.doc).unwrap_or_else(|| {
+                    let (frontmatter, body) = MEMBER_LEFT_OUT;
+                    (frontmatter.to_string(), Cow::Borrowed(body))
+                })
+            })
+            .collect();
+        let members: Vec<(String, &str)> = files
+            .iter()
+            .map(|(frontmatter, body)| (frontmatter.clone(), body.as_ref()))
+            .collect();
+        thread_context(doc.title(), &members, BUDGET)
+    };
+    if !seen.placeholders.is_empty() {
+        text.push_str("\n\n");
+        text.push_str(PLACEHOLDERS);
+    }
+    Some(Described {
+        text,
+        placeholders: seen.placeholders,
+        left_out: seen.left_out,
+    })
+}
+
+// ----------------------------------------------------------------------------
+/// The entities of one context as far as the gate lets them reach.
+struct Seen<'g> {
+    gate: &'g Gate<'g>,
+    placeholders: Placeholders,
+    left_out: Vec<String>,
+}
+
+impl Seen<'_> {
+    /// How far `doc` reaches the model.
+    fn reach(&self, doc: &Document) -> Reach {
+        policy::reach(&self.class(doc), self.gate.local)
+    }
+
+    fn class(&self, doc: &Document) -> Classification {
+        policy::class_of(doc, self.gate.default)
+    }
+
+    /// `doc` named as left out, and why.
+    fn leave_out(&mut self, doc: &Document) {
+        let class = policy::class_text(&self.class(doc));
+        let text = Text::new("ai.left_out")
+            .arg("title", doc.title())
+            .arg("class", class);
+        self.left_out.push(text.render());
+    }
+
+    /// `doc` as the model gets it, its frontmatter and its body; `None`
+    /// if it is left out.
+    fn file<'a>(&mut self, index: &Index, doc: &'a Document) -> Option<(String, Cow<'a, str>)> {
+        let projects: Vec<String> = doc
+            .projects()
+            .iter()
+            .filter_map(|p| index.entry(p))
+            .map(|e| e.doc.title().to_string())
+            .collect();
+        match self.reach(doc) {
+            Reach::Whole => Some((frontmatter(doc, &projects), self.body_of(index, doc))),
+            Reach::Placeholders => {
+                let mut value = serde_yaml_ng::to_value(given(doc, &projects)).ok()?;
+                let named = policy::with_placeholders(
+                    &mut value,
+                    doc.id(),
+                    doc.title(),
+                    &mut self.placeholders,
+                );
+                if named.is_none() {
+                    self.leave_out(doc);
+                    return None;
+                }
+                let text = Text::new("ai.left_out_values").arg("title", doc.title());
+                self.left_out.push(text.render());
+                let frontmatter = serde_yaml_ng::to_string(&value).unwrap_or_default();
+                Some((frontmatter, Cow::Borrowed(WITHHELD)))
+            }
+            Reach::Nothing => {
+                self.leave_out(doc);
+                None
+            }
+        }
+    }
+
+    /// The body of `doc` as the model sees it: its text, then its
+    /// attachments' (`Index::attachments_of`) that were read and reach the
+    /// model, each under a line naming its file and title
+    /// (`with_attachments`).
+    fn body_of<'a>(&mut self, index: &Index, doc: &'a Document) -> Cow<'a, str> {
+        let mut attached: Vec<(String, &str, &str)> = Vec::new();
+        for e in index.attachments_of(doc.id()) {
             let text = e.doc.content().trim();
-            let name = e.doc.original()?.name.clone();
+            let Some(original) = e.doc.original() else {
+                continue;
+            };
+            if text.is_empty() {
+                continue;
+            }
+            if self.reach(&e.doc) != Reach::Whole {
+                self.leave_out(&e.doc);
+                continue;
+            }
+            let name = original.name.clone();
             let name = name.unwrap_or_else(|| e.doc.title().to_string());
-            (!text.is_empty()).then(|| (name, e.doc.title(), text))
-        })
-        .collect();
-    with_attachments(doc.content(), &attached)
+            attached.push((name, e.doc.title(), text));
+        }
+        with_attachments(doc.content(), &attached)
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -86,11 +211,17 @@ fn with_attachments<'a>(text: &'a str, attached: &[(String, &str, &str)]) -> Cow
 }
 
 // ----------------------------------------------------------------------------
+/// The entity's frontmatter as the model sees it (`given`), as YAML.
+fn frontmatter(doc: &Document, projects: &[String]) -> String {
+    given(doc, projects).compose().unwrap_or_default()
+}
+
+// ----------------------------------------------------------------------------
 /// The entity's frontmatter as the model sees it: title, date, labels, the
 /// projects by title, its role blocks and other keys -- without what only
 /// the app reads (`id`, `linked-to`, the source block with its remote ids,
 /// the flags, thread ids and a conversation).
-fn frontmatter(doc: &Document, projects: &[String]) -> String {
+fn given(doc: &Document, projects: &[String]) -> Envelope {
     let mut envelope: Envelope = doc.envelope().cloned().unwrap_or_default();
     if envelope.title.is_none() && !doc.title().is_empty() {
         envelope.title = Some(doc.title().to_string());
@@ -113,7 +244,7 @@ fn frontmatter(doc: &Document, projects: &[String]) -> String {
             roles.message = None;
         }
     }
-    envelope.compose().unwrap_or_default()
+    envelope
 }
 
 // ----------------------------------------------------------------------------
@@ -123,13 +254,22 @@ fn file(frontmatter: &str, body: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
-/// The context of one entity, its `body` cut at `budget` characters.
-fn document_context(doc: &Document, projects: &[String], body: &str, budget: usize) -> String {
-    let kind = doc.kind();
+/// The context of one entity of `kind`, its `body` cut at `budget`
+/// characters.
+fn document_context(kind: impl Display, frontmatter: &str, body: &str, budget: usize) -> String {
     let body = cut_marked(body.trim(), budget, CUT);
     format!(
         "The user is asking about this {kind} from their vault, given as its file {FILES}\n\n{}",
-        file(&frontmatter(doc, projects), &body)
+        file(frontmatter, &body)
+    )
+}
+
+// ----------------------------------------------------------------------------
+/// The context of one entity of `kind` its classification keeps out.
+fn left_out_context(kind: impl Display) -> String {
+    format!(
+        "The user is asking about a {kind} from their vault that its classification keeps \
+         from you: say so, and answer what you can without it."
     )
 }
 
@@ -215,7 +355,8 @@ Please pay 40 EUR by Friday.
     #[test]
     fn a_document_is_given_as_its_file_without_what_only_the_app_reads() {
         let email = email();
-        let text = document_context(&email, &["Flat".to_string()], email.content(), BUDGET);
+        let fm = frontmatter(&email, &["Flat".to_string()]);
+        let text = document_context(email.kind(), &fm, email.content(), BUDGET);
         assert!(
             text.starts_with("The user is asking about this email from their vault"),
             "{text}"
@@ -248,7 +389,7 @@ Please pay 40 EUR by Friday.
     #[test]
     fn a_body_past_the_budget_is_cut() {
         let email = email();
-        let text = document_context(&email, &[], email.content(), 10);
+        let text = document_context(email.kind(), &frontmatter(&email, &[]), email.content(), 10);
         assert!(
             text.contains("Please pay\n\n[\u{2026} the rest is left out]"),
             "{text}"
@@ -275,7 +416,7 @@ Please pay 40 EUR by Friday.
 
         let email = email();
         let room = "Please pay 40 EUR by Friday.".chars().count() + 30;
-        let text = document_context(&email, &[], &body, room);
+        let text = document_context(email.kind(), &frontmatter(&email, &[]), &body, room);
         assert!(
             text.contains("Please pay 40 EUR by Friday.\n\n[Attached file"),
             "{text}"
@@ -306,7 +447,13 @@ Please pay 40 EUR by Friday.
             attachment("s.jpg", "Scan.jpg", ""),
         ];
         let h = crate::testing::Harness::with_vault("context-attachments", &files);
-        let text = describe(h.app.vault.index(), Id::parse(email_id).unwrap()).unwrap();
+        let gate = Gate {
+            local: false,
+            default: &Classification::Public,
+        };
+        let text = describe(h.app.vault.index(), Id::parse(email_id).unwrap(), &gate)
+            .unwrap()
+            .text;
         assert!(
             text.contains(
                 "See the bill.\n\n[Attached file \u{201C}Rechnung.pdf\u{201D} (\u{201C}Rechnung\u{201D}), as read:]\n\nBetrag: 40 EUR\n"

@@ -286,7 +286,10 @@ No other model is ever tried in place of the pick: it could send a
 document to another provider. The picker (`aiModelPicker`, `aiShowModels`
 in `features/workspace/models.js`) names the picked model, marked while it is refused,
 and opens a menu of every account's offered models, by account; an
-account without its key is dimmed. Where a pick is refused the page shows
+account without its key is dimmed, and a model on this PC (an Ollama at a
+loopback address, not a cloud tag; `aiModelIsLocal`, as the host's
+`ai::policy::is_local`) says so: the one that reads what is `pii` or
+`restricted` (`vault.md#metadata`). Where a pick is refused the page shows
 why (`aiMissingHint`), with a button to Accounts where the fix is there.
 
 ## Flows

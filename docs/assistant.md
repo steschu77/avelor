@@ -85,6 +85,26 @@ prompt, fresh for every request:
 - a thread as its members, oldest first, each with its attachments the
   same way.
 
+Each entity goes as far as its classification reaches the model
+(`vault.md#metadata`, `ai/policy.rs`, the one gate every request to a model
+asks): whole; for a `pii` one and a model off this PC, its frontmatter
+with each value a placeholder (`{checking-iban}`, its ids and title, date,
+labels, projects, kind and classification kept) and its body left out, the
+model told to write a placeholder as it is where the value belongs; or
+not at all (a thread's member as `left-out: true`, a linked entity as a
+line saying the model can't see it). A model is on this PC when it is an
+Ollama account's at a loopback address, but not one of its cloud tags
+(`gpt-oss:120b-cloud`). The conversation keeps what each placeholder
+names (`vault.md#conversation`), never the value; the reply shows the
+vault's value in its place, filled in by the host as it renders it, and
+says it does (`personal`): saved as a document, or + Task from this, what
+it makes is `pii`. The reply names what its model wasn't given ("Kept
+from gpt-5: “Checking”: its personal values as placeholders · “Diary”
+(confidential)"). The analysis of emails and documents and the reading of
+attachments leave out what isn't wholly theirs to read, which a notice
+counts; a scan read takes the vault's default, a folder's files being in
+no entity yet.
+
 A conversation that starts with a reply (the email analysis's conversation) is sent
 after a fixed question of the user's, "Have a look at it." (`OPENING`):
 providers want a request to start with the user, and so the model sees its

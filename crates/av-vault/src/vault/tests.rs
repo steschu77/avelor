@@ -535,6 +535,7 @@ fn a_new_task_lands_in_tasks_and_survives_reindexing() {
         title: " Call the landlord ".into(),
         labels: vec![" home ".into(), "home".into(), "".into()],
         linked_to: Some(ids[0]),
+        classification: None,
         content: "Ask about the heating.".into(),
         ..Default::default()
     };
@@ -572,6 +573,7 @@ fn a_new_list_is_yaml_with_its_items_and_no_body() {
     let new = NewEntity {
         roles: roles("list: {items: [Bank, Insurance]}"),
         title: "Change of address".into(),
+        classification: None,
         content: "ignored".into(),
         ..Default::default()
     };
@@ -1964,6 +1966,7 @@ fn conversations_are_written_and_read_back() {
             ..Default::default()
         }],
         active: Some(question),
+        ..Default::default()
     };
     let roles = Roles {
         conversation: Some(conversation.clone()),

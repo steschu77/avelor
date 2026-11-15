@@ -396,6 +396,14 @@
   gap: 8px;
 }
 
+/* the vault's default classification (features/workspace/vault.js) */
+.vault__class {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .vault__errors {
   margin-top: 8px;
   display: flex;

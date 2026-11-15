@@ -699,6 +699,9 @@ pub struct ConversationMessage {
     /// (the email analysis's chat, email.md#analysis).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suggestions: Vec<String>,
+    /// What the reply's model wasn't given, by their classification.
+    #[serde(rename = "left-out", default, skip_serializing_if = "Vec::is_empty")]
+    pub left_out: Vec<String>,
 }
 
 // ----------------------------------------------------------------------------
@@ -710,6 +713,18 @@ pub struct Conversation {
     pub messages: Vec<ConversationMessage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active: Option<Id>,
+    /// What each placeholder a model was given stands for, by its name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub placeholders: BTreeMap<String, Placeholder>,
+}
+
+// ----------------------------------------------------------------------------
+/// A value a model got as a placeholder: the entity it is in and the path
+/// to it (keys, a list's item by its `id` or its index), never the value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Placeholder {
+    pub entity: Id,
+    pub path: String,
 }
 
 // ----------------------------------------------------------------------------

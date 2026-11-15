@@ -131,6 +131,8 @@ fn step_for(doc: Option<&Document>, path: Option<PathBuf>) -> Step {
 /// `pick` as a job ("Reading attachments · <email>"), then analyse the emails
 /// `then` asks for, and the attachments read. A refused pick is a notice,
 /// and the analysis starts at once; so it does if there is nothing to read.
+/// One its classification keeps from the model stays unread, counted in a
+/// notice (`ai::policy`).
 pub fn read(
     app: &mut App,
     email: &str,
@@ -147,10 +149,27 @@ pub fn read(
             return analyse(app, email, then, Vec::new());
         }
     };
-    let queue: VecDeque<Id> = ids
+    let local = ai::policy::is_local(resolved.provider, &resolved.address, &resolved.model);
+    let default = app.settings.classification();
+    let index = app.vault.index();
+    let present: Vec<Id> = ids
         .into_iter()
-        .filter(|id| app.vault.index().entry(id).is_some())
+        .filter(|id| index.entry(id).is_some())
         .collect();
+    let queue: VecDeque<Id> = present
+        .iter()
+        .copied()
+        .filter(|id| {
+            index
+                .entry(id)
+                .is_some_and(|e| ai::policy::reads_whole(&e.doc, &default, local))
+        })
+        .collect();
+    let kept = present.len() - queue.len();
+    if kept > 0 {
+        let notice = Text::new("job.notice").arg("job", label.clone());
+        app.notice(notice.arg("text", ai::policy::kept_from(kept)));
+    }
     if queue.is_empty() {
         return analyse(app, email, then, Vec::new());
     }

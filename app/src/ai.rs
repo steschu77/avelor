@@ -19,6 +19,7 @@ use av_utils::text::unique_trimmed;
 
 pub(crate) mod accounts;
 pub(crate) mod context;
+pub(crate) mod policy;
 pub(crate) mod queue;
 
 /// The context window Ollama runs the model with for the email analysis and

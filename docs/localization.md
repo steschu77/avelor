@@ -72,10 +72,10 @@ What the host shows or writes itself it takes from the same catalogs,
 plain texts only: the failed start's box, the folder picker's title and
 the sign-in pages (`texts::text`, `texts::filled`), and what it writes
 into the vault, in the run's language (`Text::render`): an email's "No
-subject", a statement's title with its months, the title of the email
-analysis's conversation. A shipped blueprint's words are keys too
-(`app/blueprints`), worded as the host hands them to the page
-(`texts::of`); the build reads them from the file.
+subject", a statement's title with its months, what a reply's model
+wasn't given, the title of the email analysis's conversation. A shipped
+blueprint's words are keys too (`app/blueprints`), worded as the host
+hands them to the page (`texts::of`); the build reads them from the file.
 
 ## The language <a id="language"></a>
 

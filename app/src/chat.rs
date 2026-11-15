@@ -15,10 +15,13 @@ use av_vault::document::{Document, FileFormat};
 use av_vault::envelope::{Conversation, ConversationMessage, Empty, Roles, Source};
 use av_vault::markdown;
 use av_vault::schema::layout;
+use av_vault::vault::Index;
 use serde::{Deserialize, Serialize};
 
 use crate::ai;
 use crate::ai::accounts::Resolved;
+use crate::ai::context::Gate;
+use crate::ai::policy::Placeholders;
 use crate::app::{App, Task};
 use crate::protocol::Req;
 use crate::texts::Text;
@@ -47,6 +50,8 @@ struct Writing {
     date: DateTime,
     /// The text so far.
     text: String,
+    /// What its model wasn't given (`ai::context::Described`).
+    left_out: Vec<String>,
     /// `None` until its worker started: `chat_send` answers first.
     task: Option<Task>,
 }
@@ -127,6 +132,13 @@ struct MessageView {
     /// Questions offered to ask next (vault.md#conversation).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     suggestions: Vec<String>,
+    /// What its model wasn't given, by their classification.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    left_out: Vec<String>,
+    /// It shows personal values in place of placeholders: what is made of
+    /// it is `pii`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    personal: bool,
 }
 
 /// `chat_open`'s answer.
@@ -417,16 +429,35 @@ fn set_active(app: &mut App, id: Id, message: Id, user_only: bool) -> Result<()>
 /// Get the reply to `question` ready, with the account and model
 /// `resolved`: shown as being written from now on, and what its worker
 /// needs. The request tells the model about the item the conversation is
-/// linked to, as it is now (`ai::context`). `None` if the conversation is
-/// gone.
+/// linked to, as it is now and as far as its classification reaches the
+/// model (`ai::context`); the placeholders it gave are kept with the
+/// conversation. `None` if the conversation is gone.
 fn prepare_reply(app: &mut App, id: Id, question: Id, resolved: Resolved) -> Option<Start> {
     let entry = app.vault.index().entry(&id)?;
-    let conversation = entry.doc.roles().conversation.as_ref()?;
+    let mut conversation = entry.doc.roles().conversation.clone()?;
     let item = entry.doc.linked_to();
-    let context = item.and_then(|item| ai::context::describe(app.vault.index(), item));
+    let default = app.settings.classification();
+    let gate = Gate {
+        local: ai::policy::is_local(resolved.provider, &resolved.address, &resolved.model),
+        default: &default,
+    };
+    let described = item.and_then(|item| ai::context::describe(app.vault.index(), item, &gate));
+    let (context, placeholders, left_out) = match described {
+        Some(d) => (Some(d.text), d.placeholders, d.left_out),
+        None => (None, Placeholders::new(), Vec::new()),
+    };
+    let fresh = placeholders
+        .iter()
+        .any(|(name, p)| conversation.placeholders.get(name) != Some(p));
+    if fresh {
+        conversation.placeholders.extend(placeholders);
+        if let Err(e) = save(app, id, conversation.clone()) {
+            log::warn!("Chat {id}: its placeholders not kept: {e}");
+        }
+    }
     let today = DateTime::today();
     let request = request_for(
-        conversation,
+        &conversation,
         question,
         &resolved.model,
         today,
@@ -440,6 +471,7 @@ fn prepare_reply(app: &mut App, id: Id, question: Id, resolved: Resolved) -> Opt
         model: resolved.model.clone(),
         date: DateTime::now(),
         text: String::new(),
+        left_out,
         task: None,
     };
     app.chat.writing.insert(id, writing);
@@ -484,10 +516,16 @@ fn start_reply(app: &mut App, id: Id, start: Start) {
 // ----------------------------------------------------------------------------
 /// The reply `reply` so far: send it, rendered.
 fn on_delta(app: &mut App, id: Id, reply: Id, text: String) {
+    let html = match conversation_of(app, &id) {
+        Ok((_, conversation)) => {
+            let shown = ai::policy::fill(&text, &conversation.placeholders, app.vault.index());
+            markdown::to_html(&shown)
+        }
+        Err(_) => markdown::to_html(&text),
+    };
     let Some(writing) = app.chat.writing.get_mut(&id).filter(|w| w.id == reply) else {
         return; // stopped meanwhile
     };
-    let html = markdown::to_html(&text);
     writing.text = text;
     let delta = Delta {
         conversation: id,
@@ -556,6 +594,7 @@ fn reply_message(writing: &Writing, text: String) -> ConversationMessage {
         account: Some(writing.account),
         date: Some(writing.date),
         content: Some(text),
+        left_out: writing.left_out.clone(),
         ..Default::default()
     }
 }
@@ -581,7 +620,7 @@ fn post_conversation(app: &App, id: Id) {
 /// such conversation.
 fn view(app: &App, id: Id) -> Result<ConversationView<'_>> {
     let (doc, conversation) = conversation_of(app, &id)?;
-    Ok(view_of(&app.chat, id, doc, conversation))
+    Ok(view_of(&app.chat, id, doc, conversation, app.vault.index()))
 }
 
 // ----------------------------------------------------------------------------
@@ -590,13 +629,17 @@ fn view_of<'a>(
     id: Id,
     doc: &'a Document,
     conversation: &Conversation,
+    index: &Index,
 ) -> ConversationView<'a> {
+    let shown = |text: &str| ai::policy::fill(text, &conversation.placeholders, index);
     let mut messages: Vec<MessageView> = conversation
         .messages
         .iter()
         .filter_map(|m| {
             let message_id = m.id?;
-            let content = m.content.clone().unwrap_or_default();
+            let raw = m.content.as_deref().unwrap_or_default();
+            let content = shown(raw);
+            let personal = content != raw;
             let stopped = chat.stopped.contains(&message_id);
             Some(MessageView {
                 id: message_id,
@@ -609,6 +652,8 @@ fn view_of<'a>(
                 status: if stopped { "stopped" } else { "done" },
                 error: None,
                 suggestions: m.suggestions.clone(),
+                left_out: m.left_out.clone(),
+                personal,
             })
         })
         .collect();
@@ -624,20 +669,26 @@ fn view_of<'a>(
             status: "failed",
             error: Some(failed.error.clone()),
             suggestions: Vec::new(),
+            left_out: Vec::new(),
+            personal: false,
         });
     }
     if let Some(writing) = chat.writing.get(&id) {
+        let content = shown(&writing.text);
+        let personal = content != writing.text;
         messages.push(MessageView {
             id: writing.id,
             parent: Some(writing.parent),
             role: "assistant",
             model: Some(writing.model.clone()),
             date: Some(writing.date),
-            content: writing.text.clone(),
-            html: markdown::to_html(&writing.text),
+            html: markdown::to_html(&content),
+            content,
             status: "writing",
             error: None,
             suggestions: Vec::new(),
+            left_out: writing.left_out.clone(),
+            personal,
         });
     }
     ConversationView {
@@ -767,6 +818,7 @@ mod tests {
                 message(q3, Some(q2), None, " Also the gas bill. "),
             ],
             active: Some(q3),
+            ..Default::default()
         };
         let request = request_for(&conversation, q3, "gpt-5-mini", DateTime::today(), None);
         assert_eq!(request.model, "gpt-5-mini");
@@ -797,6 +849,7 @@ mod tests {
                 message(q2, Some(a2), None, "Still there?"),
             ],
             active: Some(q2),
+            ..Default::default()
         };
         let request = request_for(&conversation, q2, "m", DateTime::today(), Some("About X."));
         assert!(
@@ -979,6 +1032,120 @@ mod tests {
             "{system}"
         );
         assert_eq!(requests[0]["messages"][1]["content"], "What do I owe?");
+    }
+
+    // ------------------------------------------------------------------------
+    /// A chat sent about `linked` in a vault of `files` with a model of the
+    /// fake Ollama named `model`, picked for conversations, replying `reply`: the
+    /// conversation's id, what was sent, and the requests the model got.
+    fn chat_about(
+        name: &str,
+        model: &str,
+        reply: &str,
+        linked: &str,
+        files: &[(&str, String)],
+    ) -> (Harness, Id, Vec<Value>, Vec<Value>) {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let address = FakeOllama::new(&[model])
+            .replying(&[reply])
+            .recording(&requests)
+            .start();
+        let account =
+            format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: ['{model}']\n");
+        let settings = format!("chat-model:\n  account: {OLLAMA_ID}\n  model: '{model}'\n");
+        let mut files: Vec<(&str, String)> = files.to_vec();
+        files.push((".avelor/accounts/ollama.yaml", account));
+        files.push((".avelor/vault.yaml", settings));
+        let mut h = Harness::with_vault(name, &files);
+        let args = json!({ "text": "What is it?", "linked_to": linked });
+        let request = json!({ "id": 1, "cmd": "chat_send", "args": args });
+        h.app.on_web_message(request.to_string());
+        let is_done = |t: &String| t.contains(r#""ev":"account""#);
+        let sent = parse(&h.wait_for(|sent| sent.iter().any(is_done)));
+        let answer = sent.iter().find(|m| m["re"] == 1).expect("the answer");
+        let id: Id = serde_json::from_value(answer["ok"]["id"].clone()).unwrap();
+        let requests = requests.lock().unwrap().clone();
+        (h, id, sent, requests)
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_cloud_model_gets_personal_values_as_placeholders_the_reply_shows_filled() {
+        const RECORD: &str = "01a0e1cc-a24c-7490-82fe-e75669985b46";
+        let record = format!(
+            "id: {RECORD}\ntitle: Checking\nclassification: pii\nrecord: {{}}\niban: DE89 3704 0044\n"
+        );
+        let (h, id, sent, requests) = chat_about(
+            "chat-placeholders",
+            "gpt-oss:120b-cloud",
+            "Your IBAN is {checking-iban}.",
+            RECORD,
+            &[("Records/checking.rec.yaml", record)],
+        );
+        let system = requests[0]["messages"][0]["content"].as_str().unwrap();
+        assert!(
+            system.contains("iban: '{checking-iban}'") && system.contains("Values in braces"),
+            "{system}"
+        );
+        assert!(!system.contains("DE89"), "{system}");
+
+        let written = conversation(&h, id);
+        assert_eq!(written.placeholders["checking-iban"].path, "iban");
+        assert_eq!(
+            written.messages[1].content.as_deref(),
+            Some("Your IBAN is {checking-iban}.")
+        );
+        assert_eq!(
+            written.messages[1].left_out,
+            ["\u{201C}Checking\u{201D}: its personal values as placeholders"]
+        );
+        let done = events(&sent, "conversation");
+        let reply = &done[0]["messages"][1];
+        assert_eq!(reply["content"], "Your IBAN is DE89 3704 0044.");
+        assert_eq!(reply["personal"], true);
+        assert!(reply["html"].as_str().unwrap().contains("DE89 3704 0044"));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_confidential_entity_reaches_no_model_and_a_local_one_reads_pii() {
+        const NOTE: &str = "01a0e1cc-a24c-7490-82fe-e75669985b47";
+        let note = format!(
+            "---\nid: {NOTE}\ntitle: Diary\nclassification: confidential\ndocument: {{}}\n---\nDear diary.\n"
+        );
+        let (h, id, _, requests) = chat_about(
+            "chat-confidential",
+            "m",
+            "I can't see it.",
+            NOTE,
+            &[("Notes/diary.md", note)],
+        );
+        let system = requests[0]["messages"][0]["content"].as_str().unwrap();
+        assert!(
+            system.contains("its classification keeps from you") && !system.contains("Dear diary"),
+            "{system}"
+        );
+        assert_eq!(
+            conversation(&h, id).messages[1].left_out,
+            ["\u{201C}Diary\u{201D} (confidential)"]
+        );
+
+        const RECORD: &str = "01a0e1cc-a24c-7490-82fe-e75669985b48";
+        let record = format!(
+            "id: {RECORD}\ntitle: Checking\nclassification: pii\nrecord: {{}}\niban: DE89 3704 0044\n"
+        );
+        let (_, _, _, requests) = chat_about(
+            "chat-local-pii",
+            "m",
+            "DE89.",
+            RECORD,
+            &[("Records/checking.rec.yaml", record)],
+        );
+        let system = requests[0]["messages"][0]["content"].as_str().unwrap();
+        assert!(
+            system.contains("iban: DE89 3704 0044"),
+            "on this PC: {system}"
+        );
     }
 
     // ------------------------------------------------------------------------

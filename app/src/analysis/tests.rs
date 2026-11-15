@@ -605,6 +605,43 @@ fn an_analysis_writes_the_title_labels_and_projects() {
 
 // ------------------------------------------------------------------------
 #[test]
+fn a_email_its_classification_keeps_from_the_model_is_left_out_and_told() {
+    let answer = r#"{"kind": "request", "title": "Abschlag Oktober"}"#;
+    let address = FakeOllama::new(&["m"]).replying(&[answer]).start();
+    let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+    let secret = Id::generate().to_string();
+    let files = [
+        (".avelor/accounts/ollama.yaml", account),
+        ("Email/a.md", email_file(EMAIL_ID, "Abschlag", "")),
+        (
+            "Email/s.md",
+            email_file(&secret, "Befund", "classification: confidential\n"),
+        ),
+    ];
+    let mut h = Harness::with_vault("analysis-confidential", &files);
+    let ids = vec![Id::parse(EMAIL_ID).unwrap(), Id::parse(&secret).unwrap()];
+    analyse(
+        &mut h.app,
+        Batch::email("jan@example.com", ids, Vec::new()),
+        &at(AnalysisLevel::Lite),
+    );
+    let sent = until_done(&mut h);
+    assert_eq!(
+        shown(&of(&sent, "job").last().unwrap()["summary"]),
+        "1 analysed"
+    );
+    let notices = of(&sent, "notice");
+    assert!(
+        shown(&notices[0]["text"])
+            .ends_with("1 entry left for a model on this PC, by their classification"),
+        "{notices:?}"
+    );
+    let text = fs::read_to_string(h.vault().join("Email/s.md")).unwrap();
+    assert!(!text.contains("Abschlag Oktober"), "untouched: {text}");
+}
+
+// ------------------------------------------------------------------------
+#[test]
 fn medium_writes_a_chat_linked_to_the_email() {
     let answer = r#"{"kind": "request", "title": "Abschlag Oktober", "check": ["Der Betrag ist neu."], "reply": "Danke, ist bezahlt.", "questions": ["Warum ist er hoeher?"]}"#;
     let address = FakeOllama::new(&["m"]).replying(&[answer]).start();

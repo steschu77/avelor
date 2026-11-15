@@ -643,8 +643,13 @@ It carries the following additional fields:
   * `content`: string, the message text as markdown,
   * `suggestions`: [string], questions offered to ask next, shown while the
     message ends the shown path (the email analysis's conversation,
-    `email.md#analysis`).
+    `email.md#analysis`),
+  * `left-out`: [string], what the reply's model wasn't given, by their
+    classification (`#metadata`).
 * `active`: UUIDv7, ID of the leaf message of the currently shown path.
+* `placeholders`: map, what each placeholder a model was given stands for
+  (`assistant.md#context`), by its name: `entity` (ID) and `path` (keys
+  by dots, a list's item by its `id` or its index), never the value.
 
 A message with a `model` is an AI reply. In an AI conversation (the `ai`
 source) the user's own messages carry no `sender`. The app writes its
@@ -911,19 +916,21 @@ the indexing skips like every dot-folder:
 - `.avelor/vault.yaml` (`av_vault::schema::layout::VAULT_SETTINGS`): the
   vault's own settings, read when it opens (`vault_settings.rs`; changed
   with `set_vault_settings`, pushed as `vault_settings`). `chat-model`, the model the assistant answers with, `{account, model}`
-  (`accounts.md#model-choice`); a missing file is the defaults, a broken
-  one too (logged), and keys the app doesn't know are kept.
-  `format`, the vault's format (1, `av_vault::schema::VAULT_FORMAT`), is
-  written with every save, and 1 when absent; a vault of a higher one,
-  written by a newer Avelor, isn't opened: `switch_vault` answers
-  `unsupported`, the start's open a `notice` (`api.md`, `ready`), and
-  nothing is written into it.
+  (`accounts.md#model-choice`); `classification`, that of an entity
+  without one of its own (`#metadata`), `public` when absent, set on the
+  Vault page; a missing file is the defaults, a broken one too (logged),
+  and keys the app doesn't know are kept. `format`, the vault's format
+  (1, `av_vault::schema::VAULT_FORMAT`), is written with every save, and
+  1 when absent; a vault of a higher one, written by a newer Avelor,
+  isn't opened: `switch_vault` answers `unsupported`, the start's open a
+  `notice` (`api.md`, `ready`), and nothing is written into it.
 
 ```yaml
 format: 1
 chat-model:
   account: 0193a7c1-4b0e-7c1a-9d2f-3a51c8e05be0
   model: gpt-5-mini
+classification: pii
 ```
 
 Opening another vault switches to its accounts, watches and settings.
