@@ -221,9 +221,108 @@ impl<'de> Deserialize<'de> for Genre {
     }
 }
 
+// ----------------------------------------------------------------------------
+/// Which models may read an entity (vault.md#metadata): `public` any,
+/// `restricted` and `pii` one on this PC only, `confidential` none. A
+/// value the app doesn't know is kept, and reaches as little as
+/// `confidential`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Classification {
+    Public,
+    Pii,
+    Restricted,
+    Confidential,
+    Other(String),
+}
+
+// ----------------------------------------------------------------------------
+const CLASSIFICATIONS: [(&str, Classification); 4] = [
+    ("public", Classification::Public),
+    ("pii", Classification::Pii),
+    ("restricted", Classification::Restricted),
+    ("confidential", Classification::Confidential),
+];
+
+// ----------------------------------------------------------------------------
+impl Classification {
+    /// A known value (case-insensitive), or `Other`.
+    pub fn parse(s: &str) -> Classification {
+        CLASSIFICATIONS
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(s))
+            .map(|(_, class)| class.clone())
+            .unwrap_or_else(|| Classification::Other(s.to_string()))
+    }
+
+    /// The value as written to disk.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Classification::Other(s) => s,
+            known => CLASSIFICATIONS
+                .iter()
+                .find(|(_, class)| class == known)
+                .map(|(name, _)| *name)
+                .unwrap_or_default(),
+        }
+    }
+
+    /// How little it lets reach a model: `public` 0, `pii` 1 (a cloud
+    /// model gets placeholders), `restricted` 2 (a local model only),
+    /// `confidential` and anything unknown 3 (none). The stricter of two
+    /// wins where both apply.
+    pub fn rank(&self) -> u8 {
+        match self {
+            Classification::Public => 0,
+            Classification::Pii => 1,
+            Classification::Restricted => 2,
+            Classification::Confidential | Classification::Other(_) => 3,
+        }
+    }
+
+    /// The stricter of `self` and `other`.
+    pub fn stricter(self, other: Classification) -> Classification {
+        if other.rank() > self.rank() {
+            other
+        } else {
+            self
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl Serialize for Classification {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+// ----------------------------------------------------------------------------
+impl<'de> Deserialize<'de> for Classification {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(Classification::parse(&s))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_classification_keeps_what_it_doesnt_know_and_ranks_it_strictest() {
+        assert_eq!(Classification::parse("PII"), Classification::Pii);
+        let secret = Classification::parse("secret");
+        assert_eq!(secret.as_str(), "secret");
+        assert_eq!(secret.rank(), Classification::Confidential.rank());
+        assert_eq!(
+            Classification::Public.stricter(Classification::Pii),
+            Classification::Pii
+        );
+        assert_eq!(
+            Classification::Restricted.stricter(Classification::Pii),
+            Classification::Restricted
+        );
+    }
 
     #[test]
     fn contact_ref_round_trips_id() {

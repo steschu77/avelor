@@ -8,7 +8,7 @@
 use core::fmt;
 use std::collections::BTreeMap;
 
-use crate::shared::{ColorRef, ContactRef, Genre, OneOrMany};
+use crate::shared::{Classification, ColorRef, ContactRef, Genre, OneOrMany};
 use av_utils::datetime::{Date, DateTime};
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
@@ -916,6 +916,10 @@ pub struct Envelope {
     pub starred: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub archived: Option<bool>,
+    /// Which models may read it; absent, what its kind brings or the
+    /// vault's default (`Envelope::classification`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification: Option<Classification>,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub source: Option<Source>,
     #[serde(flatten)]
@@ -931,6 +935,19 @@ impl Envelope {
 
     pub fn compose(&self) -> Option<String> {
         serde_yaml_ng::to_string(self).ok()
+    }
+
+    /// Which models may read the entity (vault.md#metadata): its own
+    /// `classification`, else `pii` for a bank account and its statements,
+    /// else the vault's `default`.
+    pub fn classification(&self, default: &Classification) -> Classification {
+        if let Some(own) = &self.classification {
+            return own.clone();
+        }
+        if self.roles.bank_account.is_some() || self.roles.statement.is_some() {
+            return Classification::Pii;
+        }
+        default.clone()
     }
 
     /// Set a non-standard key (stored via the flattened `extra` map).
@@ -1087,6 +1104,27 @@ custom_key: kept
         assert_eq!(
             env.extra.get("custom_key").and_then(|v| v.as_str()),
             Some("kept")
+        );
+    }
+
+    #[test]
+    fn a_classification_is_its_own_else_its_kinds_else_the_vaults() {
+        let public = Classification::Public;
+        let own = Envelope::parse("title: Note\nclassification: confidential\n").unwrap();
+        assert_eq!(own.classification(&public), Classification::Confidential);
+        assert_eq!(
+            own.compose().unwrap(),
+            "title: Note\nclassification: confidential\n"
+        );
+        let account = Envelope::parse("title: Checking\nbank-account: {}\n").unwrap();
+        assert_eq!(account.classification(&public), Classification::Pii);
+        let opened =
+            Envelope::parse("title: Checking\nclassification: public\nbank-account: {}\n").unwrap();
+        assert_eq!(opened.classification(&public), Classification::Public);
+        let plain = Envelope::parse("title: Note\n").unwrap();
+        assert_eq!(
+            plain.classification(&Classification::Restricted),
+            Classification::Restricted
         );
     }
 

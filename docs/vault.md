@@ -228,9 +228,17 @@ and everything else kept verbatim.
 * `starred`: boolean,
 * `archived`: boolean,
 * `tags`: [string],
-* `linked-to`: Entity ID.
+* `linked-to`: Entity ID,
+* `classification`: string, which models may read it.
 
 `tags` are the labels the user sees.
+
+`classification` says which AI models may read the entity: `public` any,
+`pii` and `restricted` only one on this PC, `confidential` none; a value
+the app doesn't know counts as `confidential`. Without one, a bank account
+and its statements are `pii` by their kind, and anything else takes the
+vault's default (`public`). Where two apply, the stricter wins: public,
+pii, restricted, confidential.
 
 `starred` marks a favorite. It is only written as `starred: true`; a
 missing key means not starred.
