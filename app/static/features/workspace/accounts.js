@@ -711,10 +711,15 @@ function aiSettings(account) {
 
 // Tick or untick a model: ticked, the features' pickers offer it. A
 // feature that picked an unticked model is refused until it picks another.
+// The ticks are kept in the provider's order, which the pickers' menu
+// follows, those it no longer lists after them.
 function aiToggleOffered(account, modelId, on) {
   const offered = aiSettings(account).offered.filter(m => m !== modelId);
   if (on) offered.push(modelId);
-  aiSetSettings(account, { offered });
+  const list = aiModels.get(account);
+  if (!Array.isArray(list)) return aiSetSettings(account, { offered });
+  const listed = list.map(model => model.id).filter(id => offered.includes(id));
+  aiSetSettings(account, { offered: [...listed, ...offered.filter(id => !listed.includes(id))] });
 }
 
 // ----------------------------------------------------------------------------
@@ -941,19 +946,20 @@ function renderAiModels(account) {
     return section;
   }
 
-  const settings = aiSettings(account.id);
-  const byId = new Map(list.map(model => [model.id, model]));
-  const ticked = settings.offered.map(id => byId.get(id) ?? { id, name: id, missing: true });
-  const rest = list.filter(model => !settings.offered.includes(model.id));
+  // The provider's order, ticked or not, so a tick moves nothing; the
+  // ticked models it no longer lists after them, so they can be unticked.
+  const { offered } = aiSettings(account.id);
+  const gone = offered.filter(id => !list.some(model => model.id === id))
+    .map(id => ({ id, name: id, missing: true }));
 
   const columns = accEl('div', 'list-row ai-models__row ai-models__row--head label');
   columns.append(accEl('span'), accEl('span', '', t('accounts.model')), accEl('span', '', t('accounts.per_million')),
     accEl('span', '', t('accounts.used_by')));
   section.append(columns);
-  for (const model of [...ticked, ...rest]) {
-    section.append(renderAiModelRow(account, model, !rest.includes(model)));
+  for (const model of [...list, ...gone]) {
+    section.append(renderAiModelRow(account, model, offered.includes(model.id)));
   }
-  if (!list.length && !ticked.length) {
+  if (!list.length && !gone.length) {
     section.append(accEl('div', 'page-text', provider.local
       ? t('accounts.no_local_models')
       : t('accounts.no_key_models')));
@@ -964,9 +970,11 @@ function renderAiModels(account) {
 function renderAiModelRow(account, model, ticked) {
   const row = accEl('div', 'list-row ai-models__row');
   if (!ticked) row.classList.add('ai-models__row--off');
+  if (model.missing) row.classList.add('ai-models__row--gone');
 
   const check = accEl('button', 'check', ticked ? '\u2713' : '');
   check.type = 'button';
+  check.dataset.focusKey = `ai-model:${account.id}:${model.id}`;
   check.setAttribute('aria-pressed', String(ticked));
   titled(check, ticked ? t('accounts.stop_offering') : t('accounts.offer'));
   check.addEventListener('click', () => aiToggleOffered(account.id, model.id, !ticked));

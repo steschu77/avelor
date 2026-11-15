@@ -238,7 +238,9 @@ accounts with a detail pane.
   and Gemini with an API key, and Ollama by its address. A key or an
   address is checked by listing the provider's models before it is stored;
   until then it stays an input. The pane lists the models with their price
-  per million tokens: ticking one offers it in the features' pickers, and
+  per million tokens, in the provider's order, ticked or not, a ticked one
+  the provider no longer lists after them in red: ticking one offers it in
+  the features' pickers, which offer them in that order, and
   "Used by" names, read only, what picked it (`accounts.md#model-choice`):
   Conversations, a watch with its steps that run with it ("Scanner · OCR,
   analysis", a PDF watch's reading as "reading"), or an email filter with

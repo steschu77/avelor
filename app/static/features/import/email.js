@@ -86,6 +86,7 @@ export function openEmailFetch(account_id) {
     headers: new Map(), // id -> { date, from, subject, in_vault }
     selected: new Set(),
     page: 0,
+    fromTop: false, // the matches list starts at its top when drawn next
     fetching: false, // while `email_fetch` is answered
     fetchError: null,
     timer: null,
@@ -163,6 +164,7 @@ function onEmailMatches(reply) {
   email.truncated = reply.truncated;
   email.headers = new Map();
   email.page = 0;
+  email.fromTop = true;
   email.selected = new Set(reply.matches.filter(m => !m.in_vault).map(m => m.id));
   emailApplyHeaders(reply.headers);
   scheduleRenderEmailMatches();
@@ -318,6 +320,7 @@ function emailPageCount() {
 
 function emailShowPage(page) {
   email.page = Math.max(0, Math.min(page, emailPageCount() - 1));
+  email.fromTop = true;
   const start = email.page * EMAIL_PAGE_SIZE;
   const missing = email.matches.slice(start, start + EMAIL_PAGE_SIZE)
     .map(m => m.id)
@@ -847,7 +850,7 @@ function renderEmailMatches() {
   if (matches === null) {
     box.append(accEl('div', 'page-text email__empty',
       email.searching ? t('email.reading_matches') : t('email.press_update')));
-    email.els.matches.replaceChildren(box, renderEmailFooter());
+    drawEmailMatches(box);
     return;
   }
 
@@ -868,6 +871,7 @@ function renderEmailMatches() {
   for (const [which, name] of [['new', t('email.select.new')], ['all', t('email.select.all')], ['none', t('email.select.none')]]) {
     const button = accEl('button', '', name);
     button.type = 'button';
+    button.dataset.focusKey = `email-select:${which}`;
     button.addEventListener('click', () => emailSelect(which));
     select.append(button);
   }
@@ -883,7 +887,19 @@ function renderEmailMatches() {
   box.append(list);
 
   if (matches.length > EMAIL_PAGE_SIZE) box.append(renderEmailPager());
-  email.els.matches.replaceChildren(box, renderEmailFooter());
+  drawEmailMatches(box);
+}
+
+// The matches pane drawn anew as `box` and the footer: a tick keeps the
+// list where it was scrolled to and the focus where it was; another page
+// or new matches start at the top.
+function drawEmailMatches(box) {
+  const pane = email.els.matches;
+  const top = email.fromTop ? 0 : pane.querySelector('.email__list')?.scrollTop ?? 0;
+  email.fromTop = false;
+  keepingFocus(pane, () => pane.replaceChildren(box, renderEmailFooter()));
+  const list = pane.querySelector('.email__list');
+  if (list) list.scrollTop = top;
 }
 
 function renderEmailRow(match) {

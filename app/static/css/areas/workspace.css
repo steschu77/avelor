@@ -282,6 +282,12 @@
   color: var(--c-label);
 }
 
+/* a ticked model the provider no longer lists */
+.ai-models__row--gone .ai-models__id,
+.ai-models__row--gone .note {
+  color: var(--c-danger-ink);
+}
+
 .ai-models__id,
 .ai-pick__name {
   min-width: 0;
