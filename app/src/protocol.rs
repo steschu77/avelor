@@ -15,6 +15,7 @@ use crate::close;
 use crate::documents;
 use crate::google;
 use crate::google::accounts::{CalendarSource, Level};
+use crate::me;
 use crate::recurring_payments;
 use crate::scans;
 use crate::search;
@@ -65,6 +66,7 @@ enum Command {
     // The Settings page (`settings`).
     SetLanguage(settings::LanguageChange),
     SetTheme(settings::ThemeChange),
+    SetMe(me::Pick),
     /// The vault's own settings (`vault_settings`).
     SetVaultSettings(vault_settings::SettingsChange),
     RevealVault,
@@ -373,6 +375,7 @@ impl Command {
             "set_prefs" => Command::SetPrefs(from_value(args)?),
             "set_language" => Command::SetLanguage(from_value(args)?),
             "set_theme" => Command::SetTheme(from_value(args)?),
+            "set_me" => Command::SetMe(from_value(args)?),
             "set_vault_settings" => Command::SetVaultSettings(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
             "rebuild_index" => Command::RebuildIndex,
@@ -482,6 +485,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetPrefs(a) => api::set_prefs(app, req, a.prefs),
         Command::SetLanguage(a) => settings::set_language(app, req, a),
         Command::SetTheme(a) => settings::set_theme(app, req, a),
+        Command::SetMe(a) => me::set_me(app, req, a),
         Command::SetVaultSettings(a) => vault_settings::set_vault_settings(app, req, a),
         Command::RevealVault => api::reveal_vault(app, req),
         Command::RebuildIndex => api::rebuild_index(app, req),

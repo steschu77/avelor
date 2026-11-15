@@ -27,8 +27,8 @@ use serde_json::json;
 /// at start, and was set aside (`config::load_config`, which logs why), is
 /// told now, in the status bar. Opens the vault of the last session (or the
 /// command line's, `ConfigStore::vault`), with its accounts and watches;
-/// answers whether this build has Google (`App::has_google`), and the
-/// language (`settings::language`).
+/// answers whether this build has Google (`App::has_google`), the language
+/// (`settings::language`), and who the user is (`me`).
 pub fn ready(app: &mut App, req: Req) {
     if app.config.take_error().is_some() {
         app.notice(Text::new("config.unread"));
@@ -36,7 +36,11 @@ pub fn ready(app: &mut App, req: Req) {
     if let Some(root) = app.config.vault().map(Path::to_path_buf) {
         open_vault(app, &root, false);
     }
-    req.ok(json!({ "google": app.has_google, "language": settings::language(app) }));
+    req.ok(json!({
+        "google": app.has_google,
+        "language": settings::language(app),
+        "me": app.config.me(),
+    }));
 }
 
 // ----------------------------------------------------------------------------

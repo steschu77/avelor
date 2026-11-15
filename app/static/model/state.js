@@ -15,6 +15,9 @@ export const store = createStore({
   // features/workspace/settings.js): { picked, formal, run, run_formal,
   // system, all: [{ id, forms: [{ name, says }] }] }; always replaced
   language: null,
+  // who the user is, contacts' ids, at most one per vault (`ready`,
+  // `set_me`); `me()` (model/entities.js) is the open vault's
+  me: [],
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
   // level: 'error' | 'info', entity? }; always replaced
   notices: [],

@@ -249,6 +249,11 @@ export function parseContact(ref) {
   return named ? { name: named[1], email: named[2] } : { name: ref };
 }
 
+// The user as a contact of the open vault, its id, or null.
+export function me() {
+  return store.getState().me.find(id => entities.get(id)?.kind === 'contact') ?? null;
+}
+
 // ----------------------------------------------------------------------------
 // An entity as the page keeps it, from its `entity` event's `meta`
 // (api.md#events): its date a Date, and whether it is a day only (all day);

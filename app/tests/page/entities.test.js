@@ -1,7 +1,7 @@
 import { equal, test } from './harness.js';
 import { entity, vault } from './vault.js';
 import {
-  NO_PROJECT, assistantConversations, calendarEntityOf, entities, entityOf, knownThreads, matchesFilter, parseContact,
+  NO_PROJECT, assistantConversations, calendarEntityOf, entities, entityOf, knownThreads, matchesFilter, me, parseContact,
   projectNames, projectScope, projects, projectsFor, projectsInOrder, projectsOf, sourceKeyOf, threadMatchesFilter, threadMembers,
   threadOf, threadProjects, threads, watches,
 } from '../../static/model/entities.js';
@@ -159,6 +159,14 @@ test('a contact of the vault, one named with an email, and one as written', () =
   equal(parseContact('@gone'), { name: '@gone' });
   equal(parseContact('Maya <maya@example.org>'), { name: 'Maya', email: 'maya@example.org' });
   equal(parseContact('Shady Pines Properties'), { name: 'Shady Pines Properties' });
+});
+
+test('the user is the contact of the vault among those kept', () => {
+  vault({ id: 'maya', kind: 'contact', title: 'Maya' }, { id: 'shop', kind: 'task', title: 'Shop' });
+  for (const [kept, is] of [[[], null], [['elsewhere'], null], [['shop'], null], [['elsewhere', 'maya'], 'maya']]) {
+    store.setState({ me: kept });
+    equal(me(), is, kept.join());
+  }
 });
 
 test('an entity as the page keeps it', () => {

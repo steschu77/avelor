@@ -31,6 +31,9 @@ pub struct AppConfig {
     /// The theme the user picked (`Theme::name`), else the system's.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
+    /// Who the user is (`me`): contacts' ids, at most one per vault.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub me: Vec<String>,
     /// UI preferences, owned by the frontend; the host only stores and
     /// replays them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -164,6 +167,19 @@ impl ConfigStore {
     /// Remember `theme`, and write the file.
     pub fn set_theme(&mut self, theme: Theme) -> Result<()> {
         self.config.theme = theme.name().map(str::to_string);
+        self.save()
+    }
+
+    // ------------------------------------------------------------------------
+    /// Who the user is (`me`), as the file has it.
+    pub fn me(&self) -> &[String] {
+        &self.config.me
+    }
+
+    // ------------------------------------------------------------------------
+    /// Remember `me`, and write the file.
+    pub fn set_me(&mut self, me: Vec<String>) -> Result<()> {
+        self.config.me = me;
         self.save()
     }
 

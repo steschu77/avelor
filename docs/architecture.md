@@ -428,6 +428,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `google/accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account; the auto-syncs' schedule, `SYNC_EVERY` and `AutoSyncs` |
 | `config/files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
 | `settings.rs` | what the Settings page sets: the language as `ready` tells it (`language`), `set_language`, `set_theme`; its dispatch tests |
+| `me.rs` | who the user is in the open vault (`config.yaml` `me`): `set_me`; its dispatch tests |
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai/context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file with its attachments' read text, within a budget, each as far as its classification reaches the model; its tests |
 | `ai/policy.rs` | what reaches a model: how far an entity's classification reaches one on this PC and one off it, whether a model runs on this PC, a `masked` entity's values as placeholders and the reply's values filled in; its tests |
@@ -573,7 +574,7 @@ nothing imports `app.js`.
 | `features/window.js` | the page's zoom and full screen as commands |
 | `features/undo.js` | Ctrl+Z and Ctrl+Y as the actions `undo` and `redo` |
 | `features/words.js` | the vault panel's words box (`ui.md#words`): `search` at most every 120 ms, its answer as `word_filter`, Esc and Ctrl+F |
-| `features/blueprint.js`, `features/facts.js`, `features/route.js`, `features/gaps.js`, `features/when.js`, `features/set-dates.js` | a project's blueprint under its description (`panel.md#blueprint`): its facts, a trip's route (its parts' clicks, the sketch edited in place), When, Missing and Next, Find; the menu that fills a trip's gap (`fillGap`, also the Timeline's) and its events (`eventMenu`, also When's); When, the windows a sketched trip's days could take and its lanes edited (`panel.md#when`); Set the dates, a sketched trip's days proposed as planned events (`ui.md#set-the-dates`); a fact's value and its editor by its type; the menus of calendars and contacts (`calendarMenu`, `contactMenu`, also New's and the Accounts page's) |
+| `features/blueprint.js`, `features/facts.js`, `features/route.js`, `features/gaps.js`, `features/when.js`, `features/set-dates.js` | a project's blueprint under its description (`panel.md#blueprint`): its facts, a trip's route (its parts' clicks, the sketch edited in place), When, Missing and Next, Find; the menu that fills a trip's gap (`fillGap`, also the Timeline's) and its events (`eventMenu`, also When's); When, the windows a sketched trip's days could take and its lanes edited (`panel.md#when`); Set the dates, a sketched trip's days proposed as planned events (`ui.md#set-the-dates`); a fact's value and its editor by its type; the menus of calendars and contacts (`calendarMenu`, `contactMenu`, also New's, the Accounts page's and Settings') |
 | `features/header.js`, `features/sidebar.js`, `features/sources.js` | the lens header: the project's name, the words' and the source's chips, the active labels and their "+" menu, Clear filters, the project's details and description, a new project's (`openNewProject`), `leaveEditModes`; the vault panel: projects, the New project menu, No project and sources with their counts, the filter, the vault menu; the sources as both list them (`vaultSources`) |
 | `features/new.js`, `features/recurring-payment-new.js`, `features/linked.js` | New: the menu of types, the New page (an event's kind, state, calendar and trip fields; filled in from a trip's gap, `openNew`), the Task tab, `create_entity`; New recurring payment, filled from a transaction (`panel.md#a-new-recurring`); the Linked tab: links to, linked from, a search to link to |
 | `features/workspace/vault.js` | the Vault page; `switchVault`, `revealVault`, Rebuild index |
@@ -731,7 +732,8 @@ The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
 - `config.yaml`: the vault of the last session (`vault`), the window's
   size and maximized state, the language the user picked (`language`,
   `localization.md#language`) and the theme (`theme`: `light` or `dark`,
-  else the system's), and the page's preferences (`prefs`,
+  else the system's), who the user is in each vault (`me`, contacts' ids,
+  `ui.md#settings`), and the page's preferences (`prefs`,
   `ui.md#preferences`);
 - the accounts' DPAPI secrets, `<id>.token` and `<id>.key`
   (`accounts.md#secrets`);

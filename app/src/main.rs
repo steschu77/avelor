@@ -20,6 +20,7 @@ mod email;
 mod google;
 mod indexing;
 mod jobs;
+mod me;
 mod page;
 mod protocol;
 mod reader;

@@ -6,13 +6,15 @@ import { $, accEl, oncePerFrame, setAria } from '../../core/dom.js';
 import { registerAction, runAction, shortcutText } from '../../core/actions.js';
 import { rpcCall } from '../../core/rpc.js';
 import { locale, t } from '../../core/text.js';
-import { showError, store } from '../../model/state.js';
+import { entities, me } from '../../model/entities.js';
+import { showError, store, vaultOpen } from '../../model/state.js';
 import { iconEl } from '../../ui/icons.js';
 import { dropBox, showMenu } from '../../ui/menu.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
 import {
   closeVaultArea, detailPane, listDetailPage, listSection, openVaultOp, registerVaultPage, replaceVaultPage, setPageFocus,
 } from '../../ui/page.js';
+import { contactMenu } from '../facts.js';
 
 const SHORTCUT = 'Ctrl+,';
 
@@ -21,7 +23,7 @@ const scheduleRenderSettings = oncePerFrame(renderSettings);
 function renderSettings() {
   const { vault_op, language } = store.getState();
   if (vault_op !== 'settings' || !language) return;
-  const parts = [lookPart(language)];
+  const parts = [lookPart(language), youPart()];
 
   const links = accEl('div', 'settings__links');
   links.append(...parts.map(({ id, title, now }) => linkRow(title, accEl('span', 'meta', now), () => showPart(id))));
@@ -102,7 +104,9 @@ function settingRow(name, note, ...controls) {
   return row;
 }
 
-// The controls of a row, `name` their setting's, found again by `key`.
+// The controls of a row, `name` their setting's, found again by `key`. What
+// is the vault's waits until it is read (`busy`): until then it isn't known
+// which of the ids kept are its own.
 function settingSeg(name, key, options, current, onPick) {
   const seg = keyedSeg(accSeg(options, current, onPick), options, key);
   seg.setAttribute('role', 'group');
@@ -110,13 +114,14 @@ function settingSeg(name, key, options, current, onPick) {
   return seg;
 }
 
-function settingBox(name, key, label, hint, items) {
+function settingBox(name, key, label, hint, open, busy = false) {
   const box = dropBox(accEl('button'), label, hint);
+  box.disabled = busy;
   box.dataset.focusKey = key;
   box.setAttribute('aria-label', `${name}: ${label}`);
   box.addEventListener('click', ev => {
     ev.stopPropagation();
-    showMenu(box, items(), { matchWidth: true });
+    open(box);
   });
   return box;
 }
@@ -149,13 +154,15 @@ function languageRow({ picked, formal, run, run_formal, system, all }) {
     const options = forms.map((one, i) => [Boolean(i), one.name, { title: one.says }]);
     controls.push(settingSeg(t('settings.address'), 'address', options, formal, value => setLanguage({ formal: value })));
   }
-  controls.push(settingBox(name, 'language', picked ? languageName(id) : t('settings.system'), picked ? '' : languageName(id), () => [
+  const items = [
     { label: t('settings.system'), hint: languageName(system), checked: !picked, run: () => setLanguage({ picked: null }) },
     ...all.map((language, i) => ({
       label: languageName(language.id), desc: language.id === run ? '' : nameIn(locale, language.id), separator: i === 0,
       checked: picked === language.id, run: () => setLanguage({ picked: language.id }),
     })),
-  ]));
+  ];
+  controls.push(settingBox(name, 'language', picked ? languageName(id) : t('settings.system'), picked ? '' : languageName(id),
+    box => showMenu(box, items, { matchWidth: true })));
   return settingRow(name, note, ...controls);
 }
 
@@ -209,6 +216,47 @@ function setLanguage(change) {
 }
 
 // ----------------------------------------------------------------------------
+// The user in the vault
+
+function youPart() {
+  const open = vaultOpen();
+  return {
+    id: 'you', title: open ? t('settings.you', { vault: store.getState().vault_name }) : t('settings.you_none'),
+    scope: open ? t('settings.this_vault') : '', now: entities.get(me())?.title ?? '',
+    rows: [open ? meRow() : noVaultRow()],
+  };
+}
+
+const indexing = () => store.getState().vault_state === 'indexing';
+
+// Who the user is: a contact of the vault, or a new one by its name.
+function meRow() {
+  const name = t('settings.who');
+  const id = me();
+  const label = id ? entities.get(id).title || t('untitled') : t('facts.nobody');
+  return settingRow(name, [t('settings.who_note')], settingBox(name, 'who', label, '',
+    box => contactMenu(box, id && `@${id}`, ref => setMe(ref?.slice(1) ?? null), name, { make: makeMe }), indexing()));
+}
+
+function setMe(contact) {
+  rpcCall('set_me', { contact }).then(me => store.setState({ me })).catch(e => showError(e.message));
+}
+
+function makeMe(title) {
+  rpcCall('create_entity', { title, roles: { contact: { type: 'person' } } })
+    .then(({ id }) => setMe(id))
+    .catch(e => showError(e.message));
+}
+
+function noVaultRow() {
+  const open = accEl('button', 'btn', t('vault.open_dots'));
+  open.type = 'button';
+  open.dataset.focusKey = 'open-vault';
+  open.addEventListener('click', () => runAction('vault.switch'));
+  return settingRow(t('settings.who'), [t('settings.per_vault')], open);
+}
+
+// ----------------------------------------------------------------------------
 // Open the page, the focus on the control `key`, if given.
 function openSettings(key) {
   if (key) setPageFocus(key);
@@ -217,19 +265,25 @@ function openSettings(key) {
 }
 
 registerVaultPage('settings', { close: closeVaultArea, ofVault: false });
-store.subscribe([state => state.vault_op, state => state.language], () => scheduleRenderSettings());
+store.subscribe([
+  state => state.vault_op, state => state.language, state => state.vault_state, state => state.vault_name,
+  state => state.entities_rev, state => state.me,
+], () => scheduleRenderSettings());
 
 registerAction({
   id: 'settings', group: 'go', title: t('settings.name'), icon: '#i-settings', also: t('settings.also'),
   shortcut: SHORTCUT, page: true, place: 'page', end: () => t('palette.page'), run: () => openSettings(),
 });
-// The rows as commands: the title, the other words, and the control focused.
-for (const [id, title, also, control] of [
+// The rows as commands: the title, the other words, the control focused, and
+// when there is one.
+for (const [id, title, also, control, when] of [
   ['language', t('settings.language'), t('settings.language_also'), () => 'language'],
   ['theme', t('settings.theme'), t('settings.theme_also'), () => `theme:${pickedTheme()}`],
+  ['who', t('settings.who'), t('settings.who_also'), () => 'who', vaultOpen],
 ]) {
   registerAction({
-    id: `settings.${id}`, group: 'settings', title, icon: '#i-settings', also, page: true, run: () => openSettings(control()),
+    id: `settings.${id}`, group: 'settings', title, icon: '#i-settings', also, page: true, when,
+    run: () => openSettings(control()),
   });
 }
 

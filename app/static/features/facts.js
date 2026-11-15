@@ -225,8 +225,10 @@ function pickContacts(fact, anchor, save) {
 
 // The vault's contacts at `anchor`, to pick one of (`onPick('@id')`) or
 // nobody (null), `current` ticked (a name the vault has no contact for
-// too); also the Accounts page's Work of (features/workspace/accounts.js).
-export function contactMenu(anchor, current, onPick, head) {
+// too); `make(name)`: a name typed that no contact has is offered as a new
+// one. Also the Accounts page's Work of (features/workspace/accounts.js)
+// and who the user is (features/workspace/settings.js).
+export function contactMenu(anchor, current, onPick, head, { make } = {}) {
   const named = current && !parseContact(current).id ? [{ label: parseContact(current).name, checked: true, run: () => {} }] : [];
   showMenu(anchor, [
     { label: t('facts.nobody'), checked: !current, run: () => onPick(null) },
@@ -234,7 +236,12 @@ export function contactMenu(anchor, current, onPick, head) {
     ...vaultContacts().map(doc => ({
       label: doc.title || t('untitled'), checked: current === `@${doc.doc_id}`, run: () => onPick(`@${doc.doc_id}`),
     })),
-  ], { head, filter: { placeholder: t('facts.filter_contacts') } });
+  ], { head, filter: { placeholder: t('facts.filter_contacts'), extra: name => newContact(name, make) } });
+}
+
+function newContact(name, make) {
+  const known = vaultContacts().some(doc => (doc.title || '').toLowerCase() === name.toLowerCase());
+  return make && !known ? [{ label: t('facts.new_contact', { name }), checked: false, run: () => make(name) }] : [];
 }
 
 function vaultContacts() {
