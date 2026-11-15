@@ -281,10 +281,12 @@ function renderTaskTab(focus = false) {
 // An assistant reply's "+ Task from this" (features/assistant/assistant.js,
 // the `task.with` action): the Task tab for
 // what the panel shows, with `markdown` in its body, below what is typed
-// there already. The context column is open beside the chat already.
-function openTaskWith(markdown) {
+// there already; `personal` (a reply showing personal values) makes the
+// task `masked`. The context column is open beside the chat already.
+function openTaskWith(markdown, personal = false) {
   const d = taskDraft(contextTarget(store.getState()));
   d.body = d.body.trim() ? `${d.body.trimEnd()}\n\n${markdown}` : markdown;
+  if (personal) d.classification = 'masked';
   taskShown = null; // the form is built again, with the body
   selectContextTab('task', true);
 }
@@ -389,6 +391,7 @@ function createNew(d) {
   if (d.busy || newBlocked(d)) return;
   const args = { roles: newRoles(d), title: d.title.trim(), projects: d.projects, labels: d.labels };
   if (d.linked) args.linked_to = d.linked;
+  if (d.classification) args.classification = d.classification;
   if (d.type.kind === 'document') args.date = isoInstant(zonedInstant(d.day, localTime(new Date())));
   if (!['list', 'record'].includes(d.type.kind) && d.body.trim()) args.content = d.body;
   d.busy = true;

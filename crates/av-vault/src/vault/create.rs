@@ -13,6 +13,7 @@ use crate::envelope::Thread;
 use crate::envelope::{Bare, Project, Roles, Source};
 use crate::filename;
 use crate::schema::layout;
+use crate::shared::Classification;
 use av_utils::datetime::DateTime;
 use av_utils::error::Error;
 use av_utils::error::Result;
@@ -37,6 +38,9 @@ pub struct NewEntity {
     pub linked_to: Option<Id>,
     /// The markdown body; a list or a record has none.
     pub content: String,
+    /// Its own classification (vault.md#metadata); none, the vault's
+    /// default.
+    pub classification: Option<Classification>,
 }
 
 // ----------------------------------------------------------------------------
@@ -173,6 +177,7 @@ impl Index {
         }
         doc.set_labels(unique_trimmed(new.labels));
         doc.set_link(new.linked_to);
+        doc.set_classification(new.classification);
         let body = new.content.trim_end();
         if format == FileFormat::Markdown && !body.is_empty() {
             doc.set_content(format!("{body}\n"));

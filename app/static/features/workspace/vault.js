@@ -9,8 +9,11 @@ import { registerAction } from '../../core/actions.js';
 
 import { rpcCall } from '../../core/rpc.js';
 import { t } from '../../core/text.js';
+import { vaultSettings } from '../../model/entities.js';
 import { showError } from '../../model/state.js';
 import { store, vaultOpen } from '../../model/state.js';
+import { accSeg } from '../../ui/segmented.js';
+import { CLASSIFICATIONS } from './models.js';
 import { trySave } from '../../model/documents.js';
 import { replaceVaultPage } from '../../ui/page.js';
 import { leaveEditModes } from '../header.js';
@@ -35,7 +38,8 @@ function renderVault() {
     accEl('span', 'meta', vaultSummary(state)));
   page.append(head,
     accEl('div', 'mono truncate-start', state.vault_path),
-    renderVaultActions(true));
+    renderVaultActions(true),
+    renderVaultClassification());
   if (state.vault_errors.length) page.append(renderVaultErrors(state.vault_errors));
   replaceVaultPage(page);
 }
@@ -67,6 +71,21 @@ function renderVaultActions(open) {
   return actions;
 }
 
+// What reaches a model of what has no classification of its own
+// (vault.md#vault-config, `set_vault_settings`).
+function renderVaultClassification() {
+  const part = accEl('div', 'vault__class');
+  part.append(accEl('div', 'label section-head', t('vault.classification')));
+  const current = vaultSettings().classification ?? 'open';
+  const options = CLASSIFICATIONS.map(([value, label, means]) => [value, label, { title: means }]);
+  const seg = accSeg(options, current, classification => {
+    rpcCall('set_vault_settings', { classification }).catch(e => showError(e.message));
+  });
+  const means = CLASSIFICATIONS.find(([value]) => value === current)?.[2] ?? '';
+  part.append(seg, accEl('div', 'meta', t('vault.classification_note', { means })));
+  return part;
+}
+
 // The files the indexing couldn't read, each with the reason.
 function renderVaultErrors(errors) {
   const part = accEl('div', 'vault__errors');
@@ -87,6 +106,7 @@ function renderVaultErrors(errors) {
 store.subscribe([
   state => state.vault_op, state => state.vault_state, state => state.vault_errors,
   state => state.files_total, state => state.vault_name, state => state.vault_path,
+  state => state.settings_rev,
 ], () => scheduleRenderVault());
 
 // ----------------------------------------------------------------------------

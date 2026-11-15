@@ -136,7 +136,7 @@ mod tests {
                 message(a1b, Some(q1), Some("m")),
             ],
             active: Some(a2),
-            ..Conversation::default()
+            ..Default::default()
         };
         assert_eq!(conversation.leaf_from(a1), Some(a2));
         assert_eq!(conversation.leaf_from(q1), Some(a1b), "the newest child");
@@ -154,7 +154,7 @@ mod tests {
         let conversation = Conversation {
             messages: vec![message(a, Some(b), None), message(b, Some(a), None)],
             active: Some(a),
-            ..Conversation::default()
+            ..Default::default()
         };
         assert_eq!(conversation.path_to(a).len(), 2);
         assert!(conversation.leaf_from(a).is_some());
@@ -197,7 +197,7 @@ mod tests {
         let mut conversation = Conversation {
             messages: vec![message(q1, None, None), message(a1, Some(q1), Some("m"))],
             active: Some(a1),
-            ..Conversation::default()
+            ..Default::default()
         };
         assert!(conversation.activate(q1, true).unwrap());
         assert!(!conversation.activate(q1, true).unwrap(), "unchanged");

@@ -17,8 +17,9 @@ export const watches = new Map(); // watch_id -> the open vault's folder watch
 export const entities = new Map(); // doc_id -> document data (every non-{project, thread, account} entity)
 
 // The open vault's own settings (the `vault_settings` event,
-// vault.md#vault-config): { chat_model }. Read through `vaultSettings()`.
-let openVaultSettings = { chat_model: null };
+// vault.md#vault-config): { chat_model, classification }. Read through
+// `vaultSettings()`.
+let openVaultSettings = { chat_model: null, classification: 'open' };
 
 export function vaultSettings() {
   return openVaultSettings;

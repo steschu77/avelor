@@ -12,6 +12,8 @@ use serde_json::json;
 
 use super::{Ocr, Stamp, analysis_works, refuse, refuse_statements};
 use crate::ai;
+use crate::ai::accounts::Resolved;
+use crate::ai::policy::Reach;
 use crate::ai::queue::AiQueue;
 use crate::app::App;
 use crate::jobs::JobKind;
@@ -175,8 +177,24 @@ pub fn scan_read(app: &mut App, req: Req, request: ReadRequest) {
         ),
         WatchKind::Statements => return refuse_statements(req),
     };
-    // A PDF watch reads text layers without a model.
+    // A PDF watch reads text layers without a model. The files aren't in
+    // the vault yet: the vault's default classification decides whether a
+    // model off this PC may read them (`ai::policy`).
+    let default = app.settings.classification();
+    let kept = |r: &Resolved| {
+        let local = ai::policy::is_local(r.provider, &r.address, &r.model);
+        ai::policy::reach(&default, local) != Reach::Whole
+    };
     let (engine, account) = match app.ai.choose(picked.as_ref(), what, DateTime::now()) {
+        Ok(resolved) if kept(&resolved) => {
+            let class = ai::policy::class_text(&default);
+            let why = Text::new("scans.kept_local").arg("class", class);
+            if kind != WatchKind::Pdf {
+                let what = "a model off this PC".to_string();
+                return refuse(req, Error::Unsupported { what }, why);
+            }
+            (Engine::None { why }, None)
+        }
         Ok(resolved) => {
             let account = resolved.account;
             (Engine::Ai(resolved), Some(account))

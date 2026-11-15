@@ -4,6 +4,9 @@
 //! vault.md#metadata. Unknown
 //! keys are preserved verbatim in `extra` so round-tripping a document
 //! through the app never loses user data.
+use std::path::Path;
+
+use serde_yaml_ng::Value;
 
 use crate::envelope::BankAccount;
 use crate::envelope::Calendar;
@@ -19,13 +22,12 @@ use crate::envelope::Statement;
 use crate::envelope::Task;
 use crate::envelope::{DocumentType, Envelope, Roles, Source};
 use crate::markdown;
+use crate::shared::Classification;
 use crate::shared::{ContactRef, DocType};
 use av_utils::datetime::DateTime;
 use av_utils::error::Result;
 use av_utils::fs::FileStamp;
 use av_utils::id::Id;
-
-use std::path::Path;
 
 // ----------------------------------------------------------------------------
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -564,6 +566,18 @@ impl Document {
     // ------------------------------------------------------------------------
     /// Link the entity to `to`, replacing an older link; `None` removes the
     /// `linked-to` key.
+    pub fn set_classification(&mut self, class: Option<Classification>) {
+        match class {
+            Some(class) => self.envelope_mut().classification = Some(class),
+            None => {
+                if let Some(envelope) = &mut self.envelope {
+                    envelope.classification = None;
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
     pub fn set_link(&mut self, to: Option<Id>) {
         match to {
             Some(to) => self.envelope_mut().linked_to = Some(to),
@@ -624,6 +638,24 @@ impl Document {
     fn envelope_mut(&mut self) -> &mut Envelope {
         self.envelope.get_or_insert_default()
     }
+}
+
+// ----------------------------------------------------------------------------
+/// How a path into an entity's fields names a list's
+/// item: by its `id`, else by its index.
+pub fn item_key(item: &Value, index: usize) -> String {
+    item.get("id")
+        .and_then(Value::as_str)
+        .map_or_else(|| index.to_string(), str::to_string)
+}
+
+/// The position of the list item that `key` names in a path, as
+/// [`item_key`] names it.
+pub fn item_position(items: &[Value], key: &str) -> Option<usize> {
+    items
+        .iter()
+        .position(|item| item.get("id").and_then(Value::as_str) == Some(key))
+        .or_else(|| key.parse().ok().filter(|i: &usize| *i < items.len()))
 }
 
 // ----------------------------------------------------------------------------

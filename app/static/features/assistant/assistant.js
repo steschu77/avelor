@@ -330,6 +330,7 @@ function assistantSaveReply(node) {
   const title = assistantTitleOf(content) || assistantConversation?.title || t('chat.assistant_reply');
   const args = { roles: { document: { type: 'note' } }, title, content, projects: projectsFor(linked).projects };
   if (linked) args.linked_to = linked;
+  if (node.personal) args.classification = 'masked';
   assistantSaved.set(node.id, { busy: true });
   renderAssistantReplyActions(node);
   rpcCall('create_entity', args).then(({ id }) => {
@@ -607,8 +608,8 @@ function createAssistantReplyNode(message) {
   task.type = 'button';
   task.title = t('chat.task_from_this_title');
   el.append(label, body, actions);
-  const node = { id: message.id, el, label, body, role: 'assistant', actions, task, saved: null, content: '', html: null };
-  task.addEventListener('click', () => runAction('task.with', node.content));
+  const node = { id: message.id, el, label, body, role: 'assistant', actions, task, saved: null, content: '', html: null, personal: false };
+  task.addEventListener('click', () => runAction('task.with', node.content, node.personal));
   return node;
 }
 
@@ -650,8 +651,27 @@ function updateAssistantNode(node, message, children) {
   }
   node.html = html;
   node.content = message.content ?? '';
+  node.personal = !!message.personal;
+  renderAssistantLeftOut(node, message);
   node.actions.hidden = !['done', 'stopped'].includes(message.status) || !node.content.trim();
   if (!node.actions.hidden) renderAssistantReplyActions(node);
+}
+
+// What the reply's model wasn't given, by their classification
+// (assistant.md#context), under the reply.
+function renderAssistantLeftOut(node, message) {
+  const left = message.left_out ?? [];
+  let note = node.el.querySelector(':scope > .chat__left-out');
+  if (!left.length) {
+    note?.remove();
+    return;
+  }
+  if (!note) {
+    note = accEl('div', 'meta chat__left-out');
+    node.body.after(note);
+  }
+  const kept = left.join(' \u00b7 ');
+  note.textContent = message.model ? t('chat.kept_from', { model: message.model, kept }) : t('chat.kept_from_model', { kept });
 }
 
 // The input's button: send (dimmed without text), or stop while the reply

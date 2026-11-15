@@ -18,6 +18,15 @@ export const AI_PROVIDERS = [
   { kind: 'ollama', name: 'Ollama', local: true, address: 'http://localhost:11434' },
 ];
 
+// What an entity's classification lets reach a model (vault.md#metadata),
+// in the order of how little: value, label, what it means.
+export const CLASSIFICATIONS = [
+  ['open', t('class.name.open'), t('class.means.open')],
+  ['masked', t('class.name.masked'), t('class.means.masked')],
+  ['local', t('class.name.local'), t('class.means.local')],
+  ['sealed', t('class.name.sealed'), t('class.means.sealed')],
+];
+
 export function aiProvider(kind) {
   return AI_PROVIDERS.find(p => p.kind === kind);
 }
@@ -134,7 +143,7 @@ export function aiShowModels(anchor, choice, onPick) {
     for (const model of account.offered) {
       items.push({
         label: model,
-        hint: usable ? '' : t('models.needs_key'),
+        hint: !usable ? t('models.needs_key') : aiModelIsLocal(account, model) ? t('models.on_this_pc') : '',
         checked: choice?.account === account.id && choice?.model === model,
         dim: !usable,
         run: usable ? () => onPick({ account: account.id, model }) : undefined,
@@ -161,6 +170,15 @@ export function aiHost(address) {
 
 function aiIsLoopback(address) {
   return /^(localhost|127\.|\[::1\])/i.test(aiHost(address));
+}
+
+// Whether `model` of `account` runs on this PC, as the host decides what
+// reaches it (`ai::policy::is_local`): an Ollama at a loopback address, not
+// one of its cloud tags.
+function aiModelIsLocal(account, model) {
+  const tag = model.includes(':') ? model.slice(model.lastIndexOf(':') + 1) : model;
+  return !!aiProvider(account?.kind)?.local && aiIsLoopback(account.address)
+    && tag !== 'cloud' && !tag.endsWith('-cloud');
 }
 
 // The provider's name; Ollama's with "local", or with its host elsewhere.

@@ -188,6 +188,11 @@
   gap: 6px;
 }
 
+/* what a reply's model wasn't given, by their classification */
+.chat__left-out {
+  margin-top: 4px;
+}
+
 .chat__suggestions>.chip {
   text-align: left;
 }

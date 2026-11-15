@@ -134,10 +134,15 @@ impl EmailText {
 /// What goes with the email `email` of its attachments: the documents linked
 /// to it that have an original and text, each with the name its file came
 /// with and its text cut at `ATTACHMENT_CHARS`; the first
-/// `ATTACHMENTS_SENT`.
-pub(super) fn attachment_texts(index: &Index, email: Id) -> Vec<(String, String)> {
+/// `ATTACHMENTS_SENT`; one `reads` says no to is left out.
+pub(super) fn attachment_texts(
+    index: &Index,
+    email: Id,
+    reads: impl Fn(&Document) -> bool,
+) -> Vec<(String, String)> {
     index
         .attachments_of(email)
+        .filter(|entry| reads(&entry.doc))
         .filter_map(|entry| {
             let original = entry.doc.original()?;
             let text = entry.doc.content().trim();

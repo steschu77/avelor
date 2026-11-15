@@ -6,6 +6,7 @@ use av_llm::{ChatRequest, ChatResponse, StopReason};
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
+use av_vault::document::Document;
 use av_vault::vault::SaveOutcome;
 
 use super::answer::{Lite, Medium, parse, parse_document};
@@ -203,7 +204,8 @@ impl Batch {
 /// emails, each with its attachments' text, then its documents (an
 /// attachment as Lite). Nothing to analyse starts nothing; a refused pick
 /// is a notice; what is no longer in the vault, and a document without
-/// text, is left out.
+/// text, is left out, and so is what its classification keeps from the
+/// model (`ai::policy`), which a notice counts.
 pub fn analyse(app: &mut App, batch: Batch, analysis: &Analysis) {
     if batch.emails.is_empty() && batch.documents.is_empty() {
         return;
@@ -217,19 +219,36 @@ pub fn analyse(app: &mut App, batch: Batch, analysis: &Analysis) {
         }
     };
     let index = app.vault.index();
+    let local = ai::policy::is_local(resolved.provider, &resolved.address, &resolved.model);
+    let default = app.settings.classification();
+    let reads = |doc: &Document| ai::policy::reads_whole(doc, &default, local);
+    let kept = batch
+        .emails
+        .iter()
+        .chain(&batch.documents)
+        .filter_map(|id| index.entry(id))
+        .filter(|entry| !reads(&entry.doc))
+        .count();
+    if kept > 0 {
+        let notice = Text::new("job.notice").arg("job", batch.notices.clone());
+        app.notice(notice.arg("text", ai::policy::kept_from(kept)));
+    }
+    let index = app.vault.index();
     let emails = batch
         .emails
         .iter()
         .filter_map(|id| index.entry(id))
+        .filter(|entry| reads(&entry.doc))
         .map(|entry| {
             let mut email = EmailText::of(&entry.doc);
-            email.attachments = attachment_texts(index, email.id);
+            email.attachments = attachment_texts(index, email.id, reads);
             Item::Email(email)
         });
     let documents = batch
         .documents
         .iter()
         .filter_map(|id| index.entry(id))
+        .filter(|entry| reads(&entry.doc))
         .filter(|entry| !entry.doc.content().trim().is_empty())
         .map(|entry| {
             let mut doc = DocText::of(index, &entry.doc);
