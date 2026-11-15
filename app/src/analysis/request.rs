@@ -7,15 +7,17 @@ use super::context::{Context, DocText, EmailText};
 use crate::ai;
 
 /// The JSON object each level asks for.
-pub(super) const LITE_SHAPE: &str =
-    "{\"type\": \"...\", \"title\": \"...\", \"labels\": [\"...\"], \"projects\": [\"...\"]}";
-pub(super) const MEDIUM_SHAPE: &str = "{\"type\": \"...\", \"title\": \"...\", \"labels\": [\"...\"], \
-\"projects\": [\"...\"], \"check\": [\"...\"], \"reply\": \"...\", \"questions\": [\"...\"]}";
+pub(super) const LITE_SHAPE: &str = "{\"type\": \"...\", \"title\": \"...\", \
+\"labels\": [\"...\"], \"projects\": [\"...\"]}";
+pub(super) const MEDIUM_SHAPE: &str = "{\"type\": \"...\", \"title\": \"...\", \
+\"labels\": [\"...\"], \"projects\": [\"...\"], \"check\": [\"...\"], \"reply\": \"...\", \
+\"questions\": [\"...\"]}";
 
 const LITE_RULES: &str = "
-- type: what the email is, if one of these: a \"newsletter\" (news, offers or marketing sent \
-to many) or a \"notification\" (sent automatically: receipts, shipping, account and security \
-alerts, reminders); null if neither fits or if unsure, and for a reply.
+- type: the one type from the list of types that fits the email itself: a bill or a booking \
+confirmation written in the email, a \"newsletter\" (news, offers or marketing sent to many), a \
+\"notification\" (sent automatically: receipts, shipping, account and security alerts, \
+reminders); null if none fits or if unsure, and for a reply. Its attached files get their own.
 - title: a clean title for the email, in the email's language, at most 80 characters: what it is \
 about, without \"Re:\", \"Fwd:\", ticket or reference numbers, tags in brackets or the sender's \
 name.
@@ -33,7 +35,7 @@ notification or a newsletter.
 newsletter.
 Write the points and the questions in the email's language too.";
 
-const LISTS_ONLY: &str = "\nUse only labels and projects from the lists, spelled as given.";
+const LISTS_ONLY: &str = "\nUse only types, labels and projects from the lists, spelled as given.";
 
 /// What an attachment is asked for, at either level.
 pub(super) const DOCUMENT_SHAPE: &str = "{\"title\": \"...\", \"date\": \"YYYY-MM-DD\", \"type\": \"...\", \
@@ -81,11 +83,12 @@ pub fn request_for(
     ctx: &Context,
     email: &EmailText,
 ) -> ChatRequest {
+    let types = listed(ctx.types.iter().map(String::as_str).collect());
     let labels = listed(ctx.labels.iter().map(String::as_str).collect());
     let projects = listed(ctx.projects.iter().map(|(_, t)| t.as_str()).collect());
     let date = email.date.map(|d| d.as_iso8601()).unwrap_or_default();
     let mut text = format!(
-        "Labels:\n{labels}\nProjects:\n{projects}\nThe email:\nSubject: {}\nFrom: {}\nTo: {}\nDate: {date}\n\n{}",
+        "Types:\n{types}\nLabels:\n{labels}\nProjects:\n{projects}\nThe email:\nSubject: {}\nFrom: {}\nTo: {}\nDate: {date}\n\n{}",
         email.subject, email.from, email.to, email.body
     );
     if !email.attachments.is_empty() {

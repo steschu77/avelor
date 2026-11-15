@@ -1,5 +1,5 @@
-//! The answers applied to an entity: its type, title, date, labels and
-//! projects, Medium's messages.
+//! The answers applied to an entity: its type, title, date, labels
+//! and projects, Medium's messages.
 
 use av_utils::datetime::DateTime;
 use av_utils::id::Id;
@@ -13,8 +13,8 @@ use super::same;
 // ----------------------------------------------------------------------------
 /// Write `lite` into the email `doc`: a new title, the old one kept as
 /// `email.subject` if it has none; its type (`document: {type}` beside
-/// `email:`), unless it has one; the labels added to its own (in any case
-/// once); the projects joined.
+/// `email:`), unless it has one; the
+/// labels added to its own (in any case once); the projects joined.
 pub fn apply_lite(doc: &mut Document, lite: &Lite) {
     if let Some(mut email) = doc.roles().email.clone() {
         let before = email.clone();
@@ -33,16 +33,6 @@ pub fn apply_lite(doc: &mut Document, lite: &Lite) {
 }
 
 // ----------------------------------------------------------------------------
-/// `lite`'s type given to `doc`, unless it has one.
-fn add_doc_type(doc: &mut Document, lite: &Lite) {
-    let role = doc.roles().document.as_ref();
-    let has_type = role.is_some_and(|role| role.doc_type.is_some());
-    if let Some(doc_type) = lite.doc_type.as_deref().filter(|_| !has_type) {
-        doc.set_doc_type(Some(DocType::parse(doc_type)));
-    }
-}
-
-// ----------------------------------------------------------------------------
 /// Write `lite` into the attachment's document `doc`: a new title and date;
 /// its type, unless it has one; the labels and projects as for an email.
 pub fn apply_document(doc: &mut Document, lite: &Lite) {
@@ -54,6 +44,16 @@ pub fn apply_document(doc: &mut Document, lite: &Lite) {
     }
     add_doc_type(doc, lite);
     add_labels_and_projects(doc, lite);
+}
+
+// ----------------------------------------------------------------------------
+/// `lite`'s type given to `doc`, unless it has one.
+fn add_doc_type(doc: &mut Document, lite: &Lite) {
+    let role = doc.roles().document.as_ref();
+    let has_type = role.is_some_and(|role| role.doc_type.is_some());
+    if let Some(doc_type) = lite.doc_type.as_deref().filter(|_| !has_type) {
+        doc.set_doc_type(Some(DocType::parse(doc_type)));
+    }
 }
 
 // ----------------------------------------------------------------------------

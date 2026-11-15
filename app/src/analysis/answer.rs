@@ -20,8 +20,6 @@ pub(super) const CHECKS_PER_EMAIL: usize = 3;
 const QUESTIONS_PER_EMAIL: usize = 3;
 pub(super) const POINT_CHARS: usize = 300;
 const REPLY_CHARS: usize = 4000;
-/// The types the analysis gives an email (email.md#analysis).
-pub const EMAIL_TYPES: [&str; 2] = ["newsletter", "notification"];
 
 // ----------------------------------------------------------------------------
 /// What Lite found for an email or an attachment, in the vault's terms.
@@ -33,8 +31,7 @@ pub struct Lite {
     pub labels: Vec<String>,
     /// Active projects.
     pub projects: Vec<Id>,
-    /// An email's: one of `EMAIL_TYPES`; an attachment's: one of
-    /// `Context::types`.
+    /// One of `Context::types`.
     pub doc_type: Option<String>,
     /// An attachment's own date.
     pub date: Option<DateTime>,
@@ -54,10 +51,11 @@ pub struct Medium {
 /// Read the `answer` of the analysis at `level` against `ctx` for an email
 /// titled `title`: the JSON object in it (code fences and text around it
 /// ignored); a title trimmed and cut, dropped if empty or the email's own;
-/// a type from `EMAIL_TYPES`, in any case; the labels and projects from the lists
-/// only, matched in any case, each once, the first few kept. Medium's
+/// a type from the list, in any case; the labels
+/// and projects from the lists only, matched in any case, each once, the
+/// first few kept. Medium's
 /// points, reply and questions trimmed and cut, the first few kept; none
-/// for a newsletter, no reply for a notification, and no conversation without a
+/// for the type newsletter, no reply for a notification, and no conversation without a
 /// reply or a point. An answer without such an object is refused, in
 /// words.
 pub fn parse(
@@ -67,12 +65,8 @@ pub fn parse(
     title: &str,
 ) -> std::result::Result<(Lite, Option<Medium>), Text> {
     let object = object_in(answer)?;
-    let doc_type = object["type"]
-        .as_str()
-        .and_then(|doc_type| EMAIL_TYPES.into_iter().find(|known| same(known, doc_type)))
-        .map(str::to_string);
     let lite = Lite {
-        doc_type,
+        doc_type: doc_type_of(&object, ctx),
         ..shared_part(&object, ctx, title)
     };
     let medium = match level {
@@ -84,10 +78,10 @@ pub fn parse(
 
 // ----------------------------------------------------------------------------
 /// Read the `answer` of the analysis at `level` for the document `doc`
-/// against `ctx` as `parse` reads an email's: its type from the list only, in any case;
-/// its date as `YYYY-MM-DD`, that day at 12:00 UTC, the same day in every
-/// time zone, dropped before 1900 or after the day after the document's
-/// date (its email's; now without one).
+/// against `ctx` as `parse` reads an email's, its type too; its date as
+/// `YYYY-MM-DD`, that day at 12:00 UTC, the same day in every time zone,
+/// dropped before 1900 or after the day after the document's date (its
+/// email's; now without one).
 pub fn parse_document(
     answer: &str,
     level: AnalysisLevel,
@@ -95,10 +89,6 @@ pub fn parse_document(
     doc: &DocText,
 ) -> std::result::Result<(Lite, Option<Medium>), Text> {
     let object = object_in(answer)?;
-    let doc_type = object["type"]
-        .as_str()
-        .and_then(|doc_type| ctx.types.iter().find(|known| same(known, doc_type)))
-        .cloned();
     let day = |date: DateTime| date.as_unix().div_euclid(DAY_SECONDS);
     let latest = day(doc.date.unwrap_or_else(DateTime::now)) + 1;
     let date = object["date"]
@@ -106,12 +96,23 @@ pub fn parse_document(
         .and_then(day_of)
         .filter(|date| day(*date) <= latest);
     let lite = Lite {
-        doc_type,
+        doc_type: doc_type_of(&object, ctx),
         date,
         ..shared_part(&object, ctx, &doc.title)
     };
     let medium = doc.medium(level).then(|| document_medium_of(&object));
     Ok((lite, medium.flatten()))
+}
+
+// ----------------------------------------------------------------------------
+/// The type of the answer `object`: one of `ctx`'s types, matched in any
+/// case and spelled as the list spells it; `None` for any other.
+fn doc_type_of(object: &Value, ctx: &Context) -> Option<String> {
+    let doc_type = object["type"].as_str()?;
+    ctx.types
+        .iter()
+        .find(|known| same(known, doc_type))
+        .cloned()
 }
 
 // ----------------------------------------------------------------------------

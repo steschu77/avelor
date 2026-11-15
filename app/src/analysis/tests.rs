@@ -43,7 +43,13 @@ fn ctx() -> Context {
             (Id::parse(FLAT).unwrap(), "Wohnung Köln".into()),
             (Id::parse(OLD).unwrap(), "Auto".into()),
         ],
-        types: vec!["bill".into(), "letter".into(), "Steuerbescheid".into()],
+        types: vec![
+            "bill".into(),
+            "letter".into(),
+            "Steuerbescheid".into(),
+            "newsletter".into(),
+            "notification".into(),
+        ],
     }
 }
 
@@ -128,7 +134,7 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
     );
     let system = request.system.as_deref().unwrap();
     assert!(
-        system.contains("- type:") && !system.contains("- check:"),
+        !system.contains("- kind:") && system.contains("- type:") && !system.contains("- check:"),
         "{system}"
     );
     let medium = request_for(AnalysisLevel::Medium, "m", &ctx(), &email);
@@ -160,6 +166,10 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
     let Some(av_llm::Part::Text(text)) = request.messages[0].parts.first() else {
         panic!("{:?}", request.messages);
     };
+    assert!(
+        text.starts_with("Types:\n- bill\n- letter\n- Steuerbescheid\n"),
+        "{text}"
+    );
     assert!(text.contains("Labels:\n- Rechnungen\n- Umzug\n"), "{text}");
     assert!(
         text.contains("Projects:\n- Wohnung Köln\n- Auto\n"),
@@ -176,7 +186,7 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
         panic!();
     };
     assert!(
-        text.starts_with("Labels:\n(none)\n\nProjects:\n(none)\n"),
+        text.starts_with("Types:\n(none)\n\nLabels:\n(none)\n\nProjects:\n(none)\n"),
         "{text}"
     );
 
@@ -233,13 +243,18 @@ fn an_attachment_is_asked_for_as_a_document() {
     );
     let system = request.system.as_deref().unwrap();
     assert!(system.starts_with("You sort documents.") && system.contains(DOCUMENT_SHAPE));
-    assert!(system.contains("- type:"), "{system}");
+    assert!(
+        system.contains("- type:") && !system.contains("- kind:"),
+        "{system}"
+    );
     assert_eq!(request.think, Some(false));
     let Some(av_llm::Part::Text(text)) = request.messages[0].parts.first() else {
         panic!("{:?}", request.messages);
     };
     assert!(
-        text.starts_with("Types:\n- bill\n- letter\n- Steuerbescheid\n\nLabels:\n"),
+        text.starts_with(
+            "Types:\n- bill\n- letter\n- Steuerbescheid\n- newsletter\n- notification\n\nLabels:\n"
+        ),
         "{text}"
     );
     assert!(
@@ -345,6 +360,41 @@ fn applying_to_an_attachment_keeps_a_type_it_has() {
 
 // ------------------------------------------------------------------------
 #[test]
+fn applying_to_an_email_gives_it_a_type_unless_it_has_one() {
+    let roles = Roles {
+        email: Some(Email::default()),
+        ..Default::default()
+    };
+    let mut doc = Document::create(
+        roles,
+        Source::Created(Default::default()),
+        "Rechnung".into(),
+        Vec::new(),
+        FileFormat::Markdown,
+    );
+    let lite = Lite {
+        doc_type: Some("bill".into()),
+        ..Lite::default()
+    };
+    apply_lite(&mut doc, &lite);
+    let doc_type = |doc: &Document| doc.roles().document.clone().and_then(|d| d.doc_type);
+    assert_eq!(
+        doc_type(&doc),
+        Some(DocType::Bill),
+        "beside the email block"
+    );
+    assert_eq!(doc.kind(), DocumentType::Email, "still a mail");
+
+    let again = Lite {
+        doc_type: Some("letter".into()),
+        ..Lite::default()
+    };
+    apply_lite(&mut doc, &again);
+    assert_eq!(doc_type(&doc), Some(DocType::Bill), "a type it has stays");
+}
+
+// ------------------------------------------------------------------------
+#[test]
 fn the_answer_is_read_against_the_lists() {
     let answer = "Sure! ```json\n{\"title\": \"  Abschlag Oktober \", \"labels\": [\"rechnungen\", \"Unbekannt\", \"Rechnungen\", \"Umzug\", \"Steuer\", \"Bank\"], \"projects\": [\"wohnung köln\", \"Garten\", \"Auto\", \"Wohnung Köln\"]}\n``` Done.";
     let (lite, medium) = parse(answer, AnalysisLevel::Lite, &ctx(), "AW: Abschlag").unwrap();
@@ -359,23 +409,28 @@ fn the_answer_is_read_against_the_lists() {
     assert_eq!(lite.projects, projects);
 
     let lite = |answer: &str, title: &str| parse(answer, AnalysisLevel::Lite, &ctx(), title);
-    let same = lite(
-        r#"{"type": " Notification", "title": " Abschlag ", "labels": "Bank"}"#,
-        "Abschlag",
-    );
+    let same = lite(r#"{"title": " Abschlag ", "labels": "Bank"}"#, "Abschlag");
     assert_eq!(
         same.unwrap().0,
         Lite {
             title: None,
-            doc_type: Some("notification".into()),
             labels: vec!["Bank".into()],
             projects: vec![],
             ..Lite::default()
         },
-        "the email's own title is no change; one label as a string; the type in any case"
+        "the email's own title is no change; one label as a string"
     );
-    let unknown = lite(r#"{"type": "bill"}"#, "t").unwrap().0;
-    assert_eq!(unknown.doc_type, None, "only an email's own types");
+    let doc_type = |answer: &str| lite(answer, "t").unwrap().0.doc_type;
+    assert_eq!(
+        doc_type(r#"{"type": "BILL"}"#).as_deref(),
+        Some("bill"),
+        "as the list spells it"
+    );
+    assert_eq!(
+        doc_type(r#"{"type": "Mahnung"}"#),
+        None,
+        "only the listed types"
+    );
     let long = format!(r#"{{"title": "{}"}}"#, "x".repeat(200));
     let cut = lite(&long, "t").unwrap().0.title.unwrap();
     assert_eq!(cut.chars().count(), TITLE_CHARS);
@@ -483,17 +538,14 @@ fn applying_keeps_the_subject_and_adds_to_what_the_email_has() {
     doc.join_project(flat);
     let lite = Lite {
         title: Some("Abschlag Oktober".into()),
-        doc_type: Some("notification".into()),
         labels: vec!["Umzug".into(), "Rechnungen".into()],
         projects: vec![flat, Id::parse(OLD).unwrap()],
         ..Lite::default()
     };
     apply_lite(&mut doc, &lite);
-    let doc_type = |doc: &Document| doc.roles().document.clone().and_then(|d| d.doc_type);
     assert_eq!(doc.title(), "Abschlag Oktober");
     let email = doc.roles().email.clone().unwrap();
     assert_eq!(email.subject.as_deref(), Some("AW: Abschlag"));
-    assert_eq!(doc_type(&doc), Some(DocType::parse("notification")));
     assert_eq!(doc.labels(), ["umzug", "Rechnungen"]);
     assert_eq!(doc.projects(), [flat, Id::parse(OLD).unwrap()]);
 
@@ -507,11 +559,6 @@ fn applying_keeps_the_subject_and_adds_to_what_the_email_has() {
         email.subject.as_deref(),
         Some("AW: Abschlag"),
         "the first subject stays"
-    );
-    assert_eq!(
-        doc_type(&doc),
-        Some(DocType::parse("notification")),
-        "no type keeps it"
     );
 }
 

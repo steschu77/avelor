@@ -420,7 +420,8 @@ fields:
 "bill", "contract", "letter", or "statement". Purely a user-facing
 distinction with no effect on which fields are valid — easy to change at
 any time, only available for entities with the `document` role. A mail
-gets the role for a type, beside its `email` block, and loses it with
+gets the role for a type (on its card, or from the email analysis,
+`email.md#analysis`), beside its `email` block, and loses it with
 the type when nothing else is in it; its kind stays a mail's
 (`vault.md#kind-derivation`).
 

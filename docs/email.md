@@ -143,17 +143,20 @@ feature picks its model (`accounts.md#model-choice`).
   The summary counts the conversations Medium wrote: "18 analysed · 4 conversations · 1
   failed".
 - **Lite**: one request per email (`analysis::request::request_for`). It lists the
-  labels in use (the 100 used most) and the active projects (the first
-  50), then the email: its subject as it came (`email.subject` once the
-  title differs), sender, recipients, date, the body cut at 8,000
+  types, as an attachment's request does, the labels in use (the 100
+  used most) and the active projects (the first 50), then the email: its
+  subject as it came (`email.subject` once the title differs), sender,
+  recipients, date, the body cut at 8,000
   characters, and the text of its attachments read (the first three, each
   cut at 2,000 characters), so an email that only says its bill is attached
   is sorted by the bill. It asks for one JSON object `{type, title, labels,
-  projects}`: the email's type if it is a newsletter (news, offers or
-  marketing sent to many) or a notification (sent automatically: receipts,
-  shipping, alerts, reminders), none if unsure and none for any other; a
-  clean title in the email's language (no "Re:", "Fwd:", reference numbers
-  or tags, at most 80 characters); up to three labels
+  projects}`: the type of the email itself from the list — a bill or a
+  booking confirmation written in it, a newsletter (news, offers or
+  marketing sent to many), a notification (sent automatically: receipts,
+  shipping, alerts, reminders) — none if unsure and none for a reply, its
+  attached files getting their own; a clean
+  title in the email's language (no "Re:", "Fwd:", reference numbers or
+  tags, at most 80 characters); up to three labels
   and two projects from the lists, none if unsure. The model's reasoning
   is turned off (`think: false`; sorting an email needs none), and Ollama
   runs it with a context of 16,384 tokens (`ai::CONTEXT_TOKENS`): its default of 4,096 left a long email no room for
@@ -168,9 +171,8 @@ feature picks its model (`accounts.md#model-choice`).
 - **The answer** is read by a pure parser (`analysis::answer::parse`): the JSON
   object in it (code fences and text around it ignored); the title trimmed
   and cut at 120 characters, no change if it is empty or the email's own;
-  the type one of the two in any case, anything else left out; labels and
-  projects matched to the lists in any case and kept in the vault's
-  spelling, unknown ones and repeats dropped. Medium's points and
+  the type, labels and projects matched to the lists in any case and
+  kept in the vault's spelling, unknown ones and repeats dropped. Medium's points and
   questions are trimmed, cut at 300 characters and three at most, the
   reply cut at 4,000; a newsletter keeps none of them, a notification no
   reply, and an email left with neither a reply nor a point gets no conversation

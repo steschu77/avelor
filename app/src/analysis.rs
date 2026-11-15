@@ -1,6 +1,6 @@
 //! Analysing entities with an AI (email.md#analysis): the email analysis -- Lite
-//! gives each new email its type, a clean title, labels in use and active
-//! projects; Medium also points to check, a quick reply and questions, as a
+//! gives each new email its type, a clean title, labels in use and
+//! active projects; Medium also points to check, a quick reply and questions, as a
 //! conversation linked to the email. The attachments read go along with their email,
 //! and are analysed after the emails as Lite does an email: a clean title,
 //! their own date, a type, labels and projects. A watch's analysis takes

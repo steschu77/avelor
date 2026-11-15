@@ -152,11 +152,14 @@ pub enum DocType {
     Confirmation,
     Certificate,
 
+    Newsletter,
+    Notification,
+
     Other(String),
 }
 
 // ----------------------------------------------------------------------------
-const WELL_KNOWN_TYPES: [(&str, DocType); 18] = [
+const WELL_KNOWN_TYPES: [(&str, DocType); 20] = [
     ("bill", DocType::Bill),
     ("deposit", DocType::Deposit),
     ("expense", DocType::Expense),
@@ -175,6 +178,8 @@ const WELL_KNOWN_TYPES: [(&str, DocType); 18] = [
     ("memo", DocType::Memo),
     ("confirmation", DocType::Confirmation),
     ("certificate", DocType::Certificate),
+    ("newsletter", DocType::Newsletter),
+    ("notification", DocType::Notification),
 ];
 
 // ----------------------------------------------------------------------------
@@ -363,7 +368,7 @@ mod tests {
     #[test]
     fn the_well_known_types_parse_as_themselves() {
         let names: Vec<&str> = DocType::well_known().collect();
-        assert_eq!(names.len(), 18);
+        assert_eq!(names.len(), 20);
         assert!(names.contains(&"bill") && names.contains(&"note"));
         for name in names {
             assert_eq!(DocType::parse(name).as_str(), name);
