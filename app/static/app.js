@@ -47,6 +47,7 @@ import { initCalendarLens } from './features/lenses/calendar.js';
 import './features/lenses/bank.js';
 import './features/panel/booking.js';
 import './features/panel/recurring-payment.js';
+import './features/panel/id-documents.js';
 
 initDocumentsLens();
 initCalendarLens();

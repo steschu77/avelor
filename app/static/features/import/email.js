@@ -28,7 +28,7 @@ import { armedButton } from '../../ui/confirm.js';
 import {
   closeVaultArea, openVaultOp, registerVaultPage,
 } from '../../ui/page.js';
-import { renderPatternField } from '../../ui/field.js';
+import { keepingFocus, renderPatternField } from '../../ui/field.js';
 import { accSeg } from '../../ui/segmented.js';
 import { iconEl } from '../../ui/icons.js';
 import {
@@ -731,8 +731,6 @@ function emailReadingBlocked(attachments) {
 // focus kept in its file types' input.
 function renderEmailAttachmentsSection() {
   const block = email.els.attachments;
-  const active = document.activeElement;
-  const focusKey = block.contains(active) ? active.dataset.focusKey : undefined;
   const { seg, body } = renderEmailAttachments('email-fetch', email.attachments, attachments => {
     email.attachments = attachments;
     renderEmailAttachmentsSection();
@@ -740,8 +738,7 @@ function renderEmailAttachmentsSection() {
   }, renderEmailAttachmentsSection);
   const head = accEl('div', 'section-head', t('email.section.attachments'));
   head.append(seg);
-  block.replaceChildren(head, body);
-  if (focusKey) [...block.querySelectorAll('[data-focus-key]')].find(el => el.dataset.focusKey === focusKey)?.focus();
+  keepingFocus(block, () => block.replaceChildren(head, body));
 }
 
 // The auto-sync's attachments, under its filter; saved at once.
