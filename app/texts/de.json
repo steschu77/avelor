@@ -178,6 +178,7 @@
   "ai.key_rejected": "Der Schlüssel wurde abgelehnt.",
   "ai.key_rejected_why": "Der Schlüssel wurde abgelehnt: {why}",
   "ai.left_out": "„{title}“ ({class})",
+  "ai.left_out_id_numbers": "„{title}“: die Nummern seiner Ausweisdokumente als Platzhalter",
   "ai.left_out_values": "„{title}“: seine persönlichen Werte als Platzhalter",
   "ai.limit_for": "Für {feature} hat {name} sein Ausgabenlimit erreicht; erhöhe es unter Konten.",
   "ai.no_key": "Das Konto hat keinen Schlüssel.",

@@ -142,6 +142,14 @@ impl Seen<'_> {
             .map(|e| e.doc.title().to_string())
             .collect();
         match self.reach(doc) {
+            Reach::Whole if !self.gate.local && doc.roles().id_documents.is_some() => {
+                let mut value = serde_yaml_ng::to_value(given(doc, &projects)).ok()?;
+                policy::with_id_numbers(&mut value, doc.id(), doc.title(), &mut self.placeholders);
+                let text = Text::new("ai.left_out_id_numbers").arg("title", doc.title());
+                self.left_out.push(text.render());
+                let frontmatter = serde_yaml_ng::to_string(&value).unwrap_or_default();
+                Some((frontmatter, self.body_of(index, doc)))
+            }
             Reach::Whole => Some((frontmatter(doc, &projects), self.body_of(index, doc))),
             Reach::Placeholders => {
                 let mut value = serde_yaml_ng::to_value(given(doc, &projects)).ok()?;

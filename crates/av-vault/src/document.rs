@@ -77,6 +77,7 @@ static NO_ROLES: Roles = Roles {
     event: None,
     task: None,
     contact: None,
+    id_documents: None,
     record: None,
     list: None,
     email: None,
