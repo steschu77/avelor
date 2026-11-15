@@ -5,8 +5,9 @@
 // what it lacks (`tripGaps`).
 
 import { DAY_MONTH, addDays, dayStart, daysBetween, localDay, parseDate, timeFormatIn, zonedTime } from '../core/format.js';
-import { t } from '../core/text.js';
 import { entities, parseContact, projects, projectsOf } from './entities.js';
+import { idDocumentState, idDocumentsOf } from './id-documents.js';
+import { t } from '../core/text.js';
 
 // ----------------------------------------------------------------------------
 // The parts of a trip (`event.type`), what a journey is by (`event.by`), and
@@ -457,13 +458,21 @@ export function zoneIssuesOf(doc) {
 //   `zones`: `issue`, and `leg` unless an activity's);
 // - `tickets`: a booking without a document linked to it or from it
 //   (`ticket`: `doc`).
-// `progress`: its nights covered `[covered, all]` and its journeys booked
-// `[booked, all]`. While its days are open nothing is missing yet:
-// `later`, the nights (about) and the journeys the sketch will need.
+// - `id-documents`: a traveler's ID document that runs out before the trip ends
+//   (`id-document`: `holder`, the contact; `item`; `task`, an open task it links
+//   to; `idDocumentsOf`, model/id-documents.js).
+// `progress`: its nights covered `[covered, all]`, its journeys booked
+// `[booked, all]`, and of the travelers with ID documents those whose
+// documents all hold `[holding, all]`. While its days are open nothing is
+// missing yet but the ID documents, against the window's end: `later`, the
+// nights (about) and the journeys the sketch will need.
 export function tripGaps(id, project) {
   const route = routeOf(id, project);
   if (!route) return null;
-  if (route.sketched) return { gaps: [], progress: {}, later: laterOf(project.sketch) };
+  const idDocuments = idDocumentGaps(project, tripEndOf(project));
+  if (route.sketched) {
+    return { gaps: idDocuments.gaps, progress: { 'id-documents': idDocuments.progress }, later: laterOf(project.sketch) };
+  }
   const gaps = [];
   const nights = [0, 0];
   const journeys = [0, 0];
@@ -502,7 +511,64 @@ export function tripGaps(id, project) {
   for (const doc of events.filter(outside).sort((a, b) => a.date - b.date)) {
     gaps.push({ rule: 'nights', kind: 'outside', doc });
   }
-  return { gaps, progress: { nights, journeys }, later: null };
+  gaps.push(...idDocuments.gaps);
+  return { gaps, progress: { nights, journeys, 'id-documents': idDocuments.progress }, later: null };
+}
+
+// The trip's last day: its days', else, while they are open, its sketch's
+// window's; none without either.
+export function tripEndOf(project) {
+  const end = parseDate(project?.facts?.days?.to ?? project?.sketch?.window?.to);
+  return end && !isNaN(end) ? end : null;
+}
+
+// The travelers' ID documents that run out before `until` (`id-document` gaps),
+// and of the travelers with any those whose all hold (`[holding, all]`,
+// null without one).
+function idDocumentGaps(project, until) {
+  const gaps = [];
+  let holding = 0;
+  let all = 0;
+  if (!until) return { gaps, progress: null };
+  for (const ref of [].concat(project.facts?.travelers ?? []).map(String)) {
+    const planned = idDocumentsOf(ref);
+    if (!planned?.items.length) continue;
+    all++;
+    const short = planned.items.filter(item => idDocumentState(item, until).short);
+    if (!short.length) holding++;
+    for (const item of short) gaps.push({ rule: 'id-documents', kind: 'id-document', holder: planned.holder, item, task: linkedTask(item) });
+  }
+  return { gaps, progress: all ? [holding, all] : null };
+}
+
+// The trips the contact `id` travels on, not over by `today`, whose
+// ID documents check finds one of its ID documents running out before they end:
+// by the item's id, `[{ trip, end, task }]` (`trip` of `projects`), the
+// soonest end first -- what its card says on the document's row
+// (features/panel/id-documents.js).
+export function tripsShortOf(id, today = dayStart(new Date())) {
+  const short = new Map();
+  for (const trip of projects.values()) {
+    if (trip.archived || !(trip.project?.checks ?? []).includes('id-documents')) continue;
+    const end = tripEndOf(trip.project);
+    if (!end || end < today) continue;
+    for (const { holder, item, task } of idDocumentGaps(trip.project, end).gaps) {
+      if (holder.doc_id !== id || item.id == null) continue;
+      const key = String(item.id);
+      short.set(key, [...(short.get(key) ?? []), { trip, end, task }]);
+    }
+  }
+  for (const trips of short.values()) trips.sort((a, b) => a.end - b.end);
+  return short;
+}
+
+// The open task an ID document links to (a renewal), if it does.
+function linkedTask(item) {
+  for (const id of [].concat(item['linked-to'] ?? []).map(String)) {
+    const doc = entities.get(id);
+    if (doc?.task && doc.task.status !== 'done') return doc;
+  }
+  return null;
 }
 
 // The nights and the journeys a sketch will need once the dates are set: its

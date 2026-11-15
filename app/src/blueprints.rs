@@ -146,7 +146,14 @@ mod tests {
         );
         assert_eq!(
             trip.checks,
-            ["budget", "deadlines", "nights", "journeys", "tickets"]
+            [
+                "budget",
+                "deadlines",
+                "nights",
+                "journeys",
+                "tickets",
+                "id-documents"
+            ]
         );
         assert_eq!(trip.labels, ["travel"]);
         let json: serde_json::Value = serde_json::from_str(&json()).unwrap();

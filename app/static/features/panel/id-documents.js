@@ -2,8 +2,10 @@
 // after its toolbar (`registerCardBlock`), its head saying what models read
 // of them and + ID document; a row each by its type -- the number (Copy),
 // the type's own fields, the issuer and country, what it is linked to, the
-// expiry at the end (marked when it runs out soon or has). While the host
-// can write the contact a click on a row opens its fields under it, with
+// expiry at the end (marked when it runs out soon or has); one that runs
+// out before a trip its holder travels on ends, the trip and the task to
+// renew it, with Open (`tripsShortOf`, model/trip.js). While the host can
+// write the contact a click on a row opens its fields under it, with
 // Link... and Remove. Each writes the contact's own fields by path
 // (`setFieldsLocal`), an item's as `id-documents.<its id>.<key>`.
 
@@ -15,6 +17,7 @@ import { t } from '../../core/text.js';
 import { entities, vaultSettings } from '../../model/entities.js';
 import { ID_DOCUMENT_TYPES, idDocumentExtras, idDocumentIcon, idDocumentType, idDocumentState, newItemId } from '../../model/id-documents.js';
 import { setFieldsLocal } from '../../model/structure.js';
+import { tripsShortOf } from '../../model/trip.js';
 import { armedButton } from '../../ui/confirm.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { docIcon, iconEl } from '../../ui/icons.js';
@@ -52,7 +55,8 @@ function idDocumentsPart(doc, redraw) {
   const head = accEl('div', 'card-part__head');
   head.append(accEl('span', 'label', t('id_documents.head')), privacy);
   if (doc.writable) head.append(addButton(doc));
-  return [head, ...items.flatMap((item, i) => idDocumentEls(doc, item, item.id ?? String(i), redraw))];
+  const short = tripsShortOf(doc.doc_id);
+  return [head, ...items.flatMap((item, i) => idDocumentEls(doc, item, item.id ?? String(i), short.get(String(item.id)) ?? [], redraw))];
 }
 
 registerCardBlock('parts', 'pane-section pane-section--ruled card-part', idDocumentsPart);
@@ -62,11 +66,11 @@ const pathOf = (key, field) => (field ? `id-documents.${key}.${field}` : `id-doc
 
 // ----------------------------------------------------------------------------
 // The item's row: its type's icon, the type over its number and the rest,
-// its links; its dates at the end. A click on it opens its fields, or
-// closes them.
-function idDocumentEls(doc, item, key, redraw) {
+// its links, the `trips` it runs out before (the warning for its icon);
+// its dates at the end. A click on it opens its fields, or closes them.
+function idDocumentEls(doc, item, key, trips, redraw) {
   const open = doc.writable && editing?.contact === doc.doc_id && editing.key === key;
-  const row = accEl('div', doc.writable ? 'id-document is-writable' : 'id-document');
+  const row = accEl('div', ['id-document', trips.length && 'id-document--gap', doc.writable && 'is-writable'].filter(Boolean).join(' '));
   const main = accEl('span', 'id-document__main', idDocumentType(item.type));
   const line = accEl('span', 'id-document__line');
   if (item.number) line.append(...numberEls(String(item.number)));
@@ -79,7 +83,8 @@ function idDocumentEls(doc, item, key, redraw) {
     chips.append(...links.map(id => linkEl(doc, item, key, id)));
     main.append(chips);
   }
-  row.append(iconEl(idDocumentIcon(item.type)), main, endEl(item));
+  if (trips.length) main.append(gapEl(trips));
+  row.append(iconEl(trips.length ? '#i-warning' : idDocumentIcon(item.type)), main, endEl(item, trips[0]));
   if (!doc.writable) return [row];
   row.title = open ? t('id_documents.close_fields') : t('id_documents.edit_fields');
   pressable(row).dataset.focusKey = `id-document:${key}`;
@@ -121,15 +126,32 @@ async function copyText(text) {
   }
 }
 
-// Its expiry ("to 09/02/2027", "ran out 01/02/2026"), then "runs out in 30
-// days" once `SOON_DAYS` are left, else when it was issued.
-function endEl(item) {
+// "Runs out before Summer with Oma 2027 ends 07/18/2027 \u00b7 Renew Maya's
+// passport, due 03/15/2027", the soonest trip; how many more.
+function gapEl([{ trip, end, task }, ...more]) {
+  const parts = [t('id_documents.runs_out_before', { trip: trip.name || t('untitled'), end: DATE_FORMAT.format(end) })];
+  const title = task?.title || t('untitled');
+  if (task) parts.push(task.due && !isNaN(task.due) ? t('id_documents.task_due', { title, due: DATE_FORMAT.format(task.due) }) : title);
+  if (more.length) parts.push(t('id_documents.more_trips', { n: more.length }));
+  return accEl('span', 'meta id-document__gap', parts.join(' \u00b7 '));
+}
+
+// Its expiry ("to 09/02/2027", "ran out 01/02/2026"), then with a trip it
+// runs out before Open, the task to renew it or else the trip; else "runs
+// out in 30 days" once `SOON_DAYS` are left, else when it was issued.
+function endEl(item, gap) {
   const end = accEl('span', 'id-document__end');
   const state = idDocumentState(item);
   if (state.expiry) {
     const day = DATE_FORMAT.format(state.expiry);
     end.append(state.expired ? accEl('span', 'meta is-expired', t('id_documents.ran_out', { day }))
       : accEl('span', 'meta', t('id_documents.valid_to', { day })));
+  }
+  if (gap) {
+    const target = gap.task ? gap.task.doc_id : gap.trip.id;
+    const title = gap.task ? t('id_documents.open_task') : t('id_documents.open_trip');
+    end.append(toolButton(t('context.open'), title, () => selectById(target)));
+    return end;
   }
   const issued = parseDate(item.issued ? String(item.issued).slice(0, 10) : null);
   if (state.soon) end.append(accEl('span', 'meta is-soon', t('id_documents.runs_out', { when: relativeDay(state.expiry) })));

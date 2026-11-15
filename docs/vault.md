@@ -344,7 +344,7 @@ own file. Every field is optional; a project without one is `project: {}`.
   (the ID of the entity it is about; a transaction linked to it meets it),
 * `checks`: [string], the gaps the header shows, by their kind
   (`documents`, `payments`, `budget`, `deadlines`; a trip's `nights`,
-  `journeys` and `tickets`, `panel.md#route-gaps`),
+  `journeys`, `tickets` and `id-documents`, `panel.md#route-gaps`),
 * `afterwards`: [Afterwards], tasks written when the project is archived:
   `title`, and `due`, a fact plus a span (`handover + 5y`),
 * `labels`: [string], what the project is about, carried by its members

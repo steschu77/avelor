@@ -489,6 +489,17 @@
   display: block;
 }
 
+/* a traveler's ID documents on their chip (features/facts.js): a check, or a
+   warning when one runs out before the trip ends */
+.chip__state {
+  margin-left: 4px;
+  color: var(--c-ink-mute);
+}
+
+.chip__state.is-short {
+  color: var(--c-danger-ink);
+}
+
 /* the rule that found a gap, the note's head */
 .bp__rule {
   color: var(--c-ink);

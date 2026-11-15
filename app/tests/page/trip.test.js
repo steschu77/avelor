@@ -3,8 +3,8 @@ import { vault } from './vault.js';
 import { localDay, parseDate } from '../../static/core/format.js';
 import { entities, projects } from '../../static/model/entities.js';
 import {
-  byNights, setDatesProposal, isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripGaps,
-  tripPlaces, tripSummary, workCalendarsOf, zoneIssuesOf, zoneName,
+  byNights, setDatesProposal, isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripEndOf,
+  tripGaps, tripPlaces, tripSummary, tripsShortOf, workCalendarsOf, zoneIssuesOf, zoneName,
 } from '../../static/model/trip.js';
 
 // A trip from Springfield, from `from` to `to`, and its events on days:
@@ -202,7 +202,39 @@ test('what a sketch will need once its dates are set', () => {
   equal([later({ stops: [{ nights: 2 }, {}] }), later({}), later(undefined)], [{ nights: null, journeys: 3 }, { nights: null, journeys: 0 }, { nights: null, journeys: 0 }]);
 });
 
+test("a trip's last day is its days', else its window's", () => {
+  equal([tripEndOf({ facts: { days: DAYS }, sketch: { window: { to: '2027-09-01' } } }), tripEndOf({ sketch: { window: { to: '2027-09-01' } } }), tripEndOf({}), tripEndOf(null)],
+    [new Date(2027, 6, 12), new Date(2027, 8, 1), null, null]);
+});
+
+const passport = (id, expiry, more = {}) => ({ id, type: 'passport', expiry, ...more });
 const TRAVELERS = { travelers: ['@maya', 'Alex Yahnek', 'A friend'] };
+
+test("a traveler's ID document that runs out before the trip ends", () => {
+  vault(
+    trip(TRAVELERS), THERE, HOTEL, BACK,
+    { id: 'maya', kind: 'contact', title: 'Maya', 'id-documents': [passport('x', '2027-07-11', { 'linked-to': ['renew'] }), passport('y', '2030-01-01')] },
+    { id: 'alex', kind: 'contact', title: 'Alex Yahnek', 'id-documents': [passport('z', '2027-07-12')] },
+    { id: 'friend', kind: 'contact', title: 'A friend', 'id-documents': [passport('w', '2031-01-01')] }, { id: 'renew', kind: 'task', title: 'Renew', task: { status: 'open' } },
+  );
+  const found = gaps();
+  equal(found.gaps.map(gap => [gap.kind, gap.holder.id, gap.item.id, gap.task?.id]), [['id-document', 'maya', 'x', 'renew']]);
+  equal(found.progress['id-documents'], [2, 3]);
+});
+
+test("a contact's ID documents short of a trip, the soonest end first", () => {
+  const checks = { checks: ['id-documents'] };
+  const other = (id, facts, more = {}) => ({ ...trip({ ...TRAVELERS, ...facts }, checks), id, ...more });
+  vault(
+    other('late', { days: { from: '2028-07-01', to: '2028-07-09' } }), other('soon', { days: DAYS }), other('over', { days: { from: '2026-07-01', to: '2026-07-09' } }),
+    other('put away', { days: DAYS }, { archived: true }), { ...trip(TRAVELERS), id: 'unchecked' },
+    { id: 'maya', kind: 'contact', title: 'Maya', 'id-documents': [passport('x', '2026-07-01')] },
+  );
+  const short = tripsShortOf('maya', new Date(2027, 0, 1));
+  equal([...short].map(([id, trips]) => [id, trips.map(one => one.trip.id)]), [['x', ['soon', 'late']]]);
+  equal(tripsShortOf('maya', new Date(2028, 6, 9)).get('x').map(one => one.trip.id), ['late']);
+  equal(tripsShortOf('alex', new Date(2027, 0, 1)).size, 0);
+});
 
 const WORK = { id: 'work', kind: 'calendar', title: 'Work', calendar: { 'work-of': '@maya' } };
 
@@ -379,6 +411,15 @@ test('the tickets and what is outside come by their days', () => {
     stay('early', '2027-07-06', '2027-07-07', 'Hamburg'), HOTEL, { id: 'ticket', kind: 'document', title: '' }, { id: 'task', kind: 'task', title: '', task: { status: 'open' } },
   );
   equal(gaps().gaps.filter(gap => gap.doc).map(gap => [gap.kind, gap.doc.id]), [['ticket', 'there'], ['ticket', 'back'], ['outside', 'early'], ['outside', 'late']]);
+});
+
+test('a task done books nothing and renews nothing', () => {
+  const done = { kind: 'task', title: '', task: { status: 'done' } };
+  vault(
+    trip({ travelers: ['@maya'] }), { ...THERE, event: { ...THERE.event, ...PLANNED } }, HOTEL, BACK, { id: 'book', linked_to: 'there', ...done },
+    { id: 'maya', kind: 'contact', title: 'Maya', 'id-documents': [passport('x', '2027-07-11', { 'linked-to': 'renew' })] }, { id: 'renew', ...done },
+  );
+  equal(gaps().gaps.map(gap => [gap.kind, gap.task]), [['planned', null], ['id-document', null]]);
 });
 
 test('a sketch without places is somewhere', () => {

@@ -6,6 +6,7 @@
 
 import { dayStart, daysBetween, parseDate } from '../core/format.js';
 import { t } from '../core/text.js';
+import { entities, parseContact } from './entities.js';
 
 // The types the app names, as the vault keeps them and in words; any other
 // is kept as written.
@@ -24,6 +25,20 @@ export function idDocumentType(type) {
   return ID_DOCUMENT_TYPES.find(([value]) => value === type)?.[1] ?? (type || t('id_document.any'));
 }
 
+// `holder`'s document of `type` in a phrase: "Anna's passport".
+const ID_DOCUMENT_OF = {
+  'id-card': holder => t('id_document.of.id_card', { holder }),
+  passport: holder => t('id_document.of.passport', { holder }),
+  'driving-license': holder => t('id_document.of.driving_license', { holder }),
+  'residence-permit': holder => t('id_document.of.residence_permit', { holder }),
+  visa: holder => t('id_document.of.visa', { holder }),
+};
+
+export function idDocumentOf(type, holder) {
+  if (!type) return t('id_document.of.any', { holder });
+  return ID_DOCUMENT_OF[type]?.(holder) ?? t('id_document.of.other', { holder, type });
+}
+
 export function idDocumentIcon(type) {
   return type === 'driving-license' ? '#i-vehicle-car' : '#i-contact-card';
 }
@@ -39,6 +54,22 @@ export function idDocumentExtras(item) {
     if (key === 'is-biometric') return value === true ? t('id_document.biometric') : null;
     return value != null && typeof value !== 'object' ? `${key} ${value}` : null;
   }).filter(Boolean);
+}
+
+// The contact a ContactRef names (`@<id>`, or a contact's title), if the
+// vault has one.
+function contactOf(ref) {
+  const { id, name } = parseContact(String(ref ?? ''));
+  if (id) return entities.get(id) ?? null;
+  const wanted = name.trim().toLowerCase();
+  return [...entities.values()].find(doc => doc.kind === 'contact' && (doc.title ?? '').trim().toLowerCase() === wanted) ?? null;
+}
+
+// The ID documents of the contact `ref` names: `{ holder, items }`, none
+// if no contact.
+export function idDocumentsOf(ref) {
+  const holder = contactOf(ref);
+  return holder ? { holder, items: holder['id-documents'] ?? [] } : null;
 }
 
 // How the document `item` stands: its expiry (a Date, null without one),

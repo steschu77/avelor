@@ -8,5 +8,5 @@ facts:
   - {name: travelers, label: blueprint.travel.travelers, type: contacts}
   - {name: calendar, label: blueprint.travel.calendar, type: calendar}
   - {name: budget, label: blueprint.travel.budget, type: amount}
-checks: [budget, deadlines, nights, journeys, tickets]
+checks: [budget, deadlines, nights, journeys, tickets, id-documents]
 labels: [travel]

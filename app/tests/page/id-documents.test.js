@@ -1,5 +1,8 @@
 import { equal, test } from './harness.js';
-import { idDocumentExtras, idDocumentType, idDocumentState, newItemId } from '../../static/model/id-documents.js';
+import { vault } from './vault.js';
+import {
+  idDocumentExtras, idDocumentType, idDocumentOf, idDocumentState, idDocumentsOf, newItemId,
+} from '../../static/model/id-documents.js';
 
 const TODAY = new Date(2027, 2, 15, 18);
 const state = (expiry, until = null) => {
@@ -29,10 +32,21 @@ test('a type in words', () => {
   equal([idDocumentType('passport'), idDocumentType('fishing licence'), idDocumentType(undefined)], ['id_document.passport', 'fishing licence', 'id_document.any']);
 });
 
+test("a holder's document in words", () => {
+  equal([idDocumentOf('visa', 'Maya'), idDocumentOf('fishing licence', 'Maya'), idDocumentOf(null, 'Maya')], ['id_document.of.visa', 'id_document.of.other', 'id_document.of.any']);
+});
+
 test("a type's own fields in words", () => {
   equal(idDocumentExtras({ id: 'x', type: 'passport', number: '1', 'is-biometric': true, 'vehicle-categories': ['B', 'C'], height: 170, pages: [1] }),
     ['id_document.biometric', 'id_document.classes', 'height 170']);
   equal([idDocumentExtras({ 'is-biometric': false }), idDocumentExtras(null)], [[], []]);
+});
+
+test('the ID documents of a contact, by its id or its title', () => {
+  const items = [{ id: 'x', type: 'passport' }];
+  vault({ id: 'maya', kind: 'contact', title: 'Maya Yahnek', 'id-documents': items }, { id: 'alex', kind: 'contact', title: 'Alex' }, { id: 'note', kind: 'document', title: 'Note' });
+  equal([idDocumentsOf('@maya').items, idDocumentsOf(' maya yahnek ').items, idDocumentsOf('Alex').items], [items, items, []]);
+  equal([idDocumentsOf('Note'), idDocumentsOf('@gone'), idDocumentsOf(null)], [null, null, null]);
 });
 
 test("a new item's id is a UUIDv7 of now", () => {

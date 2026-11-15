@@ -14,12 +14,14 @@ import { amountText, compareText, dayStart, daysBetween, parseAmount, parseDate 
 import { t } from '../core/text.js';
 import { entities, parseContact } from '../model/entities.js';
 import { factsOf, withFact } from '../model/blueprint.js';
+import { idDocumentType, idDocumentState, idDocumentsOf } from '../model/id-documents.js';
 import { setProjectLocal } from '../model/structure.js';
+import { tripEndOf } from '../model/trip.js';
+import { fieldInput } from '../ui/field.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { openSetDates } from './set-dates.js';
 import { contactChip, entityChip } from './panel/details.js';
-import { fieldInput } from '../ui/field.js';
 
 // The fact `fact` (`factsOf`) of the project `id`, its block `project`, as
 // the header shows it; `meta` a note after its value (what the budget has
@@ -98,12 +100,32 @@ function valueParts(fact, project) {
   if (type === 'date') return [DATE_FORMAT.format(parseDate(String(value)))];
   if (type === 'amount') return [amountText(Number(value))];
   if (type === 'days') return daysParts(value);
+  if (type === 'contacts' && fact.name === 'travelers') {
+    return [].concat(value).map(ref => travelerChip(String(ref), tripEndOf(project)));
+  }
   if (type === 'contacts') return [].concat(value).map(ref => contactChip(String(ref)));
   if (type === 'calendar') {
     const calendar = entities.get(String(value));
     return [calendar ? entityChip(calendar.doc_id, calendar.title || t('untitled')) : String(value)];
   }
   return [typeof value === 'object' ? JSON.stringify(value) : String(value)];
+}
+
+// A traveler of a trip as a chip: with ID documents, their state against
+// the trip's last day `until` -- a check, or a warning when one runs out
+// before -- and each in its tooltip ("Passport, to 04/30/2031").
+function travelerChip(ref, until) {
+  const chip = contactChip(ref);
+  const planned = idDocumentsOf(ref);
+  if (!planned?.items.length) return chip;
+  const states = planned.items.map(item => idDocumentState(item, until));
+  chip.title = planned.items.map((item, i) => {
+    const expiry = states[i].expiry;
+    return expiry ? t('facts.id_to', { type: idDocumentType(item.type), date: DATE_FORMAT.format(expiry) }) : idDocumentType(item.type);
+  }).join(' \u00b7 ');
+  const short = states.some(state => state.short);
+  chip.append(iconEl(short ? '#i-warning' : '#i-checkmark', short ? 'chip__state is-short' : 'chip__state'));
+  return chip;
 }
 
 // A trip's days: from and to with their weekdays, the nights and how far
