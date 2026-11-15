@@ -486,6 +486,46 @@ A contact is a markdown file with the following additional fields:
 The content of the markdown can be used to store additional information
 about the contact.
 
+#### ID documents <a id="id-documents"></a>
+
+Block: `id-documents:`, beside `contact:`
+
+The ID documents the contact holds, any number, several of a kind, a list
+of items each with:
+
+* `id`: UUIDv7, ID of the item, which a path to its fields names
+  (`#record`),
+* `type`: string, `passport`, `id-card`, `driving-license`,
+  `residence-permit`, `visa`, or any other,
+* `number`: string,
+* `country`: string, the country that issued it,
+* `issued`: Date,
+* `expiry`: Date,
+* `issued-by`: string,
+* `linked-to`: [Entity ID], its scan, a task to renew it; as a
+  statement's transactions, an item links on its own (`#statement`),
+* a type's own fields, kept as written (`is-biometric`,
+  `vehicle-categories`).
+
+The block is `masked` by its kind (`#metadata`): a model off this PC gets
+each number as a placeholder named by its holder and type
+(`{maya-yahnek-passport-number}`), its type, country, dates and issuer as
+they are (`assistant.md#context`). A search finds the type, country and
+issuer, not the number.
+
+```yaml
+id-documents:
+- id: 01a2…
+  type: passport
+  number: C4X9K2L7P
+  country: US
+  issued: 2017-07-13
+  expiry: 2027-07-12
+  issued-by: Springfield Passport Agency
+  linked-to: [01a0…]
+  is-biometric: true
+```
+
 ### Calendar <a id="calendar"></a>
 
 Block: `calendar:`

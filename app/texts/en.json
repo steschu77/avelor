@@ -180,6 +180,7 @@
   "ai.key_rejected": "The key was rejected.",
   "ai.key_rejected_why": "The key was rejected: {why}",
   "ai.left_out": "“{title}” ({class})",
+  "ai.left_out_id_numbers": "“{title}”: its ID documents' numbers as placeholders",
   "ai.left_out_values": "“{title}”: its personal values as placeholders",
   "ai.limit_for": "For {feature}, {name} has reached its spend limit; raise it under Accounts.",
   "ai.no_key": "The account has no key.",

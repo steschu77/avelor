@@ -226,6 +226,42 @@ fn slug(text: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------
+/// The ID documents' numbers in `frontmatter` (the entity `entity` named
+/// `title`, a contact) as placeholders for a model off this PC, each named
+/// by its holder and its type (`{maya-yahnek-passport-number}`) and added
+/// to `given`; their type, country, dates and issuer stay.
+pub fn with_id_numbers(frontmatter: &mut Value, entity: Id, title: &str, given: &mut Placeholders) {
+    let Some(Value::Sequence(items)) = frontmatter.get_mut("id-documents") else {
+        return;
+    };
+    for (i, item) in items.iter_mut().enumerate() {
+        if !item
+            .get("number")
+            .is_some_and(|n| n.is_string() || n.is_number())
+        {
+            continue;
+        }
+        let id_type = item
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("document");
+        let base = format!("{}-{}-number", slug(title), slug(id_type));
+        let path = format!("id-documents.{}.number", item_key(item, i));
+        let mut name = base.clone();
+        let mut n = 2;
+        while given
+            .get(&name)
+            .is_some_and(|p| p.entity != entity || p.path != path)
+        {
+            name = format!("{base}-{n}");
+            n += 1;
+        }
+        item["number"] = Value::String(format!("{{{name}}}"));
+        given.insert(name, Placeholder { entity, path });
+    }
+}
+
+// ----------------------------------------------------------------------------
 /// `text` with each placeholder of `placeholders` it names in braces
 /// replaced by the vault's value now; one whose value is gone stays.
 pub fn fill(text: &str, placeholders: &Placeholders, index: &Index) -> String {
@@ -318,6 +354,34 @@ mod tests {
                 entity,
                 path: "bank-account.iban".into()
             }
+        );
+    }
+
+    #[test]
+    fn an_id_documents_number_becomes_a_placeholder_named_by_holder_and_type() {
+        let entity = Id::generate();
+        let mut fm: Value = serde_yaml_ng::from_str(
+            "title: Maya Yahnek\ncontact:\n  email: [maya@example.com]\nid-documents:\n- id: p1\n  type: passport\n  number: C4X9\n  expiry: 2027-07-12\n- type: passport\n  number: X1\n",
+        )
+        .unwrap();
+        let mut given = Placeholders::new();
+        with_id_numbers(&mut fm, entity, "Maya Yahnek", &mut given);
+        let text = serde_yaml_ng::to_string(&fm).unwrap();
+        assert!(
+            text.contains("number: '{maya-yahnek-passport-number}'"),
+            "{text}"
+        );
+        assert!(
+            text.contains("expiry: 2027-07-12") && text.contains("maya@example.com"),
+            "{text}"
+        );
+        assert_eq!(
+            given["maya-yahnek-passport-number"].path,
+            "id-documents.p1.number"
+        );
+        assert_eq!(
+            given["maya-yahnek-passport-number-2"].path,
+            "id-documents.1.number"
         );
     }
 

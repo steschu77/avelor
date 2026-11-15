@@ -659,6 +659,39 @@ pub struct Contact {
 }
 
 // ----------------------------------------------------------------------------
+/// An ID document a contact holds (vault.md#id-documents): a passport, an
+/// ID card, a driving licence, a residence permit, a visa, or any other
+/// kind written as text; a kind's own fields stay in `extra`. An item of
+/// its holder's list, with an `id` and a `linked-to` of its own: its scan,
+/// a task to renew it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct IdDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<Id>,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub id_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<String>,
+    /// The country that issued it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issued: Option<DateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expiry: Option<DateTime>,
+    #[serde(rename = "issued-by", default, skip_serializing_if = "Option::is_none")]
+    pub issued_by: Option<String>,
+    #[serde(
+        rename = "linked-to",
+        default,
+        skip_serializing_if = "OneOrMany::is_none"
+    )]
+    pub linked_to: OneOrMany<Id>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+// ----------------------------------------------------------------------------
 /// A record's fields are entirely custom per-document; nothing is typed
 /// here, they stay in `Envelope::extra`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -789,6 +822,13 @@ pub struct Roles {
     pub task: Option<Task>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub contact: Option<Contact>,
+    /// The ID documents the entity, a contact, holds.
+    #[serde(
+        rename = "id-documents",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub id_documents: Option<Vec<IdDocument>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record: Option<Record>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1128,6 +1168,11 @@ impl Envelope {
             out.extend(lists.into_iter().flatten().map(String::as_str));
             out.extend(contact.iban.as_deref());
         }
+        for document in roles.id_documents.iter().flatten() {
+            out.extend(document.id_type.as_deref());
+            out.extend(document.country.as_deref());
+            out.extend(document.issued_by.as_deref());
+        }
         if let Some(list) = &roles.list {
             out.extend(list.items.iter().map(String::as_str));
         }
@@ -1237,6 +1282,48 @@ custom_key: kept
             env.extra.get("custom_key").and_then(|v| v.as_str()),
             Some("kept")
         );
+    }
+
+    #[test]
+    fn a_contacts_id_documents_round_trip_with_their_own_fields() {
+        let yaml = format!(
+            "title: Maya Yahnek
+contact: {{}}
+id-documents:
+- id: {ID}
+  type: passport
+  number: C4X9K2L7P
+  country: US
+  issued: 2017-07-13
+  expiry: 2027-07-12
+  issued-by: Springfield Passport Agency
+  linked-to:
+  - {PROJ_ID}
+  is-biometric: true
+- type: passport
+  number: X1
+- type: driving-license
+  vehicle-categories:
+  - B
+  - C
+"
+        );
+        let env = Envelope::parse(&yaml).unwrap();
+        let documents = env.roles.id_documents.as_ref().unwrap();
+        assert_eq!(documents.len(), 3, "two of a kind and another");
+        let passport = &documents[0];
+        assert_eq!(passport.expiry.unwrap().as_iso8601(), "2027-07-12");
+        assert_eq!(
+            passport.issued_by.as_deref(),
+            Some("Springfield Passport Agency")
+        );
+        assert_eq!(passport.linked_to.as_slice(), [Id::parse(PROJ_ID).unwrap()]);
+        assert_eq!(passport.extra["is-biometric"].as_bool(), Some(true));
+        assert!(documents[2].extra.contains_key("vehicle-categories"));
+        assert_eq!(env.compose().unwrap(), yaml);
+        let text = env.text();
+        assert!(text.contains(&"Springfield Passport Agency") && text.contains(&"passport"));
+        assert!(!text.contains(&"C4X9K2L7P"), "the number isn't searched");
     }
 
     #[test]

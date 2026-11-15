@@ -180,6 +180,7 @@
   "ai.key_rejected": "La clave fue rechazada.",
   "ai.key_rejected_why": "La clave fue rechazada: {why}",
   "ai.left_out": "«{title}» ({class})",
+  "ai.left_out_id_numbers": "«{title}»: los números de sus documentos de identidad como marcadores",
   "ai.left_out_values": "«{title}»: sus valores personales como marcadores",
   "ai.limit_for": "Para {feature}, {name} ha alcanzado su límite de gasto; súbelo en Cuentas.",
   "ai.no_key": "La cuenta no tiene clave.",
