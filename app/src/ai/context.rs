@@ -337,6 +337,7 @@ starred: true
 remote:
   account: 01a0e1cc-a24c-7490-82fe-e75669985b53
   gmail-id: 18c0ffee
+  by: Maya Yahnek
 email:
   from: Telekom <rechnung@telekom.de>
   to: jan@example.com
@@ -378,6 +379,8 @@ Please pay 40 EUR by Friday.
             "starred",
             "gmail-id",
             "remote",
+            "by: ",
+            "Yahnek",
             "threads",
             "01a0e1cc",
         ] {

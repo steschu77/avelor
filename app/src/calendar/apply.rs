@@ -292,10 +292,13 @@ fn unchanged_event(app: &App, sync: &CalendarSync, path: &Path) -> Option<Id> {
 
 // ----------------------------------------------------------------------------
 /// Change `doc`'s `remote:` block from `account` (a fresh one if it has
-/// none from it, e.g. an event made in the vault and pushed).
+/// none from it, e.g. an event made in the vault and pushed; it stays by
+/// whom it was).
 pub(super) fn set_bookkeeping(doc: &mut Document, account: Id, change: impl FnOnce(&mut Remote)) {
+    let by = doc.source().and_then(|source| source.by()).cloned();
     let mut remote = doc.remote_from(Some(&account)).cloned().unwrap_or(Remote {
         account: Some(account),
+        by,
         ..Remote::default()
     });
     change(&mut remote);

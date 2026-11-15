@@ -23,6 +23,7 @@ use crate::email::EmailState;
 use crate::google::accounts::GoogleAccounts;
 use crate::indexing::Indexing;
 use crate::jobs::Jobs;
+use crate::me;
 use crate::protocol::{self, Req};
 use crate::scans::ScanState;
 use crate::search;
@@ -861,8 +862,12 @@ impl App {
     /// (`Vault::save_content`), and taking in a change made outside the app
     /// (`Vault::reload`, `Vault::refresh`) are not edits by the app. An
     /// event it wrote may wait to be pushed to Google (`calendar::changed`).
+    /// A new entity's source names the user (`me::by`).
     pub fn edit<R>(&mut self, f: impl FnOnce(&mut Index, &mut Changes) -> Result<R>) -> Result<R> {
-        let mut changes = Changes::default();
+        let mut changes = Changes {
+            by: me::by(self),
+            ..Changes::default()
+        };
         let result = f(&mut self.vault.index, &mut changes);
         self.vault.keep_edited(&changes);
         self.post_changes(&changes);

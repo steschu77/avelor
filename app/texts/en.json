@@ -1179,6 +1179,7 @@
   "period.week": "Week",
   "period.year": "Year",
   "props.account": "Account",
+  "props.added_by": "Added by",
   "props.amount": "Amount",
   "props.arrives": "Arrives",
   "props.assignee": "Assignee",

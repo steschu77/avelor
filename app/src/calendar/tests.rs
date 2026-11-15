@@ -254,6 +254,35 @@ fn sync_effect(h: &mut Harness, path: PathBuf, id: Id, effect: Effect) {
 
 // ------------------------------------------------------------------------
 #[test]
+fn an_event_pushed_first_stays_by_whom_it_was() {
+    let text = format!(
+        "---\nid: {EV}\ntitle: Dentist\ndate: 2026-10-05T08:00:00Z\ncreated:\n  by: Maya\nevent:\n  calendar: {CAL}\n  start: 2026-10-05T08:00:00Z\n---\n"
+    );
+    let path = event_file().0;
+    let mut h = with_google("calendar-by", FULL, &[calendar_file(), (path, text)]);
+    let pushed = Effect::SetRemote {
+        path: PathBuf::from(path),
+        remote_event_id: "abc".into(),
+        etag: None,
+        snapshot: "pushed".into(),
+        remote_calendar_id: "cal1".into(),
+        remote: Box::new(GoogleEvent {
+            attendees: None,
+            ..google_event()
+        }),
+    };
+    let id = Id::parse(EV).unwrap();
+    sync_effect(&mut h, PathBuf::from(path), id, pushed);
+    let text = fs::read_to_string(h.vault().join(path)).unwrap();
+    assert!(text.contains("event-id: abc"), "{text}");
+    assert!(
+        text.contains("by: Maya") && !text.contains("created:"),
+        "{text}"
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
 fn an_edit_pushed_since_is_undone_keeping_the_push() {
     let mut h = with_google(
         "calendar-undo-pushed",

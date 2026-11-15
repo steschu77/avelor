@@ -1,7 +1,7 @@
 import { equal, test } from './harness.js';
 import { entity, vault } from './vault.js';
 import {
-  NO_PROJECT, assistantConversations, calendarEntityOf, entities, entityOf, knownThreads, matchesFilter, me, parseContact,
+  NO_PROJECT, addedBy, assistantConversations, calendarEntityOf, entities, entityOf, knownThreads, matchesFilter, me, parseContact,
   projectNames, projectScope, projects, projectsFor, projectsInOrder, projectsOf, sourceKeyOf, threadMatchesFilter, threadMembers,
   threadOf, threadProjects, threads, watches,
 } from '../../static/model/entities.js';
@@ -167,6 +167,14 @@ test('the user is the contact of the vault among those kept', () => {
     store.setState({ me: kept });
     equal(me(), is, kept.join());
   }
+});
+
+test('who added an entity is in its source, whichever it is', () => {
+  for (const kind of ['created', 'file', 'remote', 'scan', 'web', 'ai', 'import']) {
+    equal(addedBy({ source: { [kind]: { by: '@maya' } } }), '@maya', kind);
+    equal(addedBy({ source: { [kind]: {} } }), null, kind);
+  }
+  equal([addedBy({ source: null }), addedBy({}), addedBy(null)], [null, null, null]);
 });
 
 test('an entity as the page keeps it', () => {

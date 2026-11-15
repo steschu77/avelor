@@ -629,7 +629,8 @@ start says so in the row. Another vault opening leaves the page open.
     kept in `config.yaml`, which is the system account's: contacts' ids, at
     most one per vault, as a vault has no id of its own. While the vault is
     read, it can't be picked: which of the ids are the vault's isn't known
-    yet.
+    yet. What the user adds from then on names them (`vault.md#sources`),
+    and the card shows it as Added by (`panel.md#cards`).
 
 ## Preferences <a id="preferences"></a>
 

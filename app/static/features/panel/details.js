@@ -12,7 +12,7 @@
 import { accEl } from '../../core/dom.js';
 import { DATE_FORMAT, amountText, fileSize, money, parseAmount, parseDate } from '../../core/format.js';
 import { TIME_FORMAT, isoInstant, localDay, relativeDay } from '../../core/format.js';
-import { entities, parseContact, vaultSettings } from '../../model/entities.js';
+import { addedBy, entities, parseContact, vaultSettings } from '../../model/entities.js';
 import { googleKept, googleLocked, googleType, isOverdue } from '../../model/calendar.js';
 import { addDays, sameDay } from '../../core/format.js';
 import { t } from '../../core/text.js';
@@ -98,6 +98,8 @@ export function renderCardDetails(row, doc, occurrence = null) {
     if (doc?.['recurring-payment']) recurringPaymentFields(doc, add);
     if (doc?.kind === 'record') recordFields(doc, add);
     if (doc?.doc_id) add(t('props.classification'), classificationField(doc));
+    const by = addedBy(doc);
+    if (by) add(t('props.added_by'), known(by) ? contactChip(by) : t('contact.unknown'));
     row.replaceChildren(...parts);
     row.hidden = !parts.length;
     if (focusKey) row.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true });
@@ -143,6 +145,12 @@ function eventFields(doc, add, occurrence) {
     const status = { tentative: t('event.tentative'), cancelled: t('event.cancelled') }[event.status];
     if (editable && event.status !== 'cancelled') add(t('props.status'), statusField(event, edit));
     else if (status && !trip) add(t('props.status'), status);
+}
+
+// Whether the contact `ref` is a name, or an entity the vault still has.
+function known(ref) {
+    const { id, name } = parseContact(ref);
+    return Boolean(id) || !name.startsWith('@');
 }
 
 // ----------------------------------------------------------------------------

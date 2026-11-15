@@ -797,13 +797,21 @@ used in iconography and filtering.
 
 ## Well-known Sources <a id="sources"></a>
 
-Each source is written as a top-level block named after the channel.
+Each source is written as a top-level block named after the channel. Each
+takes, after its own fields:
+
+* `by`: ContactRef, who made the entity or brought it in: the user
+  (`ui.md#settings`, Who you are), for what the app did by itself too, an
+  auto-sync or an analysis, the user whose app it was. Written only for a
+  new entity, and only if someone is picked. A note, not proof: whoever has
+  the folder can edit it. Anything but a text is ignored.
 
 ### Created
 
 Block: `created: {}`
 
-The entity has been created inside the app.
+The entity has been created inside the app. An event's becomes `remote` when
+it is first pushed to Google, its `by` staying.
 
 ### File
 

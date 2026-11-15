@@ -20,6 +20,7 @@ use crate::document::{Document, FileFormat};
 use crate::envelope::Source;
 use crate::envelope::Statement;
 use crate::envelope::{DocumentType, Envelope};
+use crate::shared::ContactRef;
 use av_utils::error::Error;
 use av_utils::error::Result;
 use av_utils::fs::{FileStamp, write_atomic};
@@ -165,6 +166,9 @@ impl Entry {
 /// goes, so it is accurate even when the operation fails part-way.
 #[derive(Debug, Default)]
 pub struct Changes {
+    /// Who the operation is by, given: a new entity's source names them
+    /// (`Index::create`).
+    pub by: Option<ContactRef>,
     /// An entity new in the index: made in the app, written to its own new
     /// file, or restored from the trash ([`Index::restore`]).
     pub created: Option<Id>,

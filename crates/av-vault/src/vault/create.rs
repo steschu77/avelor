@@ -197,9 +197,16 @@ impl Index {
 
     /// Write the new entity `doc` to a file with its generated name in
     /// `folder` (vault-relative), never over an existing file, and add it to
-    /// the index. Without an open vault (no root) it is `InvalidPath`.
-    pub fn create(&mut self, doc: Document, folder: &Path, changes: &mut Changes) -> Result<Id> {
+    /// the index. Its source names who the operation is by (`changes.by`).
+    /// Without an open vault (no root) it is `InvalidPath`.
+    pub fn create(
+        &mut self,
+        mut doc: Document,
+        folder: &Path,
+        changes: &mut Changes,
+    ) -> Result<Id> {
         self.open_root()?;
+        doc.made_by(changes.by.as_ref());
         let local = folder.join(filename::generated_name(&doc));
         let step = FileStep::created(local.clone(), &doc);
         let id = self.create_at(doc, local)?;

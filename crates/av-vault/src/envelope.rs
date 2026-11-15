@@ -13,7 +13,7 @@ use av_utils::datetime::{Date, DateTime};
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_utils::is_false;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 // ----------------------------------------------------------------------------
 type Extra = BTreeMap<String, serde_yaml_ng::Value>;
@@ -836,10 +836,27 @@ impl Roles {
 }
 
 // ----------------------------------------------------------------------------
+/// A source's `by`; none for anything but a text, so that it doesn't lose the
+/// whole block (`Source`).
+fn name_or_none<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<ContactRef>, D::Error> {
+    let value = serde_yaml_ng::Value::deserialize(deserializer)?;
+    Ok(value.as_str().map(ContactRef::parse))
+}
+
+// ----------------------------------------------------------------------------
 /// The payload of a source without fields of its own; written as `name: {}`.
 /// In every source's, the keys the app doesn't know stay (`extra`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Bare {
+    /// Who made the entity or brought it in (vault.md#sources).
+    #[serde(
+        default,
+        deserialize_with = "name_or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub by: Option<ContactRef>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -855,6 +872,13 @@ pub struct Import {
     /// given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// Who made the entity or brought it in (vault.md#sources).
+    #[serde(
+        default,
+        deserialize_with = "name_or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub by: Option<ContactRef>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -868,6 +892,13 @@ pub struct Remote {
     /// message-id); kept as raw YAML, their shape depends on the account.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub remote: Vec<serde_yaml_ng::Value>,
+    /// Who made the entity or brought it in (vault.md#sources).
+    #[serde(
+        default,
+        deserialize_with = "name_or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub by: Option<ContactRef>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -921,6 +952,13 @@ pub struct Scan {
     /// when `watch` is given.
     #[serde(default, skip_serializing_if = "OneOrMany::is_none")]
     pub origin: OneOrMany<String>,
+    /// Who made the entity or brought it in (vault.md#sources).
+    #[serde(
+        default,
+        deserialize_with = "name_or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub by: Option<ContactRef>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -930,6 +968,13 @@ pub struct Scan {
 pub struct Web {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// Who made the entity or brought it in (vault.md#sources).
+    #[serde(
+        default,
+        deserialize_with = "name_or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub by: Option<ContactRef>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -949,6 +994,33 @@ pub enum Source {
     Web(Web),
     Ai(Bare),
     Import(Import),
+}
+
+impl Source {
+    // ------------------------------------------------------------------------
+    /// Who made the entity or brought it in.
+    pub fn by(&self) -> Option<&ContactRef> {
+        match self {
+            Source::Created(source) | Source::File(source) | Source::Ai(source) => &source.by,
+            Source::Remote(source) => &source.by,
+            Source::Scan(source) => &source.by,
+            Source::Web(source) => &source.by,
+            Source::Import(source) => &source.by,
+        }
+        .as_ref()
+    }
+
+    // ------------------------------------------------------------------------
+    pub fn set_by(&mut self, by: Option<ContactRef>) {
+        let place = match self {
+            Source::Created(source) | Source::File(source) | Source::Ai(source) => &mut source.by,
+            Source::Remote(source) => &mut source.by,
+            Source::Scan(source) => &mut source.by,
+            Source::Web(source) => &mut source.by,
+            Source::Import(source) => &mut source.by,
+        };
+        *place = by;
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1383,6 +1455,49 @@ contact:
             assert_eq!(env.compose().unwrap(), yaml);
         }
         assert_eq!(Envelope::parse("title: x\n").unwrap().source, None);
+    }
+
+    #[test]
+    fn who_made_an_entity_is_the_last_of_its_source() {
+        let by = format!("  by: '@{ID}'\n");
+        let cases = [
+            "created:\n",
+            "file:\n",
+            "ai:\n",
+            "scan:\n  origin: scan.jpg\n",
+            "web:\n  url: https://example.com\n",
+            "import:\n  origin: export.csv\n",
+            "remote:\n  account: 01a077f7-7e89-7263-b36d-ad63c20809e2\n",
+        ];
+        for yaml in cases {
+            let yaml = format!("{yaml}{by}");
+            let mut env = Envelope::parse(&yaml).unwrap();
+            let source = env.source.as_mut().unwrap();
+            assert_eq!(source.by(), Some(&ContactRef::Id(Id::parse(ID).unwrap())));
+            assert_eq!(env.compose().unwrap(), yaml);
+
+            let source = env.source.as_mut().unwrap();
+            source.set_by(Some(ContactRef::parse("Maya")));
+            let composed = env.compose().unwrap();
+            assert_eq!(composed, yaml.replace(&format!("'@{ID}'"), "Maya"));
+            env.source.as_mut().unwrap().set_by(None);
+            assert!(!env.compose().unwrap().contains("by"), "{yaml}");
+        }
+    }
+
+    #[test]
+    fn a_by_that_isnt_a_text_leaves_its_source() {
+        for by in ["3", "[a, b]", "{id: x}", "null", "true"] {
+            let yaml = format!("remote:\n  account: {ID}\n  by: {by}\n");
+            let env = Envelope::parse(&yaml).unwrap();
+            let Some(Source::Remote(remote)) = &env.source else {
+                panic!("the source is gone with {by}");
+            };
+            assert_eq!(
+                (remote.account, &remote.by),
+                (Some(Id::parse(ID).unwrap()), &None)
+            );
+        }
     }
 
     #[test]

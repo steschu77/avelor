@@ -83,7 +83,9 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   `vault.md#record`), and for every entity which models may read it
   (Classification: its own, else the stricter of its kind's, "Masked · its
   type", and the vault's, "Open · the vault's"; a menu sets its own or none,
-  `vault.md#metadata`; `renderCardDetails`,
+  `vault.md#metadata`), and, last, who added it where its source says
+  (Added by, `vault.md#sources`: a contact, a name, or Unknown for a contact
+  the vault no longer has; `renderCardDetails`,
   `features/panel/details.js`). A task's fields, a document's type, a
   trip event's fields, a plain event's times, where, status and schedule,
   an event's Work, a recurring payment's fields, a

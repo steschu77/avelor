@@ -428,7 +428,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `google/accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account; the auto-syncs' schedule, `SYNC_EVERY` and `AutoSyncs` |
 | `config/files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
 | `settings.rs` | what the Settings page sets: the language as `ready` tells it (`language`), `set_language`, `set_theme`; its dispatch tests |
-| `me.rs` | who the user is in the open vault (`config.yaml` `me`): `set_me`; its dispatch tests |
+| `me.rs` | who the user is in the open vault (`config.yaml` `me`): `set_me`, `by`, which `App::edit` has a new entity's source name (`vault.md#sources`); its dispatch tests |
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai/context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file with its attachments' read text, within a budget, each as far as its classification reaches the model; its tests |
 | `ai/policy.rs` | what reaches a model: how far an entity's classification reaches one on this PC and one off it, whether a model runs on this PC, a `masked` entity's values as placeholders and the reply's values filled in; its tests |

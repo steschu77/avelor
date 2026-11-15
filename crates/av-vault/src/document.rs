@@ -561,6 +561,18 @@ impl Document {
     }
 
     // ------------------------------------------------------------------------
+    /// Name `by` in the source block, unless it names someone already or
+    /// there is no block.
+    pub fn made_by(&mut self, by: Option<&ContactRef>) {
+        let unnamed = self.source().is_some_and(|source| source.by().is_none());
+        if let Some(by) = by.filter(|_| unnamed)
+            && let Some(source) = &mut self.envelope_mut().source
+        {
+            source.set_by(Some(by.clone()));
+        }
+    }
+
+    // ------------------------------------------------------------------------
     pub fn set_labels(&mut self, labels: Vec<String>) {
         self.envelope_mut().labels = labels;
     }

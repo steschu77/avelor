@@ -169,6 +169,13 @@ function sourceKind(source) {
 }
 
 // ----------------------------------------------------------------------------
+// Who made `doc` or brought it in, a contact as the vault keeps it (its
+// source's `by`), or null.
+export function addedBy(doc) {
+  return doc?.source?.[sourceKind(doc.source)]?.by ?? null;
+}
+
+// ----------------------------------------------------------------------------
 // The source `doc` came from, as the sidebar keys it: `created` for an
 // entity made in the app; a statement by the statements watch of its
 // account, whichever watch imported it, else like a scan by the folder
