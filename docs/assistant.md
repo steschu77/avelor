@@ -45,8 +45,12 @@ when it started.
   is written once it is complete; Stop ends it, and what it wrote so far
   is kept as the reply. A failed reply is shown with its error and never
   written.
-- A click on one's own message edits it; Enter resends it as a new branch
-  beside the old one (`assistantResend`), and Retry asks for a new reply.
+- A user's message is headed "You", or with the name of who asked if its
+  `sender` is someone else (`otherSender`), and when; one without a `sender`
+  is the user's. The name isn't told to the model.
+- A click on a user's message edits it, also someone else's; Enter resends it
+  as a new branch beside the old one, then by the user (`assistantResend`),
+  and Retry asks for a new reply.
   ‹ › switch between siblings, which writes the conversation's `active`
   leaf (`chat_select`).
 - The switcher menu changes to another linked conversation or starts a new

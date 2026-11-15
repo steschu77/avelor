@@ -435,6 +435,7 @@
   "chat.kept_from": "Vor {model} zurückgehalten: {kept}",
   "chat.kept_from_model": "Vor dem Modell zurückgehalten: {kept}",
   "chat.message_gone": "Die Nachricht gibt es nicht mehr.",
+  "chat.name_at": "{name} · {time}",
   "chat.new_conversation": "Neue Unterhaltung",
   "chat.new_more": "Neu · {n} weitere",
   "chat.next_version": "Nächste Version",

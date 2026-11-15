@@ -668,7 +668,8 @@ It carries the following additional fields:
   by dots, a list's item by its `id` or its index), never the value.
 
 A message with a `model` is an AI reply. In an AI conversation (the `ai`
-source) the user's own messages carry no `sender`. The app writes its
+source) a user's message names in `sender` who asked, if someone was picked
+(`ui.md#settings`, Who you are); an older one has none. The app writes its
 conversations to `Conversations/`, `linked-to` (the metadata field) the document
 or thread shown when the conversation started; a reply is written once it is
 complete or stopped, and a failed reply isn't written at all. The email

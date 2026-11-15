@@ -435,6 +435,7 @@
   "chat.kept_from": "Kept from {model}: {kept}",
   "chat.kept_from_model": "Kept from the model: {kept}",
   "chat.message_gone": "The message is gone.",
+  "chat.name_at": "{name} · {time}",
   "chat.new_conversation": "New conversation",
   "chat.new_more": "New · {n} more",
   "chat.next_version": "Next version",

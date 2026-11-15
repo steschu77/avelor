@@ -441,6 +441,7 @@
   "chat.kept_from": "Retenido para {model}: {kept}",
   "chat.kept_from_model": "Retenido para el modelo: {kept}",
   "chat.message_gone": "El mensaje ya no existe.",
+  "chat.name_at": "{name} · {time}",
   "chat.new_conversation": "Conversación nueva",
   "chat.new_more": "Nueva · {n} más",
   "chat.next_version": "Versión siguiente",

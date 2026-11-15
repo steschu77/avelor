@@ -27,7 +27,7 @@ import { serializeMarkdown } from '../../editor/markdown.js';
 import { store, vaultOpen } from '../../model/state.js';
 import { showError } from '../../model/state.js';
 import {
-  assistantConversations, entities, isAiConversation, threads, vaultSettings,
+  assistantConversations, entities, isAiConversation, me, parseContact, threads, vaultSettings,
 } from '../../model/entities.js';
 import { projectsFor } from '../../model/entities.js';
 import { iconEl } from '../../ui/icons.js';
@@ -414,6 +414,7 @@ function renderAssistantHead() {
 }
 
 const scheduleRenderAssistantHead = oncePerFrame(() => renderAssistantHead());
+const scheduleRenderAssistant = oncePerFrame(() => renderAssistant());
 
 function renderAssistantMessages(setup) {
   for (const el of assistantMessagesEl.querySelectorAll('.chat__hint, .chat__suggestions, :scope>.error-note')) el.remove();
@@ -530,12 +531,21 @@ function renderAssistantGuide(setup) {
   return guide;
 }
 
+// Who asked, if it isn't the user: the sender's name, or null.
+function otherSender({ sender }) {
+  if (!sender || sender === `@${me()}`) return null;
+  const { id, name } = parseContact(sender);
+  return id || !name.startsWith('@') ? name : t('contact.unknown');
+}
+
 // The label row: who and when, and the arrows through the siblings.
 function renderAssistantLabel(node, message, children) {
   node.label.replaceChildren();
   let who;
   if (message.role === 'user') {
-    who = t('chat.you_at', { time: assistantTime(message.date, true) });
+    const time = assistantTime(message.date, true);
+    const name = otherSender(message);
+    who = name ? t('chat.name_at', { name, time }) : t('chat.you_at', { time });
   } else if (message.status === 'writing') {
     who = t('chat.writing_label');
   } else if (message.status === 'failed') {
@@ -739,7 +749,7 @@ store.subscribe([
   state => state.selected_thread, state => state.threads_rev,
 ], (_values, state) => assistantShow(state));
 
-store.subscribe([state => state.accounts_rev, state => state.settings_rev], () => renderAssistant());
+store.subscribe([state => state.accounts_rev, state => state.settings_rev, state => state.me], () => renderAssistant());
 
 // An AI conversation selected, in a lens, on the dashboard or through Go to,
 // opens beside what it is about: the panel half-open (at full width it
@@ -760,10 +770,11 @@ store.subscribe(state => state.panel_size, panel_size => {
 
 // A conversation written (or deleted) changes the switcher's count; the conversation shown
 // leaving the vault is gone; a reply's saved document leaving it brings
-// back Save as document.
+// back Save as document; a sender's name may change.
 store.subscribe(state => state.entities_rev, () => {
   if (assistantConversation && !entities.has(assistantOpen)) onConversation(assistantOpen, null);
   scheduleRenderAssistantHead();
+  if (assistantConversation?.messages.some(message => message.sender)) scheduleRenderAssistant();
   for (const node of assistantNodes.values()) {
     if (node.role === 'assistant' && !node.actions.hidden) renderAssistantReplyActions(node);
   }

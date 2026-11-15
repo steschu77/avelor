@@ -15,6 +15,7 @@ use av_vault::document::{Document, FileFormat};
 use av_vault::envelope::{Bare, Conversation, ConversationMessage, Roles, Source};
 use av_vault::markdown;
 use av_vault::schema::layout;
+use av_vault::shared::ContactRef;
 use av_vault::vault::Index;
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +24,7 @@ use crate::ai::accounts::Resolved;
 use crate::ai::context::Gate;
 use crate::ai::policy::Placeholders;
 use crate::app::{App, Task};
+use crate::me;
 use crate::protocol::Req;
 use crate::texts::Text;
 use av_vault::markdown::plain_title;
@@ -121,6 +123,9 @@ struct MessageView {
     parent: Option<Id>,
     /// `user` or `assistant`.
     role: &'static str,
+    /// Who asked, if the message names them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sender: Option<ContactRef>,
     model: Option<String>,
     date: Option<DateTime>,
     content: String,
@@ -245,6 +250,7 @@ pub fn chat_send(app: &mut App, req: Req, request: SendRequest) {
             let message = ConversationMessage {
                 id: Some(question),
                 parent: request.parent,
+                sender: me::by(app),
                 date: Some(DateTime::now()),
                 content: Some(text.to_string()),
                 ..Default::default()
@@ -645,6 +651,7 @@ fn view_of<'a>(
                 id: message_id,
                 parent: m.parent,
                 role: if m.is_reply() { "assistant" } else { "user" },
+                sender: m.sender.clone(),
                 model: m.model.clone(),
                 date: m.date,
                 html: markdown::to_html(&content),
@@ -662,6 +669,7 @@ fn view_of<'a>(
             id: failed.id,
             parent: Some(failed.parent),
             role: "assistant",
+            sender: None,
             model: Some(failed.model.clone()),
             date: Some(failed.date),
             content: String::new(),
@@ -680,6 +688,7 @@ fn view_of<'a>(
             id: writing.id,
             parent: Some(writing.parent),
             role: "assistant",
+            sender: None,
             model: Some(writing.model.clone()),
             date: Some(writing.date),
             html: markdown::to_html(&content),
@@ -1032,6 +1041,57 @@ mod tests {
             "{system}"
         );
         assert_eq!(requests[0]["messages"][1]["content"], "What do I owe?");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_question_names_who_asked_and_no_model_is_told() {
+        const MAYA: &str = "01a0e1cc-a24c-7490-82fe-e75669985b49";
+        let maya = format!("---\nid: {MAYA}\ntitle: Maya Yahnek\ncontact: {{}}\n---\n");
+        for user in [None, Some(MAYA)] {
+            let requests = Arc::new(Mutex::new(Vec::new()));
+            let address = FakeOllama::new(&["m"])
+                .replying(&["Yes."])
+                .recording(&requests)
+                .start();
+            let account =
+                format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+            let files = [
+                (".avelor/accounts/ollama.yaml", account),
+                picked(),
+                ("Contacts/Maya.md", maya.clone()),
+            ];
+            let mut h = with_accounts(&format!("chat-sender-{}", user.is_some()), &files);
+            h.call("set_me", json!({ "contact": user }));
+            let args = json!({ "conversation": CHAT_ID, "text": "And then?", "parent": A1B });
+            let request = json!({ "id": 1, "cmd": "chat_send", "args": args });
+            h.app.on_web_message(request.to_string());
+            let is_done = |t: &String| t.contains(r#""ev":"account""#);
+            let sent = parse(&h.wait_for(|sent| sent.iter().any(is_done)));
+
+            let written = conversation(&h, Id::parse(CHAT_ID).unwrap());
+            let senders: Vec<_> = written
+                .messages
+                .iter()
+                .map(|m| (m.is_reply(), m.sender.clone()))
+                .collect();
+            let by = user.map(|id| ContactRef::Id(Id::parse(id).unwrap()));
+            assert_eq!(senders[0], (false, None), "the old question has none");
+            assert_eq!(senders[3], (false, by), "{senders:?}");
+            assert!(senders.iter().all(|(reply, by)| !reply || by.is_none()));
+
+            let shown = &events(&sent, "conversation")[0]["messages"][3];
+            let expected = user.map_or(json!(null), |id| json!(format!("@{id}")));
+            assert_eq!(shown["sender"], expected);
+            assert_eq!(shown.get("sender").is_some(), user.is_some());
+
+            let requests = requests.lock().unwrap();
+            let request = requests[0].to_string();
+            assert!(request.contains("And then?"), "{request}");
+            for told in [MAYA, "Maya", "sender"] {
+                assert!(!request.contains(told), "{told} in {request}");
+            }
+        }
     }
 
     // ------------------------------------------------------------------------
