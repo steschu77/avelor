@@ -22,7 +22,8 @@ use av_vault::vault::Index;
 pub(super) enum Stored {
     /// A new entity, by its id.
     Created(Id),
-    Replaced,
+    /// The body of the entity, by its id, replaced.
+    Replaced(Id),
     /// Already in the vault, and not to be replaced.
     Skipped,
 }
@@ -98,7 +99,7 @@ pub(super) fn apply_email(
         Action::Skip => return Ok((Stored::Skipped, Saved::default())),
         Action::Replace(id) => {
             app.edit_written(|index, changes| index.set_content(&id, email.body, changes))?;
-            (Stored::Replaced, id)
+            (Stored::Replaced(id), id)
         }
         Action::Create => {
             let doc = email_entity(account, gmail_id, email);

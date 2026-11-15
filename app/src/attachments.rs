@@ -49,7 +49,7 @@ struct Read {
     /// The documents whose text it wrote.
     written: Vec<Id>,
     /// The emails to analyse afterwards, and how.
-    then: Option<(Vec<Id>, Analysis)>,
+    then: Option<(Batch, Analysis)>,
 }
 
 // ----------------------------------------------------------------------------
@@ -138,7 +138,7 @@ pub fn read(
     email: &str,
     ids: Vec<Id>,
     pick: Option<&ModelChoice>,
-    then: Option<(Vec<Id>, Analysis)>,
+    then: Option<(Batch, Analysis)>,
 ) {
     let label = Text::new("attachments.reading").arg("email", email);
     let resolved = match app.ai.choose(pick, reading(), DateTime::now()) {
@@ -146,7 +146,7 @@ pub fn read(
         Err(refusal) => {
             let notice = Text::new("job.notice").arg("job", label);
             app.notice(notice.arg("text", refusal.text));
-            return analyse(app, email, then, Vec::new());
+            return analyse(app, then, Vec::new());
         }
     };
     let local = ai::policy::is_local(resolved.provider, &resolved.address, &resolved.model);
@@ -171,7 +171,7 @@ pub fn read(
         app.notice(notice.arg("text", ai::policy::kept_from(kept)));
     }
     if queue.is_empty() {
-        return analyse(app, email, then, Vec::new());
+        return analyse(app, then, Vec::new());
     }
     let total = queue.len();
     let job = app.start_job(JobKind::AttachmentRead, label, total);
@@ -194,9 +194,9 @@ pub fn read(
 // ----------------------------------------------------------------------------
 /// The emails `then` asks for analysed, with the attachments `read`
 /// (`analysis::analyse`).
-fn analyse(app: &mut App, email: &str, then: Option<(Vec<Id>, Analysis)>, read: Vec<Id>) {
-    if let Some((emails, analysis)) = then {
-        analysis::analyse(app, Batch::email(email, emails, read), &analysis);
+fn analyse(app: &mut App, then: Option<(Batch, Analysis)>, read: Vec<Id>) {
+    if let Some((batch, analysis)) = then {
+        analysis::analyse(app, batch.with_read(read), &analysis);
     }
 }
 
@@ -394,7 +394,7 @@ fn finish(app: &mut App, job: Id) {
         app.notice(notice);
     }
     if !stopped {
-        analyse(app, &read.email, read.then, read.written);
+        analyse(app, read.then, read.written);
     }
 }
 
@@ -559,7 +559,10 @@ mod tests {
             "jan@example.com",
             all,
             Some(&pick()),
-            Some((ids(&[EMAIL]), then)),
+            Some((
+                Batch::email("jan@example.com", ids(&[EMAIL]), Vec::new()),
+                then,
+            )),
         );
         let sent = until_done(&mut h, 2);
 
@@ -689,7 +692,10 @@ mod tests {
             "jan@example.com",
             ids(&[SCAN]),
             None,
-            Some((ids(&[EMAIL]), then)),
+            Some((
+                Batch::email("jan@example.com", ids(&[EMAIL]), Vec::new()),
+                then,
+            )),
         );
         let sent = until_done(&mut h, 1);
 

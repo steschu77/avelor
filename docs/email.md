@@ -25,10 +25,11 @@ the expanded vault area, filled with the account's last filter
   to text, quoted replies as quotes, links kept, attached files named at
   the end — and writes it as an email entity to `Email/` in the vault. A
   selected email that is already in the vault gets its body replaced,
-  keeping its frontmatter; the page asks for a second click before doing
-  that, Fetch red while it can run. The fetch is a job (`ui.md#jobs-panel`); the page closes, and
-  Fetch email reads its matches again when the job ends. Esc closes the
-  page.
+  keeping its frontmatter, and the analysis takes it for a type
+  it lacks (`email.md#analysis`); the page asks for a second click before
+  doing that, Fetch red while it can run. The fetch is a job
+  (`ui.md#jobs-panel`); the page closes, and Fetch email reads its matches
+  again when the job ends. Esc closes the page.
 - **Attachments** (section 2): Off or On, the file types, the size they
   are saved up to, and whether they are read, with the model that reads
   them in a Model row; on, the fetch saves the emails' attached files
@@ -146,7 +147,11 @@ feature picks its model (`accounts.md#model-choice`).
 - **The job**: when a fetch ends (not when it was stopped), the emails it
   created go to "Analysing email · <email>", after the attachments' reading
   if the filter reads them (`email.md#attachments`), one email after
-  another, then the attachments read; Stop ends it, and so does a vault
+  another, then those it replaced that lack a type, then the
+  attachments read. A replaced email is asked at Lite, whatever the
+  filter's level, and gets only that; it is asked again at the next
+  Replace while it still lacks one (a reply has none). The
+  section says so under the sentence of what is sent; Stop ends it, and so does a vault
   switch. The spend limit is checked before each email and attachment; once
   it is reached, the rest is left and a notice says so.
   The summary counts the conversations Medium wrote: "18 analysed · 4 conversations · 1
@@ -199,8 +204,9 @@ feature picks its model (`accounts.md#model-choice`).
   `document: {type}` beside `email:` (`vault.md#document`), unless the
   email has one (the card shows it, where the user can change it,
   `panel.md#field-edits`); the
-  labels added to the email's own, the projects joined. A title the user
-  changed meanwhile stays. A wrong label or
+  labels added to the email's own, the projects joined; a replaced email
+  only its type. A title the user changed meanwhile stays. A
+  wrong label or
   project is removed on the card like any other.
 - **Scans**: a watch's analysis takes the documents Import scans wrote
   the same way (`import.md#import-scans`), named "Analysing scans ·
@@ -249,7 +255,7 @@ feature picks its model (`accounts.md#model-choice`).
 | G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_email_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email and attachment, `account`; then G7, G5 | emails in `Email/` on their own |
 | G6 | Open an attachment | the card's Attachments block: Open, or a double-click on a row; an attachment's card: its File row's Open → `openOriginal` (`features/selection.js`) | `open_file {id}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | the file in its app |
 | G7 | Read attachments | a fetch or an auto-sync run with Read on ends with saved files, or a Replace's without text | `attachments::read` → `AiAccounts::choose` (refused: a `notice`) → job "Reading attachments"; per document `step_for`, for an image or a PDF `check_limit`, then `reader::read` on a worker (an image, or a PDF's scans or the whole file, by `reader::ask`; a PDF's text layer and a text file without a model); `set_content` through the vault edit → `entity`, `content`, `job`, `account`; at the end one `notice` for the failures, then G5 | the files' text in their documents |
-| G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails or attachments read | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email, then per attachment, `check_limit`, `chat_stream` on a worker, `parse` / `parse_document`, `apply_lite` / `apply_document` through the vault edit, Medium's conversation through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their type kept; `email.subject` kept; Medium: a chat linked to the email |
+| G5 | Analyse new email | a fetch or an auto-sync run with its analysis on ends with new emails, replaced ones lacking a type, or attachments read | `analysis::analyse` → `AiAccounts::choose` (refused: a `notice`) → job "Analysing email"; per email, then per attachment, `check_limit`, `chat_stream` on a worker, `parse` / `parse_document`, `apply_lite` / `apply_document` through the vault edit, Medium's conversation through `chat::create` → `entity`, `job`, `account`; at the end one `notice` for the failures | emails retitled, labelled, in projects, their type kept (a replaced one only that); `email.subject` kept; Medium: a chat linked to the email |
 
 ## Design <a id="design"></a>
 

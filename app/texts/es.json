@@ -709,6 +709,7 @@
   "email.analysis_lite": "Envía cada correo nuevo a {model} para su tipo, un título limpio, y etiquetas y proyectos de esta bóveda. El texto leído de sus adjuntos va con él, y cada uno recibe un título limpio, su propia fecha, un tipo, etiquetas y proyectos.",
   "email.analysis_medium": "Envía cada correo nuevo a {model} para su tipo, un título limpio, y etiquetas y proyectos de esta bóveda; y, para un correo que lo pide, una respuesta rápida, puntos que revisar y preguntas, como una conversación enlazada con el correo. El texto leído de sus adjuntos va con él, y cada uno recibe un título limpio, su propia fecha, un tipo, etiquetas y proyectos.",
   "email.analysis_off": "Los correos nuevos conservan su asunto como título; no se envía nada a una IA.",
+  "email.analysis_refill": "Un correo reemplazado sin tipo también se envía, solo para eso.",
   "email.any_of": "cualquiera de",
   "email.as_it_came": "Tal como llegó el correo; solo lectura",
   "email.attachments": "Adjuntos",

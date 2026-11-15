@@ -117,6 +117,7 @@ fn the_request_lists_the_choices_and_cuts_the_body() {
         date: None,
         body: "Body".into(),
         attachments: Vec::new(),
+        fill: false,
     };
     let request = request_for(AnalysisLevel::Lite, "m", &ctx(), &email);
     assert_eq!(request.model, "m");
@@ -648,6 +649,65 @@ fn an_analysis_writes_the_title_labels_and_projects() {
     assert!(
         !h.vault().join("Conversations").exists(),
         "Lite writes no conversation"
+    );
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_replaced_email_is_asked_only_for_the_type_it_lacks() {
+    let answer = r#"{"type": "bill", "title": "Abschlag Oktober", "labels": ["Rechnungen"], "projects": ["Wohnung"], "check": ["Den Betrag prüfen"], "reply": "Danke!"}"#;
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let address = FakeOllama::new(&["m"])
+        .replying(&[answer])
+        .recording(&requests)
+        .start();
+    let account = format!("id: {OLLAMA_ID}\nollama:\n  address: {address}\n  offered: [m]\n");
+    let sorted = format!(
+        "---\nid: {EMAIL_2}\ntitle: Abschlag\nemail:\n  from: Stadtwerke <info@stadtwerke.example>\ndocument:\n  type: bill\n---\nIhre Abschlagszahlung ist fällig.\n"
+    );
+    let files = [
+        (".avelor/accounts/ollama.yaml", account),
+        (
+            "Email/a.md",
+            email_file(EMAIL_ID, "AW: [#4711] Abschlag", "tags: [Umzug]\n"),
+        ),
+        ("Email/b.md", sorted),
+        (
+            "Projects/f.md",
+            format!("---\nid: {FLAT}\ntitle: Wohnung\nproject: {{}}\n---\n"),
+        ),
+    ];
+    let mut h = Harness::with_vault("analysis-refill", &files);
+    let replaced = vec![Id::parse(EMAIL_ID).unwrap(), Id::parse(EMAIL_2).unwrap()];
+    analyse(
+        &mut h.app,
+        Batch::email("jan@example.com", Vec::new(), Vec::new()).replaced(replaced),
+        &at(AnalysisLevel::Medium),
+    );
+    let sent = until_done(&mut h);
+
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 1, "the email with a type isn't asked");
+    let system = requests[0]["messages"][0]["content"].as_str().unwrap();
+    assert!(
+        system.contains(LITE_SHAPE) && !system.contains("- check:"),
+        "asked at Lite: {system}"
+    );
+    let jobs = of(&sent, "job");
+    assert_eq!(shown(&jobs.last().unwrap()["summary"]), "1 analysed");
+    let text = fs::read_to_string(h.vault().join("Email/a.md")).unwrap();
+    assert!(text.contains("type: bill"), "{text}");
+    assert!(
+        text.contains("title: 'AW: [#4711] Abschlag'") && !text.contains("subject:"),
+        "the title stays: {text}"
+    );
+    assert!(
+        text.contains("- Umzug") && !text.contains("Rechnungen") && !text.contains(FLAT),
+        "its labels and projects stay: {text}"
+    );
+    assert!(
+        !h.vault().join("Conversations").exists(),
+        "no conversation for a replaced email"
     );
 }
 

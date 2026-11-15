@@ -78,7 +78,8 @@ pub(super) struct FetchPlan {
 pub(super) struct FetchCounts {
     /// The emails written, new.
     pub(super) created: Vec<Id>,
-    pub(super) replaced: usize,
+    /// The emails whose body was replaced.
+    pub(super) replaced: Vec<Id>,
     pub(super) skipped: usize,
     pub(super) failed: usize,
     pub(super) attachments: Saved,
@@ -91,7 +92,7 @@ impl FetchCounts {
     fn summary(&self) -> Vec<Text> {
         let counts = vec![
             (self.created.len(), Text::new("count.new")),
-            (self.replaced, Text::new("count.replaced")),
+            (self.replaced.len(), Text::new("count.replaced")),
             (self.skipped, Text::new("count.skipped")),
             (self.failed, Text::new("count.failed")),
             (
@@ -374,7 +375,7 @@ fn on_downloaded(app: &mut App, job: Id, gmail_id: String, result: Result<Downlo
         Ok((stored, attachments)) => {
             match stored {
                 Stored::Created(id) => counts.created.push(id),
-                Stored::Replaced => counts.replaced += 1,
+                Stored::Replaced(id) => counts.replaced.push(id),
                 Stored::Skipped => counts.skipped += 1,
             }
             counts.attachments.created.extend(attachments.created);
@@ -411,7 +412,8 @@ pub fn stop(app: &mut App) {
 /// one still covers what it didn't write -- and end the job with its
 /// summary. Unless it was stopped, the attachments it saved (and those of
 /// a replaced email without text) are read if its filter says so, then the
-/// analysis it asks for starts on the emails it created.
+/// analysis it asks for starts on the emails it created, and on those it
+/// replaced for the type they lack (`Batch::replaced`).
 pub(super) fn finish(app: &mut App) {
     let Some(fetch) = app.email.fetch.take() else {
         return;
@@ -451,11 +453,13 @@ pub(super) fn finish(app: &mut App) {
     }
     let FetchCounts {
         created,
+        replaced,
         attachments: saved,
         ..
     } = fetch.counts;
     let analysis = fetch.analysis.filter(|a| a.is_on() && !stopped);
-    let then = analysis.map(|analysis| (created, analysis));
+    let batch = Batch::email(&email, created, Vec::new()).replaced(replaced);
+    let then = analysis.map(|analysis| (batch, analysis));
     let reading = fetch.attachments.filter(|a| a.read && !stopped);
     let to_read: Vec<Id> = saved.created.into_iter().chain(saved.unread).collect();
     match reading {
@@ -463,8 +467,8 @@ pub(super) fn finish(app: &mut App) {
             attachments::read(app, &email, to_read, reading.model(READ_STEP), then);
         }
         _ => {
-            if let Some((emails, analysis)) = then {
-                analysis::analyse(app, Batch::email(&email, emails, Vec::new()), &analysis);
+            if let Some((batch, analysis)) = then {
+                analysis::analyse(app, batch, &analysis);
             }
         }
     }

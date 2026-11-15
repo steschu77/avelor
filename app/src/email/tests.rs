@@ -168,7 +168,7 @@ fn applying_creates_skips_replaces_and_matches_by_message_id() {
         downloaded("<m1@x>", "Second"),
         true,
     );
-    assert_eq!(replaced.unwrap().0, Stored::Replaced);
+    assert!(matches!(replaced.unwrap().0, Stored::Replaced(_)));
     let sent = parse(&h.take());
     assert!(shape(&sent).contains(&"content"), "{sent:?}");
     let text = fs::read_to_string(&path).unwrap();
@@ -327,7 +327,7 @@ fn applying_saves_each_attachment_once_beside_its_document() {
         unread: vec![id],
         ..Saved::default()
     };
-    assert_eq!((stored, saved), (Stored::Replaced, unread));
+    assert_eq!((stored, saved), (Stored::Replaced(email), unread));
     let both = Some(&keep(&["*.pdf", "*.zip"], 10));
     let email = Downloaded::parse(RAW_ATTACHED.as_bytes(), date, both);
     let (_, saved) = apply_email(&mut h.app, account, "g1", email, true).unwrap();
@@ -899,5 +899,50 @@ fn a_finished_fetch_hands_its_new_mails_to_the_analysis() {
             message.contains("For the email analysis, add an AI provider")
         });
         assert_eq!(refused, !stopped, "stopped: {stopped}, {sent:?}");
+    }
+}
+
+// ------------------------------------------------------------------------
+#[test]
+fn a_finished_fetch_hands_a_replaced_mail_lacking_a_type_to_the_analysis() {
+    let bare = Id::generate();
+    let sorted = Id::generate();
+    let file = |id: Id, extra: &str| {
+        format!("---\nid: {id}\ntitle: Abschlag\nemail:\n  from: a@example.com\n{extra}---\nText\n")
+    };
+    let files = [
+        ("Email/bare.md", file(bare, "")),
+        ("Email/sorted.md", file(sorted, "document:\n  type: bill\n")),
+    ];
+    let mut h = with_google("email-analyse-replaced", EMAIL, &files);
+    let account = connected_id();
+    let lite = Analysis {
+        level: crate::analysis::AnalysisLevel::Lite,
+        model: None,
+    };
+    for (replaced, asked) in [(sorted, false), (bare, true)] {
+        let client = h.app.google.connected(account).unwrap();
+        let plan = FetchPlan {
+            account,
+            client,
+            queue: VecDeque::new(),
+            skipped: 0,
+            replace: HashSet::new(),
+            origin: Origin::Manual,
+            started: DateTime::now(),
+            analysis: Some(lite.clone()),
+            attachments: None,
+        };
+        start_fetch(&mut h.app, Text::new("email.fetching"), plan);
+        let fetch = h.app.email.fetch.as_mut().unwrap();
+        fetch.counts.replaced.push(replaced);
+        finish(&mut h.app);
+        let sent = parse(&h.take());
+        // No AI account in this vault: an analysis that starts says so.
+        let refused = sent.iter().any(|m| {
+            let message = shown(&m["data"]["text"]);
+            message.contains("For the email analysis, add an AI provider")
+        });
+        assert_eq!(refused, asked, "{replaced}: {sent:?}");
     }
 }

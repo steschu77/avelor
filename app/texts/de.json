@@ -649,6 +649,7 @@
   "email.analysis_lite": "Sendet jede neue E-Mail an {model} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor. Der gelesene Text ihrer Anhänge geht mit, und jeder bekommt einen sauberen Titel, sein eigenes Datum, seine Art, Labels und Projekte.",
   "email.analysis_medium": "Sendet jede neue E-Mail an {model} für ihre Art, einen sauberen Titel sowie Labels und Projekte aus diesem Tresor; und für eine E-Mail, die danach fragt, eine kurze Antwort, Prüfpunkte und Fragen als mit der E-Mail verknüpfte Unterhaltung. Der gelesene Text ihrer Anhänge geht mit, und jeder bekommt einen sauberen Titel, sein eigenes Datum, seine Art, Labels und Projekte.",
   "email.analysis_off": "Neue E-Mails behalten ihren Betreff als Titel; nichts wird an eine KI gesendet.",
+  "email.analysis_refill": "Eine ersetzte E-Mail ohne Art wird auch gesendet, nur dafür.",
   "email.any_of": "eines davon",
   "email.as_it_came": "Wie die E-Mail kam; schreibgeschützt",
   "email.attachments": "Anhänge",

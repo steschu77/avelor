@@ -649,6 +649,7 @@
   "email.analysis_lite": "Sends each new email to {model} for its type, a clean title, and labels and projects from this vault. The text of its attachments read goes along, and each gets a clean title, its own date, a type, labels and projects.",
   "email.analysis_medium": "Sends each new email to {model} for its type, a clean title, and labels and projects from this vault; and, for an email that asks for it, a quick reply, points to check and questions, as a conversation linked to the email. The text of its attachments read goes along, and each gets a clean title, its own date, a type, labels and projects.",
   "email.analysis_off": "New emails keep their subject as title; nothing is sent to an AI.",
+  "email.analysis_refill": "A replaced email that lacks a type is sent too, for that alone.",
   "email.any_of": "any of",
   "email.as_it_came": "As the email came; read only",
   "email.attachments": "Attachments",

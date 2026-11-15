@@ -88,7 +88,7 @@ impl Item {
     /// The JSON object asked for at `level`.
     fn shape(&self, level: AnalysisLevel) -> &'static str {
         match self {
-            Item::Email(_) => shape(level),
+            Item::Email(email) => shape(email.level(level)),
             Item::Document(doc) if doc.medium(level) => DOCUMENT_MEDIUM_SHAPE,
             Item::Document(_) => DOCUMENT_SHAPE,
         }
@@ -97,7 +97,7 @@ impl Item {
     // ------------------------------------------------------------------------
     fn request(&self, level: AnalysisLevel, model: &str, ctx: &Context) -> ChatRequest {
         match self {
-            Item::Email(email) => request_for(level, model, ctx, email),
+            Item::Email(email) => request_for(email.level(level), model, ctx, email),
             Item::Document(doc) => document_request(level, model, ctx, doc),
         }
     }
@@ -110,7 +110,7 @@ impl Item {
         ctx: &Context,
     ) -> std::result::Result<(Lite, Option<Medium>), Text> {
         match self {
-            Item::Email(email) => parse(answer, level, ctx, &email.title),
+            Item::Email(email) => parse(answer, email.level(level), ctx, &email.title),
             Item::Document(doc) => parse_document(answer, level, ctx, doc),
         }
     }
@@ -153,6 +153,8 @@ pub struct Batch {
     /// What it is called where its pick is refused (`AiAccounts::choose`).
     pub(super) what: Text,
     emails: Vec<Id>,
+    /// Emails a fetch replaced, asked for the type they lack.
+    replaced: Vec<Id>,
     pub(super) documents: Vec<Id>,
     /// The documents whose title the user gave: it stays.
     titled: Vec<Id>,
@@ -168,9 +170,25 @@ impl Batch {
             notices: Text::new("analysis.notices.email").arg("email", email),
             what: email_analysis(),
             emails,
+            replaced: Vec::new(),
             documents,
             titled: Vec::new(),
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The emails `replaced` too, after the new ones: each that still lacks
+    /// a type, for that alone (`EmailText::fill`).
+    pub fn replaced(mut self, replaced: Vec<Id>) -> Self {
+        self.replaced = replaced;
+        self
+    }
+
+    // ------------------------------------------------------------------------
+    /// The attachments read `read` too, after the emails.
+    pub fn with_read(mut self, read: Vec<Id>) -> Self {
+        self.documents.extend(read);
+        self
     }
 
     // ------------------------------------------------------------------------
@@ -193,6 +211,7 @@ impl Batch {
             notices: notices.arg("watch", watch),
             what: scan_analysis(kind),
             emails: Vec::new(),
+            replaced: Vec::new(),
             documents,
             titled,
         }
@@ -201,13 +220,19 @@ impl Batch {
 
 // ----------------------------------------------------------------------------
 /// Analyse `batch` as `analysis` says (its level and model) as a job: its
-/// emails, each with its attachments' text, then its documents (an
+/// emails, each with its attachments' text, then the replaced ones that
+/// lack a type, for that alone, then its documents (an
 /// attachment as Lite). Nothing to analyse starts nothing; a refused pick
 /// is a notice; what is no longer in the vault, and a document without
 /// text, is left out, and so is what its classification keeps from the
 /// model (`ai::policy`), which a notice counts.
 pub fn analyse(app: &mut App, batch: Batch, analysis: &Analysis) {
-    if batch.emails.is_empty() && batch.documents.is_empty() {
+    let index = app.vault.index();
+    let refill: Vec<Id> = (batch.replaced.iter().copied())
+        .filter(|id| !batch.emails.contains(id))
+        .filter(|id| index.entry(id).is_some_and(|entry| lacks_type(&entry.doc)))
+        .collect();
+    if batch.emails.is_empty() && refill.is_empty() && batch.documents.is_empty() {
         return;
     }
     let choice = analysis.model.as_ref();
@@ -225,6 +250,7 @@ pub fn analyse(app: &mut App, batch: Batch, analysis: &Analysis) {
     let kept = batch
         .emails
         .iter()
+        .chain(&refill)
         .chain(&batch.documents)
         .filter_map(|id| index.entry(id))
         .filter(|entry| !reads(&entry.doc))
@@ -234,16 +260,16 @@ pub fn analyse(app: &mut App, batch: Batch, analysis: &Analysis) {
         app.notice(notice.arg("text", ai::policy::kept_from(kept)));
     }
     let index = app.vault.index();
-    let emails = batch
-        .emails
-        .iter()
-        .filter_map(|id| index.entry(id))
-        .filter(|entry| reads(&entry.doc))
-        .map(|entry| {
-            let mut email = EmailText::of(&entry.doc);
-            email.attachments = attachment_texts(index, email.id, reads);
-            Item::Email(email)
-        });
+    let email_item = |id: &Id, fill: bool| {
+        let entry = index.entry(id).filter(|entry| reads(&entry.doc))?;
+        let mut email = EmailText::of(&entry.doc);
+        email.attachments = attachment_texts(index, email.id, reads);
+        email.fill = fill;
+        Some(Item::Email(email))
+    };
+    let emails = (batch.emails.iter().map(|id| email_item(id, false)))
+        .chain(refill.iter().map(|id| email_item(id, true)))
+        .flatten();
     let documents = batch
         .documents
         .iter()
@@ -412,11 +438,21 @@ struct Written {
 }
 
 // ----------------------------------------------------------------------------
+/// Whether the email `doc` lacks a type, which a replaced one is
+/// analysed for.
+fn lacks_type(doc: &Document) -> bool {
+    let roles = doc.roles();
+    let doc_type = (roles.document.as_ref()).and_then(|document| document.doc_type.as_ref());
+    roles.email.is_some() && doc_type.is_none()
+}
+
+// ----------------------------------------------------------------------------
 /// Write `lite` into the email or document `item`, then `medium` as a conversation
 /// linked to it, by the model and account `by`, titled "Email analysis ·
 /// <the email's title>" or "Document analysis · <its title>". A title or a
 /// document's date the user changed since the plan stays, and a title the
 /// user gave; a type it has stays (`apply_lite`, `apply_document`);
+/// an email filled in (`EmailText::fill`) gets only a type;
 /// what is gone meanwhile gets nothing. A failed write is
 /// logged.
 fn write(
@@ -437,6 +473,14 @@ fn write(
     let given = matches!(item, Item::Document(doc) if doc.keep_title);
     if entry.doc.title() != item.title() || given {
         lite.title = None;
+    }
+    if let Item::Email(email) = item
+        && email.fill
+    {
+        lite = Lite {
+            doc_type: lite.doc_type,
+            ..Lite::default()
+        };
     }
     if let Item::Document(doc) = item
         && entry.doc.date() != doc.date

@@ -106,6 +106,9 @@ pub struct EmailText {
     pub body: String,
     /// Its attachments' names and read text (`attachment_texts`).
     pub attachments: Vec<(String, String)>,
+    /// Asked only for the type it lacks: a replaced email
+    /// (`Batch::replaced`), whose title, labels and projects stay.
+    pub fill: bool,
 }
 
 impl EmailText {
@@ -126,6 +129,17 @@ impl EmailText {
             date: doc.date(),
             body,
             attachments: Vec::new(),
+            fill: false,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The level it is asked at: Lite for one filled in (`fill`), else
+    /// `level`.
+    pub fn level(&self, level: AnalysisLevel) -> AnalysisLevel {
+        match self.fill {
+            true => AnalysisLevel::Lite,
+            false => level,
         }
     }
 }

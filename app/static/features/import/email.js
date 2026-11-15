@@ -775,9 +775,10 @@ function renderEmailSyncAttachments(form, attachments) {
 // `analysis` ({ level, model }) as a seg of its levels, the row of its
 // model while it is on (`emailModelRow`, its box's focus key after
 // `owner`; none while off), and a body: the sentence of what it sends to
-// that model while the pick works, else what keeps it from working
-// (`aiPickerWithHint`). `onChange` gets the analysis as changed.
-function renderEmailAnalysis(owner, analysis, onChange) {
+// that model while the pick works (Fetch email's, which `replaces`
+// bodies, saying what goes of a replaced one), else what keeps it from
+// working (`aiPickerWithHint`). `onChange` gets the analysis as changed.
+function renderEmailAnalysis(owner, analysis, onChange, replaces = false) {
   const seg = accSeg([['off', t('watch.off')], ['lite', t('watch.level.lite')], ['medium', t('watch.level.medium')]], analysis.level,
     level => onChange({ ...analysis, level }));
   const body = accEl('div', 'page-text email__text');
@@ -790,6 +791,7 @@ function renderEmailAnalysis(owner, analysis, onChange) {
   const model = analysis.model?.model;
   body.append(hint ?? (analysis.level === 'medium'
     ? t('email.analysis_medium', { model }) : t('email.analysis_lite', { model })));
+  if (!hint && replaces) body.append(' ', t('email.analysis_refill'));
   return { seg, model: emailModelRow(picker), body };
 }
 
@@ -808,7 +810,7 @@ function renderEmailAnalysisSection() {
     email.analysis = analysis;
     renderEmailAnalysisSection();
     scheduleRenderEmailMatches();
-  });
+  }, true);
   const head = accEl('div', 'section-head', t('email.section.analysis'));
   head.append(seg);
   const grid = accEl('div', 'form-grid');
