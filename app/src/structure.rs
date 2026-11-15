@@ -943,6 +943,24 @@ Body
 
     // ------------------------------------------------------------------------
     #[test]
+    fn a_documents_sender_gives_it_a_message_block() {
+        const LETTER: &str = "01a0e1cc-a24c-7490-82fe-e75669985b61";
+        let letter = format!("---\nid: {LETTER}\ntitle: City Hall\ndocument: {{}}\n---\nText\n");
+        let path = "Documents/l.doc.md";
+        let mut h = Harness::with_vault("edit-letter", &[(path, letter)]);
+        let change = json!({ "fields": { "message.sender": "City Hall" } });
+        let sent = h.call(
+            "edit_entities",
+            json!({ "ids": [LETTER], "change": change }),
+        );
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        assert_eq!(sent[0]["data"]["message"]["sender"], "City Hall");
+        let text = fs::read_to_string(h.vault().join(path)).unwrap();
+        assert!(text.contains("message:\n  sender: City Hall"), "{text}");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
     fn a_task_marked_done_is_pushed_with_its_done_date_then_answered() {
         let (mut h, _) = notes("edit-done", 1);
         let task = new_task(&mut h, "Pay the bill");

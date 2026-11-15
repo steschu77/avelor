@@ -135,7 +135,8 @@ impl Index {
     /// ([`layout`]). Its `date` is an event's start, else the one given,
     /// else now. Nothing is written if the title is empty, an event has no
     /// start or names a calendar that isn't one of the vault's, one of
-    /// `projects` isn't a project, `linked_to` isn't in the vault, or its
+    /// `projects` isn't a project, `linked_to` isn't in the vault, a message
+    /// block names threads (a thread's own command adds them), or its
     /// `fields` reach more than its own fields.
     pub fn create_new(&mut self, new: NewEntity, changes: &mut Changes) -> Result<Id> {
         let invalid = |arg: &str| Error::InvalidArgument { arg: arg.into() };
@@ -151,6 +152,14 @@ impl Index {
         let title = new.title.trim().to_string();
         if title.is_empty() {
             return Err(invalid("title"));
+        }
+        if new
+            .roles
+            .message
+            .as_ref()
+            .is_some_and(|m| !m.threads.is_empty())
+        {
+            return Err(invalid("message.threads"));
         }
         let date = match &new.roles.event {
             Some(event) => Some(event.start.ok_or_else(|| invalid("event.start"))?),

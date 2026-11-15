@@ -420,8 +420,8 @@ fields:
 "bill", "contract", "letter", or "statement". Purely a user-facing
 distinction with no effect on which fields are valid — easy to change at
 any time, only available for entities with the `document` role. A mail
-gets the role for a type from the email analysis (`email.md#analysis`),
-beside its `email` block; its kind stays a mail's
+gets the role for a type, beside its `email` block, and loses it with
+the type when nothing else is in it; its kind stays a mail's
 (`vault.md#kind-derivation`).
 
 **Original** — a file that isn't markdown, such as an email's attachment
@@ -618,6 +618,12 @@ Adding an entity to a thread appends the thread's `id` to `threads`, adding
 the `message` role if it's missing. Removing an entity from a thread removes
 the `id` again; if the `message` block ends up empty, the role is dropped.
 The entity keeps all its other roles.
+
+A document outside a thread, a letter, gets the block with the first
+`sender` or `recipient` the user types in (`api.md#structure`'s
+`edit_entities`), and keeps it when both are removed. A plain file gets
+`document: {}` beside it, so it stays a document
+(`vault.md#kind-derivation`).
 
 If the entity also carries the `email` role, the email's `from` / `to`
 fields are authoritative and `sender` / `recipient` are omitted.

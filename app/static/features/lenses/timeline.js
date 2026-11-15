@@ -71,7 +71,7 @@ function summaryOf(doc) {
     if (doc.event.schedule?.length) parts.push(scheduleText(doc.event.schedule));
   } else if (doc.email) {
     if (doc.email.from) parts.push(parseContact(doc.email.from).name);
-    parts.push(time);
+    parts.push(doc.type, time);
   } else if (doc.task) {
     parts.push(TASK_STATUS_NAMES[doc.task.status] ?? doc.task.status);
     if (!isNaN(doc.due)) parts.push(t('timeline.due', { day: shortDate(doc.due) }));

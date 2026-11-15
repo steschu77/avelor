@@ -655,22 +655,39 @@ impl Document {
     /// envelope, or if it touches more than the entity's own fields: its
     /// id, title, date, labels, projects, link, flags and source stay, and
     /// its threads, conversation, project and event blocks have their own
-    /// commands, but for the sender and recipient of a message that isn't a
-    /// mail (vault.md#message), the block it has already.
+    /// commands, but for the sender and recipient of a document or of a
+    /// message that isn't a mail (vault.md#message), the first one giving a
+    /// document its block (a plain file `document: {}` beside it, so it stays
+    /// a document, vault.md#kind-derivation); a mail's block is as the mail
+    /// came (vault.md#email).
     pub fn with_fields(&self, fields: &BTreeMap<String, Value>) -> Option<Envelope> {
         const OWN_COMMANDS: [&str; 5] = ["message", "thread", "conversation", "project", "event"];
-        let letter = self.roles().message.is_some() && self.roles().email.is_none();
+        let roles = self.roles();
+        let letter = roles.email.is_none()
+            && (roles.message.is_some() || self.kind() == DocumentType::Document);
         let before = self.envelope.clone().unwrap_or_default();
         let mut value = serde_yaml_ng::to_value(&before).ok()?;
         for (path, new) in fields {
             let keys: Vec<&str> = path.split('.').collect();
             let person = letter && matches!(keys[..], ["message", "sender" | "recipient"]);
-            if keys.iter().any(|k| k.is_empty()) || (OWN_COMMANDS.contains(&keys[0]) && !person) {
+            let as_it_came = keys[0] == "email";
+            if keys.iter().any(|k| k.is_empty())
+                || (OWN_COMMANDS.contains(&keys[0]) && !person)
+                || as_it_came
+            {
                 return None;
             }
             set_at(&mut value, &keys, new.clone())?;
         }
-        let after: Envelope = serde_yaml_ng::from_value(value).ok()?;
+        let mut after: Envelope = serde_yaml_ng::from_value(value).ok()?;
+        if before.roles.message.is_none()
+            && after.roles.message.as_ref().is_some_and(Message::is_empty)
+        {
+            after.roles.message = None;
+        }
+        if before.roles.derived_type().is_none() && after.roles.message.is_some() {
+            after.roles.document.get_or_insert_with(Default::default);
+        }
         let core = |e: &Envelope| {
             (
                 e.id,

@@ -287,7 +287,7 @@ day — a recurring event on its first start, a task on its own date — but cal
   rule, a trip's event planned, a journey's times each in its place's time
   ("6:05 PM Springfield → 9:20 AM Frankfurt, next day") and its booking,
   a stay's place and nights, an activity's place and time (`tripSummary`,
-  `model/trip.js`), an email's sender and
+  `model/trip.js`), an email's sender, type and
   time, a task's status and due day, a conversation's model and messages, a
   list's items, a contact's phone or email, a bank account's bank and
   number, statements' transactions, a document's author or sender and type

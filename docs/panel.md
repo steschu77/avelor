@@ -63,9 +63,7 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   status other than confirmed; a trip's event its trip fields instead
   (`panel.md#trip-fields`) — for a task its status, its
   due date as seen from today (tagged when overdue), its assignee and when
-  it was done (`task.done`), for an email its sender, followed by its type
-  when the email analysis found one ("Stadtwerke · notification",
-  `email.md#analysis`), whom it went to (To, Cc, Bcc) and its subject as
+  it was done (`task.done`), for an email its sender, whom it went to (To, Cc, Bcc) and its subject as
   it came where the analysis gave it another title, read only, each row's
   label saying so, for another message (a letter, a document in a thread)
   its sender and recipient, for any
@@ -927,12 +925,18 @@ one shows them as text:
 - **Author** (a document, `document.author`): typed in as the Assignee
   is (`contactField`), "Unknown" while there is none; through
   `edit_entities`' `{fields}`; a chip while the host can't write it.
-- **From** and **To** (a message that isn't a mail, a letter or a
-  document in a thread: `message.sender`, `message.recipient`): as the
-  Author, each through `edit_entities`' `{fields}`, into the message block
-  it has; a document outside a thread has none.
-- **Type** (a document): typed in, with the types the vault's documents
-  use offered (`#type-list`); empty removes it. The card's icon follows.
+- **From** and **To** (a document, and a message that isn't a mail, a
+  letter or a document in a thread: `message.sender`,
+  `message.recipient`): as the Author, under it, each through `edit_entities`' `{fields}`, into the
+  message block it has; a document without one, a scanned letter outside a
+  thread, shows them too, the first one typed in making its block, which
+  stays when both are emptied. The draft card's document has them as
+  well.
+- **Type** (a document, and a mail: `document: {type}` beside its
+  `email` block, its kind a mail's still): typed in, with the types the
+  vault's documents and mails use offered (`#type-list`); empty removes
+  it, a mail's block with it when nothing else is in it. A document's icon
+  follows.
 - **A contact's fields** (`contactFields`,
   `features/panel/contact-fields.js`, `vault.md#contact`): Type, Person
   or Organization; Email, Phone and Address, each a list (`textListField`,

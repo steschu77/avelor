@@ -201,7 +201,7 @@ impl Change {
     }
 
     // ------------------------------------------------------------------------
-    /// Whether `doc` can take the change: a type a document, a task's
+    /// Whether `doc` can take the change: a type a document or a mail, a task's
     /// field a task, an event's an event, leaving its times in order
     /// (`in_order`; a recurring event's move all its occurrences) and a
     /// timed schedule given with a zone, a calendar's a calendar; its own
@@ -209,7 +209,7 @@ impl Change {
     pub fn fits(&self, doc: &Document) -> bool {
         let kind = doc.kind();
         match self {
-            Change::DocType(_) => kind == DocumentType::Document,
+            Change::DocType(_) => kind == DocumentType::Document || kind == DocumentType::Email,
             Change::Task(_) => kind == DocumentType::Task,
             Change::Event(change) => {
                 let mut event = doc.roles().event.clone().unwrap_or_default();
@@ -612,6 +612,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_mail_gets_a_type_beside_its_email_block_and_stays_a_mail() {
+        let mut mail = entity("title: Bill\nemail:\n  from: a@example.com\n");
+        let bill = Change::DocType(Some("bill".into()));
+        assert!(bill.fits(&mail));
+        bill.apply(&mut mail, date(NOW));
+        assert_eq!(mail.kind(), DocumentType::Email);
+        assert!(
+            mail.save().contains("document:\n  type: bill"),
+            "{}",
+            mail.save()
+        );
+        Change::DocType(None).apply(&mut mail, date(NOW));
+        assert!(mail.roles().document.is_none(), "its block was its type's");
+    }
+
+    #[test]
+    fn what_came_with_a_mail_isnt_set() {
+        let mail = entity("title: M\nemail:\n  from: a@example.com\n");
+        for change in [
+            "email.from: b@example.com",
+            "email.subject: Other",
+            "email: null",
+        ] {
+            assert!(!fields(change).fits(&mail), "{change}");
+        }
+    }
+
     /// The fields change of `yaml`, keys to values as the page sends them.
     fn fields(yaml: &str) -> Change {
         Change::Fields(serde_yaml_ng::from_str(yaml).unwrap())
@@ -688,11 +716,31 @@ mod tests {
                 &format!("title: L\nmessage:\n  threads: [{thread}]\n"),
                 "message: {sender: X}",
             ),
-            (&"title: D\ndocument: {}\n".to_string(), "message.sender: X"),
+            (&"title: T\ntask: {}\n".to_string(), "message.sender: X"),
             (&mail, "message.recipient: X"),
         ] {
             assert!(!fields(change).fits(&entity(yaml)), "{change} on {yaml}");
         }
+    }
+
+    #[test]
+    fn a_documents_first_sender_or_recipient_gives_it_a_message_block() {
+        let city = fields("message.sender: City Hall");
+        let mut scan = entity("title: Letter\ndocument:\n  type: letter\n");
+        assert!(city.fits(&scan));
+        city.apply(&mut scan, date(NOW));
+        let sender = scan.roles().message.as_ref().unwrap().sender.clone();
+        assert_eq!(sender, Some(ContactRef::parse("City Hall")));
+        fields("message.sender: null").apply(&mut scan, date(NOW));
+        assert!(scan.roles().message.is_some(), "kept when both go");
+
+        let mut plain = Document::load("Text\n".into(), FileFormat::Markdown);
+        city.apply(&mut plain, date(NOW));
+        assert_eq!(plain.kind(), DocumentType::Document, "a document still");
+
+        let mut note = entity("title: Note\ndocument: {}\n");
+        fields("message.recipient: null").apply(&mut note, date(NOW));
+        assert!(note.roles().message.is_none(), "nothing typed, no block");
     }
 
     #[test]

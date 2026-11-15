@@ -556,6 +556,32 @@ fn a_new_record_comes_with_its_own_fields_but_not_the_core() {
 }
 
 #[test]
+fn a_new_document_comes_with_its_sender_but_joins_no_thread() {
+    let (root, ids) = thread_vault();
+    let mut index = Index::build(&root);
+    let new = NewEntity {
+        roles: roles("{document: {}, message: {sender: City Hall}}"),
+        title: "Pickup".into(),
+        ..NewEntity::default()
+    };
+    let (_, _, text) = create_new(&mut index, new);
+    assert!(text.contains("message:\n  sender: City Hall"), "{text}");
+
+    let member = NewEntity {
+        roles: roles(&format!(
+            "{{document: {{}}, message: {{threads: [{}]}}}}",
+            ids[0]
+        )),
+        title: "Pickup".into(),
+        ..NewEntity::default()
+    };
+    let refused = index.create_new(member, &mut Changes::default());
+    assert!(matches!(refused, Err(Error::InvalidArgument { .. })));
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_new_task_lands_in_tasks_and_survives_reindexing() {
     let (root, ids) = thread_vault();
     let mut index = Index::build(&root);

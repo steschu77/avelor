@@ -53,15 +53,16 @@ export function dueTag(text) {
 // `.props` grid, filled with its kinds' rows in this order: an event's
 // (`eventFields`, `occurrence`'s times on a day card), a task's
 // (`taskFields`, or `taskText` while the host can't write it), an email's
-// (`emailFields`), a message's (`messageFields`), its date (any entity's but an event's, whose start it
-// is: `dateField`), a document's author, type and the file it stands for
+// (`emailFields`), its date (any entity's but an event's, whose start it
+// is: `dateField`), a document's author, its From and To (a message's too,
+// `messageFields`) and type (a mail's type too) and the file it stands for
 // (`originalField`), a contact's (`contactFields`), a list's items
 // (`listFields`), a bank account's (`bankAccountFields`), a
 // statement's (`statementFields`), a recurring payment's
-// (`recurringPaymentFields`), a record's own fields (`recordFields`), and
-// which models may read it (`classificationField`). A task's fields, the
-// date, a document's author and type, a message's sender and recipient, an
-// event's Work, a record's fields and the classification are editable while
+// (`recurringPaymentFields`), a record's own fields (`recordFields`),
+// and which models may read it (`classificationField`). A task's fields, the
+// date, a document's author and type, a mail's type, a message's
+// sender and recipient, an event's Work, a record's fields and the classification are editable while
 // the host can write the entity (`taskFields`, `contactField`, `docTypeField`,
 // `workField`). Rows without a value are left
 // out; hidden for an entity with none of them.
@@ -84,12 +85,12 @@ export function renderCardDetails(row, doc, occurrence = null) {
     if (doc?.task && doc.writable) taskFields(doc, add);
     else if (doc?.task) taskText(doc, add);
     if (doc?.email) emailFields(doc, add);
-    if (doc?.message && !doc.email) messageFields(doc, add);
     if (doc && !doc.event && !isNaN(doc.date)) add(t('props.date'), doc.writable ? dateField(doc) : DATE_FORMAT.format(doc.date));
     if (doc?.kind === 'document' && doc.writable) add(t('props.author'), authorField(doc));
     else if (doc?.kind === 'document' && doc.document?.author) add(t('props.author'), contactChip(doc.document.author));
-    if (doc?.kind === 'document' && doc.writable) add(t('props.type'), docTypeField(doc));
-    else if (doc?.kind === 'document' && doc.type) add(t('props.type'), doc.type);
+    if (!doc?.email && (doc?.message || doc?.kind === 'document')) messageFields(doc, add);
+    if (takesType(doc) && doc.writable) add(t('props.type'), docTypeField(doc));
+    else if (takesType(doc) && doc.type) add(t('props.type'), doc.type);
     if (doc?.document?.original) add(t('props.file'), ...originalField(doc));
     if (doc?.contact) contactFields(doc, add);
     if (doc?.list) listFields(doc, add);
@@ -344,17 +345,15 @@ function taskText(doc, add) {
 }
 
 // ----------------------------------------------------------------------------
-// An email's sender and its type (the email analysis's), whom
-// it went to and its subject (written only once the title differs from it,
-// vault.md#email): read only, as the mail came, each such row's label saying
-// so.
+// An email's sender, whom it went to and its subject (written only once the
+// title differs from it, vault.md#email): read only, as the mail came, each
+// such row's label saying so.
 const EMAIL_PEOPLE = [['to', t('props.to')], ['cc', t('props.cc')], ['bcc', t('props.bcc')]];
 
 function emailFields(doc, add) {
     const { email } = doc;
     const asItCame = dt => { dt.title = t('email.as_it_came'); };
-    if (email.from) asItCame(add(t('props.from'), contactChip(email.from), ...(doc.type ? [` \u00b7 ${doc.type}`] : [])));
-    else if (doc.type) add(t('props.type'), doc.type);
+    if (email.from) asItCame(add(t('props.from'), contactChip(email.from)));
     for (const [key, label] of EMAIL_PEOPLE) {
         if (email[key]?.length) asItCame(add(label, ...email[key].map(contactChip)));
     }
@@ -362,14 +361,15 @@ function emailFields(doc, add) {
 }
 
 // ----------------------------------------------------------------------------
-// The sender and recipient of a message that isn't a mail (vault.md#message:
-// a letter, a document in a thread), as a document's author: typed in while
-// the host can write it, else as chips.
+// The sender and recipient of a document or of a message that isn't a mail
+// (vault.md#message: a letter, a document in a thread), as a document's
+// author: typed in while the host can write it, the first one giving a
+// document its message block; else as chips.
 const MESSAGE_PEOPLE = [['sender', t('props.from')], ['recipient', t('props.to')]];
 
 function messageFields(doc, add) {
     for (const [key, label] of MESSAGE_PEOPLE) {
-        const ref = doc.message[key];
+        const ref = doc.message?.[key];
         const write = value => setFieldsLocal(doc.doc_id, { [`message.${key}`]: value });
         if (doc.writable) add(label, contactField(key, ref, t('contact.unknown'), write));
         else if (ref) add(label, contactChip(ref));
@@ -405,8 +405,11 @@ function workField(doc) {
 }
 
 // ----------------------------------------------------------------------------
-// A document's type, typed in while the host can write it; the types the
-// vault's documents use are offered (`typeList`).
+// A document's type or a mail's (`document: {type}` beside its `email`
+// block), typed in while the host can write it; the types the vault's
+// documents and mails use are offered (`typeList`).
+const takesType = doc => doc?.kind === 'document' || doc?.kind === 'email';
+
 const typeList = accEl('datalist');
 typeList.id = 'type-list';
 document.body.append(typeList);
@@ -416,7 +419,7 @@ function docTypeField(doc) {
     input.placeholder = t('type.none');
     input.setAttribute('list', typeList.id);
     input.addEventListener('focus', () => {
-        const used = new Set([...entities.values()].map(other => other.kind === 'document' && other.type));
+        const used = new Set([...entities.values()].map(other => takesType(other) && other.type));
         used.delete(false);
         typeList.replaceChildren(...[...used].sort().map(type => {
             const option = accEl('option');
@@ -687,6 +690,7 @@ export const TASK_STATUSES = [
     ['todo', t('task.todo')], ['in-progress', t('task.in_progress')],
     ['waiting', t('task.waiting')], ['done', t('task.done')],
 ];
+
 
 // ----------------------------------------------------------------------------
 // When `ev` is: all day, its date or "date - date" (`end` is the day after

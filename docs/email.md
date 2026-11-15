@@ -186,8 +186,8 @@ feature picks its model (`accounts.md#model-choice`).
 - **Written at once**, one write per email (`analysis::apply::apply_lite`): the new
   title, the subject kept as `email.subject` (`vault.md#email`), and the type as
   `document: {type}` beside `email:` (`vault.md#document`), unless the
-  email has one (the card shows it after the sender,
-  `panel.md#cards`); the
+  email has one (the card shows it, where the user can change it,
+  `panel.md#field-edits`); the
   labels added to the email's own, the projects joined. A title the user
   changed meanwhile stays. A wrong label or
   project is removed on the card like any other.
