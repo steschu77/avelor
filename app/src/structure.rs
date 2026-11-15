@@ -446,7 +446,7 @@ pub fn reload_entity(app: &mut App, req: Req, id: Id) {
 mod tests {
     use crate::testing::parse;
     use crate::testing::trashed;
-    use crate::testing::{notes, shape, shown, undoes};
+    use crate::testing::{Harness, notes, shape, shown, undoes};
     use av_utils::error::Error;
     use av_utils::id::Id;
     use av_vault::vault::SaveOutcome;
@@ -903,6 +903,41 @@ Body
         let sent = parse(&h.take());
         assert_eq!(shape(&sent), ["entity"]);
         assert_eq!(sent[0]["data"]["id"], ids[0].to_string());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_records_own_fields_are_edited_by_path_and_reach_the_page() {
+        const RECORD: &str = "01a0e1cc-a24c-7490-82fe-e75669985b60";
+        let record = format!("id: {RECORD}\ntitle: Insurance\nrecord: {{}}\npolicy: SH-1\n");
+        let mut h = Harness::with_vault("edit-fields", &[("Records/i.rec.yaml", record)]);
+        let change = json!({ "fields": { "policy": "SH-2", "insurer": "Steady Hands", "classification": "masked" } });
+        let sent = h.call(
+            "edit_entities",
+            json!({ "ids": [RECORD], "change": change }),
+        );
+        assert_eq!(shape(&sent), ["entity", "reply"]);
+        let entity = &sent[0]["data"];
+        assert_eq!(
+            (
+                &entity["fields"]["policy"],
+                &entity["fields"]["insurer"],
+                &entity["classification"]
+            ),
+            (&json!("SH-2"), &json!("Steady Hands"), &json!("masked"))
+        );
+        let text = fs::read_to_string(h.vault().join("Records/i.rec.yaml")).unwrap();
+        assert!(
+            text.contains("classification: masked") && text.contains("policy: SH-2"),
+            "{text}"
+        );
+
+        let title = json!({ "fields": { "title": "Other" } });
+        let sent = h.call("edit_entities", json!({ "ids": [RECORD], "change": title }));
+        assert_eq!(
+            sent[0]["ok"]["skipped"],
+            json!([{ "id": RECORD, "reason": "invalid_argument" }])
+        );
     }
 
     // ------------------------------------------------------------------------

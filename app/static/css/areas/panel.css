@@ -199,6 +199,13 @@
   width: var(--w-new-date);
 }
 
+/* a record's own field typed in (features/panel/details.js), its name
+   and its value side by side */
+.props__new-field {
+  display: flex;
+  gap: 4px;
+}
+
 /* a trip event's fields (features/panel/trip-fields.js): a time beside its
    day, a place, the booking, and the zone a time is in, which opens the
    zones' menu */

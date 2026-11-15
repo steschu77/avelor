@@ -225,6 +225,13 @@ export function editEntityLocal(id, change, step = undefined) {
   structureCall('edit_entities', { ids: [id], change }, null, step);
 }
 
+// Write the entity `id`'s own `fields` by path (vault.md#record): `key`,
+// `role.key`, or `role.<item id>.key` of a list's item, null removing it,
+// a map under an item id not there adding the item.
+export function setFieldsLocal(id, fields) {
+  editEntityLocal(id, { fields });
+}
+
 // Why `edit_entities` skipped an entity, by the reason it names.
 const SKIP_REASONS = {
   not_writable: t('structure.not_writable'),

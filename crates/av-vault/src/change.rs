@@ -1,18 +1,24 @@
 //! One change to entities (`api.md#structure`'s `edit_entities`): a
-//! document's type, one of a task's fields, an event's fields, or a
-//! calendar's. [`Index::edit_entities`] writes it to every entity named
-//! that can take it.
+//! document's type, one of a task's fields, an event's fields, a
+//! calendar's, or an entity's own fields by path (`set_fields`).
+//! [`Index::edit_entities`] writes it to every entity named that can take
+//! it.
 //!
 //! [`Index::edit_entities`]: crate::vault::Index::edit_entities
+
+use std::collections::BTreeMap;
 
 use av_utils::datetime::DateTime;
 use av_utils::error::{Error, Result};
 use av_utils::id::Id;
 use av_utils::patch::present;
 use serde::Deserialize;
+use serde_yaml_ng::Value;
 
 use crate::document::Document;
 use crate::envelope::{DocumentType, Event};
+#[cfg(test)]
+use crate::shared::Classification;
 use crate::shared::{ContactRef, DocType};
 
 // ----------------------------------------------------------------------------
@@ -38,6 +44,8 @@ pub enum Change {
     Event(Box<EventChange>),
     /// A calendar's fields (vault.md#calendar).
     Calendar(CalendarChange),
+    /// An entity's own fields by path (`Document::with_fields`).
+    Fields(BTreeMap<String, Value>),
     /// An entity's date (vault.md#metadata), not an event's: its date is
     /// its start.
     Date(DateTime),
@@ -185,6 +193,9 @@ impl Change {
                 })
             }
             Change::Event(event) => event.check(),
+            Change::Fields(fields) if fields.is_empty() => Err(Error::InvalidArgument {
+                arg: "fields".into(),
+            }),
             _ => Ok(()),
         }
     }
@@ -193,7 +204,8 @@ impl Change {
     /// Whether `doc` can take the change: a type a document, a task's
     /// field a task, an event's an event, leaving its times in order
     /// (`in_order`; a recurring event's move all its occurrences) and a
-    /// timed schedule given with a zone, a calendar's a calendar.
+    /// timed schedule given with a zone, a calendar's a calendar; its own
+    /// fields one they leave readable, its core as it was.
     pub fn fits(&self, doc: &Document) -> bool {
         let kind = doc.kind();
         match self {
@@ -211,6 +223,7 @@ impl Change {
                 kind == DocumentType::Event && in_order(&event) && !zoneless
             }
             Change::Calendar(_) => kind == DocumentType::Calendar,
+            Change::Fields(fields) => doc.with_fields(fields).is_some(),
             Change::Date(_) => kind != DocumentType::Event,
         }
     }
@@ -244,6 +257,11 @@ impl Change {
                     calendar.work_of = text(work_of).map(ContactRef::parse);
                 }
                 doc.set_calendar(Some(calendar));
+            }
+            Change::Fields(fields) => {
+                if let Some(envelope) = doc.with_fields(fields) {
+                    doc.set_envelope(envelope);
+                }
             }
             Change::Date(date) => doc.set_date(*date),
         }
@@ -592,5 +610,60 @@ mod tests {
             (task.status.as_deref(), task.done),
             (Some("done"), Some(date(NOW)))
         );
+    }
+
+    /// The fields change of `yaml`, keys to values as the page sends them.
+    fn fields(yaml: &str) -> Change {
+        Change::Fields(serde_yaml_ng::from_str(yaml).unwrap())
+    }
+
+    #[test]
+    fn own_fields_are_set_and_removed_by_path() {
+        let mut doc = entity(
+            "title: Insurance\nrecord: {}\npolicy: SH-1\nnote: old\nitems:\n- id: a\n  n: 1\n",
+        );
+        let change = fields(
+            "policy: SH-2\nnote: null\nclassification: masked\nitems.a.n: 2\nitems.b: {n: 3}\n",
+        );
+        assert!(change.check().is_ok() && change.fits(&doc));
+        change.apply(&mut doc, date(NOW));
+        let env = doc.envelope().unwrap();
+        assert_eq!(env.extra["policy"].as_str(), Some("SH-2"));
+        assert!(!env.extra.contains_key("note"));
+        assert_eq!(env.classification, Some(Classification::Masked));
+        let items = env.extra["items"].as_sequence().unwrap();
+        assert_eq!(items[0]["n"].as_u64(), Some(2));
+        assert_eq!(
+            (items[1]["id"].as_str(), items[1]["n"].as_u64()),
+            (Some("b"), Some(3))
+        );
+
+        fields("items.a: null").apply(&mut doc, date(NOW));
+        let items = doc.envelope().unwrap().extra["items"]
+            .as_sequence()
+            .unwrap()
+            .clone();
+        assert_eq!(items.len(), 1);
+
+        let mut contact = entity("title: Maya\ncontact: {}\n");
+        fields("contact.birthday: 1990-04-02").apply(&mut contact, date(NOW));
+        let born = contact.roles().contact.as_ref().unwrap().birthday;
+        assert_eq!(born.unwrap().as_iso8601(), "1990-04-02");
+    }
+
+    #[test]
+    fn fields_dont_reach_what_has_its_own_command_or_doesnt_read() {
+        let doc = entity("title: T\nmessage:\n  threads: []\nevent:\n  start: 2026-01-01\n");
+        for change in [
+            "title: Other",
+            "projects: [01a0e1cc-a24c-7490-82fe-e75669985b41]",
+            "linked-to: 01a0e1cc-a24c-7490-82fe-e75669985b40",
+            "message.threads: []",
+            "event.start: not a date",
+            "event.start.deeper: 1",
+        ] {
+            assert!(!fields(change).fits(&doc), "{change}");
+        }
+        assert!(fields("{}").check().is_err(), "no field at all");
     }
 }

@@ -42,7 +42,7 @@ use av_utils::fs::FileStamp;
 use av_utils::id::Id;
 use av_vault::envelope::{DocumentType, Roles, Source};
 use av_vault::markdown;
-use av_vault::shared::DocType;
+use av_vault::shared::{Classification, DocType};
 use av_vault::vault::Changes;
 use av_vault::vault::Refresh;
 use av_vault::vault::SaveOutcome;
@@ -83,6 +83,12 @@ pub struct EntityMeta {
     pub writable: bool,
     /// Whether the delete button may move the file to `.trash`.
     pub deletable: bool,
+    /// Its own classification (vault.md#metadata), if it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification: Option<Classification>,
+    /// A record's own fields (vault.md#record), edited on its card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fields: Option<BTreeMap<String, serde_yaml_ng::Value>>,
     /// A synced calendar's: what becomes of a change to its events in Google
     /// (`calendar::access`).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -810,6 +816,9 @@ impl App {
             editable: entry.is_editable(),
             writable: entry.is_writable(),
             deletable: entry.is_deletable(),
+            classification: doc.envelope().and_then(|e| e.classification.clone()),
+            fields: (doc.kind() == DocumentType::Record)
+                .then(|| doc.envelope().map(|e| e.extra.clone()).unwrap_or_default()),
             access: (doc.kind() == DocumentType::Calendar)
                 .then(|| calendar::access(self, doc))
                 .flatten(),

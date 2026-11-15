@@ -69,12 +69,19 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   its date, for a document its type and the file it stands for, with Open (`vault.md#document`), for a bank account its bank,
   number, balance and holder, for a statement its account, its transactions
   (and how many are pending) and the balance it ends with
-  (`vault.md#statement`), and for a recurring payment its fields
-  (`panel.md#a-recurring-card`; `renderCardDetails`,
+  (`vault.md#statement`), for a recurring payment its fields
+  (`panel.md#a-recurring-card`), for a record its own fields, a row each by
+  its key (a value typed in edited in place, empty removing it, a list or
+  a map shown as it is, x removing it, + Field adding one, named first;
+  `vault.md#record`), and for every entity which models may read it
+  (Classification: its own, else the stricter of its kind's, "Masked · its
+  type", and the vault's, "Open · the vault's"; a menu sets its own or none,
+  `vault.md#metadata`; `renderCardDetails`,
   `features/panel/details.js`). A task's fields, a document's type, a
-  trip event's fields, an event's Work and a recurring payment's fields
-  are editable in place while the host can write the entity
-  (`panel.md#field-edits`); the rest is read-only;
+  trip event's fields, an event's Work, a recurring payment's fields, a
+  record's fields and the classification are editable in place while the
+  host can write the entity (`panel.md#field-edits`), the last two
+  through `edit_entities`' `fields`; the rest is read-only;
 - the blocks other modules add (`registerCardBlock`): after the head or
   after the details, each filled for the card's entity, hidden on a card
   it has nothing for, and refreshed with the chips (a recurring payment's

@@ -449,11 +449,17 @@ and out for good with it (`vault.md#trash`).
 
 Emails can be imported directly from a Google account.
 
-### Record
+### Record <a id="record"></a>
 
 Block: `record:`
 
-A record is a pure YAML file with additional custom fields.
+A record is a pure YAML file with additional custom fields. Its card shows
+them and edits them in place (`panel.md#cards`): an entity's own fields are
+written by path, a key, `role.key`, or `role.<item id>.key` of a list's
+item (by its `id`, else its index), null removing it; the host reads the
+result as an envelope before it writes, and the id, title, date, labels,
+projects, link, flags and source stay (`edit_entities`' `fields`,
+`api.md`).
 
 ### List
 
