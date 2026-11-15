@@ -21,7 +21,7 @@ import { t } from '../../core/text.js';
 import { store } from '../../model/state.js';
 import { entities, parseContact, watches } from '../../model/entities.js';
 import { ACCOUNT_TYPES, ledger, statementsOf } from '../../model/bank.js';
-import { structureCall } from '../../model/structure.js';
+import { setBankAccountLocal, structureCall } from '../../model/structure.js';
 import { showMenu } from '../../ui/menu.js';
 import { armedButton } from '../../ui/confirm.js';
 import { iconEl } from '../../ui/icons.js';
@@ -320,12 +320,6 @@ function addAccount() {
     Object.assign(d, { saving: false, [e.code === 'file_not_found' ? 'folderError' : 'error']: e.message });
   }).finally(scheduleRenderFolders);
   scheduleRenderFolders();
-}
-
-// Change fields of the bank account `id` (`set_bank_account`): its bank,
-// number or kind.
-function setBankAccount(id, change) {
-  structureCall('set_bank_account', { entity: id, ...change });
 }
 
 // ----------------------------------------------------------------------------
@@ -696,21 +690,21 @@ function renderAccountStats(account) {
     stat(t('watch.newest_statement'), newest?.title || t('watch.none'), newest?.source?.import?.origin ?? null));
 }
 
-// The account's fields: bank, number and kind changed here
-// (`set_bank_account`), currency, holder and file as they are.
+// The account's fields: bank, number, type and holder changed here
+// (`set_bank_account`), currency and file as they are.
 function renderAccountPart(id, account) {
   const fields = account['bank-account'] ?? {};
-  const edit = (field, saved, title, mono = false) => {
+  const edit = (field, saved, title, mono = false, shown = saved) => {
     const key = fieldEditKey(id, field);
     const [wrap, note] = renderEditField(id, field, {
-      saved: saved ?? null,
+      saved: shown ?? null,
       empty: '\u2014',
-      value: saved ?? '',
+      value: shown ?? '',
       mono,
       editTitle: title,
       onSave: value => {
         fieldEdits.delete(key);
-        setBankAccount(account.id, { [field]: value });
+        setBankAccountLocal(account.id, { [field]: value });
         scheduleRenderFolders();
       },
       rerender: scheduleRenderFolders,
@@ -725,10 +719,11 @@ function renderAccountPart(id, account) {
   row(t('props.bank'), ...edit('bank', fields.bank, t('watch.change_bank')));
   row(t('props.number'), ...edit('number', fields.number, t('watch.change_number'), true),
     accEl('span', 'note watch__note', t('watch.number_note')));
-  row(t('props.type'), accSeg(ACCOUNT_TYPES, fields.type ?? null, type => setBankAccount(account.id, { type })));
+  row(t('props.type'), accSeg(ACCOUNT_TYPES, fields.type ?? null, type => setBankAccountLocal(account.id, { type })));
   row(t('watch.currency'), fields.currency
     ? accEl('span', '', fields.currency) : accEl('span', 'note', t('watch.currency_from_file')));
-  if (fields.holder) row(t('props.holder'), accEl('span', '', parseContact(fields.holder).name));
+  row(t('props.holder'), ...edit('holder', fields.holder, t('watch.change_holder'), false,
+    fields.holder ? parseContact(fields.holder).name : null));
   const path = accEl('span', 'meta truncate-start', account.path);
   path.title = account.path;
   row(t('accounts.in_vault'), path);

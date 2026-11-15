@@ -200,6 +200,13 @@ export function setTransactionRecurringPaymentLocal(transactions, to, step = und
   structureCall('set_transaction_recurring_payment', { transactions, to }, () => store.getState(), step);
 }
 
+// Change the bank account `id`'s fields in `change` (`set_bank_account`: its
+// bank, number, kind or holder, an empty one removing it); the host pushes it
+// back. Nothing is published, so a field keeps the focus.
+export function setBankAccountLocal(id, change) {
+  structureCall('set_bank_account', { entity: id, ...change });
+}
+
 // Write the recurring payment `id`'s role as `recurring` (vault.md#recurring);
 // the host pushes the entity back. The selection stays.
 export function setRecurringPaymentLocal(id, recurring) {

@@ -139,8 +139,8 @@ vault), following the Accounts page:
   button to Accounts where the fix is there.
 - A statements watch's pane shows its account instead of a name: its
   balance (and what is pending), its transactions and its newest statement;
-  its name, which is the watch's (`set_title`), its bank, number and kind
-  (`set_bank_account`), its currency, holder and file as they are. Then its
+  its name, which is the watch's (`set_title`), its bank, number, kind and
+  holder (`set_bank_account`), its currency and file as they are. Then its
   folder, as any watch's, and the steps a file takes: Read the rows, Skip
   what is there and Check the balance, which always run, and Pair
   transfers, switched by its check (`pair_transfers`).

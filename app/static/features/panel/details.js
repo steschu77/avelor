@@ -20,7 +20,7 @@ import { PERIODS, eventRuleOf, eventScheduleLines, scheduleLine, periodOf } from
 import {
     CATEGORIES, amountsOf, nextOccurrence, withAmount,
 } from '../../model/bank.js';
-import { editEntityLocal, setFieldsLocal, setRecurringPaymentLocal } from '../../model/structure.js';
+import { editEntityLocal, setBankAccountLocal, setFieldsLocal, setRecurringPaymentLocal } from '../../model/structure.js';
 import { LOCAL_ZONE, isTripEvent } from '../../model/trip.js';
 import { editField, fieldInput } from '../../ui/field.js';
 import { fileIcon, iconEl } from '../../ui/icons.js';
@@ -540,13 +540,29 @@ function listFields(doc, add) {
 }
 
 // ----------------------------------------------------------------------------
-// A bank account's bank, number, balance and holder.
+// A bank account's bank, number, balance and holder: the bank, the number
+// and the holder (as a document's author, `contactField`) typed in while the
+// host can write it, each by itself (`set_bank_account`, an empty one
+// removing it; while empty, + Add); the balance the statements'.
 function bankAccountFields(doc, add) {
     const account = doc['bank-account'];
-    if (account.bank) add(t('props.bank'), account.bank);
-    if (account.number) add(t('props.number'), account.number);
+    const write = change => setBankAccountLocal(doc.doc_id, change);
+    const text = (key, value) => {
+        const input = fieldInput('text', key, value ?? '', 'form-input');
+        input.placeholder = t('list.add');
+        editField(input, next => write({ [key]: next.trim() }));
+        return input;
+    };
+    if (doc.writable) {
+        add(t('props.bank'), text('bank', account.bank));
+        add(t('props.number'), text('number', account.number));
+    } else {
+        if (account.bank) add(t('props.bank'), account.bank);
+        if (account.number) add(t('props.number'), account.number);
+    }
     if (account.balance != null) add(t('props.balance'), money(account.balance, account.currency));
-    if (account.holder) add(t('props.holder'), contactChip(account.holder));
+    if (doc.writable) add(t('props.holder'), contactField('holder', account.holder, t('contact.unknown'), holder => write({ holder: holder ?? '' })));
+    else if (account.holder) add(t('props.holder'), contactChip(account.holder));
 }
 
 // ----------------------------------------------------------------------------

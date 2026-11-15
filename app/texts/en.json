@@ -1866,6 +1866,7 @@
   "watch.can_wait": "can wait",
   "watch.change_bank": "Change the bank",
   "watch.change_folder": "Change folder",
+  "watch.change_holder": "Change the holder",
   "watch.change_number": "Change the number",
   "watch.change_once_added": "File types and the import can be changed once the account is added.",
   "watch.choose_account": "Choose the bank account.",

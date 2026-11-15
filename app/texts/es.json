@@ -1939,6 +1939,7 @@
   "watch.can_wait": "puede esperar",
   "watch.change_bank": "Cambiar el banco",
   "watch.change_folder": "Cambiar la carpeta",
+  "watch.change_holder": "Cambiar el titular",
   "watch.change_number": "Cambiar el número",
   "watch.change_once_added": "Los tipos de archivo y la importación se pueden cambiar en cuanto se añada la cuenta.",
   "watch.choose_account": "Elige la cuenta bancaria.",

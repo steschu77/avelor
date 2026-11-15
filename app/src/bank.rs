@@ -337,12 +337,14 @@ pub(crate) struct AccountChange {
     number: Option<String>,
     #[serde(rename = "type")]
     account_type: Option<String>,
+    holder: Option<String>,
 }
 
 // ----------------------------------------------------------------------------
-/// `set_bank_account {entity, bank?, number?, type?}`: change the
-/// bank account's fields given, an empty one removing its key; `type` is
-/// `checking`, `savings` or `credit-card`. Answered as `set_title` is.
+/// `set_bank_account {entity, bank?, number?, type?, holder?}`:
+/// change the bank account's fields given, an empty one removing its key;
+/// `type` is `checking`, `savings` or `credit-card`, `holder` a contact of
+/// the vault (`@<uuid>`) or a name. Answered as `set_title` is.
 pub fn set_bank_account(app: &mut App, req: Req, change: AccountChange) {
     let id = change.entity;
     if !is_account(app, id) {
@@ -365,6 +367,9 @@ pub fn set_bank_account(app: &mut App, req: Req, change: AccountChange) {
             }
             if let Some(account_type) = change.account_type {
                 account.account_type = Some(account_type);
+            }
+            if let Some(holder) = change.holder {
+                account.holder = some(&holder).as_deref().map(ContactRef::parse);
             }
             d.set_bank_account(Some(account));
         })

@@ -880,6 +880,14 @@ fn set_bank_account_changes_the_fields_given() {
     assert_eq!(fields.number, None, "an empty one removes it");
     assert_eq!(fields.account_type.as_deref(), Some("savings"));
     assert!(fields.holder.is_some(), "the others stay");
+    let holder = json!({ "entity": ACCOUNT, "holder": " Jane Roe " });
+    h.call("set_bank_account", holder);
+    assert_eq!(account(&h).holder, Some(ContactRef::parse("Jane Roe")));
+    h.call(
+        "set_bank_account",
+        json!({ "entity": ACCOUNT, "holder": "" }),
+    );
+    assert_eq!(account(&h).holder, None, "an empty one removes it");
     let sent = h.call(
         "set_bank_account",
         json!({ "entity": ACCOUNT, "type": "loan" }),

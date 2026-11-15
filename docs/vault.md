@@ -732,7 +732,7 @@ leaf to `active`. The tree's rules are av-vault's `conversation` module
 The tree itself is fixed: it is determined by the importer or the AI
 conversation, and the user can't reorder messages.
 
-### Bank Account
+### Bank Account <a id="bank-account"></a>
 
 Block: `bank-account:`
 
@@ -746,7 +746,9 @@ A bank account is a pure YAML file with the following additional fields:
 * `bank`: string.
 
 A statements watch imports into one account, which takes its balance and
-currency from the statements (`import.md#statements`).
+currency from the statements (`import.md#statements`). Its holder is the
+account's side of the transactions imported after it is set; a transaction keeps
+the side it was written with.
 
 ### Statement <a id="statement"></a>
 

@@ -1861,6 +1861,7 @@
   "watch.can_wait": "kann warten",
   "watch.change_bank": "Bank ändern",
   "watch.change_folder": "Ordner ändern",
+  "watch.change_holder": "Inhaber ändern",
   "watch.change_number": "Nummer ändern",
   "watch.change_once_added": "Dateitypen und der Import lassen sich ändern, sobald das Konto hinzugefügt ist.",
   "watch.choose_account": "Wähle das Bankkonto.",

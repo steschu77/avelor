@@ -932,6 +932,10 @@ one shows them as text:
   thread, shows them too, the first one typed in making its block, which
   stays when both are emptied. The draft card's document has them as
   well.
+- **A bank account's Bank, Number and Holder** (`bankAccountFields`,
+  `vault.md#bank-account`): typed in, the holder as the Author is, each
+  through `set_bank_account` (`setBankAccountLocal`, `model/structure.js`),
+  an empty one removing it; its balance is the statements'.
 - **Type** (a document, and a mail: `document: {type}` beside its
   `email` block, its kind a mail's still): typed in, with the types the
   vault's documents and mails use offered (`#type-list`); empty removes
