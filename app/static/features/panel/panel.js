@@ -50,7 +50,7 @@ import { armedButton } from '../../ui/confirm.js';
 import {
   createDocPreviewToolbar, createEditorToolbar,
 } from '../../ui/toolbar.js';
-import { editTextInPlace } from '../../ui/field.js';
+import { editTextInPlace, heldWhileTyping, keepingFocus } from '../../ui/field.js';
 import {
   MEMBER_DRAG, attachDropZone, endDragPreview, startDragPreview,
 } from '../../ui/dropzone.js';
@@ -385,10 +385,14 @@ function renderCardAttachments(doc_id, block) {
 }
 
 // The blocks other modules add to every card (a recurring payment's,
-// features/panel/recurring-payment.js): `place` is `head` (after the head) or `details`
-// (after the details), `className` the block's; `render(doc)` gives its
-// nodes, or null on a card it has nothing for, which hides it. Drawn with
-// the card, and again with its chips.
+// features/panel/recurring-payment.js): `place` is `head` (after the head), `details`
+// (after the details) or `parts` (after the toolbars, before the notes: a
+// contact's ID documents, features/panel/id-documents.js), `className` the
+// block's; `render(doc, redraw)` gives its nodes, or null on a card it has
+// nothing for, which hides it, `redraw()` drawing it again. Drawn with the
+// card, and again with its chips; as the details, that waits while one of
+// its inputs has the focus (`heldWhileTyping`), and a field or button that
+// had the focus gets it back (`keepingFocus`).
 const cardBlocks = [];
 
 export function registerCardBlock(place, className, render) {
@@ -397,9 +401,13 @@ export function registerCardBlock(place, className, render) {
 
 // The block `el` filled for `doc` by `render`, or hidden.
 function fillCardBlock(el, render, doc) {
-  const nodes = render(doc);
-  el.hidden = !nodes;
-  el.replaceChildren(...(nodes ?? []));
+  const redraw = () => fillCardBlock(el, render, entities.get(doc?.doc_id) ?? doc);
+  if (heldWhileTyping(el, redraw)) return;
+  keepingFocus(el, () => {
+    const nodes = render(doc, redraw);
+    el.hidden = !nodes;
+    el.replaceChildren(...(nodes ?? []));
+  });
 }
 
 // The card's elements of the blocks at `place`, filled for `doc`.
@@ -919,6 +927,8 @@ function createMessageController(msg, { selectable = false, thread = false, occu
 
   const editorToolbar = createEditorToolbar();
   card.appendChild(editorToolbar);
+  const partBlocks = cardBlocksAt('parts', msg);
+  card.append(...partBlocks.map(block => block.el));
 
   const editorRoot = accEl('div', 'pane-section editor prose');
   card.appendChild(editorRoot);
@@ -978,7 +988,7 @@ function createMessageController(msg, { selectable = false, thread = false, occu
   const controller = {
     doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
     dateEl, detailsEl, linksEl, attachmentsEl, threadsEl, chatBtn, occurrence, unsubscribeContent,
-    blocks: [...headBlocks, ...detailBlocks],
+    blocks: [...headBlocks, ...detailBlocks, ...partBlocks],
   };
   msgControllers.set(doc_id, controller);
   renderCardHead(controller);

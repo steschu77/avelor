@@ -93,10 +93,13 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   calendar read-only in Google (`calendar.md#two-way-sync`,
   `googleLocked`) shows what it syncs as text, its title without the pen,
   and neither Edit nor Delete, whose tooltip says why;
-- the blocks other modules add (`registerCardBlock`): after the head or
-  after the details, each filled for the card's entity, hidden on a card
-  it has nothing for, and refreshed with the chips (a recurring payment's
-  sum and occurrences, `features/panel/recurring-payment.js`);
+- the blocks other modules add (`registerCardBlock`): after the head,
+  after the details, or after the toolbars before the notes, a part of
+  the card under a head of its own; each filled for the card's entity,
+  hidden on a card it has nothing for, and refreshed with the chips, as
+  the details (`#field-edits`) not while one of its fields is typed in (a
+  recurring payment's sum and occurrences, `features/panel/recurring-payment.js`; a
+  contact's ID documents, `panel.md#id-documents`);
 - its project and label chips on one line, with the "+" menu that adds
   either (`panel.md#labels`, `panel.md#projects`), and its link chips
   (`panel.md#links`);
@@ -998,13 +1001,51 @@ a task, a type, an event's Work or a trip event is one `edit_entities`
 for the one entity (`editEntityLocal`, `model/structure.js`). It
 publishes no selection, so the cards aren't rebuilt: they follow the entity's push (`refreshCardChips`). While one of
 the block's fields has the focus, that refresh waits until the block is
-left, so what is typed stays; a button that had the focus gets it back.
+left, so what is typed stays, and while a press on the block is under
+way, until its click has run, so the button isn't replaced before it
+(`heldWhileTyping`); a field or button that had the focus gets it back
+(`keepingFocus`). The project's blueprint is drawn anew the same way
+(`#blueprint`).
 An entity the host skipped because its file changed outside the app opens
 the conflict dialog (`saving.md#the-dialog`); any other skip is reported
 in the status bar.
 
 The dashboard's Tasks card sets a task's status the same way, by dragging
 it to another column (`ui.md#dashboard`).
+
+### A contact's ID documents <a id="id-documents"></a>
+
+A contact's card has a part for the ID documents it holds
+(`vault.md#id-documents`), after its toolbar
+(`features/panel/id-documents.js`): its head, "ID documents", what models
+read of them by the contact's classification ("Private · numbers to local
+models only", a cloud model getting each number as a placeholder; "local
+models only" for a local contact, "no model" for a sealed
+one; `assistant.md#context`) and + ID document. Then a row each, its
+type's icon and the type ("Passport", `idDocumentType`,
+`model/id-documents.js`) over:
+
+- the number, Copy putting it on the clipboard ("Copied" for a moment); a
+  type's own fields in words ("class C", "biometric",
+  `idDocumentExtras`), the issuer and the country;
+- what it is linked to, a chip each that selects it, x unlinking it;
+- at its end the expiry ("to 09/02/2027", "ran out" after it), under it
+  "runs out in 30 days" once 90 days are left (`idDocumentState`), else
+  when it was issued.
+
+While the host can write the contact a click on a row opens its fields
+under it, another closes them: the type (the app's offered as it is
+typed), number, country, issued, expiry and issuer, each written by
+itself on Enter or leaving it; Link…, a menu of the vault's documents,
+tasks and emails, newest first, a filter finding any; Remove, which asks
+first ("Remove?"); Done. A contact the host can't write shows the part
+only with documents.
+
++ ID document offers the types (ID card, Passport, Driving licence,
+Residence permit, Visa), or one typed in: an item with a new id, its
+fields open. Every write is the contact's own fields by path
+(`edit_entities`' `fields`, `vault.md#record`): `id-documents.<id>.<key>`,
+the item itself to remove it, the whole list for the first one.
 
 ### A trip's event <a id="trip-fields"></a>
 

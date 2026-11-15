@@ -20,6 +20,7 @@ import { checksOf, factsOf, hasBlueprint, membersOf } from '../model/blueprint.j
 import { setProjectLocal } from '../model/structure.js';
 import { zoneName } from '../model/trip.js';
 import { whenOf } from '../model/when.js';
+import { heldWhileTyping } from '../ui/field.js';
 import { KIND_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { toolButton } from '../ui/toolbar.js';
@@ -46,15 +47,10 @@ export function showBlueprint(id) {
   render();
 }
 
-// A render waits while a fact is typed in, and runs once the facts are left;
-// a radio picked (When's windows) is no typing.
-function typing() {
-  const el = document.activeElement;
-  return bpEl.contains(el) && el.tagName === 'INPUT' && el.type !== 'radio' && el.type !== 'checkbox';
-}
-
+// Drawn anew on every change, but not while a fact is typed in or a press
+// on the blueprint is under way (`heldWhileTyping`).
 const render = oncePerFrame(() => {
-  if (typing()) return;
+  if (heldWhileTyping(bpEl, render)) return;
   const project = shownId ? projects.get(shownId) : null;
   bpEl.hidden = !project || !hasBlueprint(project.project);
   if (bpEl.hidden) {
@@ -62,14 +58,6 @@ const render = oncePerFrame(() => {
     return;
   }
   bpEl.replaceChildren(...renderBlueprint(project));
-});
-// Focus moving to a button of the blueprint (a pressed one takes it) draws
-// nothing anew: the button would be replaced before its click.
-bpEl.addEventListener('focusout', e => {
-  if (bpEl.contains(e.relatedTarget)) return;
-  setTimeout(() => {
-    if (!typing()) render();
-  });
 });
 store.subscribe([state => state.projects_rev, state => state.entities_rev, state => state.selected_entity], () => render());
 

@@ -84,6 +84,62 @@ export function editField(input, write) {
 }
 
 // ----------------------------------------------------------------------------
+// A block of fields drawn anew on every change (a card's details and its
+// parts, a project's blueprint): while one of its inputs has the focus,
+// that waits until the block is left, so what is typed stays; while a
+// press on it is under way, until its click has run, so the pressed button
+// isn't replaced before it (the host's answer to a field written as the
+// button took the focus). A radio or a checkbox is no typing.
+const heldRenders = new WeakMap(); // block -> its latest render
+const watchedBlocks = new WeakSet(); // the blocks listening for that
+const pressedBlocks = new WeakSet();
+
+function busy(block) {
+  if (pressedBlocks.has(block)) return true;
+  const el = document.activeElement;
+  return block.contains(el) && el.tagName === 'INPUT' && el.type !== 'radio' && el.type !== 'checkbox';
+}
+
+// Hold `render` of `block` while it is typed in or pressed; whether it did.
+export function heldWhileTyping(block, render) {
+  watch(block);
+  if (!busy(block)) return false;
+  heldRenders.set(block, render);
+  return true;
+}
+
+function watch(block) {
+  if (watchedBlocks.has(block)) return;
+  watchedBlocks.add(block);
+  // where the focus went, and whether a click followed the mouseup, is
+  // known only after the event
+  const release = () => setTimeout(() => {
+    const held = heldRenders.get(block);
+    if (!held || busy(block)) return;
+    heldRenders.delete(block);
+    held();
+  });
+  block.addEventListener('mousedown', () => {
+    pressedBlocks.add(block);
+    document.addEventListener('mouseup', () => {
+      pressedBlocks.delete(block);
+      release();
+    }, { capture: true, once: true });
+  });
+  block.addEventListener('focusout', release);
+}
+
+// Draw `block` anew with `draw()`: the field or button of it that had the
+// focus gets it back, found by its focus key (`fieldInput`).
+export function keepingFocus(block, draw) {
+  const el = document.activeElement;
+  const key = block.contains(el) ? el.dataset.focusKey : undefined;
+  draw();
+  const again = key && [...block.querySelectorAll('[data-focus-key]')].find(other => other.dataset.focusKey === key);
+  again?.focus({ preventScroll: true });
+}
+
+// ----------------------------------------------------------------------------
 // `${owner}\n${field}` -> { value, checking, error } while a field is
 // edited; `owner` is what the field belongs to: an account or watch id, or
 // 'new:<kind>' for one not saved yet. Absent: the saved value shows.

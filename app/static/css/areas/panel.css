@@ -199,6 +199,174 @@
   width: var(--w-new-date);
 }
 
+/* a part of a card after its toolbar (`registerCardBlock`): its head names
+   it, says which models read it, and + adds to it */
+.card-part {
+  padding-bottom: 6px;
+}
+
+.card-part__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--h-control-sm);
+}
+
+.card-part__head>.label:first-child {
+  color: var(--c-ink);
+}
+
+.card-part__head>.private {
+  margin-left: auto;
+}
+
+.private {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.private>.icon {
+  width: 12px;
+  height: 12px;
+  color: var(--c-ink-mute);
+}
+
+/* a contact's ID document (features/panel/id-documents.js): its type's
+   icon, the type over its number and the rest, its dates at the end; a
+   click opens its fields under it */
+.id-document {
+  display: grid;
+  grid-template-columns: var(--h-icon) minmax(0, 1fr) auto;
+  gap: 0 8px;
+  align-items: baseline;
+  padding: 6px 4px;
+  margin: 0 -4px;
+}
+
+.id-document.is-writable {
+  cursor: pointer;
+}
+
+.id-document.is-writable:hover {
+  background: var(--c-hover);
+}
+
+.card-part__head+.id-document {
+  margin-top: 4px;
+}
+
+.id-document+.id-document,
+.id-document__form+.id-document {
+  border-top: 1px solid var(--c-line);
+}
+
+.id-document>.icon {
+  align-self: start;
+  margin-top: 2px;
+  color: var(--c-ink-mute);
+}
+
+.id-document__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font: 400 var(--fs-body)/1.35 var(--f-serif);
+  color: var(--c-ink);
+}
+
+.id-document__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.id-document__number {
+  flex: none;
+  font: 400 var(--fs-small)/1.4 var(--f-mono);
+  letter-spacing: 0.02em;
+  color: var(--c-ink-soft);
+}
+
+.id-document__line>.tool {
+  flex: none;
+  height: auto;
+  min-width: 0;
+}
+
+/* what Copy copies where the Clipboard API isn't offered, out of sight */
+.id-document__copy {
+  position: fixed;
+  top: 0;
+  left: 0;
+  opacity: 0;
+}
+
+.id-document__about {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.id-document__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.id-document__end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.id-document__end>.is-soon {
+  color: var(--c-ink);
+}
+
+.id-document__end>.is-expired {
+  color: var(--c-danger-ink);
+}
+
+/* its fields under it, a label over each, then Link..., Remove and Done */
+.id-document__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px 12px;
+  padding: 2px 0 10px calc(var(--h-icon) + 8px);
+}
+
+.id-document__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.id-document__field>.form-input {
+  flex: none;
+  width: 100%;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--c-line);
+  font: 400 var(--fs-body)/1.4 var(--f-serif);
+}
+
+.id-document__acts {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+}
+
+.id-document__acts>.tool:last-child {
+  margin-left: auto;
+}
+
 /* a record's own field typed in (features/panel/details.js), its name
    and its value side by side */
 .props__new-field {

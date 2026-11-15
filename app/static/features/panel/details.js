@@ -22,7 +22,7 @@ import {
 } from '../../model/bank.js';
 import { editEntityLocal, setBankAccountLocal, setFieldsLocal, setRecurringPaymentLocal } from '../../model/structure.js';
 import { LOCAL_ZONE, isTripEvent } from '../../model/trip.js';
-import { editField, fieldInput } from '../../ui/field.js';
+import { editField, fieldInput, heldWhileTyping, keepingFocus } from '../../ui/field.js';
 import { fileIcon, iconEl } from '../../ui/icons.js';
 import { showMenu } from '../../ui/menu.js';
 import { accSeg, keyedSeg } from '../../ui/segmented.js';
@@ -69,10 +69,10 @@ export function dueTag(text) {
 //
 // Drawn again on every entity change: while one of its fields has the focus,
 // that waits until the block is left, so what is typed stays (as a title
-// being renamed, ui/field.js); a button that had the focus gets it back.
+// being renamed, `heldWhileTyping`, ui/field.js); a field or button that
+// had the focus gets it back (`keepingFocus`).
 export function renderCardDetails(row, doc, occurrence = null) {
     if (heldWhileTyping(row, () => renderCardDetails(row, entities.get(doc?.doc_id) ?? doc, occurrence))) return;
-    const focusKey = row.contains(document.activeElement) ? document.activeElement.dataset.focusKey : undefined;
     const parts = [];
     const add = (label, ...content) => {
         const dt = accEl('dt', 'label', label);
@@ -101,9 +101,10 @@ export function renderCardDetails(row, doc, occurrence = null) {
     if (doc?.doc_id) add(t('props.classification'), classificationField(doc));
     const by = addedBy(doc);
     if (by) add(t('props.added_by'), known(by) ? contactChip(by) : t('contact.unknown'));
-    row.replaceChildren(...parts);
-    row.hidden = !parts.length;
-    if (focusKey) row.querySelector(`[data-focus-key="${focusKey}"]`)?.focus({ preventScroll: true });
+    keepingFocus(row, () => {
+        row.replaceChildren(...parts);
+        row.hidden = !parts.length;
+    });
 }
 
 // ----------------------------------------------------------------------------
@@ -152,34 +153,6 @@ function eventFields(doc, add, occurrence) {
 function known(ref) {
     const { id, name } = parseContact(ref);
     return Boolean(id) || !name.startsWith('@');
-}
-
-// ----------------------------------------------------------------------------
-// The details blocks waiting to be drawn again (`renderCardDetails`): one is
-// held while an input of it has the focus, and drawn once the block is left.
-const heldRenders = new WeakMap(); // block -> its latest render
-const watchedBlocks = new WeakSet(); // the blocks listening for that
-
-function typingIn(row) {
-    return row.contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
-}
-
-// Hold `render` of `row` if an input of it has the focus; whether it did.
-function heldWhileTyping(row, render) {
-    if (!typingIn(row)) return false;
-    heldRenders.set(row, render);
-    if (!watchedBlocks.has(row)) {
-        watchedBlocks.add(row);
-        // where the focus went (perhaps another field of the block) is known
-        // only after the event
-        row.addEventListener('focusout', () => setTimeout(() => {
-            const held = heldRenders.get(row);
-            if (!held || typingIn(row)) return;
-            heldRenders.delete(row);
-            held();
-        }));
-    }
-    return true;
 }
 
 // ----------------------------------------------------------------------------
