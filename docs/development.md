@@ -53,23 +53,21 @@
 
 ## CI and releases
 
-CI (`.github/workflows/ci.yml`) builds on Windows and Linux and runs fmt,
-clippy and the tests on Linux, and checks every catalog as one from
+CI (`.github/workflows/ci.yml`) builds on Windows and Linux and runs
+fmt, clippy and the tests on Linux, and checks every catalog as one from
 outside is checked (`tools/check_catalog.py`,
-`localization.md#new-language`). The OAuth client comes from the
-repository's secrets `AVELOR_GOOGLE_CLIENT_ID` and
-`AVELOR_GOOGLE_CLIENT_SECRET`: with both, the build, clippy and the tests
-have the feature `google-account`, and clippy runs once more without it;
-without them (a pull request from a fork gets none) all run without
-Google. Each build keeps
-its result as an artifact: on Windows `avelor-<version>-windows-x64.exe`,
-packed with UPX (a pinned release, checked against its SHA-256); on Linux
+`localization.md#new-language`). The build, clippy and the tests have
+the feature `google-account` without the client's variables, so what CI
+builds, a release too, signs in through the user's own client
+(`accounts.md#own-client`), and CI needs no secrets; clippy runs once
+more without the feature. Each build keeps its result as an artifact: on
+Windows `avelor-<version>-windows-x64.exe`, packed with UPX (a pinned
+release, checked against its SHA-256); on Linux
 `avelor-<version>-linux-x86_64.tar.gz` with the exe, the icons and the
 desktop file the README installs. A pushed tag `v<version>`, the
 workspace's version (the root `Cargo.toml`'s `[workspace.package]`),
-makes a draft release with both once every job has passed; a build
-without the feature `google-account` makes none. The draft is published
-by hand.
+makes a draft release with both once every job has passed. The draft is
+published by hand.
 
 A release is its tag pushed. The first commit after it raises the
 version (`chore: v<next>`), so `main` between two releases carries the
