@@ -75,6 +75,23 @@ pub fn pick_folder(owner: &Owner, title: &str) -> Option<PathBuf> {
 }
 
 // ----------------------------------------------------------------------------
+/// The file the user picks in a dialog owned by `owner`, of the files
+/// `pattern` matches (`*.json`), named `kind`; `None` if the dialog was
+/// cancelled.
+pub fn pick_file(owner: &Owner, title: &str, kind: &str, pattern: &str) -> Option<PathBuf> {
+    let filter = gtk::FileFilter::new();
+    filter.set_name(Some(kind));
+    filter.add_pattern(pattern);
+    let dialog = gtk::FileDialog::builder()
+        .title(title)
+        .modal(true)
+        .default_filter(&filter)
+        .build();
+    let picked = wait(|done| dialog.open(owner.0.as_ref(), None::<&gio::Cancellable>, done))?;
+    picked.ok()?.path()
+}
+
+// ----------------------------------------------------------------------------
 /// Open `url` in the default browser.
 pub fn open_url(url: &str) -> Result<()> {
     let launcher = gtk::UriLauncher::new(url);

@@ -7,7 +7,8 @@
 // A model picker's way here is the `accounts.open` action
 // (`openAccountsPage`). The Email row's auto-sync is Fetch email's
 // (`renderEmailSync`); a synced calendar's Work of is its vault entity's
-// (`renderWorkOf`). The sidebar follows `accounts_rev` (app.js).
+// (`renderWorkOf`); the user's own Google client, in a build without one,
+// is client.js's. The sidebar follows `accounts_rev` (app.js).
 
 import { accEl, oncePerFrame } from '../../core/dom.js';
 import { titled } from '../../core/dom.js';
@@ -37,6 +38,7 @@ import { aiLimitReached } from './models.js';
 import { isAiAccount } from './models.js';
 import { WATCH_READ_STEP, watchType } from './folders.js';
 import { renderEmailSync } from '../import/email.js';
+import { hasGoogleClient, ownGoogleClient, renderGoogleClient } from './client.js';
 import { contactMenu } from '../facts.js';
 
 // The access rows shown; `tasks` stays in the account (and in every
@@ -321,11 +323,16 @@ function renderAccessRows(account) {
 }
 
 // Checkboxes for the account's calendars: checked ones show as sources in
-// the sidebar, each with its auto-sync and its Work of. Loaded
-// once per account (and again after a reconnect).
+// the sidebar, each with its auto-sync and its Work of. Loaded once per
+// account (and again after a reconnect), once there is a Google client to
+// ask with.
 function renderCalendarSources(account) {
   const list = accEl('div', 'accounts__sub');
   list.append(accEl('span', 'label', t('accounts.calendars_shown')));
+  if (!hasGoogleClient()) {
+    list.append(accEl('span', 'page-text', t('accounts.calendars_need_client')));
+    return list;
+  }
   let calendars = accountCalendars.get(account);
   if (calendars === undefined) {
     requestCalendars(account);
@@ -430,13 +437,14 @@ function renderConnectPane() {
   const pane = detailPane();
   pane.append(detailHead(t('accounts.connect_google_head')),
     accEl('div', 'pane-title', t('accounts.google_account')),
-    accEl('div', 'page-text', t('accounts.connect_google_text')),
-    renderAccessRows('new'));
+    accEl('div', 'page-text', t('accounts.connect_google_text')));
+  if (ownGoogleClient()) pane.append(renderGoogleClient(scheduleRenderAccounts));
+  pane.append(renderAccessRows('new'));
 
   const actions = accEl('div', 'accounts__actions');
   const signIn = accEl('button', 'btn btn--primary', t('accounts.sign_in_google'));
   signIn.type = 'button';
-  signIn.disabled = pendingConnect !== null;
+  signIn.disabled = pendingConnect !== null || !hasGoogleClient();
   signIn.addEventListener('click', () => connectGoogle('new'));
   actions.append(signIn);
   pane.append(actions);
@@ -464,7 +472,7 @@ function renderAccountPane(account) {
 
   const reconnect = accEl('button', 'btn', connected ? t('accounts.reconnect') : t('accounts.connect'));
   reconnect.type = 'button';
-  reconnect.disabled = pendingConnect !== null;
+  reconnect.disabled = pendingConnect !== null || !hasGoogleClient();
   reconnect.addEventListener('click', () => connectGoogle(account.id));
   const heading = connected
     ? t('accounts.head_connected', { date: pageDate(account.connected) })
@@ -478,7 +486,9 @@ function renderAccountPane(account) {
     stat(t('accounts.connected_since'), account.connected ? pageDate(account.connected) : t('accounts.unknown')),
     stat(t('accounts.in_vault'), t('count.entities', { n: total }), detail),
     stat(t('accounts.account_id'), `${account.id.slice(0, 8)}\u2026${account.id.slice(-4)}`, t('accounts.in_remote_blocks')),
-  ), renderAccessRows(account.id));
+  ));
+  if (ownGoogleClient()) pane.append(renderGoogleClient(scheduleRenderAccounts));
+  pane.append(renderAccessRows(account.id));
 
   // An edit only takes effect with the next consent.
   const draft = accountDrafts.get(account.id);

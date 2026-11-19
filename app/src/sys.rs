@@ -10,9 +10,11 @@
 //! - `Owner`: the main window as the owner of a `UiTask::Modal`'s dialog;
 //!   tests use `Owner::none()`.
 //! - `pick_folder(owner: &Owner, title) -> Option<PathBuf>`: a folder the
-//!   user picks; `open_path(path) -> Result<()>`: a file or folder opened
-//!   in its default app; `open_url(url) -> Result<()>`: a link opened in
-//!   its default app. All three wait in the platform's modal loop.
+//!   user picks; `pick_file(owner, title, kind, pattern)`: a file of those
+//!   `pattern` matches (`*.json`); `open_path(path) -> Result<()>`: a file
+//!   or folder opened in its default app; `open_url(url) -> Result<()>`: a
+//!   link opened in its default app. All four wait in the platform's modal
+//!   loop.
 //! - `expand_env(text) -> PathBuf`, `collapse_env(path) -> String`: a
 //!   watch's folder as used and as stored: `%NAME%` and `%USERPROFILE%\…`
 //!   on Windows, a leading `~` and `$NAME` and `~/…` on Linux.
@@ -42,7 +44,7 @@ pub use win32::{BRIDGE_JS, UiSignal};
 #[cfg(target_os = "windows")]
 pub use win32::{ImageThread, preview};
 #[cfg(target_os = "windows")]
-pub use win32::{Owner, open_path, pick_folder};
+pub use win32::{Owner, open_path, pick_file, pick_folder};
 #[cfg(target_os = "windows")]
 pub use win32::{collapse_env, expand_env, mark_downloaded};
 #[cfg(target_os = "windows")]
@@ -59,7 +61,7 @@ pub use linux::{BRIDGE_JS, UiSignal};
 #[cfg(target_os = "linux")]
 pub use linux::{ImageThread, preview};
 #[cfg(target_os = "linux")]
-pub use linux::{Owner, open_path, pick_folder};
+pub use linux::{Owner, open_path, pick_file, pick_folder};
 #[cfg(target_os = "linux")]
 pub use linux::{collapse_env, expand_env, mark_downloaded};
 #[cfg(target_os = "linux")]

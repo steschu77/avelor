@@ -21,6 +21,7 @@ use crate::documents::DocumentState;
 use crate::email;
 use crate::email::EmailState;
 use crate::google::accounts::GoogleAccounts;
+use crate::google::oauth::{self, GoogleClient};
 use crate::indexing::Indexing;
 use crate::jobs::Jobs;
 use crate::me;
@@ -34,7 +35,7 @@ use crate::texts::Text;
 use crate::undo::History;
 use crate::vault_settings::VaultSettings;
 use crate::watches::Watches;
-use av_google::auth::{self, OAuth};
+use av_google::auth::OAuth;
 use av_store::catalog::{FileRow, Read, Words};
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
@@ -386,13 +387,13 @@ pub struct App {
     /// The open vault's Google accounts (`accounts::open`).
     pub google: GoogleAccounts,
 
-    /// Whether this build has Google (the feature `google-account`, with its
-    /// client); without it no Google account is loaded, and the page offers
-    /// none to connect.
-    pub has_google: bool,
+    /// Where Google's OAuth client comes from (`google::oauth`); without
+    /// Google no Google account is loaded, and the page offers none to
+    /// connect.
+    pub google_client: GoogleClient,
 
     /// The OAuth client Google's accounts sign in and refresh with: the
-    /// build's (`av_google::auth::built_in`).
+    /// build's, or the user's own once given.
     pub oauth: OAuth,
 
     /// The open vault's AI accounts (`accounts::open`).
@@ -459,14 +460,14 @@ impl App {
         config: ConfigStore,
         catalog_dir: PathBuf,
     ) -> Self {
-        let oauth = OAuth::new(auth::built_in());
+        let (google_client, oauth) = oauth::start(config.dir());
         Self {
             outbox,
             config,
             vault: Vault::new(catalog_dir),
             ui,
             google: GoogleAccounts::default(),
-            has_google: oauth.get().is_some(),
+            google_client,
             oauth,
             ai: AiAccounts::default(),
             watches: Watches::default(),

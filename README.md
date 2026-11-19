@@ -80,10 +80,12 @@ Avelor through Alex's story, the one behind the sample vault:
 
 [![Gone in 60 Documents](docs/images/gone.webp)](https://youtu.be/mGvF7rzJQkk)
 
-Signing in to Google needs the app's OAuth client (a Desktop client of a
-Google Cloud project) in the build's environment, `AVELOR_GOOGLE_CLIENT_ID`
-and `AVELOR_GOOGLE_CLIENT_SECRET`, and the feature `google-account`; a
-plain `cargo run` builds without Google:
+Google needs the feature `google-account`; a plain `cargo run` builds
+without it. With the feature, Avelor signs in through a Desktop client of
+your own Google Cloud project, given under Accounts
+([how to make one](docs/accounts.md#own-client)), or through the build's,
+if `AVELOR_GOOGLE_CLIENT_ID` and `AVELOR_GOOGLE_CLIENT_SECRET` are in its
+environment:
 
 ```sh
 cargo run --features avelor/google-account

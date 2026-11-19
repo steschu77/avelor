@@ -70,6 +70,13 @@ impl Client {
     }
 
     // ------------------------------------------------------------------------
+    /// Whether the app has an OAuth client to refresh through: without one,
+    /// no access token can be had.
+    pub fn has_oauth_client(&self) -> bool {
+        self.oauth.get().is_some()
+    }
+
+    // ------------------------------------------------------------------------
     /// A valid access token, refreshed through the refresh token when the
     /// cached one is missing or stale. `Error::Expired` if the account has
     /// to be reconnected.

@@ -1,7 +1,7 @@
 //! Google accounts' commands (api.md#google): connect one through the browser
 //! sign-in, or cancel that; list its calendars and check them as sources;
 //! disconnect it (`accounts::disconnect_account`). The accounts themselves:
-//! `google::accounts`.
+//! `google::accounts`; the OAuth client they sign in with: `google::oauth`.
 
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
@@ -25,6 +25,7 @@ use crate::sys;
 use crate::texts::{self, Text};
 
 pub(crate) mod accounts;
+pub(crate) mod oauth;
 
 // ----------------------------------------------------------------------------
 /// How often an auto-sync runs (an account's email, a calendar), in seconds.
@@ -55,10 +56,12 @@ pub fn post_with_calendars(app: &App, id: Id) {
 
 // ----------------------------------------------------------------------------
 /// Answer a request whose account has no client (`GoogleAccounts::connected`
-/// failed): `not_found`, or `not_connected`.
+/// failed): `not_found`, `not_connected`, or `unsupported` while the user's
+/// own OAuth client isn't given.
 pub fn refuse_account(req: Req, error: Error) {
     match error {
         Error::NotConnected => req.fail(error, Text::new("google.not_connected")),
+        Error::Unsupported { .. } => req.fail(error, Text::new("google.no_client")),
         error => req.err(error),
     }
 }
@@ -382,7 +385,7 @@ struct Calendars<'a> {
 pub fn list_calendars(app: &mut App, req: Req, id: Id) {
     let client = match app.google.connected(id) {
         Ok(client) => client,
-        Err(e) => return req.err(e),
+        Err(e) => return refuse_account(req, e),
     };
     log::info!("Listing the calendars of {id}");
     app.run(

@@ -1,4 +1,7 @@
 {
+  "accounts.calendars_need_client": "Los calendarios aparecen en cuanto se guarde su cliente de Google.",
+  "accounts.client.head": "Su cliente de Google",
+  "accounts.client.text": "Avelor inicia sesión con un cliente que crea en su propio proyecto de Google Cloud. Introduzca su ID y su secreto, o cargue el archivo que Google entrega para él.",
   "accounts.connect_google_text": "Inicie sesión con Google en su navegador. Avelor pide el acceso elegido aquí, además de su nombre y su dirección de correo.",
   "accounts.continue_in_browser": "Continúe en su navegador…",
   "accounts.disconnect_again": "Haga clic de nuevo para desconectar",
@@ -58,6 +61,10 @@
   },
   "email.truncated": "Solo se listan los {n} más recientes; acote el filtro para ver el resto.",
   "email.updates_as_you_edit": "se actualiza mientras edita",
+  "error.expired": "Google ya no acepta este inicio de sesión. Vuelva a conectar la cuenta.",
+  "google.client.pick": "El archivo de su cliente de Google",
+  "google.client.secret_missing": "Introduzca también el secreto del cliente.",
+  "google.no_client": "Primero añada su cliente de Google.",
   "google.page.connected_line": "Puede cerrar esta pestaña.",
   "google.page.failed_line": "Vuelva a Avelor e inténtelo de nuevo.",
   "google.page.outdated_line": "Hay uno más reciente esperando: termínelo en su propia pestaña o empiece de nuevo en Avelor.",

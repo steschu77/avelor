@@ -120,6 +120,8 @@ enum Command {
     // (`accounts`).
     ConnectGoogle(Connect),
     CancelConnect,
+    SetGoogleClient(OwnClient),
+    LoadGoogleClient,
     ListCalendars(OfAccount),
     SetCalendarSource(CalendarChoice),
     DisconnectAccount(OfAccount),
@@ -317,6 +319,13 @@ struct Connect {
     levels: BTreeMap<String, Level>,
 }
 
+/// `{id, secret}`: the user's own Google client.
+#[derive(Deserialize)]
+struct OwnClient {
+    id: String,
+    secret: String,
+}
+
 /// `{account?, provider?, key?, address?}`: no `account` connects a new
 /// one of `provider`.
 #[derive(Deserialize)]
@@ -416,6 +425,8 @@ impl Command {
             "redo" => Command::Redo,
             "connect_google" => Command::ConnectGoogle(from_value(args)?),
             "cancel_connect" => Command::CancelConnect,
+            "set_google_client" => Command::SetGoogleClient(from_value(args)?),
+            "load_google_client" => Command::LoadGoogleClient,
             "list_calendars" => Command::ListCalendars(from_value(args)?),
             "set_calendar_source" => Command::SetCalendarSource(from_value(args)?),
             "disconnect_account" => Command::DisconnectAccount(from_value(args)?),
@@ -565,6 +576,8 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::Redo => undo::replay(app, req, Op::Redo),
         Command::ConnectGoogle(a) => google::connect_google(app, req, a.account, a.levels),
         Command::CancelConnect => google::cancel_connect(app, req),
+        Command::SetGoogleClient(a) => google::oauth::set_google_client(app, req, &a.id, &a.secret),
+        Command::LoadGoogleClient => google::oauth::load_google_client(app, req),
         Command::ListCalendars(a) => google::list_calendars(app, req, a.account),
         Command::SetCalendarSource(a) => {
             google::set_calendar_source(app, req, a.account, a.calendar, a.selected)
@@ -666,7 +679,8 @@ impl Req {
 
     // ------------------------------------------------------------------------
     /// Answer with `error`: `{"re": id, "err": {"code", "text"}}`, the text
-    /// naming the code; the error goes to the log.
+    /// naming the code (an expired sign-in's asking to reconnect); the error
+    /// goes to the log.
     pub fn err(mut self, error: Error) {
         self.send_error(&error);
     }
@@ -724,9 +738,12 @@ impl Drop for Req {
 // ----------------------------------------------------------------------------
 fn error_reply(id: u64, error: &Error) -> Value {
     let mut text = Text::new("error.code").arg("code", error.code());
-    // The argument named, for the page that sent it (not shown).
-    if let Error::InvalidArgument { arg } = error {
-        text = text.arg("arg", arg.as_str());
+    match error {
+        // The argument named, for the page that sent it (not shown).
+        Error::InvalidArgument { arg } => text = text.arg("arg", arg.as_str()),
+        // The one code the user acts on: the account signs in again.
+        Error::Expired => text = Text::new("error.expired"),
+        _ => {}
     }
     let err = json!({ "code": error.code(), "text": text });
     json!({ "re": id, "err": err })
@@ -840,5 +857,15 @@ mod tests {
         let sent = parse(&h.take());
         assert_eq!(sent[0], json!({ "ev": "entity", "data": { "id": "x" } }));
         assert_eq!(sent[1], json!({ "re": 1, "ok": "done" }));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn an_expired_sign_in_asks_to_reconnect() {
+        let reply = error_reply(1, &Error::Expired);
+        assert_eq!(error_code(&reply, 1), "expired");
+        assert_eq!(reply["err"]["text"]["key"], "error.expired");
+        let other = error_reply(2, &Error::Timeout);
+        assert_eq!(other["err"]["text"]["key"], "error.code");
     }
 }

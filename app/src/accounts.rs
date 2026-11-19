@@ -23,6 +23,7 @@ use crate::calendar;
 use crate::config::files::load_config_files;
 use crate::google;
 use crate::google::accounts::{Account, AccountMeta, GoogleAccounts};
+use crate::google::oauth::GoogleClient;
 use crate::protocol::Req;
 
 // ----------------------------------------------------------------------------
@@ -79,7 +80,7 @@ pub(crate) fn open(app: &mut App, root: &Path) {
     let folder = root.join(layout::ACCOUNTS);
     let secrets = app.config.dir().to_path_buf();
     let (mut google, ai) = load(&folder, &secrets, &app.oauth);
-    if !app.has_google {
+    if app.google_client == GoogleClient::Absent {
         // Their files stay as they are.
         google.clear();
     }
@@ -293,7 +294,7 @@ mod tests {
     fn a_build_without_google_leaves_the_google_accounts_out() {
         let mut h = with_accounts("hidden-google", false);
         h.take();
-        h.app.has_google = false;
+        h.app.google_client = GoogleClient::Absent;
         let root = h.vault();
         crate::api::switch_to(&mut h.app, root.clone());
         h.wait_indexed();
@@ -372,6 +373,34 @@ mod tests {
         let sent = h.call("remove_account", args);
         assert_eq!(shape(&sent), ["account_removed", "reply"]);
         assert!(!h.vault().join(".avelor/accounts/openai.yaml").exists());
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn signing_in_waits_for_a_client() {
+        let mut h = with_accounts("no-client", true);
+        h.take();
+        h.app.oauth = OAuth::default();
+        let args = serde_json::json!({ "levels": { "email": "read" } });
+        let sent = h.call("connect_google", args);
+        assert_eq!(sent[0]["err"]["code"], "unsupported");
+        assert_eq!(sent[0]["err"]["text"]["key"], "google.no_client");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_signed_in_account_waits_for_a_client_too() {
+        let mut h = with_accounts("account-no-client", false);
+        h.app.oauth = OAuth::default();
+        let root = h.vault();
+        crate::api::switch_to(&mut h.app, root);
+        h.take();
+        let sent = h.call(
+            "list_calendars",
+            serde_json::json!({ "account": GOOGLE_ID }),
+        );
+        assert_eq!(sent[0]["err"]["code"], "unsupported");
+        assert_eq!(sent[0]["err"]["text"]["key"], "google.no_client");
     }
 
     // ------------------------------------------------------------------------

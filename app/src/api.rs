@@ -11,6 +11,7 @@ use crate::app::Prefs;
 use crate::calendar;
 use crate::documents;
 use crate::email;
+use crate::google::oauth::{self, GoogleClient};
 use crate::protocol::Req;
 use crate::settings;
 use crate::sys::{self, WindowStep};
@@ -27,8 +28,8 @@ use serde_json::json;
 /// at start, and was set aside (`config::load_config`, which logs why), is
 /// told now, in the status bar. Opens the vault of the last session (or the
 /// command line's, `ConfigStore::vault`), with its accounts and watches;
-/// answers whether this build has Google (`App::has_google`), the language
-/// (`settings::language`), and who the user is (`me`).
+/// answers whether this build has Google, its client (`google::oauth::meta`),
+/// the language (`settings::language`), and who the user is (`me`).
 pub fn ready(app: &mut App, req: Req) {
     if app.config.take_error().is_some() {
         app.notice(Text::new("config.unread"));
@@ -36,8 +37,10 @@ pub fn ready(app: &mut App, req: Req) {
     if let Some(root) = app.config.vault().map(Path::to_path_buf) {
         open_vault(app, &root, false);
     }
+    let google = app.google_client != GoogleClient::Absent;
     req.ok(json!({
-        "google": app.has_google,
+        "google": google,
+        "google_client": oauth::meta(app),
         "language": settings::language(app),
         "me": app.config.me(),
     }));
@@ -242,6 +245,7 @@ mod tests {
     use crate::config::load_config;
     use crate::testing::parse;
     use crate::testing::{Harness, shown};
+    use av_google::auth::OAuth;
     use serde_json::Value;
     use std::fs;
 
@@ -280,9 +284,20 @@ mod tests {
     #[test]
     fn ready_answers_at_once() {
         let mut h = Harness::new("ready");
-        let sent = h.call("ready", json!({}));
-        assert_eq!(sent.len(), 1, "{sent:?}");
-        assert_eq!(sent[0]["ok"]["google"], json!(true));
+        let google = |h: &mut Harness| {
+            let sent = h.call("ready", json!({}));
+            assert_eq!(sent.len(), 1, "{sent:?}");
+            let ok = &sent[0]["ok"];
+            (ok["google"].clone(), ok["google_client"].clone())
+        };
+        assert_eq!(google(&mut h), (json!(true), json!("built-in")));
+
+        // A build that takes the user's own client, before one is given.
+        h.app.google_client = GoogleClient::Own;
+        h.app.oauth = OAuth::default();
+        assert_eq!(google(&mut h), (json!(true), json!(null)));
+        h.app.google_client = GoogleClient::Absent;
+        assert_eq!(google(&mut h), (json!(false), json!(null)));
     }
 
     // ------------------------------------------------------------------------

@@ -27,7 +27,8 @@ current Windows user (`av-utils/secret.rs`). On Linux the file is in
 `$XDG_CONFIG_HOME/avelor`, holds the secret as it is, and only the
 user can read it (0600, `fs::write_private`). So no file in the vault names
 its secret, and a backup of the vault never holds one. Only the key's ends
-reach the page (`sk-…4f2a`).
+reach the page (`sk-…4f2a`). The user's own Google client (`#own-client`)
+is kept the same way, its id and secret in `google.client`.
 
 ## Connection status <a id="connection"></a>
 
@@ -214,13 +215,46 @@ it includes sending. Name and email address (identity) are always requested.
 There is no Write or Send level; vocabulary elsewhere
 maps onto these three.
 
+## Your own Google client <a id="own-client"></a>
+
+A build without a client of its own (the feature `google-account`
+without the two variables, `#design`) signs in through the user's: a
+Desktop client of a Google Cloud project of their own, so no client is
+shared between users, and none needs Google's verification. It is made
+once and serves every vault and every Google account of the Windows user
+who gave it:
+
+1. In the Google Cloud console, a new project.
+2. Under APIs & Services → Library, the Gmail API, the Google Calendar
+   API, the Google Tasks API and the People API, each enabled.
+3. Under Google Auth Platform:
+   - Branding: the app's name (Avelor), and the user's email as its
+     support and developer contact.
+   - Audience: External, then Publish app, to In production, without
+     submitting it for verification. In Testing, only the test users
+     listed there can sign in, and a sign-in lasts 7 days.
+4. Under Clients, Create client, of the type Desktop app; then Download
+   JSON at once: Google shows the secret only then.
+5. In Avelor, Accounts → Google account: Load Google's file…, or its
+   client ID and client secret entered; Save checks them with Google.
+
+Signing in then shows "Google hasn't verified this app": Advanced, then
+Go to Avelor, goes on to the access asked for. An unverified client takes
+up to 100 users. A client replaced signs every Google account out, as
+their tokens were issued to the one before: each signs in again.
+
 ## The Accounts page <a id="accounts-page"></a>
 
 Workspace → Accounts (`features/workspace/accounts.js`) lists the open vault's
 accounts with a detail pane.
 
-- **Google**: Off/Read/Full per service, then "Sign in with Google"
-  connects an account; reconnecting (also to change the access) keeps the
+- **Google**: in a build without a client of its own, the connect pane
+  and each Google account's show the user's own above the access rows
+  (`#own-client`, `features/workspace/client.js`): its client ID and
+  secret, or Google's file loaded, checked with Google before it is kept,
+  then its id and its secret's ends with Replace; Sign in, Reconnect and
+  an account's calendars wait for it. Off/Read/Full per
+  service, then "Sign in with Google" connects an account; reconnecting (also to change the access) keeps the
   account's id and must sign in as the same email. Disconnecting revokes
   the token and deletes it but keeps the account file, marked
   `disconnected`, so connecting the same Google account again keeps the
@@ -310,9 +344,10 @@ beside a box in red, nothing picked too, which a tool says itself.
 | H2 | Connect Google | Off/Read/Full per service → "Sign in with Google" → `connectGoogle` | `connect_google {levels}` → the browser opened after the handler → consent (loopback, PKCE) → code redeemed and user info fetched on workers → `GoogleAccounts::connect`: account YAML in `.avelor/accounts/` + DPAPI token `<id>.token` → `account`, `ok {id}` | card; sidebar sources |
 | H3 | Reconnect / change access | same with the account id | as H2 with `{account, levels}`; must be the same email (`wrong_account`) | id and `remote:` links kept |
 | H4 | Cancel sign-in | Cancel | `cancel_connect` → `ok`; the connect answers `cancelled` | — |
-| H5 | Calendars as sources | account pane renders → `list_calendars`; checkbox → `set_calendar_source {account, calendar, selected}` | `ok {calendars}` (after `entity` per calendar entity made, `account` if names changed); `entity` for one made, `account`, `ok` | checked calendars become sources, each with its calendar entity |
+| H5 | Calendars as sources | account pane renders, once there is a client → `list_calendars`; checkbox → `set_calendar_source {account, calendar, selected}` | `ok {calendars}` (after `entity` per calendar entity made, `account` if names changed); `entity` for one made, `account`, `ok` | checked calendars become sources, each with its calendar entity |
 | H6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` (revoke on a worker, file marked `disconnected`, token deleted) → `account`, `ok`; `remove_account` (file and token deleted) → `account_removed`, `ok` | — |
 | H7 | A work calendar | a checked calendar's Work of → a contact, or Nobody → `editEntityLocal(id, {calendar: {"work-of": …}})` | `edit_entities` → `Index::edit_entities` → `entity` | the row names the owner; the calendar's events show Work on their cards |
+| H8 | Your own client | the client on the connect pane or an account's → Save, or Load Google's file… → `set_google_client` / `load_google_client` | the file picked in a dialog (`sys::pick_file`) and read → `auth::check_client` on a worker → `google.client` written, the accounts' `OAuth` set → `google_client`, `ok` | Sign in with Google |
 | I1 | Add an AI provider | "AI provider" menu → draft pane → key or address → Save → `aiConnect` | `connect_ai {provider, key \| address}` (channel `connect_ai`) → models listed with the new values on a worker → only then stored in `.avelor/accounts/` (the key as `<id>.key`) → `account`, `ok {id, models}` | card with models |
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |
 | I3 | Offer a model | tick | `set_ai_settings {account, offered}` → `account`, `ok` | pickers offer it |
@@ -347,11 +382,19 @@ the OAuth wait and the requests that redeem the code and ask who signed
 in; a new connect, `cancel_connect` or a vault switch cancels it. The
 OAuth client is the build's with the feature `google-account` and both
 `AVELOR_GOOGLE_CLIENT_ID` and `AVELOR_GOOGLE_CLIENT_SECRET`
-(`av-google/auth.rs`), one of them alone failing the build; the app holds
-it in one `av_google::auth::OAuth`, which every account's client
-refreshes through. A build without the client has no Google: the host
-loads no Google account, the page offers none to connect (`ready`), and a
-sign-in is refused (`unsupported`).
+(`av-google/auth.rs`), one of them alone failing the build; with the
+feature and neither, it is the user's own (`#own-client`,
+`google/oauth.rs`), read from `google.client` at start. The app holds it
+in one `av_google::auth::OAuth`, which every account's client refreshes
+through, so a client given or replaced counts at once; a token another
+client issued is refused (`unauthorized_client`), and its account has to
+reconnect (`expired`: "Google no longer accepts this sign-in. Reconnect
+the account."). A build without the feature has no Google: the host loads
+no Google account, the page offers none to connect (`ready`), and a
+sign-in is refused (`unsupported`), as it is while the user's own client
+isn't given; so is every request of a signed-in account then
+(`GoogleAccounts::connected`, "Add your Google client first."), and the
+auto-syncs skip it.
 
 What the account files share is in `config/files.rs`:
 

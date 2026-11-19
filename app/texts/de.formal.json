@@ -1,4 +1,7 @@
 {
+  "accounts.calendars_need_client": "Die Kalender erscheinen, sobald Ihr Google-Client gespeichert ist.",
+  "accounts.client.head": "Ihr Google-Client",
+  "accounts.client.text": "Avelor meldet sich über einen Client an, den Sie in Ihrem eigenen Google-Cloud-Projekt anlegen. Geben Sie seine ID und seinen Schlüssel ein oder laden Sie die Datei, die Google dafür ausgibt.",
   "accounts.connect_google_text": "Melden Sie sich in Ihrem Browser bei Google an. Avelor fragt nach dem hier gewählten Zugriff sowie nach Ihrem Namen und Ihrer E-Mail-Adresse.",
   "accounts.continue_in_browser": "Machen Sie in Ihrem Browser weiter …",
   "accounts.disconnected_note": "Getrennt: Aus diesem Konto wird nichts gelesen. Wenn Sie dasselbe Google-Konto wieder verbinden, geht es mit diesem Konto und seinen Dokumenten weiter.",
@@ -48,6 +51,10 @@
   "email.press_update": "Drücken Sie Aktualisieren, um die Treffer zu lesen.",
   "email.reading_blocked": "Das Lesen der Anhänge ist an: Wählen Sie ein Modell, das dafür funktioniert, oder schalten Sie es aus.",
   "email.truncated": "Nur die neuesten {n} werden gelistet; grenzen Sie den Filter ein, um den Rest zu sehen.",
+  "error.expired": "Google akzeptiert diese Anmeldung nicht mehr. Verbinden Sie das Konto neu.",
+  "google.client.pick": "Die Datei Ihres Google-Clients",
+  "google.client.secret_missing": "Geben Sie auch den Clientschlüssel ein.",
+  "google.no_client": "Fügen Sie zuerst Ihren Google-Client hinzu.",
   "google.page.connected_line": "Sie können diesen Tab schließen.",
   "google.page.failed_line": "Kehren Sie zu Avelor zurück und versuchen Sie es erneut.",
   "google.page.outdated_line": "Eine neuere wartet: Schließen Sie sie in ihrem eigenen Tab ab oder beginnen Sie in Avelor neu.",

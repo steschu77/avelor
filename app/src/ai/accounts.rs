@@ -21,7 +21,9 @@ use av_utils::id::Id;
 use serde::{Deserialize, Serialize};
 use serde_yaml_ng::{Mapping, Value};
 
-use crate::config::files::{ConnectionStatus, SecretFile, free_stem, remove_if_exists, write_yaml};
+use crate::config::files::{
+    ConnectionStatus, SecretFile, free_stem, remove_if_exists, secret_hint, write_yaml,
+};
 use crate::texts::{self, Text};
 
 /// The extension of an AI account's secret, its API key.
@@ -293,7 +295,7 @@ impl AiAccount {
         AiAccountMeta {
             id: self.id,
             kind: self.provider.as_str(),
-            key: self.key.as_deref().map(key_hint),
+            key: self.key.as_deref().map(secret_hint),
             address: self.address(),
             status: self.status(),
             connected: self.settings.connected,
@@ -437,19 +439,6 @@ impl AiAccount {
 /// stored.
 pub fn candidate(provider: Provider, key: Option<String>, address: &str) -> Client {
     Client::new(provider, key).with_base_url(address)
-}
-
-// ----------------------------------------------------------------------------
-/// `sk-…4f2a`: enough to tell keys apart, too little to use one. Short
-/// keys show nothing.
-fn key_hint(key: &str) -> String {
-    let chars: Vec<char> = key.chars().collect();
-    if chars.len() < 12 {
-        return "…".to_string();
-    }
-    let head: String = chars[..3].iter().collect();
-    let tail: String = chars[chars.len() - 4..].iter().collect();
-    format!("{head}…{tail}")
 }
 
 // ----------------------------------------------------------------------------
@@ -979,13 +968,6 @@ note: top-level kept
         ollama.set_credentials(None, Some("http://nas:11434".into()));
         assert_eq!(ollama.address(), "http://nas:11434");
         assert!(!ollama.uses_key() && ollama.status() == "unknown");
-    }
-
-    // ------------------------------------------------------------------------
-    #[test]
-    fn key_hints_show_only_the_ends() {
-        assert_eq!(key_hint("sk-proj-abcdefghijklmnop4f2a"), "sk-…4f2a");
-        assert_eq!(key_hint("short"), "…");
     }
 
     // ------------------------------------------------------------------------

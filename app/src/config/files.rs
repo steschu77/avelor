@@ -1,7 +1,7 @@
 //! What the YAML files of the configuration share (`accounts.md#design`):
 //! accounts of both kinds and folder watches are each one YAML file, an
-//! account's secret a DPAPI-encrypted file with the app (on Linux, a file
-//! only the user can read).
+//! account's secret (and the user's own Google client) a DPAPI-encrypted
+//! file with the app (on Linux, a file only the user can read).
 
 use std::fs;
 use std::io::ErrorKind;
@@ -26,6 +26,12 @@ impl SecretFile {
     /// The secret of the account `id` in `secrets`; `ext` says which kind.
     pub fn of(secrets: &Path, id: Id, ext: &str) -> Self {
         Self(secrets.join(format!("{id}.{ext}")))
+    }
+
+    // ------------------------------------------------------------------------
+    /// The secret `name` in `secrets`, of none of the accounts.
+    pub fn named(secrets: &Path, name: &str) -> Self {
+        Self(secrets.join(name))
     }
 
     // ------------------------------------------------------------------------
@@ -55,6 +61,19 @@ impl SecretFile {
     pub fn remove(&self) -> Result<()> {
         remove_if_exists(&self.0)
     }
+}
+
+// ----------------------------------------------------------------------------
+/// `sk-…4f2a`: enough to tell secrets apart, too little to use one. Short
+/// ones show nothing.
+pub fn secret_hint(secret: &str) -> String {
+    let chars: Vec<char> = secret.chars().collect();
+    if chars.len() < 12 {
+        return "…".to_string();
+    }
+    let head: String = chars[..3].iter().collect();
+    let tail: String = chars[chars.len() - 4..].iter().collect();
+    format!("{head}…{tail}")
 }
 
 // ----------------------------------------------------------------------------
@@ -213,6 +232,26 @@ mod tests {
         #[cfg(target_os = "linux")]
         assert_eq!(mode, 0o600, "only the user can read it");
         assert!(gone, "removed, and removing again is fine");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_named_secret_is_kept_beside_the_accounts() {
+        let dir = temp_dir();
+        let secret = SecretFile::named(&dir, "google.client");
+        secret.write("{}").unwrap();
+        let read = secret.read().unwrap();
+        let kept = dir.join("google.client").exists();
+        fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(read, "{}");
+        assert!(kept);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn secret_hints_show_only_the_ends() {
+        assert_eq!(secret_hint("sk-proj-abcdefghijklmnop4f2a"), "sk-…4f2a");
+        assert_eq!(secret_hint("short"), "…");
     }
 
     // ------------------------------------------------------------------------

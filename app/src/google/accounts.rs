@@ -662,9 +662,15 @@ impl GoogleAccounts {
 
     // ------------------------------------------------------------------------
     /// The client of the account `id`; `NotFound` if there is no such
-    /// account, `NotConnected` if it has no token.
+    /// account, `NotConnected` if it has no token, `Unsupported` while the
+    /// app has no OAuth client (the user's own not given yet).
     pub fn connected(&self, id: Id) -> Result<Arc<Client>> {
-        self.get(id)?.client.clone().ok_or(Error::NotConnected)
+        let client = self.get(id)?.client.clone().ok_or(Error::NotConnected)?;
+        if !client.has_oauth_client() {
+            let what = "Google without an OAuth client".to_string();
+            return Err(Error::Unsupported { what });
+        }
+        Ok(client)
     }
 
     // ------------------------------------------------------------------------
@@ -763,8 +769,16 @@ impl GoogleAccounts {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use av_google::auth::OAuthClient;
     use av_utils::secret;
     use std::fs;
+
+    fn oauth() -> OAuth {
+        OAuth::new(Some(OAuthClient {
+            id: "test.apps.googleusercontent.com".into(),
+            secret: "test-secret".into(),
+        }))
+    }
 
     const GOOGLE: &str = "id: 01a0e1cc-a24c-7490-82fe-e75669985b24
 google:
@@ -809,7 +823,7 @@ last-sync: 2026-09-27T10:30:00Z
         fn load(&self, name: &str) -> Account {
             let path = self.folder.join(name);
             let value = serde_yaml_ng::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-            load(&path, value, &self.secrets, &OAuth::default()).unwrap()
+            load(&path, value, &self.secrets, &oauth()).unwrap()
         }
 
         fn accounts(&self, names: &[&str]) -> GoogleAccounts {
@@ -981,13 +995,23 @@ last-sync: 2026-09-27T10:30:00Z
 
     // ------------------------------------------------------------------------
     #[test]
-    fn lookups_tell_unknown_from_not_connected() {
+    fn lookups_tell_unknown_from_not_connected_and_from_no_client() {
         let dirs = Dirs::new();
         dirs.account("a.yaml", GOOGLE, None);
         let accounts = dirs.accounts(&["a.yaml"]);
         let id = accounts.iter().next().unwrap().id();
         assert!(matches!(accounts.connected(id), Err(Error::NotConnected)));
         assert!(matches!(accounts.get(Id::generate()), Err(Error::NotFound)));
+
+        let client = Client::new(OAuth::default(), "1//t".into(), GoogleScope::default());
+        let account = Account::new(Path::new("cfg"), "a@example.com", client);
+        let id = account.id();
+        let accounts = GoogleAccounts::new("cfg".into(), "cfg".into(), vec![account]);
+        let waiting = accounts.connected(id);
+        assert!(
+            matches!(waiting, Err(Error::Unsupported { .. })),
+            "a token, but no client"
+        );
     }
 
     // ------------------------------------------------------------------------
