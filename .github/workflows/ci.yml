@@ -12,12 +12,10 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  # The Google OAuth client is taken from the build (av-google/auth.rs).
-  AVELOR_GOOGLE_CLIENT_ID: ${{ secrets.AVELOR_GOOGLE_CLIENT_ID }}
-  AVELOR_GOOGLE_CLIENT_SECRET: ${{ secrets.AVELOR_GOOGLE_CLIENT_SECRET }}
-  # With both the build has Google (the feature google-account); a pull
-  # request from a fork gets none, and builds without it.
-  GOOGLE_ACCOUNT: ${{ (secrets.AVELOR_GOOGLE_CLIENT_ID != '' && secrets.AVELOR_GOOGLE_CLIENT_SECRET != '') && '--features avelor/google-account' || '' }}
+  # Google with the user's own OAuth client: the feature without the
+  # client's variables (docs/accounts.md#own-client), so a release carries
+  # no client and CI needs no secrets.
+  GOOGLE_ACCOUNT: --features avelor/google-account
 
 jobs:
   build:
@@ -135,10 +133,6 @@ jobs:
           version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml)
           if [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "::error::The tag $GITHUB_REF_NAME isn't the workspace's version (Cargo.toml), v$version."
-            exit 1
-          fi
-          if [ -z "$GOOGLE_ACCOUNT" ]; then
-            echo "::error::A release needs the OAuth client: the secrets AVELOR_GOOGLE_CLIENT_ID and AVELOR_GOOGLE_CLIENT_SECRET."
             exit 1
           fi
           gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --title "Avelor $version" --generate-notes
