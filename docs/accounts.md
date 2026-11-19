@@ -345,12 +345,13 @@ The sign-in uses a loopback redirect with PKCE and a 5-minute limit. The
 pending sign-in lives in `App` with its own `av_utils::cancel::Cancel`, which ends
 the OAuth wait and the requests that redeem the code and ask who signed
 in; a new connect, `cancel_connect` or a vault switch cancels it. The
-OAuth client is the build's with the feature `google-account`
-(`AVELOR_GOOGLE_CLIENT_ID`, `AVELOR_GOOGLE_CLIENT_SECRET`,
-`av-google/auth.rs`), and such a build fails without it; a build without
-the feature has no Google: the host loads no Google account, the page
-offers none to connect (`ready`), and a sign-in is refused
-(`unsupported`).
+OAuth client is the build's with the feature `google-account` and both
+`AVELOR_GOOGLE_CLIENT_ID` and `AVELOR_GOOGLE_CLIENT_SECRET`
+(`av-google/auth.rs`), one of them alone failing the build; the app holds
+it in one `av_google::auth::OAuth`, which every account's client
+refreshes through. A build without the client has no Google: the host
+loads no Google account, the page offers none to connect (`ready`), and a
+sign-in is refused (`unsupported`).
 
 What the account files share is in `config/files.rs`:
 

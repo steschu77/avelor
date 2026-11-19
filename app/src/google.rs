@@ -227,13 +227,10 @@ pub fn connect_google(
         Some(Ok(account)) => account.email().map(str::to_string),
         Some(Err(e)) => return req.err(e),
     };
-    if !auth::has_client() {
-        let what = "signing in to Google without an OAuth client".to_string();
-        let text = Text::new("google.no_client");
-        return req.fail(Error::Unsupported { what }, text);
-    }
-    let pending = match auth::begin_consent(&scope, login_hint.as_deref(), sign_in_pages()) {
+    let pending = auth::begin_consent(&app.oauth, &scope, login_hint.as_deref(), sign_in_pages());
+    let pending = match pending {
         Ok(pending) => pending,
+        Err(e @ Error::Unsupported { .. }) => return req.fail(e, Text::new("google.no_client")),
         Err(e) => return req.err(e),
     };
 

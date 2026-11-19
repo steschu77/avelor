@@ -34,6 +34,7 @@ use crate::texts::Text;
 use crate::undo::History;
 use crate::vault_settings::VaultSettings;
 use crate::watches::Watches;
+use av_google::auth::{self, OAuth};
 use av_store::catalog::{FileRow, Read, Words};
 use av_utils::cancel::Cancel;
 use av_utils::datetime::DateTime;
@@ -385,9 +386,14 @@ pub struct App {
     /// The open vault's Google accounts (`accounts::open`).
     pub google: GoogleAccounts,
 
-    /// Whether this build has Google (the feature `google-account`); without
-    /// it no Google account is loaded, and the page offers none to connect.
+    /// Whether this build has Google (the feature `google-account`, with its
+    /// client); without it no Google account is loaded, and the page offers
+    /// none to connect.
     pub has_google: bool,
+
+    /// The OAuth client Google's accounts sign in and refresh with: the
+    /// build's (`av_google::auth::built_in`).
+    pub oauth: OAuth,
 
     /// The open vault's AI accounts (`accounts::open`).
     pub ai: AiAccounts,
@@ -453,13 +459,15 @@ impl App {
         config: ConfigStore,
         catalog_dir: PathBuf,
     ) -> Self {
+        let oauth = OAuth::new(auth::built_in());
         Self {
             outbox,
             config,
             vault: Vault::new(catalog_dir),
             ui,
             google: GoogleAccounts::default(),
-            has_google: av_google::auth::has_client(),
+            has_google: oauth.get().is_some(),
+            oauth,
             ai: AiAccounts::default(),
             watches: Watches::default(),
             settings: VaultSettings::default(),

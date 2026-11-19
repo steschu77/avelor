@@ -20,6 +20,7 @@ use crate::api;
 use crate::app::{App, UiQueue, UiTask};
 use crate::config::load_config;
 use crate::sys::UiSignal;
+use av_google::auth::{OAuth, OAuthClient};
 use av_pdf::{Dict, Object, Stream, Writer};
 use av_utils::id::Id;
 
@@ -49,6 +50,10 @@ impl Harness {
         let mut app = App::new(Arc::clone(&ui), outbox, config, dir.join("catalog"));
         // The tests run as a build with Google, whatever its features.
         app.has_google = true;
+        app.oauth = OAuth::new(Some(OAuthClient {
+            id: "test.apps.googleusercontent.com".to_string(),
+            secret: "test-secret".to_string(),
+        }));
         Self { app, ui, sent, dir }
     }
 
