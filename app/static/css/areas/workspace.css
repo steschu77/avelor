@@ -205,6 +205,31 @@
   gap: 8px;
 }
 
+/* the user's own Google client (features/workspace/client.js): its head
+   with the guide, then its id and secret as fields or the kept one, each
+   after its label */
+.accounts__client {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.accounts__client>.label {
+  flex: none;
+  width: 10em;
+}
+
+.accounts__client-id {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.accounts__guide {
+  margin-left: auto;
+}
+
 .accounts__calendar,
 .accounts__pick,
 .accounts__work,

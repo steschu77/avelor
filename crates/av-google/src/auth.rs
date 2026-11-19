@@ -27,7 +27,7 @@ use av_utils::cancel::Cancel;
 use av_utils::error::{Error, Result};
 use av_utils::url::{decode_url_component, encode_url_component};
 use av_utils::{base64::encode_base64_url, random::os_random, sha256::sha256};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::client::{self, Client};
 
@@ -70,9 +70,16 @@ const IDENTITY_SCOPES: [&str; 3] = ["openid", "email", "profile"];
 const CONSENT_TIMEOUT: Duration = Duration::from_secs(300);
 
 // ----------------------------------------------------------------------------
+/// Whether this build has Google: the feature `google-account`, with the
+/// build's client (`built_in`) or else the user's own.
+pub fn has_google() -> bool {
+    cfg!(feature = "google-account")
+}
+
+// ----------------------------------------------------------------------------
 /// An OAuth client: a Desktop client of a Google Cloud project. No `Debug`,
 /// so the secret can't reach the log.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OAuthClient {
     pub id: String,
     pub secret: String,
@@ -106,6 +113,41 @@ impl OAuth {
             .read()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
+    }
+
+    // ------------------------------------------------------------------------
+    /// Sign in and refresh through `client` from now on.
+    pub fn set(&self, client: OAuthClient) {
+        *self.0.write().unwrap_or_else(PoisonError::into_inner) = Some(client);
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// Whether Google knows `client` with its secret, before it is kept: a code
+/// exchange with a code that can't be valid, which Google refuses as
+/// `invalid_grant` for a client it knows, and as `invalid_client` for one it
+/// doesn't or whose secret is wrong; that, or any other failure, is the
+/// error.
+pub fn check_client(cancel: &Cancel, client: &OAuthClient) -> Result<()> {
+    let form = [
+        ("code", "avelor-checks-its-client"),
+        ("client_id", client.id.as_str()),
+        ("client_secret", client.secret.as_str()),
+        ("redirect_uri", "http://127.0.0.1"),
+        ("grant_type", "authorization_code"),
+    ];
+    let req = av_http::Client::shared()
+        .request(Method::Post, TOKEN_ENDPOINT)
+        .form(&form)
+        .cancel_with(cancel);
+    known_client(client::execute_empty(req))
+}
+
+/// `check_client`'s answer from the exchange's.
+fn known_client(exchanged: Result<()>) -> Result<()> {
+    match exchanged {
+        Err(Error::Http { reason, .. }) if reason == "invalid_grant" => Ok(()),
+        exchanged => exchanged,
     }
 }
 
@@ -260,8 +302,8 @@ fn token_request(cancel: &Cancel, form: &[(&str, &str)]) -> Result<TokenResponse
 
 // ----------------------------------------------------------------------------
 /// A new access token for `refresh_token`, through `oauth`'s client;
-/// `Error::Expired` if Google no longer accepts it (revoked, or unused for
-/// months) — reconnect needed. `NotConnected` without a client.
+/// `Error::Expired` if Google no longer accepts it (`refused_token`) —
+/// reconnect needed. `NotConnected` without a client.
 pub(crate) fn refresh(cancel: &Cancel, oauth: &OAuth, refresh_token: &str) -> Result<AccessToken> {
     let client = oauth.get().ok_or(Error::NotConnected)?;
     let form = [
@@ -272,8 +314,22 @@ pub(crate) fn refresh(cancel: &Cancel, oauth: &OAuth, refresh_token: &str) -> Re
     ];
     match token_request(cancel, &form) {
         Ok(resp) => Ok(AccessToken::new(resp.access_token, resp.expires_in)),
-        Err(Error::Http { reason, .. }) if reason == "invalid_grant" => Err(Error::Expired),
-        Err(e) => Err(e),
+        Err(e) => Err(refused_token(e)),
+    }
+}
+
+/// A refresh's error: `Expired` where Google no longer takes the token,
+/// revoked or unused for months (`invalid_grant`), or issued to another
+/// client than the one it is refreshed with (`unauthorized_client`: the
+/// user's client was replaced).
+fn refused_token(error: Error) -> Error {
+    match error {
+        Error::Http { reason, .. }
+            if matches!(reason.as_str(), "invalid_grant" | "unauthorized_client") =>
+        {
+            Error::Expired
+        }
+        error => error,
     }
 }
 
@@ -750,6 +806,47 @@ mod tests {
         assert!(!pending.verifier.is_empty() && !pending.state.is_empty());
         let none = begin_consent(&OAuth::default(), &GoogleScope::default(), None, pages());
         assert!(matches!(none, Err(Error::Unsupported { .. })));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn google_s_refusals_tell_the_client_and_the_token() {
+        let refused = |reason: &str| Error::Http {
+            status: 400,
+            reason: reason.to_string(),
+            msg: String::new(),
+        };
+        assert!(known_client(Err(refused("invalid_grant"))).is_ok());
+        let unknown = known_client(Err(refused("invalid_client")));
+        assert!(matches!(unknown, Err(Error::Http { reason, .. }) if reason == "invalid_client"));
+        assert!(matches!(
+            known_client(Err(Error::Timeout)),
+            Err(Error::Timeout)
+        ));
+
+        assert!(matches!(
+            refused_token(refused("invalid_grant")),
+            Error::Expired
+        ));
+        assert!(matches!(
+            refused_token(refused("unauthorized_client")),
+            Error::Expired
+        ));
+        let client = refused_token(refused("invalid_client"));
+        assert!(matches!(client, Error::Http { reason, .. } if reason == "invalid_client"));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_set_client_is_what_every_holder_gets() {
+        let oauth = OAuth::default();
+        let shared = oauth.clone();
+        assert!(shared.get().is_none());
+        oauth.set(OAuthClient {
+            id: "own.apps.googleusercontent.com".to_string(),
+            secret: "own-secret".to_string(),
+        });
+        assert_eq!(shared.get().unwrap().id, "own.apps.googleusercontent.com");
     }
 
     // ------------------------------------------------------------------------

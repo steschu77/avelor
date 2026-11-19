@@ -420,7 +420,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `structure.rs` | the structural commands: `create_entity`, threads, projects (`create_project`, `set_project`), titles, stars, archiving, labels, links (a booking's too), `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
 | `config.rs` | `config.yaml` (`ConfigStore`: read through its getters, each setter writes the file) |
 | `accounts.rs` | both kinds of account: the one pass over `.avelor/accounts/` on vault open, the events `accounts` / `account_removed`, `disconnect_account`, `remove_account`; their dispatch tests |
-| `google/accounts.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account; the auto-syncs' schedule, `SYNC_EVERY` and `AutoSyncs` |
+| `google/accounts.rs`, `google/oauth.rs`, `google.rs` | Google account files, scope levels, the `GoogleAccounts` sub-state; the OAuth client, the build's or the user's own (`google.client`); the Google commands (connect, cancel, calendars, disconnect); `finish_sync`, the end of every sync of an account; the auto-syncs' schedule, `SYNC_EVERY` and `AutoSyncs` |
 | `config/files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai/context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file with its attachments' read text, within a budget, each as far as its classification reaches the model; its tests |
@@ -474,9 +474,9 @@ the only `cfg(target_os)` in `app/src`:
 - `UiSignal` (`Send + Sync`): `wake()` and `close()`. `UiQueue` holds one instead of an
   `HWND`; tests use `UiSignal::none()`.
 - `Owner`: what a `UiTask::Modal` gets instead of an `HWND`.
-  `pick_folder(&Owner, title)` waits in the platform's modal loop
-  (`IFileOpenDialog`; `gtk::FileDialog` in a nested `glib::MainLoop`), so
-  `App::on_ui` keeps its meaning.
+  `pick_folder(&Owner, title)` and `pick_file` wait in the platform's
+  modal loop (`IFileOpenDialog`; `gtk::FileDialog` in a nested
+  `glib::MainLoop`), so `App::on_ui` keeps its meaning.
 - `open_url`, `open_path`, `show_error` (a failed start: `MessageBoxW`, or `gtk::AlertDialog` if GTK
   is up, else stderr), `preview`, the watch folder expansion,
   `mark_downloaded`, the user's `languages`, and `BRIDGE_JS`.
@@ -557,7 +557,7 @@ nothing imports `app.js`.
 | `features/lenses/types.js` | the type selection of the Documents and Timeline lenses: the types (`DOC_TYPES`, `typeOf`), a lens's bar of toggles and its preferences (`typeBar`), the lens head's Types button |
 | `features/lenses/scrub.js` | the scrubber of the Timeline and Bank lenses (`scrubber`): its head with the range picked, Clear and Today, a track of a bar per week the lens draws, a dashed line at today and the labels under it, the range dragged across it or picked (`pick`); the weeks (`weeksBetween`, `weekOf`) |
 | `features/workspace/models.js` | the models features pick: the AI providers, `aiModelOf`, the picker (`aiModelPicker`), `aiMissingHint`; its way to the Accounts page is the `accounts.open` action |
-| `features/workspace/folders.js`, `features/workspace/accounts.js`, `features/workspace/trash.js` | Workspace pages: the folder watches with their types; the accounts, Google (a calendar's Work of) and AI; the trash |
+| `features/workspace/folders.js`, `features/workspace/accounts.js`, `features/workspace/client.js`, `features/workspace/trash.js` | Workspace pages: the folder watches with their types; the accounts, Google (a calendar's Work of, the user's own client) and AI; the trash |
 | `features/import/scans.js`, `features/import/email.js` | Import scans; Fetch email, and an account's email auto-sync |
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event, with Stop |
@@ -709,8 +709,8 @@ The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
   size and maximized state, the language the user picked (`language`,
   `localization.md#language`), and the page's preferences (`prefs`,
   `ui.md#preferences`);
-- the accounts' DPAPI secrets, `<id>.token` and `<id>.key`
-  (`accounts.md#secrets`);
+- the accounts' DPAPI secrets, `<id>.token` and `<id>.key`, and the
+  user's own Google client, `google.client` (`accounts.md#secrets`);
 - the WebView2 profile in `…\Avelor\WebView2`;
 - the log files, one per run, in `…\Avelor\log`
   (`development.md#diagnosis`);

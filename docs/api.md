@@ -53,7 +53,9 @@ which answers through a `Req`.
   `cancelled`, `not_found` (no entity, account, watch, job or message with that id), `wrong_kind` (the id
   names something of another kind than the command takes), `not_writable`,
   `changed_outside`, `file_not_found`, `file_write`, `file_exists`, `spend_limit`, `win32`, `gtk`, `http`, …. `Req::fail` answers in the host's own
-  words where the page shows them, `Req::err` with the code's own text.
+  words where the page shows them, `Req::err` with the code's own text
+  ("Something went wrong (http)."; `expired`'s asks to reconnect the
+  account).
 - The page sends **strings** (`JSON.stringify`), since the host reads with
   `TryGetWebMessageAsString`.
 - **Decoding is written by hand**: `Command::decode` matches on `cmd` and
@@ -94,7 +96,7 @@ Host modules: `api.rs`, `indexing.rs`, `vault_settings.rs`, `search.rs`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one (`vault.md#flows`, A1), unless its format is newer (`vault.md#vault-config`: a `notice`, nothing opened): its accounts, watches and settings (`accounts`, `watches`, `vault_settings`), then the indexing (`vault`, an `entity` per file, `vault_error`, the indexing's `job` events; `vault.md#opening`). `{google}` once the indexing has started: whether this build has Google (`accounts.md#design`). |
+| `ready` | — | The page is loaded and listens. A `config.yaml` that couldn't be read at start is told first (`notice`). The host opens the vault of the last session (or the one the command line names), if there is one (`vault.md#flows`, A1), unless its format is newer (`vault.md#vault-config`: a `notice`, nothing opened): its accounts, watches and settings (`accounts`, `watches`, `vault_settings`), then the indexing (`vault`, an `entity` per file, `vault_error`, the indexing's `job` events; `vault.md#opening`). `{google, google_client}` once the indexing has started: whether this build has Google, and its client: `"built-in"`, the user's own as `{id, secret}` (the secret's ends only), or null while there is none (`accounts.md#design`). |
 | `switch_vault` | `{ path? }` | Open the vault at `path`, or (without one, as the page sends it) the folder picked in a dialog owned by the main window. Remembered for the next start (`config.yaml` `vault`), opened once the work bound to the open vault has stopped (`architecture.md#jobs`), and indexed as on `ready`. `ok {path}`, the vault being opened, once the switch is under way; `path` is null when the dialog was cancelled, which keeps the open vault; `unsupported` for a vault of a newer format ("This vault was written by a newer Avelor …", `vault.md#vault-config`), which keeps it too and isn't remembered. The page sends its unsaved edits first. |
 | `set_vault_settings` | `{ chat_model?, classification? }` | Change the open vault's settings (`.avelor/vault.yaml`, `vault.md#vault-config`); only the fields given change. `chat_model` is `{account, model}`, the model the assistant answers with, checked when it is used (`accounts.md#model-choice`); `classification` that of an entity without one of its own (`vault.md#metadata`), `public` not written. Pushes `vault_settings`, then `null`; `invalid_path` (no vault is open), or the failed save ("Could not save the vault's settings."). |
 | `set_prefs` | `{ prefs }` | Store the page's preferences, `{ key: value }` with string values, replacing the ones stored (`ui.md#preferences`). `null`, or the failed save ("Could not save the settings"); a value that isn't a string is `bad_request`. |
@@ -168,13 +170,15 @@ Host module: `trash.rs`. `vault.md#trash`.
 
 ### Google account commands <a id="google"></a>
 
-Host module: `google.rs`, `accounts.rs` (both kinds). `accounts.md`.
+Host module: `google.rs`, `google/oauth.rs` (the client), `accounts.rs` (both kinds). `accounts.md`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `connect_google` | `{ account?, levels }` | Connect a Google account (no `account`) or reconnect one, asking for `levels` (`{"email": "read", "calendar": "full", …}`, each `off`/`read`/`full`). The browser opens for the sign-in (loopback redirect, 5-minute limit); a new connect replaces the pending one, which answers `cancelled`, and so do `cancel_connect` and opening another vault. Reconnecting keeps the account's id and must sign in as the same email (`wrong_account`); a new connect of an email the vault has updates that account. Pushes `account`, then `ok {id}`. Else `timeout` or `denied` (the sign-in), `not_found` (no such account, or it was removed meanwhile), `invalid_path` (no vault is open to keep it in), `unsupported` (a build without the OAuth client, `accounts.md#design`). |
+| `connect_google` | `{ account?, levels }` | Connect a Google account (no `account`) or reconnect one, asking for `levels` (`{"email": "read", "calendar": "full", …}`, each `off`/`read`/`full`). The browser opens for the sign-in (loopback redirect, 5-minute limit); a new connect replaces the pending one, which answers `cancelled`, and so do `cancel_connect` and opening another vault. Reconnecting keeps the account's id and must sign in as the same email (`wrong_account`); a new connect of an email the vault has updates that account. Pushes `account`, then `ok {id}`. Else `timeout` or `denied` (the sign-in), `not_found` (no such account, or it was removed meanwhile), `invalid_path` (no vault is open to keep it in), `unsupported` (no OAuth client: none in the build, or none of the user's own yet, `accounts.md#design`). |
 | `cancel_connect` | — | Abandon the pending sign-in, if there is one: `null`; the connect answers `cancelled`. |
-| `list_calendars` | `{ account }` | The account's calendars: `ok {calendars: [{id, name, color, primary}]}`, the primary calendar first, then by name. Checked calendars take their current names and colors; if that changed any, `account` is pushed first. `not_found`, `not_connected`, or the request's error. |
+| `set_google_client` | `{ id, secret }` | The user's own OAuth client (`accounts.md#own-client`), in a build without one of its own: checked with Google first, then kept in `google.client`, replacing the one before; a newer one supersedes a check under way, which answers `cancelled`. Pushes `google_client`, then `null`. Else `invalid_argument` (an id that doesn't end in `.apps.googleusercontent.com`, no secret), `http` (Google doesn't know the client, or its secret is wrong), `unsupported` (a build with its own client, or without Google). |
+| `load_google_client` | — | As `set_google_client`, with the client from the file Google hands out, picked in a dialog owned by the main window: a Desktop app's (`installed`); a web application's is `unsupported`, a file that isn't one `invalid_file_type` or `serde`. `null` when the dialog was cancelled too. |
+| `list_calendars` | `{ account }` | The account's calendars: `ok {calendars: [{id, name, color, primary}]}`, the primary calendar first, then by name. Checked calendars take their current names and colors; if that changed any, `account` is pushed first. `not_found`, `not_connected`, `unsupported` while the user's own client isn't given ("Add your Google client first."), or the request's error. |
 | `set_calendar_source` | `{ account, calendar: {id, name, color}, selected }` | Check or uncheck a calendar as a source, stored in the account file. Pushes `account` (also when nothing changed), then `null`. |
 | `disconnect_account` | `{ account }` | Either kind: a Google account's token is revoked at Google (best effort) and deleted, an AI account's key deleted; the account file stays, marked `disconnected` (`accounts.md#connection`). Pushes `account`, then `null`. |
 | `remove_account` | `{ account }` | Forget an account that isn't connected (`disconnected` or `reconnect`; an Ollama account in any state): its file and secret are deleted. Pushes `account_removed`, then `null`; `unsupported` for a connected account. |
@@ -230,8 +234,9 @@ Host module: `bank.rs`. `import.md#statements`.
 ### Email commands <a id="email"></a>
 
 Host module: `email.rs`. `email.md`. The errors of every `email_*`:
-`not_found` (no such account), `not_connected`, and Gmail's (`http`,
-`network`, …) in the host's words ("Searching failed."), the error in the log.
+`not_found` (no such account), `not_connected`, `unsupported` while the
+user's own client isn't given, and Gmail's (`http`, `network`, …) in the
+host's words ("Searching failed."), the error in the log.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
@@ -247,7 +252,7 @@ Host module: `calendar.rs`. `calendar.md`.
 
 | Command | Args | Reply and pushes |
 |---|---|---|
-| `calendar_sync` | `{ account, calendar }` | Sync the checked calendar `calendar` (Google's id) as a job (`calendar.md#syncing`), `ok {job}` once it started. Every entity written arrives as `entity`, a changed body also as `content`; each failed event as a `notice`; at the end `account` (`last_sync`), then the job's end with the summary ("3 new · 1 updated") or why it failed. Stopped (`cancel_job`), it still records what it did. Refused before any job: `unsupported` while another sync runs ("Another calendar sync is still running.") or for an account without calendar access, `not_found` (no such account), `not_connected`, `invalid_argument` for a calendar that isn't one of the account's sources. |
+| `calendar_sync` | `{ account, calendar }` | Sync the checked calendar `calendar` (Google's id) as a job (`calendar.md#syncing`), `ok {job}` once it started. Every entity written arrives as `entity`, a changed body also as `content`; each failed event as a `notice`; at the end `account` (`last_sync`), then the job's end with the summary ("3 new · 1 updated") or why it failed. Stopped (`cancel_job`), it still records what it did. Refused before any job: `unsupported` while another sync runs ("Another calendar sync is still running.") or for an account without calendar access, as while the user's own client isn't given, `not_found` (no such account), `not_connected`, `invalid_argument` for a calendar that isn't one of the account's sources. |
 | `set_calendar_sync` | `{ account, calendar, enabled }` | Switch the auto-sync of the account's checked calendar on or off (`calendar.md#auto-sync`), stored in the account file (`auto-sync: true`); switched on, the calendar is due at the clock's next tick. Pushes `account` (its `calendars[].auto_sync`), then `null`; `not_found`, `invalid_argument` for a calendar that isn't one of the account's sources, or the failed save ("Could not save the account."). |
 
 ### Chat commands <a id="chat"></a>
@@ -279,6 +284,7 @@ What the host pushes; the page listens with `rpcOn`.
 | `accounts` | `{ items: [account…] }` | A vault opened: its accounts, from `.avelor/accounts/`, replacing the ones the page has. Each item is an `account`'s data. |
 | `account` | Google: `{ id, kind: "google", email, scope: { email, calendar, contacts, tasks }, connected, last_sync, status, calendars: [{ id, name, color, auto_sync }], email: { filter, auto_update, last_fetch, analysis, auto_sync: { enabled, filter, since, analysis } \| null } \| null }`; AI: `{ id, kind: "anthropic"\|"openai"\|"mistral"\|"gemini"\|"ollama", key, address, status, connected, offered, spend_limit, spent: { cost, calls, unpriced } }` | An account was connected, changed, used or disconnected. Each `scope` level is `off`/`read`/`full`; `status` is `connected`, `disconnected` or `reconnect`, an Ollama account's `running`/`not running`/`unknown` (`accounts.md#connection`). `key` is only the key's ends (`sk-…4f2a`) or null; `spent` is what the account's calls cost this month (UTC): USD of the priced calls, all calls, and the calls whose price is unknown. An email `analysis` is `{level, model?}` or null (off). |
 | `account_removed` | `{ id }` | The account was removed (`remove_account`); its files are gone. |
+| `google_client` | `{ id, secret }` | The user's own Google client was kept (`set_google_client`, `load_google_client`): its id and its secret's ends. |
 | `watches` | `{ items: [watch…] }` | A vault opened: its folder watches, from `.avelor/watches/`, replacing the ones the page has. Each item is a `watch`'s data. |
 | `watch` | `{ id, type: "images"\|"pdf"\|"statements", name, folder, subfolders, patterns, collect, account, models, analysis, keep_original, pair_transfers, enabled, added }` | A watch was created or changed. `name` is the folder's name if the watch has none (the page shows a statements watch's account's title instead); `folder` is as stored (`%USERPROFILE%\…`, on Linux `~/…`), empty for a statements watch whose folder isn't chosen yet; `collect` is `together`, `single`, or null (always for a PDF watch); `account` the bank account a statements watch imports into, else null; `models` maps a step (`read`) to its pick, `{account, model}`; empty until one is picked; `analysis` is `{level, model}` or null; `pair_transfers` whether a statements watch's imports pair transfers (`import.md#statements`). |
 | `watch_removed` | `{ id }` | The watch was removed (`remove_watch`); its file is gone. |

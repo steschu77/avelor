@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use av_utils::error::{Error, Result};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance, CoTaskMemFree};
+use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
 use windows::Win32::UI::Shell::{
     FOS_PICKFOLDERS, FileOpenDialog, IFileOpenDialog, IShellItem, SIGDN_FILESYSPATH, ShellExecuteW,
 };
@@ -46,6 +47,26 @@ pub fn pick_folder(owner: &Owner, title: &str) -> Option<PathBuf> {
         if let Ok(opts) = dialog.GetOptions() {
             let _ = dialog.SetOptions(opts | FOS_PICKFOLDERS);
         }
+        dialog.Show(Some(owner.0)).ok()?;
+        item_path(&dialog.GetResult().ok()?)
+    }
+}
+
+// ----------------------------------------------------------------------------
+/// The file the user picks in a dialog owned by `owner`, of the files
+/// `pattern` matches (`*.json`), named `kind`; `None` if the dialog was
+/// cancelled.
+pub fn pick_file(owner: &Owner, title: &str, kind: &str, pattern: &str) -> Option<PathBuf> {
+    let (kind, pattern) = (HSTRING::from(kind), HSTRING::from(pattern));
+    let types = [COMDLG_FILTERSPEC {
+        pszName: PCWSTR(kind.as_ptr()),
+        pszSpec: PCWSTR(pattern.as_ptr()),
+    }];
+    unsafe {
+        let dialog: IFileOpenDialog =
+            CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).ok()?;
+        let _ = dialog.SetTitle(&HSTRING::from(title));
+        let _ = dialog.SetFileTypes(&types);
         dialog.Show(Some(owner.0)).ok()?;
         item_path(&dialog.GetResult().ok()?)
     }

@@ -11,6 +11,7 @@ export const store = createStore({
   vault_state: 'none', // 'none' | 'indexing' | 'open' (the `vault` event)
   vault_errors: [], // [{ path, error }] the indexing couldn't read (`vault_error`); always replaced, never mutated
   google: true, // whether this build has Google (`ready`)
+  google_client: 'built-in', // its client: 'built-in', the user's own, or null (`ready`, features/workspace/client.js)
   // the status bar's notices, newest last (ui/statusbar.js): { key, text,
   // level: 'error' | 'info', entity? }; always replaced
   notices: [],

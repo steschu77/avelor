@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 use crate::api;
 use crate::app::{App, UiQueue, UiTask};
 use crate::config::load_config;
+use crate::google::oauth::GoogleClient;
 use crate::sys::UiSignal;
 use av_google::auth::{OAuth, OAuthClient};
 use av_pdf::{Dict, Object, Stream, Writer};
@@ -47,8 +48,9 @@ impl Harness {
             Box::new(move |text: &str| sent.borrow_mut().push(text.to_string()))
         };
         let mut app = App::new(Arc::clone(&ui), outbox, config, dir.join("catalog"));
-        // The tests run as a build with Google, whatever its features.
-        app.has_google = true;
+        // The tests run as a build with its own client, whatever its
+        // features and variables.
+        app.google_client = GoogleClient::BuiltIn;
         app.oauth = OAuth::new(Some(OAuthClient {
             id: "test.apps.googleusercontent.com".to_string(),
             secret: "test-secret".to_string(),

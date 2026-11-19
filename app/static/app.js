@@ -103,5 +103,5 @@ rpcOn('vault', ({ state }) => {
 });
 
 // The page listens: the host opens the vault of the last session, and
-// says whether this build has Google.
-rpcCall('ready').then(({ google }) => store.setState({ google }));
+// says whether this build has Google, and its client.
+rpcCall('ready').then(({ google, google_client }) => store.setState({ google, google_client }));
