@@ -1,15 +1,16 @@
 //! Google OAuth 2.0 for installed apps: the loopback consent flow with
 //! PKCE, the authorization-code exchange, and access-token refresh.
 //!
-//! The app ships one OAuth Desktop client (Google treats desktop client
-//! secrets as non-confidential), taken from the build with the feature
-//! `google-account`: `AVELOR_GOOGLE_CLIENT_ID` and
-//! `AVELOR_GOOGLE_CLIENT_SECRET`, never the sources; such a build fails
-//! without them. A build without the feature has no client and can't sign
-//! in (`has_client`). The refresh token is the real credential:
-//! `PendingConsent::redeem` hands it out inside a `Client`, and the caller
-//! persists it (encrypted, `av_utils::secret`) outside the vault. Access
-//! tokens live only in memory, inside their `Client`.
+//! The sign-in goes through an OAuth Desktop client (Google treats a
+//! desktop client's secret as non-confidential), the build's with the
+//! feature `google-account` and both `AVELOR_GOOGLE_CLIENT_ID` and
+//! `AVELOR_GOOGLE_CLIENT_SECRET` (`built_in`), never the sources. The app
+//! holds it in one `OAuth` that every account's `Client` refreshes through;
+//! without one, it can't sign in (`begin_consent`). The refresh token is
+//! the real credential: `PendingConsent::redeem` hands it out inside a
+//! `Client`, and the caller persists it (encrypted, `av_utils::secret`)
+//! outside the vault. Access tokens live only in memory, inside their
+//! `Client`.
 //!
 //! No extra crates: the loopback listener is `std::net::TcpListener`, PKCE
 //! uses av-utils' SHA-256 and OS randomness, HTTP goes through `client`.
@@ -18,6 +19,7 @@
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
+use std::sync::{Arc, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use av_http::Method;
@@ -33,24 +35,31 @@ use crate::client::{self, Client};
 const AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 const REVOKE_ENDPOINT: &str = "https://oauth2.googleapis.com/revoke";
-/// The OAuth client's id and secret, from the build's environment; an empty
-/// one fails the build as a missing one does (CI hands a missing secret
-/// over as an empty variable).
+/// The build's OAuth client, its id and secret from the build's
+/// environment: both or neither, an empty one counting as unset (CI hands a
+/// missing secret over as an empty variable).
 #[cfg(feature = "google-account")]
-const CLIENT: Option<(&str, &str)> = {
-    let (id, secret) = (
-        env!("AVELOR_GOOGLE_CLIENT_ID"),
-        env!("AVELOR_GOOGLE_CLIENT_SECRET"),
-    );
-    assert!(
-        !id.is_empty() && !secret.is_empty(),
-        "AVELOR_GOOGLE_CLIENT_ID or AVELOR_GOOGLE_CLIENT_SECRET is empty: set both, \
-         or build without the feature google-account"
-    );
-    Some((id, secret))
+const BUILT_IN: Option<(&str, &str)> = {
+    const fn set(value: Option<&'static str>) -> Option<&'static str> {
+        match value {
+            Some(value) if !value.is_empty() => Some(value),
+            _ => None,
+        }
+    }
+    match (
+        set(option_env!("AVELOR_GOOGLE_CLIENT_ID")),
+        set(option_env!("AVELOR_GOOGLE_CLIENT_SECRET")),
+    ) {
+        (Some(id), Some(secret)) => Some((id, secret)),
+        (None, None) => None,
+        _ => panic!(
+            "only one of AVELOR_GOOGLE_CLIENT_ID and AVELOR_GOOGLE_CLIENT_SECRET is set: \
+             set both, or neither"
+        ),
+    }
 };
 #[cfg(not(feature = "google-account"))]
-const CLIENT: Option<(&str, &str)> = None;
+const BUILT_IN: Option<(&str, &str)> = None;
 
 /// Prefix of the per-service scopes.
 const SCOPE_PREFIX: &str = "https://www.googleapis.com/auth/";
@@ -61,18 +70,43 @@ const IDENTITY_SCOPES: [&str; 3] = ["openid", "email", "profile"];
 const CONSENT_TIMEOUT: Duration = Duration::from_secs(300);
 
 // ----------------------------------------------------------------------------
-/// Whether this build can sign in to Google: it was built with an OAuth
-/// client.
-pub fn has_client() -> bool {
-    CLIENT.is_some()
+/// An OAuth client: a Desktop client of a Google Cloud project. No `Debug`,
+/// so the secret can't reach the log.
+#[derive(Clone, PartialEq, Eq)]
+pub struct OAuthClient {
+    pub id: String,
+    pub secret: String,
 }
 
-fn client_id() -> &'static str {
-    CLIENT.map_or("", |(id, _)| id)
+// ----------------------------------------------------------------------------
+/// The build's OAuth client (`BUILT_IN`), if it has one.
+pub fn built_in() -> Option<OAuthClient> {
+    BUILT_IN.map(|(id, secret)| OAuthClient {
+        id: id.to_string(),
+        secret: secret.to_string(),
+    })
 }
 
-fn client_secret() -> &'static str {
-    CLIENT.map_or("", |(_, secret)| secret)
+// ----------------------------------------------------------------------------
+/// The OAuth client the app signs in with, shared with every account's
+/// `Client`, which refreshes its access token through it.
+#[derive(Clone, Default)]
+pub struct OAuth(Arc<RwLock<Option<OAuthClient>>>);
+
+impl OAuth {
+    // ------------------------------------------------------------------------
+    pub fn new(client: Option<OAuthClient>) -> Self {
+        Self(Arc::new(RwLock::new(client)))
+    }
+
+    // ------------------------------------------------------------------------
+    /// The client, if there is one.
+    pub fn get(&self) -> Option<OAuthClient> {
+        self.0
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -225,12 +259,14 @@ fn token_request(cancel: &Cancel, form: &[(&str, &str)]) -> Result<TokenResponse
 }
 
 // ----------------------------------------------------------------------------
-/// A new access token for `refresh_token`; `Error::Expired` if Google no
-/// longer accepts it (revoked, or unused for months) — reconnect needed.
-pub(crate) fn refresh(cancel: &Cancel, refresh_token: &str) -> Result<AccessToken> {
+/// A new access token for `refresh_token`, through `oauth`'s client;
+/// `Error::Expired` if Google no longer accepts it (revoked, or unused for
+/// months) — reconnect needed. `NotConnected` without a client.
+pub(crate) fn refresh(cancel: &Cancel, oauth: &OAuth, refresh_token: &str) -> Result<AccessToken> {
+    let client = oauth.get().ok_or(Error::NotConnected)?;
     let form = [
-        ("client_id", client_id()),
-        ("client_secret", client_secret()),
+        ("client_id", client.id.as_str()),
+        ("client_secret", client.secret.as_str()),
         ("refresh_token", refresh_token),
         ("grant_type", "refresh_token"),
     ];
@@ -256,6 +292,10 @@ pub fn revoke(cancel: &Cancel, refresh_token: &str) -> Result<()> {
 // the loopback consent flow
 pub struct PendingConsent {
     pub url: String,
+    /// The client the consent is for, which redeems its code; the accounts'
+    /// `OAuth` beside it.
+    client: OAuthClient,
+    oauth: OAuth,
     listener: TcpListener,
     verifier: String,
     state: String,
@@ -267,15 +307,19 @@ pub struct PendingConsent {
 
 // ----------------------------------------------------------------------------
 /// Phase 1 (UI thread): bind the loopback listener and build the consent
-/// URL. The caller opens the URL in the browser, then runs `wait_code` and
-/// `redeem` on a worker thread. `login_hint` (an
-/// email) preselects the account when reconnecting; `pages` are what the
-/// browser's tab shows at the end.
+/// URL for `oauth`'s client (`Unsupported` without one). The caller opens
+/// the URL in the browser, then runs `wait_code` and `redeem` on a worker
+/// thread. `login_hint` (an email) preselects the account when
+/// reconnecting; `pages` are what the browser's tab shows at the end.
 pub fn begin_consent(
+    oauth: &OAuth,
     scope: &GoogleScope,
     login_hint: Option<&str>,
     pages: SignInPages,
 ) -> Result<PendingConsent> {
+    let client = oauth.get().ok_or_else(|| Error::Unsupported {
+        what: "signing in to Google without an OAuth client".to_string(),
+    })?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     let redirect = format!("http://127.0.0.1:{port}");
@@ -292,7 +336,7 @@ pub fn begin_consent(
         "{AUTH_ENDPOINT}?response_type=code&client_id={}&redirect_uri={}&scope={}\
          &code_challenge={challenge}&code_challenge_method=S256&state={state}\
          &access_type=offline&prompt=consent",
-        encode_url_component(client_id()),
+        encode_url_component(&client.id),
         encode_url_component(&redirect),
         encode_url_component(&scope.to_scope_string()),
     );
@@ -306,6 +350,8 @@ pub fn begin_consent(
     );
     Ok(PendingConsent {
         url,
+        client,
+        oauth: oauth.clone(),
         listener,
         verifier,
         state,
@@ -345,8 +391,8 @@ impl PendingConsent {
     pub fn redeem(&self, cancel: &Cancel, code: &str) -> Result<Client> {
         let form = [
             ("code", code),
-            ("client_id", client_id()),
-            ("client_secret", client_secret()),
+            ("client_id", self.client.id.as_str()),
+            ("client_secret", self.client.secret.as_str()),
             ("redirect_uri", self.redirect.as_str()),
             ("grant_type", "authorization_code"),
             ("code_verifier", self.verifier.as_str()),
@@ -357,7 +403,12 @@ impl PendingConsent {
         })?;
         let scope = GoogleScope::from_scope_string(&resp.scope);
         let access = AccessToken::new(resp.access_token, resp.expires_in);
-        Ok(Client::with_access(refresh_token, scope, access))
+        Ok(Client::with_access(
+            self.oauth.clone(),
+            refresh_token,
+            scope,
+            access,
+        ))
     }
 }
 
@@ -628,6 +679,14 @@ mod tests {
     use super::*;
 
     // ------------------------------------------------------------------------
+    fn oauth() -> OAuth {
+        OAuth::new(Some(OAuthClient {
+            id: "test.apps.googleusercontent.com".to_string(),
+            secret: "test-secret".to_string(),
+        }))
+    }
+
+    // ------------------------------------------------------------------------
     fn pages() -> SignInPages {
         let page = |heading: &str| (heading.to_string(), "A line.".to_string());
         SignInPages {
@@ -670,10 +729,16 @@ mod tests {
     // ------------------------------------------------------------------------
     #[test]
     fn consent_url_carries_pkce_state_and_scope() {
-        let pending = begin_consent(&GoogleScope::default(), None, pages()).unwrap();
+        let pending = begin_consent(&oauth(), &GoogleScope::default(), None, pages()).unwrap();
+        assert!(
+            pending
+                .url
+                .contains("client_id=test.apps.googleusercontent.com&")
+        );
         assert!(pending.url.contains("code_challenge_method=S256"));
         assert!(!pending.url.contains("login_hint"));
-        let hinted = begin_consent(&GoogleScope::default(), Some("a@b.c"), pages()).unwrap();
+        let hinted =
+            begin_consent(&oauth(), &GoogleScope::default(), Some("a@b.c"), pages()).unwrap();
         assert!(hinted.url.contains("&login_hint=a%40b.c"));
         assert!(pending.url.contains("access_type=offline"));
         assert!(pending.url.contains("scope=openid%20email%20profile"));
@@ -683,6 +748,8 @@ mod tests {
                 .contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A")
         );
         assert!(!pending.verifier.is_empty() && !pending.state.is_empty());
+        let none = begin_consent(&OAuth::default(), &GoogleScope::default(), None, pages());
+        assert!(matches!(none, Err(Error::Unsupported { .. })));
     }
 
     // ------------------------------------------------------------------------
@@ -730,7 +797,7 @@ mod tests {
     // ------------------------------------------------------------------------
     #[test]
     fn loopback_skips_idle_unrelated_and_stale_requests() {
-        let pending = begin_consent(&GoogleScope::default(), None, pages()).unwrap();
+        let pending = begin_consent(&oauth(), &GoogleScope::default(), None, pages()).unwrap();
         let addr = pending.listener.local_addr().unwrap();
         let state = pending.state.clone();
         let request = move |line: String| {
@@ -773,7 +840,7 @@ mod tests {
     // ------------------------------------------------------------------------
     #[test]
     fn cancelling_ends_the_wait_with_none() {
-        let pending = begin_consent(&GoogleScope::default(), None, pages()).unwrap();
+        let pending = begin_consent(&oauth(), &GoogleScope::default(), None, pages()).unwrap();
         let cancel = pending.cancel_handle();
         let canceller = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(100));

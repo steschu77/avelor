@@ -9,6 +9,7 @@
 use std::fs;
 use std::path::Path;
 
+use av_google::auth::OAuth;
 use av_utils::id::Id;
 use av_vault::schema::layout;
 use serde::Serialize;
@@ -34,9 +35,9 @@ enum Loaded {
 // ----------------------------------------------------------------------------
 /// The accounts in `folder`, their secrets in `secrets`: every `*.yaml`,
 /// handed to the loader of its top-level key (`google`, or a provider's);
-/// AI accounts read their spend files themselves. Other and broken files
-/// are logged and skipped.
-pub(crate) fn load(folder: &Path, secrets: &Path) -> (Vec<Account>, Vec<AiAccount>) {
+/// AI accounts read their spend files themselves, Google's refresh through
+/// `oauth`. Other and broken files are logged and skipped.
+pub(crate) fn load(folder: &Path, secrets: &Path, oauth: &OAuth) -> (Vec<Account>, Vec<AiAccount>) {
     let loaded = load_config_files(folder, "account", |path| {
         if ai::accounts::is_spend_file(path) {
             return Ok(None);
@@ -46,7 +47,7 @@ pub(crate) fn load(folder: &Path, secrets: &Path) -> (Vec<Account>, Vec<AiAccoun
             return Ok(None);
         };
         if map.contains_key("google") {
-            let account = google::accounts::load(path, Value::Mapping(map), secrets)?;
+            let account = google::accounts::load(path, Value::Mapping(map), secrets, oauth)?;
             return Ok(Some(Loaded::Google(account)));
         }
         match ai::accounts::kind_of(&map) {
@@ -76,7 +77,7 @@ pub(crate) fn load(folder: &Path, secrets: &Path) -> (Vec<Account>, Vec<AiAccoun
 pub(crate) fn open(app: &mut App, root: &Path) {
     let folder = root.join(layout::ACCOUNTS);
     let secrets = app.config.dir().to_path_buf();
-    let (mut google, ai) = load(&folder, &secrets);
+    let (mut google, ai) = load(&folder, &secrets, &app.oauth);
     if !app.has_google {
         // Their files stay as they are.
         google.clear();
@@ -201,7 +202,7 @@ mod tests {
         );
         write(&folder.join("broken.yaml"), "google: [unclosed\n");
 
-        let (google, ai) = load(&folder, &secrets);
+        let (google, ai) = load(&folder, &secrets, &OAuth::default());
         fs::remove_dir_all(&dir).unwrap();
 
         assert_eq!(google.len(), 1);

@@ -14,12 +14,14 @@ use av_utils::error::Result;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use crate::auth::{self, AccessToken, GoogleScope};
+use crate::auth::{self, AccessToken, GoogleScope, OAuth};
 
 // ----------------------------------------------------------------------------
 /// A connected account. Cheap to share (`Arc<Client>`): the cached access
-/// token is refreshed on demand by whichever request finds it stale.
+/// token is refreshed on demand by whichever request finds it stale,
+/// through the app's OAuth client (`oauth`).
 pub struct Client {
+    oauth: OAuth,
     refresh_token: String,
     scope: GoogleScope,
     access: Mutex<Option<AccessToken>>,
@@ -29,8 +31,9 @@ impl Client {
     // ------------------------------------------------------------------------
     /// A client for a stored account: the refresh token and the scope that
     /// was granted with it, as persisted by the caller.
-    pub fn new(refresh_token: String, scope: GoogleScope) -> Self {
+    pub fn new(oauth: OAuth, refresh_token: String, scope: GoogleScope) -> Self {
         Self {
+            oauth,
             refresh_token,
             scope,
             access: Mutex::new(None),
@@ -40,11 +43,13 @@ impl Client {
     // ------------------------------------------------------------------------
     /// A freshly consented account, with the access token that came along.
     pub(crate) fn with_access(
+        oauth: OAuth,
         refresh_token: String,
         scope: GoogleScope,
         access: AccessToken,
     ) -> Self {
         Self {
+            oauth,
             refresh_token,
             scope,
             access: Mutex::new(Some(access)),
@@ -78,7 +83,7 @@ impl Client {
             return Ok(token);
         }
         log::debug!("Access token missing or expired; refreshing");
-        let fresh = auth::refresh(cancel, &self.refresh_token)?;
+        let fresh = auth::refresh(cancel, &self.oauth, &self.refresh_token)?;
         let token = fresh.token().to_string();
         *self.lock_access() = Some(fresh);
         Ok(token)

@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use av_google::auth::{GoogleScope, ScopeAccess};
+use av_google::auth::{GoogleScope, OAuth, ScopeAccess};
 use av_google::calendar::CalendarListEntry;
 use av_google::client::Client;
 use av_google::gmail::EmailFilter;
@@ -579,8 +579,8 @@ fn file_safe(s: &str) -> String {
 
 // ----------------------------------------------------------------------------
 /// The Google account in `path` (`value`, its parsed content), its token in
-/// `secrets`.
-pub(crate) fn load(path: &Path, value: Value, secrets: &Path) -> Result<Account> {
+/// `secrets`, refreshed through `oauth`.
+pub(crate) fn load(path: &Path, value: Value, secrets: &Path, oauth: &OAuth) -> Result<Account> {
     let file: AccountFile = serde_yaml_ng::from_value(value)?;
     let mut account = Account {
         path: path.to_path_buf(),
@@ -590,7 +590,7 @@ pub(crate) fn load(path: &Path, value: Value, secrets: &Path) -> Result<Account>
     let secret = account.secret(secrets);
     match secret.read() {
         Ok(token) => {
-            let client = Client::new(token, account.file.google.scope());
+            let client = Client::new(oauth.clone(), token, account.file.google.scope());
             account.client = Some(Arc::new(client));
         }
         Err(e) if account.file.google.disconnected.is_none() => {
@@ -792,7 +792,7 @@ last-sync: 2026-09-27T10:30:00Z
         fn load(&self, name: &str) -> Account {
             let path = self.folder.join(name);
             let value = serde_yaml_ng::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-            load(&path, value, &self.secrets).unwrap()
+            load(&path, value, &self.secrets, &OAuth::default()).unwrap()
         }
 
         fn accounts(&self, names: &[&str]) -> GoogleAccounts {
@@ -915,7 +915,7 @@ last-sync: 2026-09-27T10:30:00Z
             ConnectionStatus::Disconnected
         );
 
-        let client = Client::new("1//new".into(), GoogleScope::default());
+        let client = Client::new(OAuth::default(), "1//new".into(), GoogleScope::default());
         let connected = accounts
             .connect(None, "Someone@Example.com", client)
             .unwrap();
@@ -934,12 +934,12 @@ last-sync: 2026-09-27T10:30:00Z
         let mut accounts = dirs.accounts(&["google_a.yaml"]);
         let id = accounts.iter().next().unwrap().id();
 
-        let client = Client::new("1//b".into(), GoogleScope::default());
+        let client = Client::new(OAuth::default(), "1//b".into(), GoogleScope::default());
         let err = accounts.connect(Some(id), "other@example.com", client);
         assert!(matches!(err, Err(Error::WrongAccount { email }) if email == "other@example.com"));
         let token = accounts.connected(id).unwrap().refresh_token().to_string();
         assert_eq!(token, "1//a", "the account is as it was");
-        let client = Client::new("1//c".into(), GoogleScope::default());
+        let client = Client::new(OAuth::default(), "1//c".into(), GoogleScope::default());
         let unknown = accounts.connect(Some(Id::generate()), "x@example.com", client);
         assert!(matches!(unknown, Err(Error::NotFound)));
     }
@@ -949,7 +949,7 @@ last-sync: 2026-09-27T10:30:00Z
     fn new_accounts_are_named_after_their_email_and_need_a_vault() {
         let dirs = Dirs::new();
         let mut accounts = dirs.accounts(&[]);
-        let client = Client::new("1//t".into(), GoogleScope::default());
+        let client = Client::new(OAuth::default(), "1//t".into(), GoogleScope::default());
         let id = accounts.connect(None, "a/b@example.com", client).unwrap();
         let account = accounts.get(id).unwrap();
         let path = dirs.folder.join("google_a_b@example.com.yaml");
@@ -957,7 +957,7 @@ last-sync: 2026-09-27T10:30:00Z
         assert!(path.exists() && dirs.token(id).exists());
         assert!(account.file.google.connected.is_some());
 
-        let client = Client::new("1//t".into(), GoogleScope::default());
+        let client = Client::new(OAuth::default(), "1//t".into(), GoogleScope::default());
         let none = GoogleAccounts::default().connect(None, "c@example.com", client);
         assert!(matches!(none, Err(Error::InvalidPath { .. })));
     }
@@ -1112,7 +1112,7 @@ last-sync: 2026-09-27T10:30:00Z
     // ------------------------------------------------------------------------
     #[test]
     fn refreshing_calendars_renames_and_keeps_missing_ones() {
-        let client = Client::new("1//t".into(), GoogleScope::default());
+        let client = Client::new(OAuth::default(), "1//t".into(), GoogleScope::default());
         let mut account = Account::new(Path::new("cfg"), "a@example.com", client);
         account.set_calendar(calendar("me@example.com", "Me"), true);
         account.set_calendar(calendar("gone@group", "Gone"), true);
