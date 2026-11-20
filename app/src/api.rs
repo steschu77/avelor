@@ -179,6 +179,30 @@ pub fn open_url(app: &mut App, req: Req, url: String) {
 }
 
 // ----------------------------------------------------------------------------
+/// The web view refused to leave the page for `url` (`Shell::on_refused`): a
+/// link the page let through, clicked with the middle button or dropped onto
+/// the window. A web, email or phone link opens in its default app as
+/// `open_url` opens it; anything else (a dropped file, a `javascript:` link)
+/// is only logged.
+pub fn open_refused(app: &mut App, url: String) {
+    if !is_link(&url) {
+        let scheme = url.split_once(':').map_or("", |(scheme, _)| scheme);
+        return log::warn!("Leaving the page refused: a {scheme}: address");
+    }
+    app.on_ui(
+        {
+            let url = url.clone();
+            move |_| sys::open_url(&url)
+        },
+        move |_, opened| {
+            if let Err(e) = opened {
+                log::warn!("Could not open {url}: {e}");
+            }
+        },
+    );
+}
+
+// ----------------------------------------------------------------------------
 /// `open_file {id}`: open the document `id`'s original (`vault.md#document`)
 /// in its default app once the handler has returned, as `open_url`. Only a
 /// PDF or an image ([`may_open`]): an attachment could be a program.
@@ -313,6 +337,17 @@ mod tests {
         assert_eq!(sent[0], json!({ "ev": "notice", "data": notice }));
         assert_eq!(sent[1]["ok"]["google"], json!(true));
         assert_eq!(h.call("ready", json!({})), [sent[1].clone()], "told once");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_refused_navigation_opens_only_a_link() {
+        let mut h = Harness::new("refused-navigation");
+        open_refused(&mut h.app, "file:///C:/Users/a/bill.pdf".to_string());
+        open_refused(&mut h.app, "javascript:alert(1)".to_string());
+        assert!(h.ui.pop().is_none(), "nothing opened");
+        open_refused(&mut h.app, "https://example.com/a".to_string());
+        assert!(matches!(h.ui.pop(), Some(crate::app::UiTask::Modal(_))));
     }
 
     // ------------------------------------------------------------------------

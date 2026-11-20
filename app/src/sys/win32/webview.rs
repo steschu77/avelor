@@ -12,10 +12,14 @@ use webview2_com::{
     CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
     Microsoft::Web::WebView2::Win32::{
         COREWEBVIEW2_COLOR, COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
-        COREWEBVIEW2_PHYSICAL_KEY_STATUS, CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2,
-        ICoreWebView2Controller, ICoreWebView2Controller2, ICoreWebView2Environment,
-        ICoreWebView2EnvironmentOptions, ICoreWebView2Settings3,
+        COREWEBVIEW2_PHYSICAL_KEY_STATUS, COREWEBVIEW2_PROCESS_FAILED_KIND,
+        CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2, ICoreWebView2Controller,
+        ICoreWebView2Controller2, ICoreWebView2Environment, ICoreWebView2EnvironmentOptions,
+        ICoreWebView2Settings3, ICoreWebView2Settings4,
     },
+};
+use webview2_com::{
+    NavigationStartingEventHandler, NewWindowRequestedEventHandler, ProcessFailedEventHandler,
 };
 use webview2_com::{WebMessageReceivedEventHandler, take_pwstr};
 use windows::Win32::Foundation::{E_POINTER, HWND};
@@ -181,18 +185,27 @@ fn zoom_key(key: u32) -> Option<Zoom> {
 }
 
 // ----------------------------------------------------------------------------
-/// One-time webview configuration: settings, the message-received handler,
-/// and the initial navigation, to the `page`.
+/// One-time webview configuration: settings, the page held to itself
+/// (`hold`), the message-received handler, and the initial navigation, to
+/// the `page`. DevTools and the context menu only in a debug build, as on
+/// Linux; what is typed into the page's fields isn't kept for suggestions.
 fn setup(hwnd: HWND, webview: &ICoreWebView2, page: String) -> Result<()> {
     unsafe {
         if let Ok(settings) = webview.Settings() {
             let _ = settings.SetIsStatusBarEnabled(false);
             let _ = settings.SetIsZoomControlEnabled(true);
             let _ = settings.SetIsScriptEnabled(true);
+            let _ = settings.SetAreDevToolsEnabled(cfg!(debug_assertions));
+            let _ = settings.SetAreDefaultContextMenusEnabled(cfg!(debug_assertions));
             if let Ok(s3) = settings.cast::<ICoreWebView2Settings3>() {
                 let _ = s3.SetAreBrowserAcceleratorKeysEnabled(false);
             }
+            if let Ok(s4) = settings.cast::<ICoreWebView2Settings4>() {
+                let _ = s4.SetIsGeneralAutofillEnabled(false);
+                let _ = s4.SetIsPasswordAutosaveEnabled(false);
+            }
         }
+        hold(hwnd, webview)?;
 
         let mut token: i64 = 0;
         let handler = WebMessageReceivedEventHandler::create(Box::new(move |_sender, args| {
@@ -209,6 +222,60 @@ fn setup(hwnd: HWND, webview: &ICoreWebView2, page: String) -> Result<()> {
         webview.add_WebMessageReceived(&handler, &mut token)?;
 
         webview.NavigateToString(&HSTRING::from(page))?;
+    }
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
+/// Hold the web view to the app's page (`architecture.md#platforms`): its
+/// own load, the first navigation, goes through; every later one and every
+/// new window is refused and handed to the app (`WindowProc::on_refused`),
+/// which opens a link in the browser. A failed process of the web view's is
+/// logged: the page is gone then.
+fn hold(hwnd: HWND, webview: &ICoreWebView2) -> Result<()> {
+    let mut loaded = false;
+    let navigation = NavigationStartingEventHandler::create(Box::new(move |_, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        if !std::mem::replace(&mut loaded, true) {
+            return Ok(());
+        }
+        let mut uri = PWSTR::null();
+        unsafe {
+            args.SetCancel(true)?;
+            args.Uri(&mut uri)?;
+        }
+        let uri = take_pwstr(uri);
+        WindowProc::with_window(hwnd, |window| window.on_refused(uri));
+        Ok(())
+    }));
+    let new_window = NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        let mut uri = PWSTR::null();
+        unsafe {
+            args.SetHandled(true)?;
+            args.Uri(&mut uri)?;
+        }
+        let uri = take_pwstr(uri);
+        WindowProc::with_window(hwnd, |window| window.on_refused(uri));
+        Ok(())
+    }));
+    let failed = ProcessFailedEventHandler::create(Box::new(|_, args| {
+        let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
+        if let Some(args) = args {
+            unsafe { args.ProcessFailedKind(&mut kind)? };
+        }
+        log::error!("A process of WebView2's failed (kind {})", kind.0);
+        Ok(())
+    }));
+    let mut token: i64 = 0;
+    unsafe {
+        webview.add_NavigationStarting(&navigation, &mut token)?;
+        webview.add_NewWindowRequested(&new_window, &mut token)?;
+        webview.add_ProcessFailed(&failed, &mut token)?;
     }
     Ok(())
 }

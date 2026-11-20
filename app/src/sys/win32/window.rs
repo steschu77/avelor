@@ -254,6 +254,52 @@ impl WindowProc {
     }
 
     // ------------------------------------------------------------------------
+    /// The title bar and the web view's ground before the page paints in
+    /// the theme, as the page's colors are.
+    fn follow_theme(&self) {
+        let dark = BOOL::from(self.dark());
+        let _ = unsafe {
+            DwmSetWindowAttribute(
+                self.hwnd(),
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &dark as *const BOOL as *const core::ffi::c_void,
+                std::mem::size_of::<BOOL>() as u32,
+            )
+        };
+        if let Some(controller) = self.controller.borrow().as_ref() {
+            webview::set_background(controller, dark.as_bool());
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// Whether the theme is the dark one, by the user's pick or by Windows'
+    /// theme for apps (WebView2 takes `prefers-color-scheme` from the same
+    /// setting).
+    fn dark(&self) -> bool {
+        match self.theme.get() {
+            Theme::System => apps_dark(),
+            Theme::Light => false,
+            Theme::Dark => true,
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The user picked the theme at `at` in `THEMES`.
+    fn on_theme(&self, at: usize) -> LRESULT {
+        if let Some(theme) = THEMES.get(at) {
+            self.theme.set(*theme);
+            self.follow_theme();
+        }
+        LRESULT(0)
+    }
+
+    // ------------------------------------------------------------------------
+    /// The web view refused to leave the page for `url` (`webview::hold`).
+    pub fn on_refused(&self, url: String) {
+        self.shell.on_refused(url);
+    }
+
+    // ------------------------------------------------------------------------
     /// The page's zoom or fullscreen: the step at `at` in `STEPS`.
     fn on_step(&self, at: usize) -> LRESULT {
         match STEPS.get(at).map(|step| step.zoom()) {
@@ -335,46 +381,6 @@ impl WindowProc {
                 SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
             );
         }
-    }
-
-    // ------------------------------------------------------------------------
-    /// The title bar and the web view's ground before the page paints in
-    /// the theme, as the page's colors are.
-    fn follow_theme(&self) {
-        let dark = BOOL::from(self.dark());
-        let _ = unsafe {
-            DwmSetWindowAttribute(
-                self.hwnd(),
-                DWMWA_USE_IMMERSIVE_DARK_MODE,
-                &dark as *const BOOL as *const core::ffi::c_void,
-                std::mem::size_of::<BOOL>() as u32,
-            )
-        };
-        if let Some(controller) = self.controller.borrow().as_ref() {
-            webview::set_background(controller, dark.as_bool());
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    /// Whether the theme is the dark one, by the user's pick or by Windows'
-    /// theme for apps (WebView2 takes `prefers-color-scheme` from the same
-    /// setting).
-    fn dark(&self) -> bool {
-        match self.theme.get() {
-            Theme::System => apps_dark(),
-            Theme::Light => false,
-            Theme::Dark => true,
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    /// The user picked the theme at `at` in `THEMES`.
-    fn on_theme(&self, at: usize) -> LRESULT {
-        if let Some(theme) = THEMES.get(at) {
-            self.theme.set(*theme);
-            self.follow_theme();
-        }
-        LRESULT(0)
     }
 
     // ------------------------------------------------------------------------
