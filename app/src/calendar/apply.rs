@@ -99,9 +99,9 @@ pub(super) fn apply(app: &mut App, job_id: Id, result: Result<SyncOutput>) {
     let key = (sync.account, sync.source.clone());
     let quiet = sync.auto_sync && app.calendar.auto.is_failing(&key);
     // The host's words in the status bar, the error in the log
-    // (`App::notice`).
+    // (`App::notice`), with the text's key: not the event's subject.
     let fail = |app: &App, text: Text, error: &Error| {
-        log::warn!("{text}: {error}");
+        log::warn!("{}: {error}", text.key);
         if !quiet {
             app.notice(text);
         }
