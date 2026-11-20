@@ -484,7 +484,7 @@ carry scripts, styles, or arbitrary markup outside the editor's model.
   anything else (`javascript:` above all) is rejected, in typed shortcuts,
   the toolbar, and paste/drop alike. A web image stays in the markdown but
   isn't loaded: the page takes images only as `data:` URLs
-  (`architecture.md#platforms`).
+  (`architecture.md#threats`).
 - **Clicking a link never navigates the page** — not in edit mode (where
   it would only get in the way of positioning the caret) and not in
   read-only mode (where the WebView2 host, like WebKitGTK on Linux, has no

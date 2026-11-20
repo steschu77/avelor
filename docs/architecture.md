@@ -520,8 +520,8 @@ posts to `webkit.messageHandlers.host`, and a reply is
 `evaluate_javascript` of `host.receive(…)` with the text as a JSON string
 literal.
 
-**The page held to itself.** The page trusts its own bundle only, and the
-web view holds it to that:
+**The page held to itself.** The page trusts its own bundle only
+(`architecture.md#threats`), and the web view holds it to that:
 
 - **Its policy**: a content security policy (`page::with_policy`) lets
   only the two scripts the page carries run, by their SHA-256, so no
@@ -777,6 +777,44 @@ settings of another version survive a save. Everything the vault's
 entities name by id — accounts — is kept in the vault's `.avelor/`, and so are
 the vault's own settings (`vault.md#vault-config`). Every overwriting
 write, in the vault and here, is atomic (`saving.md#atomic-writes`).
+
+## Threat model <a id="threats"></a>
+
+Avelor runs as the user, on their PC, with their files. It trusts its own
+bundle (the page and its scripts, built into the exe), the user, and the
+account it runs under. Another program running as that account reads the
+vault and the app's folders as the app does: that is the system's to
+prevent, not the app's.
+
+What comes from elsewhere is not trusted, and each kind is held where it
+comes in:
+
+- **Mail**: MIME and HTML from anyone (av-utils' `mime` and `charsets`,
+  av-vault's `email`). The HTML becomes markdown (`html.rs`): its links
+  only web, email or phone links (`is_link`), its images their text. An
+  attachment is saved with the mark of the web
+  (`architecture.md#platforms`), and opened from the app only if it is a
+  PDF or an image (`api::may_open`).
+- **Files**: PDFs (av-pdf, av-utils' `inflate`), images (`sys::preview`),
+  a bank's statements (`bank.rs`), markdown other tools wrote. A
+  document's original or a watch's file is opened in its default app only
+  if it is a PDF or an image; a watch's file only from inside its folder
+  (`invalid_path`).
+- **Web pages**: never loaded. The web view holds the page to itself, and
+  a link goes to the browser (`architecture.md#platforms`).
+- **The models' answers**: markdown like a document's, raw HTML escaped
+  (`markdown::to_html`), shown under the page's policy: no script in it
+  runs and no web image loads, so an answer steered by a mail it read
+  can't carry the vault out in an image's address. A link in it opens
+  only when clicked, in the browser.
+- **The services' replies**: Google's and the AI providers' JSON, read
+  into types (serde); a reply that doesn't fit is an error, not data.
+- **The page's messages**: each is decoded into a typed command
+  (`protocol.rs`), and names an entity by its id.
+
+Secrets at rest are the system's to protect: DPAPI on Windows, a file only
+the user can read on Linux (`architecture.md#platforms`). The log holds
+no secret, and what it keeps is said in `development.md#diagnosis`.
 
 ## Build <a id="build"></a>
 
