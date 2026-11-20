@@ -2,9 +2,25 @@
 // marks where it would land (one mark page-wide); the drag preview chip a
 // lens's row and a card's head both show; the type a card dragged out of its
 // thread carries and the lenses that take it; and the panel's drop zones.
+// A drop nothing takes is refused: a file dropped onto the window never
+// replaces the app (architecture.md#platforms).
 
 import { accEl } from '../core/dom.js';
 import { iconEl } from './icons.js';
+
+// ----------------------------------------------------------------------------
+// A drop no target took, outside a field or an editor, is refused: without
+// it, the web view would load a dropped file or link in place of the page.
+const takesText = el => el.isContentEditable || !!el.closest?.('input, textarea');
+
+document.addEventListener('dragover', ev => {
+  if (ev.defaultPrevented || takesText(ev.target)) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'none';
+});
+document.addEventListener('drop', ev => {
+  if (!takesText(ev.target)) ev.preventDefault();
+});
 
 // A card dragged out of its thread by its head carries the thread it
 // leaves as this type, beside its id as `text/plain`: the Documents and

@@ -1,12 +1,19 @@
 //! The page the web view shows, the same on every platform: one
 //! self-contained HTML file, with the platform's bridge to the host, the
 //! page's preferences, the shipped blueprints and the texts in the run's
-//! language.
+//! language, held to its own scripts by its content security policy.
+
+use av_utils::base64::to_base64;
+use av_utils::sha256::sha256;
 
 use crate::app::Prefs;
 use crate::blueprints;
 use crate::sys::BRIDGE_JS;
 use crate::texts;
+
+// ----------------------------------------------------------------------------
+/// The page's content security policy (`index.html`), empty.
+const POLICY_BLOCK: &str = r#"<meta http-equiv="Content-Security-Policy" content="">"#;
 
 // ----------------------------------------------------------------------------
 /// The page's block for its bridge to the host (`index.html`), empty.
@@ -35,7 +42,8 @@ const LANGUAGE: &str = r#"<html lang="en">"#;
 /// its preferences block, the shipped blueprints (`blueprints::json`) in
 /// theirs, and the run's language (`texts::locale`) as its `lang` with its
 /// catalog in the texts block and its own texts in it (`worded`). `<` is
-/// escaped: a value can't end the script element.
+/// escaped: a value can't end the script element. Last, its policy
+/// (`with_policy`).
 pub fn html(prefs: &Prefs) -> String {
     let html = worded(include_str!(concat!(env!("OUT_DIR"), "/index.html")));
     let bridge = format!(r#"<script id="bridge">{BRIDGE_JS}</script>"#);
@@ -45,11 +53,55 @@ pub fn html(prefs: &Prefs) -> String {
     let locale = texts::locale();
     let language = format!(r#"<html lang="{}">"#, locale.tag);
     let texts = TEXTS_BLOCK.replace("{}", &escaped(locale.catalog.json));
-    html.replacen(LANGUAGE, &language, 1)
+    let html = html
+        .replacen(LANGUAGE, &language, 1)
         .replacen(BRIDGE_BLOCK, &bridge, 1)
         .replacen(PREFS_BLOCK, &prefs, 1)
         .replacen(BLUEPRINTS_BLOCK, &blueprints, 1)
-        .replacen(TEXTS_BLOCK, &texts, 1)
+        .replacen(TEXTS_BLOCK, &texts, 1);
+    with_policy(&html)
+}
+
+// ----------------------------------------------------------------------------
+/// `html` with its content security policy (`architecture.md#platforms`):
+/// only the scripts it carries run, each by its SHA-256, so no handler or
+/// `javascript:` link in the content does; styles inline; images only as
+/// `data:` URLs, so a web image in a note or a model's reply never loads;
+/// nothing fetched, framed or sent.
+fn with_policy(html: &str) -> String {
+    let hashes: Vec<String> = scripts(html)
+        .iter()
+        .map(|script| format!("'sha256-{}'", to_base64(&sha256(script.as_bytes()))))
+        .collect();
+    let policy = format!(
+        "default-src 'none'; script-src {}; style-src 'unsafe-inline'; img-src data:; \
+         base-uri 'none'; form-action 'none'",
+        hashes.join(" ")
+    );
+    let block = POLICY_BLOCK.replace(r#"content="""#, &format!(r#"content="{policy}""#));
+    html.replacen(POLICY_BLOCK, &block, 1)
+}
+
+// ----------------------------------------------------------------------------
+/// The text of each script in `html` that runs: its script elements but the
+/// data blocks (`type="application/json"`). A script's text ends at the first
+/// `</script>`, as the browser reads it.
+fn scripts(html: &str) -> Vec<&str> {
+    let mut found = Vec::new();
+    let mut rest = html;
+    while let Some(at) = rest.find("<script") {
+        let Some((attributes, after)) = rest[at..].split_once('>') else {
+            break;
+        };
+        let Some((script, after)) = after.split_once("</script>") else {
+            break;
+        };
+        if !attributes.contains(r#"type="application/json""#) {
+            found.push(script);
+        }
+        rest = after;
+    }
+    found
 }
 
 // ----------------------------------------------------------------------------
@@ -116,6 +168,43 @@ mod tests {
         let page = html(&Prefs::new());
         assert!(!page.contains(BRIDGE_BLOCK));
         assert!(page.contains(BRIDGE_JS));
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_page_runs_only_the_scripts_it_carries() {
+        let page = html(&Prefs::new());
+        let policy_at = page.find("Content-Security-Policy").unwrap();
+        assert!(
+            policy_at < page.find("<script").unwrap(),
+            "before any script"
+        );
+        assert!(!page.contains(POLICY_BLOCK));
+        let policy = &page[policy_at..page[policy_at..].find('>').unwrap() + policy_at];
+
+        let scripts = scripts(&page);
+        assert_eq!(scripts.len(), 2, "the bridge and the bundle");
+        assert_eq!(scripts[0], BRIDGE_JS);
+        for script in scripts {
+            let hash = to_base64(&sha256(script.as_bytes()));
+            assert!(policy.contains(&format!("'sha256-{hash}'")));
+        }
+        let directive = |name: &str| {
+            let found = policy
+                .split(';')
+                .map(str::trim)
+                .find(|d| d.starts_with(name));
+            found.unwrap().to_string()
+        };
+        assert!(!directive("script-src").contains("unsafe"));
+        assert_eq!(directive("img-src"), "img-src data:");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_data_block_is_no_script() {
+        let html = r#"<script type="application/json" id="p">{"a":"<script>"}</script><script>run()</script><p>"#;
+        assert_eq!(scripts(html), vec!["run()"]);
     }
 
     // ------------------------------------------------------------------------

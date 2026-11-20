@@ -394,18 +394,18 @@ knows neither: `app` turns the indexing's texts into its rows.
 |---|---|
 | `main.rs` | logger, panic hook, the config (`load_config`), the run's language (`texts::init`) |
 | `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net, Close to `App` (`architecture.md#platforms`) |
-| `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences, the shipped blueprints, the texts in the run's language, its own filled in (`worded`), and the platform's `BRIDGE_JS` |
+| `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences, the shipped blueprints, the texts in the run's language, its own filled in (`worded`), the platform's `BRIDGE_JS`, and its content security policy (`with_policy`) |
 | `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`, `filled`, `of`, `Text::render`), a text the page shows (`Text`: a key and its arguments, a date or money among them); its tests |
 | `blueprints.rs` | the shipped blueprints (`app/blueprints/*.yaml`, `vault.md#project`): their facts with their types, checks and labels, read with `shipped`, as the page's data block (`json`), their words keys of the catalogs worded in the run's language; their tests |
 | `sys.rs` | the platform layer: what each backend provides (`architecture.md#platforms`) |
 | `sys/win32/paths.rs`, `sys/win32/dialogs.rs` | the app's folders (`paths`: the config, the log, the web view's profile, the catalogs), the mark of the web; folder picker, message boxes, ShellExecute |
 | `sys/win32.rs`, `sys/win32/window.rs` | `run`; Win32 window, wndproc, size persistence, the session's end; the clock's timer (`WM_TIMER` → `App::on_clock`); `UiSignal` (`WM_TASK`, `WM_CLOSE_NOW`); Close to `App` |
 | `sys/win32/images.rs` | image previews with WIC (`preview`): decoded, upright by the EXIF orientation, scaled to fit, JPEG; COM on a worker (`ComThread`) |
-| `sys/win32/webview.rs` | WebView2 environment/controller, message handler, `NavigateToString`; App's outbox (`PostWebMessageAsString`) |
+| `sys/win32/webview.rs` | WebView2 environment/controller, message handler, the page held to itself (`hold`), `NavigateToString`; App's outbox (`PostWebMessageAsString`) |
 | `sys/linux/paths.rs`, `sys/linux/dialogs.rs` | the same in the XDG folders, with GTK |
 | `sys/linux.rs`, `sys/linux/window.rs` | `run`: the `gtk::Application`, the session's end; the window, size persistence; the clock (a GLib timeout); `UiSignal` (`glib::idle_add_once`); Close to `App` |
 | `sys/linux/images.rs` | the same with gdk-pixbuf |
-| `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, App's outbox (`evaluate_javascript`), `load_html` |
+| `sys/linux/webview.rs` | the WebKitGTK web view with its network session, the script message handler `host`, the page held to itself (`hold`), App's outbox (`evaluate_javascript`), `load_html` |
 | `app.rs` | `App` (all state) and `Vault` (the open vault's folder, av-vault's `Index` and the catalog's thread, private: read through `index`, edited through `App::edit`; `content`, `save_content`, `reload`, `refresh`, `changed_at`, `require_written`; every change of the index sent to the catalog in its order, `catalog_key`), the config writes no request asked for (`save_window_state`, `remember_vault`), `on_web_message` (every message to `protocol`), `post_text` / `post_event` through the outbox, `edit` and `edit_written`, `run*` (with `run_on_catalog`), `on_ui`, `Progress` (`send`, coalescing `send_latest`), `UiQueue` / `UiTask` (`close_window`), entity pushes, the pending sign-in, `on_clock` |
 | `catalog.rs` | the catalog's thread (`CatalogThread`, `vault.md#catalog`): `open`, the writes `put`, `forget`, `keep_only`, logged when they fail and leaving the catalog behind, `ask` for a worker; what it holds (`CatalogState::current`, `Unavailable`) |
 | `search.rs` | `search` (`vault.md#search`): an entity's words (`words_of`), the catalog's rows on its thread, one rule for them (`holds`), the excerpt; its dispatch tests |
@@ -414,7 +414,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update, stop and end a job (the `job` event), `run_job`, `cancel_job`, the vault switch that waits for the old vault's jobs, and Rebuild index's reopen (`rebuild_when_stopped`); a job's summary (`count_summary`, `job_summary`); its tests |
-| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch, reveal and `rebuild_index`, `set_prefs`, `open_url`, `open_file` and the types it opens (`may_open`) |
+| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch, reveal and `rebuild_index`, `set_prefs`, `open_url`, `open_file` and the types it opens (`may_open`), a navigation the web view refused (`open_refused`) |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `set_editing`; `DocumentState`, the documents in edit mode and the app's version of each one in conflict; the conflict copy shared with calendar sync (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects (`create_project`, `set_project`), titles, stars, archiving, labels, links (a booking's too), `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |
@@ -449,7 +449,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | Fullscreen | F11 from the controller's `AcceleratorKeyPressed`; the frame removed and the monitor filled, the placement from before restored | `sys/*/window.rs`, `sys/win32/webview.rs` | F11 from an `EventControllerKey` in the capture phase, ahead of the web view; `fullscreen()`, `unfullscreen()` |
 | Zoom | Ctrl+Plus, Ctrl+Minus and Ctrl+0 from the controller's `AcceleratorKeyPressed`, `SetZoomFactor`; Ctrl+wheel and a pinch are WebView2's own (`SetIsZoomControlEnabled`) | `sys.rs` (`Zoom`: Chromium's levels), `sys/linux/window.rs`, `sys/win32/webview.rs` | the keys from F11's `EventControllerKey`, Ctrl+wheel from an `EventControllerScroll`, both in the capture phase, ahead of the web view; `set_zoom_level`; a pinch is WebKitGTK's own |
 | Session end | `WM_QUERYENDSESSION`, `WM_ENDSESSION` | `sys/win32/window.rs`, `sys/linux.rs` | `query-end` (the application registers with the session manager), SIGTERM and SIGHUP; SIGINT closes as the window's Close does |
-| Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString` | `sys/*/webview.rs` (`BRIDGE_JS`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html` |
+| Web view | WebView2: `PostWebMessageAsString`, `WebMessageReceived`, `NavigateToString`; `NavigationStarting` and `NewWindowRequested` refuse leaving the page, the context menu and DevTools in a debug build only, `ProcessFailed` logged | `sys/*/webview.rs` (`BRIDGE_JS`, `hold`); `rpc.js` | WebKitGTK 6.0: a script message handler `host`, `evaluate_javascript`, `load_html`; `decide-policy` refuses leaving the page, the context menu (`context-menu`) and developer extras in a debug build only, `web-process-terminated` logged |
 | Theme | Windows' theme for apps (`AppsUseLightTheme`): the title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the web view's ground before the page paints (`SetDefaultBackgroundColor`), again on `WM_SETTINGCHANGE`; WebView2's `prefers-color-scheme` follows the same setting | `sys/win32/window.rs`, `sys/win32/webview.rs` | GTK's theme: the window's, and through it WebKitGTK's color scheme |
 | Language | the display languages (`GetUserPreferredUILanguages`); WebView2's `Language` | `sys/*.rs` (`languages`), `sys/*/webview.rs` | the languages GLib reads from the environment (`language_names`); the web context's preferred languages |
 | Dialogs and shell | `IFileOpenDialog`, `MessageBoxW`, `ShellExecuteW` | `sys/*/dialogs.rs` | `gtk::FileDialog`, `gtk::AlertDialog`, `gtk::UriLauncher` and `FileLauncher` (they use the XDG desktop portal where there is one) |
@@ -489,7 +489,8 @@ the only `cfg(target_os)` in `app/src`:
 - close, the app's own close and the session end;
 - the window active again (`App::on_activated`);
 - the clock (`App::on_clock`);
-- the window state.
+- the window state;
+- a navigation the web view refused (`api::open_refused`).
 
 Each platform's window only turns its native events into calls on it,
 so the subtle part is written once:
@@ -509,6 +510,24 @@ bridge defines `window.host.post(text)` and calls
 posts to `webkit.messageHandlers.host`, and a reply is
 `evaluate_javascript` of `host.receive(…)` with the text as a JSON string
 literal.
+
+**The page held to itself.** The page trusts its own bundle only, and the
+web view holds it to that:
+
+- **Its policy**: a content security policy (`page::with_policy`) lets
+  only the two scripts the page carries run, by their SHA-256, so no
+  handler or `javascript:` link in a document or a model's reply does;
+  styles inline; images only as `data:` URLs (the scans' previews), so a
+  web image never loads, nor carries anything out in its address; nothing
+  fetched, framed or sent.
+- **No way out**: the page's own load goes through, every navigation after
+  it and every new window is refused (`hold`); the app opens a web, email
+  or phone link in its default app, as `open_url` does
+  (`api::open_refused`), and only logs anything else. The page refuses a
+  drop nothing takes, so a file dropped onto the window never replaces it
+  (`ui/dropzone.js`).
+- **Release builds**: no context menu and no DevTools; a debug build has
+  both.
 
 **The crates.** av-http's `client.rs` is portable (the builder, logging,
 multipart, `send_logged`), with a backend module per platform behind the
@@ -749,7 +768,7 @@ column. A new module
 is in the page once a module there imports it. The markdown selftest gets
 a bundle of its own beside it (`markdown.md#testing`). The host fills the
 preferences, the shipped blueprints and the run's texts into the page
-(`page::html`) and
+(`page::html`), with its content security policy, and
 loads it with
 `NavigateToString`, on Linux with `load_html`.
 

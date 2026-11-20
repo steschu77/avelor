@@ -221,6 +221,31 @@ impl WindowProc {
     }
 
     // ------------------------------------------------------------------------
+    /// The title bar and the web view's ground before the page paints in
+    /// Windows' theme for apps, as the page's colors are (`prefers-color-scheme`,
+    /// which WebView2 takes from the same setting).
+    fn follow_theme(&self) {
+        let dark = BOOL::from(apps_dark());
+        let _ = unsafe {
+            DwmSetWindowAttribute(
+                self.hwnd(),
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &dark as *const BOOL as *const core::ffi::c_void,
+                std::mem::size_of::<BOOL>() as u32,
+            )
+        };
+        if let Some(controller) = self.controller.borrow().as_ref() {
+            webview::set_background(controller, dark.as_bool());
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /// The web view refused to leave the page for `url` (`webview::hold`).
+    pub fn on_refused(&self, url: String) {
+        self.shell.on_refused(url);
+    }
+
+    // ------------------------------------------------------------------------
     /// F11: the window fills its monitor without a frame, or goes back to
     /// its placement from before (Raymond Chen, "How do I switch a window
     /// between normal and fullscreen?"). A maximized window stays maximized
@@ -280,25 +305,6 @@ impl WindowProc {
                 rect.bottom - rect.top,
                 SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
             );
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    /// The title bar and the web view's ground before the page paints in
-    /// Windows' theme for apps, as the page's colors are (`prefers-color-scheme`,
-    /// which WebView2 takes from the same setting).
-    fn follow_theme(&self) {
-        let dark = BOOL::from(apps_dark());
-        let _ = unsafe {
-            DwmSetWindowAttribute(
-                self.hwnd(),
-                DWMWA_USE_IMMERSIVE_DARK_MODE,
-                &dark as *const BOOL as *const core::ffi::c_void,
-                std::mem::size_of::<BOOL>() as u32,
-            )
-        };
-        if let Some(controller) = self.controller.borrow().as_ref() {
-            webview::set_background(controller, dark.as_bool());
         }
     }
 

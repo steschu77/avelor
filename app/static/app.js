@@ -17,6 +17,7 @@ import { store } from './model/state.js';
 import { isDirty } from './model/documents.js';
 import './model/events.js';
 import './ui/menu.js';
+import './ui/dropzone.js';
 import { shownVaultPage } from './ui/page.js';
 import './ui/statusbar.js';
 import { invalidateLenses, restoreLens } from './features/lenses/registry.js';

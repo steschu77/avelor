@@ -480,11 +480,14 @@ carry scripts, styles, or arbitrary markup outside the editor's model.
   the module's one list) or a link into the vault (`id:<uuid>`,
   `vault.md#links-in-content`) is accepted;
   anything else (`javascript:` above all) is rejected, in typed shortcuts,
-  the toolbar, and paste/drop alike.
+  the toolbar, and paste/drop alike. A web image stays in the markdown but
+  isn't loaded: the page takes images only as `data:` URLs
+  (`architecture.md#platforms`).
 - **Clicking a link never navigates the page** — not in edit mode (where
   it would only get in the way of positioning the caret) and not in
   read-only mode (where the WebView2 host, like WebKitGTK on Linux, has no
-  back button, so navigating away would leave the app). In read-only mode the `href` is
+  back button, so navigating away would leave the app; the host refuses
+  it too, `architecture.md#platforms`). In read-only mode the `href` is
   handed to the optional `onLinkClick` callback. The app passes `openLink`
   (`features/selection.js`) for the cards, the project description and the assistant's
   replies: a web, email or phone link (`isLink`) opens in its default app

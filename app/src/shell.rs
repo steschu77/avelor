@@ -90,6 +90,14 @@ impl Shell {
     }
 
     // ------------------------------------------------------------------------
+    /// The web view refused to leave the page for `url`: a navigation or a
+    /// new window (`architecture.md#platforms`). `App` opens a link in its
+    /// default app (`api::open_refused`).
+    pub fn on_refused(&self, url: String) {
+        let _ = self.queue(move |app| crate::api::open_refused(app, url));
+    }
+
+    // ------------------------------------------------------------------------
     /// Run `f` with `App` after everything queued before it: right
     /// away, or -- if a handler further up the stack holds it, and
     /// this message came from a modal loop inside it -- once that handler

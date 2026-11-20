@@ -1,6 +1,7 @@
 //! The WebKitGTK web view and the bridge to the page: the message handler,
 //! the way back, and the page.
 
+use std::cell::Cell;
 use std::path::Path;
 use std::rc::Rc;
 
@@ -45,7 +46,56 @@ pub fn create(data_dir: &Path, cache_dir: &Path, shell: &Rc<Shell>) -> webkit6::
             }
         });
     }
+    hold(&webview, shell);
     webview
+}
+
+// ----------------------------------------------------------------------------
+/// Hold `webview` to the app's page (`architecture.md#platforms`): its own
+/// load goes through until it is committed; every navigation after it and
+/// every new window is refused and handed to `shell` (`Shell::on_refused`),
+/// which opens a link in the browser. No context menu in a release build,
+/// as on Windows. A web process that ended is logged: the page is gone
+/// then.
+fn hold(webview: &webkit6::WebView, shell: &Rc<Shell>) {
+    let loaded = Rc::new(Cell::new(false));
+    webview.connect_load_changed({
+        let loaded = Rc::clone(&loaded);
+        move |_, event| {
+            if event == webkit6::LoadEvent::Committed {
+                loaded.set(true);
+            }
+        }
+    });
+    let shell = Rc::downgrade(shell);
+    webview.connect_decide_policy(move |_, decision, kind| {
+        let leaves = match kind {
+            webkit6::PolicyDecisionType::NavigationAction => loaded.get(),
+            webkit6::PolicyDecisionType::NewWindowAction => true,
+            _ => false,
+        };
+        if !leaves {
+            return false;
+        }
+        let uri = decision
+            .downcast_ref::<webkit6::NavigationPolicyDecision>()
+            .and_then(|decision| decision.navigation_action())
+            .and_then(|action| action.request())
+            .and_then(|request| request.uri())
+            .map(|uri| uri.to_string())
+            .unwrap_or_default();
+        decision.ignore();
+        if let Some(shell) = shell.upgrade() {
+            shell.on_refused(uri);
+        }
+        true
+    });
+    if !cfg!(debug_assertions) {
+        webview.connect_context_menu(|_, _, _| true);
+    }
+    webview.connect_web_process_terminated(|_, reason| {
+        log::error!("WebKit's web process ended: {reason:?}");
+    });
 }
 
 // ----------------------------------------------------------------------------
