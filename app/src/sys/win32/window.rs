@@ -120,13 +120,13 @@ impl UiSignal {
 pub struct WindowProc {
     hwnd: Cell<HWND>,
     controller: RefCell<Option<ICoreWebView2Controller>>,
-    /// Where the web view keeps its profile.
-    webview_dir: PathBuf,
     shell: Shell,
     theme: Cell<Theme>,
     maximized: Cell<bool>,
     /// The placement before fullscreen, while the window is fullscreen.
     fullscreen: Cell<Option<WINDOWPLACEMENT>>,
+    /// Why the web view didn't come up (`on_failed`).
+    failure: RefCell<Option<Error>>,
 }
 
 impl WindowProc {
@@ -167,11 +167,11 @@ impl WindowProc {
         let window = Rc::new(WindowProc {
             hwnd: Cell::new(HWND::default()),
             controller: RefCell::new(None),
-            webview_dir,
             shell,
             theme: Cell::new(theme),
             maximized: Cell::new(state.maximized),
             fullscreen: Cell::new(None),
+            failure: RefCell::new(None),
         });
 
         let hwnd = unsafe {
@@ -191,6 +191,17 @@ impl WindowProc {
             )
             .map_err(Error::from)?
         };
+
+        // Once the window exists, not in `WM_CREATE`: a web view that fails,
+        // here or later, closes the window (`on_failed`), whose quit ends the
+        // message loop before the start's box. One that failed here isn't
+        // shown.
+        if let Err(e) = webview::init(hwnd, &webview_dir) {
+            webview::failed(hwnd, e);
+        }
+        if window.failure.borrow().is_some() {
+            return Ok(window);
+        }
 
         window.follow_theme();
         let show = if state.maximized {
@@ -251,6 +262,20 @@ impl WindowProc {
     /// A message arrived from the page's JS via `window.host.post`.
     pub fn on_web_message(&self, message: String) {
         self.shell.on_web_message(message);
+    }
+
+    // ------------------------------------------------------------------------
+    /// The web view didn't come up: the window closes, and the run fails
+    /// with `error` (`take_failure`).
+    pub fn on_failed(&self, error: Error) {
+        self.failure.replace(Some(error));
+        let _ = unsafe { DestroyWindow(self.hwnd()) };
+    }
+
+    // ------------------------------------------------------------------------
+    /// Why the web view didn't come up, once the message loop has ended.
+    pub fn take_failure(&self) -> Option<Error> {
+        self.failure.take()
     }
 
     // ------------------------------------------------------------------------
@@ -417,7 +442,6 @@ impl WindowProc {
     // ------------------------------------------------------------------------
     fn handle_msg(&self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         match msg {
-            WM_CREATE => self.on_create(),
             WM_DESTROY => self.on_destroy(),
             WM_CLOSE => self.on_close(),
             WM_CLOSE_NOW => self.on_close_now(),
@@ -451,15 +475,6 @@ impl WindowProc {
             }
             _ => unsafe { DefWindowProcW(self.hwnd(), msg, wparam, lparam) },
         }
-    }
-
-    // ------------------------------------------------------------------------
-    fn on_create(&self) -> LRESULT {
-        if let Err(e) = webview::init(self.hwnd(), &self.webview_dir) {
-            log::error!("WebView2 init failed: {e}");
-            return LRESULT(-1);
-        }
-        LRESULT(0)
     }
 
     // ------------------------------------------------------------------------

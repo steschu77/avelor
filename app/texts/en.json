@@ -1185,6 +1185,7 @@
     "other": "{n}th"
   },
   "page.close": "Close the page",
+  "page.failed": "Something went wrong: {message}",
   "page.retry": "Retry",
   "page.submit": "Run the page’s main action",
   "palette.all": "All",
@@ -1679,7 +1680,8 @@
   "size.bytes": "{n} B",
   "size.kb": "{n} KB",
   "size.mb": "{n} MB",
-  "start.failed": "An error occurred.\n\nCheck the log file for more information.",
+  "start.failed": "Avelor could not start.\n\nThe log in {folder} says why.",
+  "start.failed_no_log": "Avelor could not start.",
   "statement.pending": "{n} pending",
   "status.dismiss": "Dismiss",
   "status.more": "+{n} more",

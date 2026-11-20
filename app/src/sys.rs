@@ -46,9 +46,9 @@ pub use win32::{ImageThread, preview};
 #[cfg(target_os = "windows")]
 pub use win32::{Owner, open_path, pick_file, pick_folder};
 #[cfg(target_os = "windows")]
-pub use win32::{collapse_env, expand_env, mark_downloaded};
+pub use win32::{Paths, languages, paths, show_error};
 #[cfg(target_os = "windows")]
-pub use win32::{languages, paths, show_error};
+pub use win32::{collapse_env, expand_env, mark_downloaded};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -63,9 +63,9 @@ pub use linux::{ImageThread, preview};
 #[cfg(target_os = "linux")]
 pub use linux::{Owner, open_path, pick_file, pick_folder};
 #[cfg(target_os = "linux")]
-pub use linux::{collapse_env, expand_env, mark_downloaded};
+pub use linux::{Paths, languages, paths, show_error};
 #[cfg(target_os = "linux")]
-pub use linux::{languages, paths, show_error};
+pub use linux::{collapse_env, expand_env, mark_downloaded};
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 compile_error!("Windows and Linux only.");

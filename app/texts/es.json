@@ -1255,6 +1255,7 @@
   "open.url_failed": "No se pudo abrir {url}.",
   "ordinal": "{n}.º",
   "page.close": "Cerrar la página",
+  "page.failed": "Algo ha fallado: {message}",
   "page.retry": "Reintentar",
   "page.submit": "Ejecutar la acción principal de la página",
   "palette.all": "Todo",
@@ -1749,7 +1750,8 @@
   "size.bytes": "{n} B",
   "size.kb": "{n} KB",
   "size.mb": "{n} MB",
-  "start.failed": "Se ha producido un error.\n\nEl archivo de registro tiene más información.",
+  "start.failed": "Avelor no pudo iniciarse.\n\nEl registro en {folder} explica por qué.",
+  "start.failed_no_log": "Avelor no pudo iniciarse.",
   "statement.pending": {
     "one": "{n} pendiente",
     "other": "{n} pendientes"

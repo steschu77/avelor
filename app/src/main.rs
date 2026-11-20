@@ -43,19 +43,26 @@ use av_utils::error::Result;
 use av_utils::logger;
 
 // ----------------------------------------------------------------------------
+/// The run: the app's folders and the log first. A failed start is named in
+/// a box, with the log's folder if there is a log.
 pub fn main() {
-    if let Err(e) = run() {
+    let paths = sys::paths();
+    let log_dir = paths.as_ref().ok().map(|paths| paths.log_dir());
+    let log_dir = log_dir.filter(|dir| logger::init_logger(dir).is_ok());
+    if let Err(e) = paths.and_then(|paths| run(&paths)) {
         log::error!("Avelor failed: {e}");
         log::logger().flush();
 
-        sys::show_error("Avelor", texts::text("start.failed"));
+        let text = match &log_dir {
+            Some(dir) => texts::filled("start.failed", &[("folder", &dir.display().to_string())]),
+            None => texts::text("start.failed_no_log").to_string(),
+        };
+        sys::show_error("Avelor", &text);
     }
 }
 
 // ----------------------------------------------------------------------------
-fn run() -> Result<()> {
-    let paths = sys::paths()?;
-    let _ = logger::init_logger(&paths.log_dir());
+fn run(paths: &sys::Paths) -> Result<()> {
     let mut config = config::load_config(&paths.config_dir())?;
     texts::init(config.language());
     // `avelor <folder>` opens that vault for this session.
@@ -63,5 +70,5 @@ fn run() -> Result<()> {
         config.set_session_vault(std::path::absolute(vault)?);
     }
 
-    sys::run(&paths, config)
+    sys::run(paths, config)
 }

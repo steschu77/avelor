@@ -7,6 +7,7 @@
 //   settings it couldn't write, an email a fetch couldn't write. It stays
 //   until its x dismisses it; the same text again doesn't stack up (autosave
 //   retries a failed save every 4 s).
+// - an error of the page's own (below), which the host logs too.
 // - what an undo or a redo did, or what a job brought (the `notice` event
 //   at level info): new email. It goes on its own after `NOTICE_INFO_MS`,
 //   not while the mouse is over the bar; one about a single entity shows
@@ -17,7 +18,7 @@
 
 import { accEl } from '../core/dom.js';
 import { titled } from '../core/dom.js';
-import { RpcError, rpcOn } from '../core/rpc.js';
+import { RpcError, rpcCall, rpcOn } from '../core/rpc.js';
 import { runAction } from '../core/actions.js';
 import { t, textOf } from '../core/text.js';
 import { showError, store } from '../model/state.js';
@@ -111,8 +112,29 @@ rpcOn('notice', ({ level, text, entity }) => {
 // Superseded and cancelled calls are expected, and stay quiet.
 window.addEventListener('unhandledrejection', e => {
   const error = e.reason;
-  if (!(error instanceof RpcError)) return;
+  if (!(error instanceof RpcError)) {
+    showPageError(error);
+    return;
+  }
   e.preventDefault();
   if (error.code === 'superseded' || error.code === 'cancelled') return;
   showError(error.message);
 });
+window.addEventListener('error', e => showPageError(e.error ?? e.message));
+
+// An error of the page's own, which no code expected: shown, and logged by
+// the host (`page_error`) with where it was thrown, its stack's first frame
+// (Chromium's `at ...`, WebKit's `name@...`). Each message once per load, and
+// `PAGE_ERRORS_MAX` at most, so a loop can't flood the log.
+const PAGE_ERRORS_MAX = 20;
+const pageErrors = new Set();
+
+function showPageError(error) {
+  const message = String(error?.message ?? error);
+  if (pageErrors.has(message) || pageErrors.size >= PAGE_ERRORS_MAX) return;
+  pageErrors.add(message);
+  const frames = String(error?.stack ?? '').split('\n').map(line => line.trim());
+  const at = frames.find(line => line.startsWith('at ') || line.includes('@')) ?? '';
+  showError(t('page.failed', { message }));
+  rpcCall('page_error', { message, at }).catch(() => {});
+}

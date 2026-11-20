@@ -442,7 +442,10 @@ tell (the `notice` event, a failed call), the newest message with a count
 of the others.
 
 - An error (a failed save, an email a fetch couldn't write) stays until
-  dismissed with ×.
+  dismissed with ×; a failed call says what failed, the command's name is
+  the host's log's. So does an error of the page's own, an exception no
+  code expected ("Something went wrong: …"), which the host logs too
+  (`page_error`); each message once, 20 at most per load.
 - A message about what an undo or a redo did, or what a job brought, goes
   on its own after 6 seconds, but not while the mouse is over it:
   "Undone: Renamed The Money Pit"; after a fetch or an auto-sync wrote new

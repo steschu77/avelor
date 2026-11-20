@@ -39,7 +39,9 @@ window.chrome.webview.addEventListener('message', e => window.host.receive(e.dat
 
 // ----------------------------------------------------------------------------
 /// Create the web view in the window `hwnd`, its profile in `data_dir`.
-/// It comes up asynchronously: the window gets its controller later.
+/// It comes up asynchronously, or at once (WebView2 may call its handlers
+/// before this returns): the window gets its controller, or closes if it
+/// can't (`failed`).
 pub fn init(hwnd: HWND, data_dir: &Path) -> Result<()> {
     unsafe {
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
@@ -47,9 +49,13 @@ pub fn init(hwnd: HWND, data_dir: &Path) -> Result<()> {
 
     let env_handler = CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(
         move |result: Result<()>, environment: Option<ICoreWebView2Environment>| {
-            result?;
-            let environment = environment.ok_or_else(|| Error::from(E_POINTER))?;
-            on_environment_created(hwnd, environment)
+            let created = result
+                .and_then(|()| environment.ok_or_else(|| Error::from(E_POINTER)))
+                .and_then(|environment| on_environment_created(hwnd, environment));
+            if let Err(e) = created {
+                failed(hwnd, e);
+            }
+            Ok(())
         },
     ));
 
@@ -73,15 +79,25 @@ pub fn init(hwnd: HWND, data_dir: &Path) -> Result<()> {
 fn on_environment_created(hwnd: HWND, environment: ICoreWebView2Environment) -> Result<()> {
     let controller_handler = CreateCoreWebView2ControllerCompletedHandler::create(Box::new(
         move |result: Result<()>, controller: Option<ICoreWebView2Controller>| {
-            result?;
-            if let Some(controller) = controller {
-                on_controller_created(hwnd, controller)
-            } else {
-                Err(Error::from(E_POINTER))
+            let created = result
+                .and_then(|()| controller.ok_or_else(|| Error::from(E_POINTER)))
+                .and_then(|controller| on_controller_created(hwnd, controller));
+            if let Err(e) = created {
+                failed(hwnd, e);
             }
+            Ok(())
         },
     ));
     unsafe { environment.CreateCoreWebView2Controller(hwnd, &controller_handler) }
+}
+
+// ----------------------------------------------------------------------------
+/// The web view didn't come up, after the window was made: logged, and the
+/// window closes, so the start fails with its box (`WindowProc::on_failed`)
+/// instead of staying blank.
+pub fn failed(hwnd: HWND, error: Error) {
+    log::error!("WebView2 could not start: {error}");
+    WindowProc::with_window(hwnd, |window| window.on_failed(error.into()));
 }
 
 // ----------------------------------------------------------------------------

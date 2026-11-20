@@ -174,6 +174,7 @@ Host module: `jobs.rs`, `close.rs`.
 | Command | Args | Reply and pushes |
 |---|---|---|
 | `cancel_job` | `{ id }` | Stop the job `id`: its requests are cancelled and it ends through its `job` events — an email fetch at once, writing nothing more; a calendar sync once it has recorded what it already did; the reading of scans with the files left `stopped`. `null` once the stop is under way; `not_found` for a job that isn't running, `unsupported` for an indexing. |
+| `page_error` | `{ message, at? }` | An error the page didn't expect, an exception or a rejection that isn't a failed call (`ui.md#status-bar`), logged with `at`, where it was thrown (its stack's first frame). `null`. |
 | `close_ready` | `{ id, ready }` | The page's answer to the `close` event `id`, sent once every save it sent is answered (`saving.md#closing-the-app`): `ready` closes the window; not ready keeps it. An answer to an earlier close changes nothing. `null`. |
 
 ### Trash commands <a id="trash"></a>

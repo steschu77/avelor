@@ -179,6 +179,15 @@ pub fn open_url(app: &mut App, req: Req, url: String) {
 }
 
 // ----------------------------------------------------------------------------
+/// `page_error {message, at}`: an error the page didn't expect (an exception,
+/// a rejection that isn't a failed call), which it shows in its status bar,
+/// logged with where it was thrown, `at`. Answers `null`.
+pub fn page_error(req: Req, message: &str, at: &str) {
+    log::error!("Page: {message} ({at})");
+    req.ok(());
+}
+
+// ----------------------------------------------------------------------------
 /// The web view refused to leave the page for `url` (`Shell::on_refused`): a
 /// link the page let through, clicked with the middle button or dropped onto
 /// the window. A web, email or phone link opens in its default app as
