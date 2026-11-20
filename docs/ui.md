@@ -409,7 +409,9 @@ tell (the `notice` event, a failed call), the newest message with a count
 of the others.
 
 - An error (a failed save, an email a fetch couldn't write) stays until
-  dismissed with ×.
+  dismissed with ×. So does an error of the page's own, an exception no
+  code expected ("Something went wrong: …"), which the host logs too
+  (`page_error`); each message once, 20 at most per load.
 - A message about what a job brought goes on its own after 6 seconds, but
   not while the mouse is over it: after a fetch or an auto-sync wrote new
   email, "3 new emails · jan@gmail.com", or for a single email "New email:

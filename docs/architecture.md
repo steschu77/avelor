@@ -392,7 +392,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 
 | Module | Responsibility |
 |---|---|
-| `main.rs` | logger, panic hook, the config (`load_config`), the run's language (`texts::init`) |
+| `main.rs` | logger, panic hook, the config (`load_config`), the run's language (`texts::init`), a failed start's box with the log's folder |
 | `shell.rs` | what the main window decides on every platform: its state, the UI task loop (`run_tasks`) and the re-entrancy net, Close to `App` (`architecture.md#platforms`) |
 | `page.rs` | the page (`app/static/index.html`), the same on every platform, with its preferences, the shipped blueprints, the texts in the run's language, its own filled in (`worded`), the platform's `BRIDGE_JS`, and its content security policy (`with_policy`) |
 | `texts.rs` | the catalogs the build wrote, the run's language (`init`, `locale`: its catalog and its tag), the texts the host shows or writes itself (`text`, `filled`, `of`, `Text::render`), a text the page shows (`Text`: a key and its arguments, a date or money among them); its tests |
@@ -414,7 +414,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `testing.rs` | the test harness: a temporary vault, `Harness::call`, the collected events, `FakeOllama` |
 | `close.rs` | closing the app (`CloseState`): the `close` event, its answer `close_ready`, the wait for a page that doesn't answer; the session ending, answered without the page (`on_session_end`); its dispatch tests |
 | `jobs.rs` | the jobs helper: start, update, stop and end a job (the `job` event), `run_job`, `cancel_job`, the vault switch that waits for the old vault's jobs, and Rebuild index's reopen (`rebuild_when_stopped`); a job's summary (`count_summary`, `job_summary`); its tests |
-| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch, reveal and `rebuild_index`, `set_prefs`, `open_url`, `open_file` and the types it opens (`may_open`), a navigation the web view refused (`open_refused`) |
+| `api.rs` | `ready`, vault open (with its accounts, watches and settings), switch, reveal and `rebuild_index`, `set_prefs`, `open_url`, `open_file` and the types it opens (`may_open`), a navigation the web view refused (`open_refused`), `page_error` |
 | `documents.rs` | a document's content in the editors: `load_doc_content`, `save_doc_content`, `check_files`, taking in files changed outside the app (`post_taken_in`); `set_editing`; `DocumentState`, the documents in edit mode and the app's version of each one in conflict; the conflict copy shared with calendar sync (`keep_conflict_copy`, `keep_held`); their dispatch tests |
 | `trash.rs` | the trash: `list_trash`, `restore_entity` (an edit, answered like the structural commands), `delete_trashed`, `empty_trash` |
 | `structure.rs` | the structural commands: `create_entity`, threads, projects (`create_project`, `set_project`), titles, stars, archiving, labels, links (a booking's too), `edit_entities`, deletes, `reload_entity`; their answers; their dispatch tests |

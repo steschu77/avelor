@@ -363,14 +363,14 @@ mod tests {
     #[test]
     fn the_host_s_texts_are_the_language_s() {
         assert_eq!(locale().catalog.language, "en");
-        assert!(text("start.failed").starts_with("An error occurred."));
+        assert!(text("start.failed").starts_with("Avelor could not start."));
         let de = choose(Some("de"), &[]);
         let texts: Map<String, Value> = serde_json::from_str(de.catalog.json).unwrap();
         assert!(
             texts["start.failed"]
                 .as_str()
                 .unwrap()
-                .starts_with("Ein Fehler")
+                .starts_with("Avelor konnte nicht")
         );
     }
 }

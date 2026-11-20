@@ -123,7 +123,9 @@ session; WSLg has none.
 Read the log first: `%LOCALAPPDATA%\Avelor\log` (on Linux
 `$XDG_STATE_HOME/avelor/log`), one file per run
 (`av-utils/logger.rs`), times in UTC; the panic hook logs a panic's
-thread, message and location before the abort. Requests that take
+thread, message and location before the abort. A start that fails names the
+log's folder in its box. The page's own errors are logged as `Page: …`
+with where they were thrown. Requests that take
 multiples of 21 s are TCP connect timeouts on a network whose IPv6 goes
 nowhere, not the code: compare the `in N ms` lines with older logs, then
 `curl -4` and `curl -6` to the host. av-http's IPv6 fast fallback

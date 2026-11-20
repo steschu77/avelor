@@ -24,14 +24,16 @@ pub use window::UiSignal;
 
 // ----------------------------------------------------------------------------
 /// Show the main window in the state `config` saved, with the page in its
-/// web view, and run the message loop until the window is gone.
+/// web view, and run the message loop until the window is gone; an error if
+/// the web view didn't come up.
 pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
     let webview_dir = paths.webview_dir();
     let shell = Shell::new(config, paths.catalog_dir());
     let window = window::WindowProc::create(TITLE, Some("APP_ICON"), webview_dir, shell)?;
     window::run_message_loop();
+    let failure = window.take_failure();
     drop(window);
-    Ok(())
+    failure.map_or(Ok(()), Err)
 }
 
 // ----------------------------------------------------------------------------

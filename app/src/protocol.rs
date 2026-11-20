@@ -68,6 +68,8 @@ enum Command {
     OpenFile(Target),
     /// Stop the job `id` (`jobs::cancel_job`).
     CancelJob(Target),
+    /// An error the page didn't expect, to the log.
+    PageError(PageError),
     /// The page's answer to the event `close` (`close::close_ready`).
     CloseReady(close::Answer),
     // A document's content in the editors (`documents`).
@@ -164,6 +166,15 @@ struct PagePrefs {
 #[derive(Deserialize)]
 struct Url {
     url: String,
+}
+
+/// `{message, at}`: an error the page didn't expect, and where it was
+/// thrown.
+#[derive(Deserialize)]
+struct PageError {
+    message: String,
+    #[serde(default)]
+    at: String,
 }
 
 /// `{id}`: the entity or job the command is about.
@@ -357,6 +368,7 @@ impl Command {
             "open_url" => Command::OpenUrl(from_value(args)?),
             "open_file" => Command::OpenFile(from_value(args)?),
             "cancel_job" => Command::CancelJob(from_value(args)?),
+            "page_error" => Command::PageError(from_value(args)?),
             "close_ready" => Command::CloseReady(from_value(args)?),
             "load_doc_content" => Command::LoadDocContent(from_value(args)?),
             "save_doc_content" => Command::SaveDocContent(from_value(args)?),
@@ -459,6 +471,7 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::OpenUrl(a) => api::open_url(app, req, a.url),
         Command::OpenFile(a) => api::open_file(app, req, a.id),
         Command::CancelJob(a) => jobs::cancel_job(app, req, a.id),
+        Command::PageError(a) => api::page_error(req, &a.message, &a.at),
         Command::CloseReady(a) => close::close_ready(app, req, a),
         Command::LoadDocContent(a) => documents::load_doc_content(app, req, a.id),
         Command::SaveDocContent(a) => {
@@ -687,6 +700,23 @@ mod tests {
         h.run_queue();
         let replies = parse(&h.take());
         assert_eq!(error_code(&replies[0], 7), "cancelled");
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn the_page_s_own_error_is_logged_and_answered() {
+        let mut h = Harness::new("page-error");
+        let args = json!({ "message": "x is undefined", "at": "at f (about:blank:9:3)" });
+        let request = json!({ "id": 4, "cmd": "page_error", "args": args });
+        assert_eq!(
+            parse(&h.send(&request.to_string())),
+            [json!({ "re": 4, "ok": null })]
+        );
+        let request = json!({ "id": 5, "cmd": "page_error", "args": { "message": "y" } });
+        assert_eq!(
+            parse(&h.send(&request.to_string())),
+            [json!({ "re": 5, "ok": null })]
+        );
     }
 
     // ------------------------------------------------------------------------
