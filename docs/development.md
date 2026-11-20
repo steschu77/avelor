@@ -129,7 +129,8 @@ session; WSLg has none.
 
 Read the log first: `%LOCALAPPDATA%\Avelor\log` (on Linux
 `$XDG_STATE_HOME/avelor/log`), one file per run
-(`av-utils/logger.rs`), times in UTC; the panic hook logs a panic's
+(`av-utils/logger.rs`), times in UTC, kept 30 days;
+the panic hook logs a panic's
 thread, message and location before the abort. A start that fails names the
 log's folder in its box. The page's own errors are logged as `Page: …`
 with where they were thrown. Requests that take
@@ -137,6 +138,13 @@ multiples of 21 s are TCP connect timeouts on a network whose IPv6 goes
 nowhere, not the code: compare the `in N ms` lines with older logs, then
 `curl -4` and `curl -6` to the host. av-http's IPv6 fast fallback
 (`architecture.md#crates`) covers the usual case.
+
+The log keeps paths and file names, an attachment's among them, the
+user's name in them, and the accounts' addresses, since a problem is
+found by them; never a token, a key or a
+password, nor what a mail or an event says, its subject, a search or a
+link's query. A debug build also logs the auto-sync's search and a
+model's answers. Look a log over before sharing it, in an issue for one.
 
 A vault's indexing logs how many files came from the catalog ("N of M files
 from the catalog"); a catalog that couldn't be opened or written is

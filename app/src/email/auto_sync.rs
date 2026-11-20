@@ -149,7 +149,8 @@ pub fn auto_sync(app: &mut App, now: DateTime) {
     let root = app.vault.root().map(Path::to_path_buf);
     let query = sync_query(&filter, since);
     let started = DateTime::now();
-    log::info!("Email auto-sync of {account}: searching `{query}`");
+    log::info!("Email auto-sync of {account}: searching");
+    log::debug!("Email auto-sync of {account}: the search `{query}`");
     app.run(
         move |cancel| gmail::list_message_ids(&client, cancel, &query, MATCH_CAP),
         move |app, result| {

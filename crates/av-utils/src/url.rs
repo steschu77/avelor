@@ -59,6 +59,13 @@ pub fn is_link(url: &str) -> bool {
 }
 
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+/// `url` without its query and fragment, as a log names a link: they can
+/// carry what the link is about (a search, a token).
+pub fn without_query(url: &str) -> &str {
+    url.split(['?', '#']).next().unwrap_or(url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,6 +82,24 @@ mod tests {
         assert_eq!(decode_url_component("100%"), "100%", "a dangling % stays");
         let s = "ä/ü?x=1&y";
         assert_eq!(decode_url_component(&encode_url_component(s)), s);
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_logged_link_keeps_no_query() {
+        assert_eq!(
+            without_query("https://a.example/b?q=x#f"),
+            "https://a.example/b"
+        );
+        assert_eq!(
+            without_query("https://a.example/b#f?x"),
+            "https://a.example/b"
+        );
+        assert_eq!(
+            without_query("mailto:a@b.example?subject=Hi"),
+            "mailto:a@b.example"
+        );
+        assert_eq!(without_query("https://a.example/"), "https://a.example/");
     }
 
     // ------------------------------------------------------------------------

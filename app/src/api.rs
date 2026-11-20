@@ -20,7 +20,7 @@ use crate::vault_settings;
 use crate::watches;
 use av_utils::error::Error;
 use av_utils::id::Id;
-use av_utils::url::is_link;
+use av_utils::url::{is_link, without_query};
 use serde_json::json;
 
 // ----------------------------------------------------------------------------
@@ -171,7 +171,7 @@ pub fn open_url(app: &mut App, req: Req, url: String) {
         move |_, opened| match opened {
             Ok(()) => req.ok(()),
             Err(e) => {
-                log::warn!("Could not open {url}: {e}");
+                log::warn!("Could not open {}: {e}", without_query(&url));
                 req.fail(e, Text::new("open.url_failed").arg("url", url.as_str()));
             }
         },
@@ -205,7 +205,7 @@ pub fn open_refused(app: &mut App, url: String) {
         },
         move |_, opened| {
             if let Err(e) = opened {
-                log::warn!("Could not open {url}: {e}");
+                log::warn!("Could not open {}: {e}", without_query(&url));
             }
         },
     );

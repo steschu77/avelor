@@ -373,15 +373,10 @@ fn on_answer(app: &mut App, job: Id, result: Result<ChatResponse>) {
     let found = match result {
         Ok(response) => {
             let found = ask.item.parse(&response.text, run.level, &run.context);
-            let (text, stop, thinking) = (&response.text, &response.stop, &response.thinking);
-            match &found {
-                Ok(_) => log::debug!(
-                    "Analysis {job}: {id}, attempt {attempt}, answered ({stop:?}): {text:?}, reasoning: {thinking:?}"
-                ),
-                Err(_) => log::info!(
-                    "Analysis {job}: {id}, attempt {attempt}, an answer that isn't the JSON object ({stop:?}): {text:?}, reasoning: {thinking:?}"
-                ),
-            }
+            let (text, thinking) = (&response.text, &response.thinking);
+            log::debug!(
+                "Analysis {job}: {id}, attempt {attempt}, found: {found:?}, text: {text:?}, reasoning: {thinking:?}"
+            );
             let cut = response.stop == StopReason::MaxTokens;
             if found.is_err() && !cut && attempt < LITE_ATTEMPTS {
                 run.queue.again(Ask {

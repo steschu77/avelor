@@ -526,10 +526,11 @@ impl App {
 
     // ------------------------------------------------------------------------
     /// Tell the page `text` in its status bar (the event `notice`, level
-    /// info), and log it: what an undo or a redo did, what a job brought,
-    /// e.g. new email; `entity` is the one a click on it shows.
+    /// info), and log its key: what an undo or a redo did, what a job
+    /// brought, e.g. new email, whose subject stays out of the log; `entity`
+    /// is the one a click on it shows.
     pub fn inform(&self, text: Text, entity: Option<Id>) {
-        log::info!("{text:?}");
+        log::info!("Notice: {}", text.key);
         let notice = serde_json::json!({ "level": "info", "text": text, "entity": entity });
         self.post_event("notice", notice);
     }
