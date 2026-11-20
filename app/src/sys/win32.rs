@@ -7,6 +7,7 @@ mod webview;
 mod window;
 
 use crate::config::ConfigStore;
+use crate::kept::Folders;
 use crate::shell::{Shell, TITLE};
 use av_utils::error::Result;
 use windows::Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME};
@@ -26,14 +27,15 @@ pub use window::UiSignal;
 /// Show the main window in the state `config` saved, with the page in its
 /// web view, and run the message loop until the window is gone; an error if
 /// the web view didn't come up.
-pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
+pub fn run(paths: &Paths, config: ConfigStore) -> Result<bool> {
     let webview_dir = paths.webview_dir();
-    let shell = Shell::new(config, paths.catalog_dir());
+    let shell = Shell::new(config, Folders::of(paths));
     let window = window::WindowProc::create(TITLE, Some("APP_ICON"), webview_dir, shell)?;
     window::run_message_loop();
     let failure = window.take_failure();
+    let removes = window.removes();
     drop(window);
-    failure.map_or(Ok(()), Err)
+    failure.map_or(Ok(removes), Err)
 }
 
 // ----------------------------------------------------------------------------

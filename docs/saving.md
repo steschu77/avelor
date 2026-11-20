@@ -360,6 +360,9 @@ the page first (`close::on_close`; `close.rs`, `features/close.js`).
   waiting, keeps the window: the conflict dialog is on screen, and closing
   again once it is answered goes on. A save that failed otherwise doesn't
   hold the close; its error was shown in the status bar.
+- **Removing Avelor's data** (`ui.md#settings`) closes the same way
+  (`close::and_remove`), and what Avelor keeps on this PC goes once the
+  window is gone. Not ready, it all stays, and closing again only closes.
 - **No answer.** A page that doesn't answer within 4 s is hung or broken
   and can't save anything: the window closes anyway.
 - The host closes the window through the UI queue

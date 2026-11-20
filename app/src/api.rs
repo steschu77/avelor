@@ -130,16 +130,23 @@ pub fn reveal_vault(app: &mut App, req: Req) {
         };
         return req.fail(error, Text::new("vault.none_open"));
     };
+    reveal(app, req, root, Text::new("vault.show_failed"));
+}
+
+// ----------------------------------------------------------------------------
+/// Show the folder `path` in the file manager once the handler has returned.
+/// Answers `null`, or the shell's error with `failed`.
+pub fn reveal(app: &mut App, req: Req, path: PathBuf, failed: Text) {
     app.on_ui(
         {
-            let root = root.clone();
-            move |_| sys::open_path(&root)
+            let path = path.clone();
+            move |_| sys::open_path(&path)
         },
         move |_, opened| match opened {
             Ok(()) => req.ok(()),
             Err(e) => {
-                log::warn!("Could not show {} in its folder: {e}", root.display());
-                req.fail(e, Text::new("vault.show_failed"));
+                log::warn!("Could not show {} in its folder: {e}", path.display());
+                req.fail(e, failed);
             }
         },
     );

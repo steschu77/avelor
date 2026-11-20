@@ -15,6 +15,8 @@ pub(crate) mod files;
 
 const CONFIG_FILE: &str = "config.yaml";
 const BROKEN_FILE: &str = "config.yaml.broken";
+/// The settings' files in the config folder.
+pub const FILES: [&str; 2] = [CONFIG_FILE, BROKEN_FILE];
 
 // ----------------------------------------------------------------------------
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

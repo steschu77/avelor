@@ -95,7 +95,7 @@ The structural commands go through `structureCall`
 
 ### Vault commands
 
-Host modules: `api.rs`, `settings.rs`, `me.rs`, `indexing.rs`,
+Host modules: `api.rs`, `settings.rs`, `me.rs`, `kept.rs`, `indexing.rs`,
 `vault_settings.rs`, `search.rs`.
 
 | Command | Args | Reply and pushes |
@@ -107,6 +107,9 @@ Host modules: `api.rs`, `settings.rs`, `me.rs`, `indexing.rs`,
 | `set_language` | `{ language, formal? }` | The language of the next start (`config.yaml` `language`), one of `ready`'s `all` or null for the system's, and whether its texts address the user formally. `null`; `invalid_argument` for another language, or the failed save ("Could not save the settings"). |
 | `set_theme` | `{ theme }` | `"system"`, `"light"` or `"dark"`: the title bar at once, where it follows (`architecture.md#platforms`), and the next start (`config.yaml` `theme`); the page changes its own colors. `null`; `bad_request` for another theme, or the failed save ("Could not save the settings"). |
 | `set_me` | `{ contact }` | Who the user is in the open vault (`ui.md#settings`): a contact of it, or null. The ids in `me` that aren't contacts of the open vault stay (another vault's). Answers `me` as it is now; `not_found`, `wrong_kind` (not a contact), `not_initialized` ("No vault is open.", or "The vault is still being read …"), or the failed save ("Could not save the settings"). |
+| `kept` | — | What Avelor keeps on this PC outside the vaults (`architecture.md#storage`), counted on a worker: `{folder, settings, secrets, google, ai, client, catalog, web, log}`: the settings' folder; the bytes of the settings, the secrets, the catalogs, the web view's files and the logs; how many Google sign-ins and AI keys are among the secrets, and whether the user's own Google client is. |
+| `reveal_data` | — | Open the settings' folder, as `reveal_vault` does the vault's. `null`, or the shell's error ("Could not show Avelor's folder."). |
+| `remove_data` | — | Close the window as its Close does (`saving.md#closing-the-app`) and remove what `kept` counts once it is gone; a close that doesn't come about leaves both, and a later one is just that. `null`. |
 | `reveal_vault` | — | Open the vault's folder in Explorer (on Linux the file manager) once the handler has returned. `null`; `invalid_path` ("No vault is open."), or the shell's error ("Could not show the vault's folder."). |
 | `rebuild_index` | — | Empty the open vault's catalog and open the vault again, as `switch_vault` to the same folder does, so every file is read (`vault.md#catalog`); not remembered. With a switch waiting for the old vault's jobs, its vault is the one rebuilt. `null` once it is under way; `not_initialized` ("No vault is open."). The page sends its unsaved edits first. |
 | `window` | `{ step }` | What the host's own keys do, from the page (`ui.md#go-to`): `zoom_in`, `zoom_out` and `zoom_reset` zoom the page a step in or out or back to 100%, `fullscreen` enters or leaves fullscreen. `null`; `bad_request` for another step. |

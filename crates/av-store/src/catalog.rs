@@ -388,6 +388,15 @@ fn format_of(name: &str, hash: &str) -> Option<u32> {
 }
 
 // ----------------------------------------------------------------------------
+/// Whether `name` is a catalog's file, of any vault and any format.
+pub fn is_catalog_file(name: &str) -> bool {
+    name.split_once('-').is_some_and(|(hash, _)| {
+        let digits = hash.bytes().all(|b| b.is_ascii_hexdigit());
+        hash.len() == 16 && digits && format_of(name, hash).is_some()
+    })
+}
+
+// ----------------------------------------------------------------------------
 /// Remove the vault `hash`'s files of other formats. One another instance
 /// holds open stays: on Windows the removal fails, on Linux that instance
 /// keeps the file it has.
@@ -677,6 +686,10 @@ mod tests {
         assert_eq!(format_of(&format!("{hash}-v12.db-wal"), &hash), Some(12));
         assert_eq!(format_of(&format!("{hash}-v.db"), &hash), None);
         assert_eq!(format_of(&format!("{hash}-v1.db.bak"), &hash), None);
+        let is = |name: String| is_catalog_file(&name);
+        assert!(is(format!("{other}-v12.db")) && is(format!("{hash}-v1.db-shm")));
+        assert!(!is(format!("{hash}-vectors.db")) && !is("photo-v1.db".to_string()));
+        assert!(!is(format!("{hash}.db")) && !is(format!("{hash}0-v1.db")));
     }
 
     // ------------------------------------------------------------------------

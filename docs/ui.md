@@ -634,6 +634,12 @@ start says so in the row. Another vault opening leaves the page open.
     read, it can't be picked: which of the ids are the vault's isn't known
     yet. What the user adds from then on names them (`vault.md#sources`),
     and the card shows it as Added by (`panel.md#cards`).
+- **On this PC**: what Avelor keeps outside the vaults
+  (`architecture.md#storage`), counted as the page opens: the settings, the
+  sign-ins and keys of every vault, the index, the web view's files and the
+  logs, each with its size, and the folder to show. **Remove Avelor's data**
+  removes them: a first click says what goes and what stays, a second quits
+  and does it; Esc takes the first back.
 
 ## Preferences <a id="preferences"></a>
 
@@ -701,6 +707,7 @@ the days as they were.
 | A8 | Stop a job | the card's Stop | `cancel_job` → the job's requests cancelled; it ends `stopped · …` | email fetch, calendar sync |
 | A9 | Language | Settings → the language or its form of address → `setLanguage` (`features/workspace/settings.js`) | `set_language {language, formal}` → `config.yaml` `language` | the row says what the next start shows (`localization.md#language`) |
 | A10 | Theme | Settings → System, Light, Dark → `setTheme` | `set_theme {theme}` → `config.yaml` `theme`, the title bar (`UiSignal::theme`) | the page in the theme (`data-theme`) |
+| A12 | Remove Avelor's data | Settings → Remove…, Remove and quit | `remove_data` → a close (`saving.md#closing-the-app`) → `Shell::removes`, `kept::remove` | quit, and its data gone from this PC; a save that can't be made leaves both |
 | A13 | Who you are | Settings → a contact, Nobody, or New contact (`create_entity` first) → `setMe` | `set_me {contact}` → `config.yaml` `me` | the box and the list name the contact |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `watch:<id>`, `<account>\nemail`, `<account>\ncalendar\n<id>` |

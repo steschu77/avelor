@@ -20,6 +20,7 @@ use crate::api;
 use crate::app::{App, UiQueue, UiTask};
 use crate::config::load_config;
 use crate::google::oauth::GoogleClient;
+use crate::kept::Folders;
 use crate::sys::UiSignal;
 use av_google::auth::{OAuth, OAuthClient};
 use av_pdf::{Dict, Object, Stream, Writer};
@@ -48,7 +49,7 @@ impl Harness {
             let sent = Rc::clone(&sent);
             Box::new(move |text: &str| sent.borrow_mut().push(text.to_string()))
         };
-        let mut app = App::new(Arc::clone(&ui), outbox, config, dir.join("catalog"));
+        let mut app = App::new(Arc::clone(&ui), outbox, config, Folders::in_dir(&dir));
         // The tests run as a build with its own client, whatever its
         // features and variables.
         app.google_client = GoogleClient::BuiltIn;
@@ -210,7 +211,7 @@ impl Harness {
 impl Drop for Harness {
     fn drop(&mut self) {
         // Its file is held open until then.
-        self.app.vault.catalog().close();
+        self.app.vault.catalog().close_waiting();
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }

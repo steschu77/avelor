@@ -20,6 +20,7 @@ mod email;
 mod google;
 mod indexing;
 mod jobs;
+mod kept;
 mod me;
 mod page;
 mod protocol;
@@ -41,6 +42,8 @@ mod watches;
 
 use av_utils::error::Result;
 use av_utils::logger;
+
+use crate::kept::Folders;
 
 // ----------------------------------------------------------------------------
 /// The run: the app's folders and the log first. A failed start is named in
@@ -70,5 +73,8 @@ fn run(paths: &sys::Paths) -> Result<()> {
         config.set_session_vault(std::path::absolute(vault)?);
     }
 
-    sys::run(paths, config)
+    if sys::run(paths, config)? {
+        kept::remove(&Folders::of(paths));
+    }
+    Ok(())
 }

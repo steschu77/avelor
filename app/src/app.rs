@@ -24,6 +24,7 @@ use crate::google::accounts::GoogleAccounts;
 use crate::google::oauth::{self, GoogleClient};
 use crate::indexing::Indexing;
 use crate::jobs::Jobs;
+use crate::kept::Folders;
 use crate::me;
 use crate::protocol::{self, Req};
 use crate::scans::ScanState;
@@ -379,6 +380,10 @@ pub fn catalog_key(local: &Path) -> Option<String> {
 pub struct App {
     outbox: Outbox,
     pub config: ConfigStore,
+
+    /// The app's folders (`kept`).
+    pub folders: Folders,
+
     /// The open vault: read through `Vault::index`, edited through
     /// `App::edit`.
     pub vault: Vault,
@@ -453,18 +458,13 @@ impl App {
     // ------------------------------------------------------------------------
     /// `ui` is the window's task queue: the shell runs what is queued on it
     /// (`Shell::run_tasks`). Every message to the page goes to `outbox`.
-    /// `catalog_dir` holds the vaults' catalogs (`vault.md#catalog`).
-    pub fn new(
-        ui: Arc<UiQueue>,
-        outbox: Outbox,
-        config: ConfigStore,
-        catalog_dir: PathBuf,
-    ) -> Self {
+    pub fn new(ui: Arc<UiQueue>, outbox: Outbox, config: ConfigStore, folders: Folders) -> Self {
         let (google_client, oauth) = oauth::start(config.dir());
         Self {
             outbox,
             config,
-            vault: Vault::new(catalog_dir),
+            vault: Vault::new(folders.catalog.clone()),
+            folders,
             ui,
             google: GoogleAccounts::default(),
             google_client,

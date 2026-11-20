@@ -279,6 +279,13 @@ impl WindowProc {
     }
 
     // ------------------------------------------------------------------------
+    /// Whether what Avelor keeps on this PC is to go, once the message loop
+    /// has ended (`Shell::removes`).
+    pub fn removes(&self) -> bool {
+        self.shell.removes()
+    }
+
+    // ------------------------------------------------------------------------
     /// The title bar and the web view's ground before the page paints in
     /// the theme, as the page's colors are.
     fn follow_theme(&self) {

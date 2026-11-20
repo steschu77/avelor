@@ -13,6 +13,7 @@ use gtk::{gio, glib};
 use webkit6::prelude::WebViewExt;
 
 use crate::config::ConfigStore;
+use crate::kept::Folders;
 use crate::page;
 use crate::shell::Shell;
 use av_utils::error::Result;
@@ -35,14 +36,15 @@ const APP_ID: &str = "io.github.steschu77.Avelor";
 /// Show the main window in the state `config` saved, with the page in its
 /// web view, and run the main loop until the window is gone. Each start is
 /// a process of its own (`NON_UNIQUE`), as on Windows.
-pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
+pub fn run(paths: &Paths, config: ConfigStore) -> Result<bool> {
     let (data_dir, cache_dir) = (paths.webview_dir(), paths.webview_cache_dir());
     let app = gtk::Application::builder()
         .application_id(APP_ID)
         .flags(gio::ApplicationFlags::NON_UNIQUE)
         .register_session(true)
         .build();
-    let shell = Rc::new(Shell::new(config, paths.catalog_dir()));
+    let shell = Rc::new(Shell::new(config, Folders::of(paths)));
+    let ended = Rc::clone(&shell);
     app.connect_activate(move |app| {
         let webview = webview::create(&data_dir, &cache_dir, &shell);
         let window = window::create(app, &webview, &shell);
@@ -55,7 +57,7 @@ pub fn run(paths: &Paths, config: ConfigStore) -> Result<()> {
     });
     // GTK isn't handed the command line: it has no options of its own.
     app.run_with_args::<&str>(&[]);
-    Ok(())
+    Ok(ended.removes())
 }
 
 // ----------------------------------------------------------------------------

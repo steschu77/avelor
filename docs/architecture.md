@@ -429,6 +429,7 @@ knows neither: `app` turns the indexing's texts into its rows.
 | `config/files.rs` | the config-file helpers (`accounts.md#design`): `SecretFile`, `ConnectionStatus`, `write_yaml`, `load_config_files`, `free_stem` |
 | `settings.rs` | what the Settings page sets: the language as `ready` tells it (`language`), `set_language`, `set_theme`; its dispatch tests |
 | `me.rs` | who the user is in the open vault (`config.yaml` `me`): `set_me`, `by`, which `App::edit` has a new entity's source name (`vault.md#sources`); its dispatch tests |
+| `kept.rs` | what Avelor keeps on this PC outside the vaults (`Folders`): `kept`, `reveal_data`, `remove_data`, and the removal once the window is gone (`remove`); its dispatch tests |
 | `vault_settings.rs` | the vault's own settings (`.avelor/vault.yaml`): the `VaultSettings` sub-state, loaded on vault open, `set_vault_settings`, the event `vault_settings`; its dispatch tests |
 | `ai/context.rs` | the context builder: what the AI is told about a conversation's linked document or thread, each as its file with its attachments' read text, within a budget, each as far as its classification reaches the model; its tests |
 | `ai/policy.rs` | what reaches a model: how far an entity's classification reaches one on this PC and one off it, whether a model runs on this PC, a `masked` entity's values as placeholders and the reply's values filled in; its tests |
@@ -762,6 +763,12 @@ The app's configuration lives in `%LOCALAPPDATA%\Avelor\` (`config.rs`,
   (`development.md#diagnosis`);
 - the vaults' catalogs in `…\Avelor\catalog` (`vault.md#catalog`),
   written through SQLite's transactions.
+
+Settings shows what is kept there and can remove it (`kept.rs`,
+`ui.md#settings`): once the window is gone, by the files' names, the web
+view's by their folder, trying again for some seconds while the web view's
+processes end. A file of another name stays, and so does a folder that isn't
+empty then; what can't be removed is named in a box.
 
 A broken `config.yaml` is set aside at start, without a question, as
 `config.yaml.broken`; an older one is kept, and the broken file is

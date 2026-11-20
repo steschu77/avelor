@@ -140,16 +140,17 @@ impl CatalogThread {
     }
 
     // ------------------------------------------------------------------------
-    /// Close the catalog once what was queued has run, and wait for it: a
-    /// test's folder can go then.
-    #[cfg(test)]
+    /// Close the catalog once what was queued has run: its file can go then.
     pub fn close(&self) {
-        let (closed, waited) = mpsc::sync_channel(1);
-        self.queue(move |state| {
-            *state = CatalogState::default();
-            let _ = closed.send(());
-        });
-        let _ = waited.recv();
+        self.queue(|state| *state = CatalogState::default());
+    }
+
+    // ------------------------------------------------------------------------
+    /// `close`, and wait for it.
+    #[cfg(test)]
+    pub fn close_waiting(&self) {
+        self.close();
+        self.ask(|_| ());
     }
 
     // ------------------------------------------------------------------------

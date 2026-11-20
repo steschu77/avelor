@@ -6,7 +6,8 @@
 //! closing again goes on once that is answered. A page that doesn't answer
 //! within `CLOSE_WAIT` is hung or broken and can't save anything: the window
 //! closes then. The app closes the window through the UI queue
-//! (`UiQueue::close_window`), never from a worker.
+//! (`UiQueue::close_window`), never from a worker. Removing what Avelor keeps
+//! on this PC (`kept::remove_data`) closes it the same way.
 //!
 //! The session ending is answered at once, without the page: the UI thread
 //! never waits for it (`architecture.md#principles`, principle 8).
@@ -32,6 +33,17 @@ pub struct CloseState {
     /// The close asked (the event `close`), until the page answers or its
     /// wait ends.
     asked: Option<Id>,
+    /// Whether what Avelor keeps on this PC is to go once the window is
+    /// closed (`and_remove`).
+    removing: bool,
+}
+
+impl CloseState {
+    // ------------------------------------------------------------------------
+    /// Whether the close asked last is for a removal (`and_remove`).
+    pub fn removes(&self) -> bool {
+        self.removing
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -46,12 +58,27 @@ pub(crate) struct Answer {
 /// The window's Close: ask the page, unless a close is asked already -- its
 /// answer or its wait ends that one.
 pub fn on_close(app: &mut App) {
+    ask(app, false);
+}
+
+// ----------------------------------------------------------------------------
+/// Close as the window's Close does, and have what Avelor keeps on this PC
+/// removed then (`Shell::removes`). A close that doesn't come about removes
+/// nothing, nor does a later one.
+pub fn and_remove(app: &mut App) {
+    ask(app, true);
+}
+
+// ----------------------------------------------------------------------------
+fn ask(app: &mut App, removing: bool) {
     if let Some(id) = app.close.asked {
+        app.close.removing |= removing;
         return log::info!("Close {id}: asked already");
     }
     let id = Id::generate();
     log::info!("Close {id}: asking the page");
     app.close.asked = Some(id);
+    app.close.removing = removing;
     app.post_event("close", json!({ "id": id }));
     app.run(
         |_| std::thread::sleep(CLOSE_WAIT),
@@ -77,7 +104,10 @@ pub fn close_ready(app: &mut App, req: Req, answer: Answer) {
             log::info!("Close {id}: the page is ready");
             app.ui().close_window();
         }
-        false => log::info!("Close {id}: not ready, a file changed outside the app"),
+        false => {
+            app.close.removing = false;
+            log::info!("Close {id}: not ready, a file changed outside the app");
+        }
     }
 }
 
@@ -101,7 +131,9 @@ fn waited(app: &mut App, id: Id) {
 /// processes at their own `WM_ENDSESSION`). What it saved is on disk, at
 /// most about a second behind the typing (`saving.md#triggers`); a save
 /// refused for a conflict is kept as a conflict copy (`documents::keep_held`).
+/// Nothing of the app's is removed then (`and_remove`).
 pub fn on_session_end(app: &mut App) {
+    app.close.removing = false;
     documents::keep_held(app);
 }
 

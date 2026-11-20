@@ -15,6 +15,7 @@ use crate::close;
 use crate::documents;
 use crate::google;
 use crate::google::accounts::{CalendarSource, Level};
+use crate::kept;
 use crate::me;
 use crate::recurring_payments;
 use crate::scans;
@@ -67,6 +68,10 @@ enum Command {
     SetLanguage(settings::LanguageChange),
     SetTheme(settings::ThemeChange),
     SetMe(me::Pick),
+    // What Avelor keeps on this PC (`kept`).
+    Kept,
+    RevealData,
+    RemoveData,
     /// The vault's own settings (`vault_settings`).
     SetVaultSettings(vault_settings::SettingsChange),
     RevealVault,
@@ -396,6 +401,9 @@ impl Command {
             "set_language" => Command::SetLanguage(from_value(args)?),
             "set_theme" => Command::SetTheme(from_value(args)?),
             "set_me" => Command::SetMe(from_value(args)?),
+            "kept" => Command::Kept,
+            "reveal_data" => Command::RevealData,
+            "remove_data" => Command::RemoveData,
             "set_vault_settings" => Command::SetVaultSettings(from_value(args)?),
             "reveal_vault" => Command::RevealVault,
             "rebuild_index" => Command::RebuildIndex,
@@ -509,6 +517,9 @@ fn route(app: &mut App, req: Req, command: Command) {
         Command::SetLanguage(a) => settings::set_language(app, req, a),
         Command::SetTheme(a) => settings::set_theme(app, req, a),
         Command::SetMe(a) => me::set_me(app, req, a),
+        Command::Kept => kept::kept(app, req),
+        Command::RevealData => kept::reveal_data(app, req),
+        Command::RemoveData => kept::remove_data(app, req),
         Command::SetVaultSettings(a) => vault_settings::set_vault_settings(app, req, a),
         Command::RevealVault => api::reveal_vault(app, req),
         Command::RebuildIndex => api::rebuild_index(app, req),

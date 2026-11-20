@@ -558,6 +558,67 @@
   width: 200px;
 }
 
+/* what Avelor keeps on this PC: what it is, what for, its size */
+.kept {
+  display: flex;
+  flex-direction: column;
+}
+
+.kept__folder {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.kept__folder>.mono {
+  flex: 1;
+  min-width: 0;
+}
+
+.kept__row {
+  --cols: 150px minmax(0, 1fr) auto;
+  min-height: var(--h-row);
+  padding: 5px 0;
+  align-items: baseline;
+  gap: 0 16px;
+}
+
+.kept__row>.meta {
+  min-width: 48px;
+  text-align: right;
+}
+
+/* a removal, to confirm: what goes and what stays */
+.removal {
+  flex: 1 0 100%;
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-left: 2px solid var(--c-danger-ink);
+  background: var(--c-danger-soft);
+}
+
+.removal p {
+  margin: 0;
+}
+
+.removal ul {
+  margin: 0;
+  padding: 0 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.removal__foot {
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+}
+
 @media (max-width: 1240px) {
   .list-detail--settings {
     grid-template-columns: 264px minmax(0, 1fr);
@@ -576,6 +637,16 @@
 
   .setting__control {
     justify-content: flex-start;
+  }
+
+  .kept__row {
+    --cols: minmax(0, 1fr) auto;
+    row-gap: 1px;
+  }
+
+  .kept__row>.note {
+    grid-row: 2;
+    grid-column: 1 / -1;
   }
 }
 

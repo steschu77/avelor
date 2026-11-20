@@ -103,7 +103,7 @@ fn prune(dir: &std::path::Path, today: Date) {
 
 // ----------------------------------------------------------------------------
 /// Whether `name` is a run's log, `YYYYMMDD_HHMMSS.log` (`FileLogger::init`).
-fn is_run_log(name: &str) -> bool {
+pub fn is_run_log(name: &str) -> bool {
     let digits =
         |part: &str, len: usize| part.len() == len && part.bytes().all(|b| b.is_ascii_digit());
     let stamp = name

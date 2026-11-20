@@ -31,6 +31,12 @@ impl Paths {
     }
 
     // ------------------------------------------------------------------------
+    /// The web view's folders, its own as a whole.
+    pub fn web_dirs(&self) -> Vec<PathBuf> {
+        vec![self.webview_dir()]
+    }
+
+    // ------------------------------------------------------------------------
     /// `%LOCALAPPDATA%\Avelor\log`: one log file per run.
     pub fn log_dir(&self) -> PathBuf {
         self.app_dir.join("log")

@@ -4,6 +4,7 @@
 
 import { $, accEl, oncePerFrame, setAria } from '../../core/dom.js';
 import { registerAction, runAction, shortcutText } from '../../core/actions.js';
+import { fileSize } from '../../core/format.js';
 import { rpcCall } from '../../core/rpc.js';
 import { locale, t } from '../../core/text.js';
 import { entities, me } from '../../model/entities.js';
@@ -23,7 +24,7 @@ const scheduleRenderSettings = oncePerFrame(renderSettings);
 function renderSettings() {
   const { vault_op, language } = store.getState();
   if (vault_op !== 'settings' || !language) return;
-  const parts = [lookPart(language), youPart()];
+  const parts = [lookPart(language), youPart(), pcPart()];
 
   const links = accEl('div', 'settings__links');
   links.append(...parts.map(({ id, title, now }) => linkRow(title, accEl('span', 'meta', now), () => showPart(id))));
@@ -257,14 +258,117 @@ function noVaultRow() {
 }
 
 // ----------------------------------------------------------------------------
+// What Avelor keeps on this PC outside the vaults (the host's kept.rs)
+
+let kept = null; // the answer to `kept`, asked as the page opens
+let removing = false; // whether what a removal does is shown, to confirm it
+
+function countKept() {
+  rpcCall('kept', {}, { channel: 'kept' }).then(answer => {
+    kept = answer;
+    scheduleRenderSettings();
+  }).catch(e => {
+    if (e.code !== 'superseded') showError(e.message);
+  });
+}
+
+function pcPart() {
+  const size = kept ? fileSize(kept.settings + kept.secrets + kept.catalog + kept.web + kept.log) : '';
+  return {
+    id: 'pc', title: t('settings.pc'), scope: kept ? t('settings.outside', { size }) : '', now: size,
+    rows: [...(kept ? [keptEl()] : []), removeRow()],
+  };
+}
+
+function keptEl() {
+  const el = accEl('div', 'kept');
+  const folder = accEl('div', 'kept__folder');
+  const show = accEl('button', 'btn', t('sidebar.show_in_folder'));
+  show.type = 'button';
+  show.dataset.focusKey = 'show-data';
+  show.addEventListener('click', () => rpcCall('reveal_data').catch(e => showError(e.message)));
+  folder.append(accEl('span', 'mono truncate-start', kept.folder), show);
+  el.append(folder);
+  for (const [name, note, bytes] of [
+    [t('settings.name'), t('settings.kept.settings'), kept.settings],
+    [t('settings.kept.secrets'), secretsText(), kept.secrets],
+    [t('settings.kept.index'), t('settings.kept.index_note'), kept.catalog],
+    [t('settings.kept.window'), t('settings.kept.window_note'), kept.web],
+    [t('settings.kept.log'), t('settings.kept.log_note'), kept.log],
+  ]) {
+    const row = accEl('div', 'list-row kept__row');
+    row.append(accEl('span', 'row-title', name), accEl('span', 'note', note), accEl('span', 'meta', fileSize(bytes)));
+    el.append(row);
+  }
+  return el;
+}
+
+// "3 Google sign-ins, 4 AI keys; only your account on this PC can read them".
+function secretsText() {
+  const { google, ai, client } = kept;
+  const what = [
+    ...(google ? [t('settings.kept.google', { n: google })] : []),
+    ...(ai ? [t('settings.kept.ai', { n: ai })] : []),
+    ...(client ? [t('settings.kept.client')] : []),
+  ];
+  return what.length ? t('settings.kept.only_you', { what: what.join(', ') }) : t('settings.kept.no_secrets');
+}
+
+// The removal: its first click says what goes and what stays, its second
+// does it.
+function removeRow() {
+  const remove = accEl('button', 'btn btn--danger-text', t('settings.remove_dots'));
+  remove.type = 'button';
+  remove.dataset.focusKey = 'remove';
+  remove.addEventListener('click', () => showRemoval(true));
+  const row = settingRow(t('settings.remove'), [t('settings.remove_note')], ...(removing ? [] : [remove]));
+  if (removing) row.append(removalEl());
+  return row;
+}
+
+function removalEl() {
+  const el = accEl('div', 'removal prose');
+  el.setAttribute('role', 'alertdialog');
+  el.setAttribute('aria-label', t('settings.remove'));
+  const list = accEl('ul');
+  for (const text of [
+    t('settings.gone.vaults'),
+    ...(!kept || kept.google || kept.ai ? [t('settings.gone.secrets')] : []),
+    ...(!kept || kept.google ? [t('settings.gone.google')] : []),
+    t('settings.gone.start'),
+  ]) list.append(accEl('li', '', text));
+  const go = accEl('button', 'btn btn--danger', t('settings.remove_quit'));
+  go.type = 'button';
+  go.dataset.focusKey = 'remove-quit';
+  go.addEventListener('click', () => rpcCall('remove_data').catch(e => showError(e.message)));
+  const keep = accEl('button', 'btn', t('field.cancel'));
+  keep.type = 'button';
+  keep.dataset.focusKey = 'keep';
+  keep.addEventListener('click', () => showRemoval(false));
+  const foot = accEl('div', 'removal__foot');
+  foot.append(go, keep);
+  el.append(accEl('p', '', t('settings.gone')), list, foot);
+  return el;
+}
+
+function showRemoval(on) {
+  removing = on;
+  setPageFocus(on ? 'keep' : 'remove');
+  renderSettings();
+}
+
+// ----------------------------------------------------------------------------
 // Open the page, the focus on the control `key`, if given.
 function openSettings(key) {
+  removing = false;
   if (key) setPageFocus(key);
   openVaultOp('settings');
   scheduleRenderSettings();
+  countKept();
 }
 
-registerVaultPage('settings', { close: closeVaultArea, ofVault: false });
+// Esc takes a removal back first.
+registerVaultPage('settings', { close: () => (removing ? showRemoval(false) : closeVaultArea()), ofVault: false });
 store.subscribe([
   state => state.vault_op, state => state.language, state => state.vault_state, state => state.vault_name,
   state => state.entities_rev, state => state.me,
@@ -280,6 +384,7 @@ for (const [id, title, also, control, when] of [
   ['language', t('settings.language'), t('settings.language_also'), () => 'language'],
   ['theme', t('settings.theme'), t('settings.theme_also'), () => `theme:${pickedTheme()}`],
   ['who', t('settings.who'), t('settings.who_also'), () => 'who', vaultOpen],
+  ['remove', t('settings.remove'), t('settings.remove_also'), () => 'remove'],
 ]) {
   registerAction({
     id: `settings.${id}`, group: 'settings', title, icon: '#i-settings', also, page: true, when,

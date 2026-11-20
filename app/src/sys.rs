@@ -3,8 +3,9 @@
 //! re-exported here, so the rest of the app never names a platform:
 //!
 //! - `paths() -> Result<Paths>`: the app's folders.
-//! - `run(paths: &Paths, config: ConfigStore) -> Result<()>`: show the main
-//!   window and run the main loop; returns once the window is gone.
+//! - `run(paths: &Paths, config: ConfigStore) -> Result<bool>`: show the main
+//!   window and run the main loop; returns once the window is gone, and
+//!   whether what Avelor keeps on this PC is to go too (`Shell::removes`).
 //! - `UiSignal` (`Send + Sync`): `wake()` has the UI thread run the app's
 //!   queue (`Shell::run_tasks`), from any thread; tests use `UiSignal::none()`.
 //! - `Owner`: the main window as the owner of a `UiTask::Modal`'s dialog;

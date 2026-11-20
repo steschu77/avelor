@@ -40,6 +40,11 @@
   filter: brightness(1.04);
 }
 
+/* what comes before a .btn--danger */
+.btn--danger-text {
+  color: var(--c-danger-ink);
+}
+
 .btn--ghost {
   border-color: transparent;
   color: var(--c-label);

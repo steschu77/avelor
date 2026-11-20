@@ -22,7 +22,7 @@ use crate::texts::{self, Text};
 
 /// The user's own client, in the config folder beside the accounts'
 /// secrets.
-const FILE: &str = "google.client";
+pub const FILE: &str = "google.client";
 /// How the id of every client Google hands out ends.
 const ID_END: &str = ".apps.googleusercontent.com";
 

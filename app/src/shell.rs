@@ -4,13 +4,13 @@
 
 use std::cell::RefCell;
 use std::cell::{Cell, OnceCell};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::app::Prefs;
 use crate::app::{App, Outbox, UiQueue, UiTask};
 use crate::close;
 use crate::config::{ConfigStore, Theme, WindowState};
+use crate::kept::Folders;
 use crate::sys::Owner;
 use crate::sys::UiSignal;
 use av_utils::error::Error;
@@ -31,8 +31,8 @@ const DEFAULT_STATE: WindowState = WindowState {
 pub struct Shell {
     /// The app config, held until `App` exists and takes it over.
     config: RefCell<Option<ConfigStore>>,
-    /// The folder of the vaults' catalogs, handed to `App`.
-    catalog_dir: PathBuf,
+    /// The app's folders, handed to `App`.
+    folders: Folders,
     /// Taken only by `run_tasks`, for one task at a time. A message that
     /// finds it taken came from a modal loop inside that task, and its work
     /// waits in the queue until the task returns.
@@ -51,10 +51,10 @@ pub struct Shell {
 
 impl Shell {
     // ------------------------------------------------------------------------
-    pub fn new(config: ConfigStore, catalog_dir: PathBuf) -> Self {
+    pub fn new(config: ConfigStore, folders: Folders) -> Self {
         Self {
             config: RefCell::new(Some(config)),
-            catalog_dir,
+            folders,
             app: RefCell::new(None),
             ui: OnceCell::new(),
             deferred: Cell::new(false),
@@ -82,7 +82,7 @@ impl Shell {
         };
         let prefs = config.prefs().clone();
         let ui = Arc::new(UiQueue::new(signal));
-        let app = App::new(Arc::clone(&ui), outbox, config, self.catalog_dir.clone());
+        let app = App::new(Arc::clone(&ui), outbox, config, self.folders.clone());
         if let Ok(mut slot) = self.app.try_borrow_mut() {
             *slot = Some(app);
         }
@@ -125,6 +125,20 @@ impl Shell {
     /// is no page to ask, and the window closes at once.
     pub fn on_close(&self) -> bool {
         self.queue(close::on_close).is_ok()
+    }
+
+    // ------------------------------------------------------------------------
+    /// The window is gone: whether what Avelor keeps on this PC is to go too
+    /// (`kept::remove`). The catalog is closed then, for its file to go.
+    pub fn removes(&self) -> bool {
+        let Ok(app) = self.app.try_borrow() else {
+            return false;
+        };
+        let Some(app) = app.as_ref().filter(|app| app.close.removes()) else {
+            return false;
+        };
+        app.vault.catalog().close();
+        true
     }
 
     // ------------------------------------------------------------------------
@@ -238,7 +252,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("avelor-shell-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
 
-        let shell = Shell::new(load_config(&dir).unwrap(), dir.join("catalog"));
+        let shell = Shell::new(load_config(&dir).unwrap(), Folders::in_dir(&dir));
         assert_eq!(shell.window_state(), DEFAULT_STATE);
         shell.start(UiSignal::none(), Owner::none(), Box::new(|_| {}));
         let state = WindowState {
@@ -248,8 +262,32 @@ mod tests {
         };
         shell.on_window_state(state);
 
-        let shell = Shell::new(load_config(&dir).unwrap(), dir.join("catalog"));
+        let shell = Shell::new(load_config(&dir).unwrap(), Folders::in_dir(&dir));
         assert_eq!(shell.window_state(), state);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // ------------------------------------------------------------------------
+    #[test]
+    fn a_removal_closes_the_open_vault_s_catalog() {
+        let dir = std::env::temp_dir().join(format!("avelor-shell-removes-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("vault")).unwrap();
+        let shell = Shell::new(load_config(&dir).unwrap(), Folders::in_dir(&dir));
+        assert!(!shell.removes(), "before the app is up");
+        shell.start(UiSignal::none(), Owner::none(), Box::new(|_| {}));
+        let root = dir.join("vault");
+        let _ = shell.queue(move |app| crate::api::switch_to(app, root));
+        assert!(!shell.removes());
+
+        let opened = |shell: &Shell| {
+            let app = shell.app.borrow();
+            let catalog = app.as_ref().unwrap().vault.catalog();
+            catalog.ask(|catalog| catalog.is_some()).unwrap()
+        };
+        assert!(opened(&shell));
+        let _ = shell.queue(close::and_remove);
+        assert!(shell.removes() && !opened(&shell));
+        drop(shell);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
