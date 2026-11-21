@@ -10,7 +10,7 @@ import { titled } from '../core/dom.js';
 import { registerAction, runAction } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { savePrefs, store } from '../model/state.js';
-import { openVaultOp } from '../ui/page.js';
+import { closeVaultArea, openVaultOp, registerVaultPage } from '../ui/page.js';
 
 const root = document.documentElement;
 const shell = document.querySelector(".shell");
@@ -213,11 +213,14 @@ store.subscribe(state => state.vault_expanded, vault_expanded => {
 });
 
 // A page item is highlighted only while its page is shown; a click opens
-// its page.
+// its page, and Esc closes it. Accounts and the Vault page stay while a
+// vault opens (Rebuild index opens the same one again).
 const vaultOpNavs = sidebar.querySelectorAll("[data-vault-op]");
+const NOT_OF_A_VAULT = new Set(['accounts', 'vault']);
 for (const nav of vaultOpNavs) {
   const op = nav.dataset.vaultOp;
   nav.addEventListener('click', () => openVaultOp(op));
+  registerVaultPage(op, { close: closeVaultArea, ofVault: !NOT_OF_A_VAULT.has(op) });
   registerAction({
     id: `workspace.${op}`, group: 'go', title: nav.textContent.trim(), icon: nav.querySelector('use').getAttribute('href'),
     also: nav.dataset.also, page: true, place: 'page', end: () => t('palette.page'),

@@ -28,8 +28,9 @@ pages of the vault panel: the Workspace pages (Accounts, Folders, Vault,
 Trash), Settings (`ui.md#settings`), Fetch email, Import scans and New
 recurring payment (`panel.md#a-new-recurring`). It is
 expanded only while one of them is shown: a page opens it (`openVaultOp`,
-`ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
-or a click on a filter closes it (`closeVaultArea`). Menus are popups
+`ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`,
+every one of them), a click on a filter or a lens picked (its tab, Ctrl+1
+to Ctrl+5, Go to) closes it (`closeVaultArea`). Menus are popups
 (`showMenu`, `ui/menu.js`), which mark their anchor `aria-expanded`; an
 item may say on its right what it makes (`.menu__desc`, New project's
 blueprints).
@@ -481,7 +482,7 @@ What a key, a menu, a button or Go to starts is a registered action
 - **Ctrl+Shift+P** opens Go to (`ui.md#go-to`).
 - **Ctrl+,** opens Settings (`ui.md#settings`).
 - **Esc** closes an open menu, else the page in the expanded vault area
-  (Settings, Fetch email, Import scans, New recurring payment), else drops the
+  (any of them), else drops the
   draft card shown (`panel.md#draft`) with the focus outside a field and
   the editor; in an editor it leaves edit mode.
 - **Ctrl+Enter** runs the open page's main action (Fetch, Import all,
@@ -496,7 +497,8 @@ What a key, a menu, a button or Go to starts is a registered action
 - **F6** and **Shift+F6** move between the areas: the lens tabs, the vault
   panel, the main view and the panel, onto what is current or selected
   there, else its first control.
-- **Ctrl+1** to **Ctrl+5** show the lenses, in the tabs' order.
+- **Ctrl+1** to **Ctrl+5** show the lenses, in the tabs' order, closing
+  the page in the expanded vault area.
 - A key the editor already handled (Ctrl+I as italic) is left alone.
 
 Every control is in the keyboard's reach (`architecture.md#css`): **Tab**
@@ -702,7 +704,7 @@ the days as they were.
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
 | B2 | Filter by source | source row → `selectSource(key)` | — | keys: `created`, `watch:<id>`, `<account>\nemail`, `<account>\ncalendar\n<id>` |
 | B3 | Filter by labels | the lens head's "+" → its menu, a label picked; the × of a label in the lens head → `selectFilter` | — | entities carrying all selected labels; the head names them, and the words and the source too, Clear filters after more than one |
-| B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
+| B4 | Switch lens | topbar tab, Ctrl+1 to Ctrl+5 or Go to → `selectLens` (`features/selection.js`), which closes the open vault page | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | B6 | Filter by words | typing in the box (`features/words.js`) → `selectFilter({words})`, at most every 120 ms `search` on the channel `search`; the chip's ×, the box's × or Esc → `NO_WORDS` | `search {text}` → `ok {terms, hits}` | the lenses keep what holds every word, its words marked, an excerpt where the title lacks some; the chip in the lens head; the find strip in the panel |
 | D7 | New | New item or Ctrl+N → `showNewMenu` → a draft card (`openDraft`, `panel.md#draft`); Create or Ctrl+Enter → `createDraft` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the draft is dropped and the new entity shown where it lives (`documents.show_made`); a failure stays on the card; Esc discards |

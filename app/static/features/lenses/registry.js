@@ -53,7 +53,7 @@ store.subscribe(state => state.selected_lens,
 // lens shown is remembered (the `lens` preference).
 export function restoreLens() {
   const { lens } = store.getState().prefs;
-  if (lens && lensViewEls[lens]) selectLens(lens);
+  if (lens && lensViewEls[lens]) store.setState({ selected_lens: lens });
   store.subscribe(state => state.selected_lens, selected_lens => {
     if (store.getState().prefs.lens !== selected_lens) savePrefs({ lens: selected_lens });
   });

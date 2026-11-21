@@ -73,9 +73,9 @@ export function draftKind(selected) {
 
 // ----------------------------------------------------------------------------
 // The vault area is expanded only while a page is shown in it: a page
-// opens it (`openVaultOp`), its x, Esc (`registerVaultPage`) or a filter
-// click closes it (`closeVaultArea`). The layout follows `vault_expanded`
-// (features/layout.js).
+// opens it (`openVaultOp`), its x, Esc (`registerVaultPage`), a filter
+// click or a lens picked closes it (`closeVaultArea`). The layout follows
+// `vault_expanded` (features/layout.js).
 
 // vault operations: selecting one titles the vault area and expands the panel
 const vaultOpTitles = {

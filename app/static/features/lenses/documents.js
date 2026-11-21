@@ -31,7 +31,6 @@ import { joinProjectLocal, joinThreadLocal, leaveThreadLocal } from '../../model
 import { docIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
 import { excerptNodes, markedNodes } from '../../ui/marks.js';
-import { closeVaultArea } from '../../ui/page.js';
 import {
   dropTarget, endDragPreview, startDragPreview, takeMemberDrops,
 } from '../../ui/dropzone.js';
@@ -575,12 +574,11 @@ function showingAny(members) {
   store.setState({ selected_project: null, selected_source: null, selected_labels: [], ...NO_WORDS });
 }
 
-// The lens `lens` shown, the open vault page closed; `behind`: under it (a
-// restore in Trash), the page staying.
+// The lens `lens` shown; `behind`: under the open vault page (a restore in
+// Trash), which stays.
 function showLens(lens, behind) {
-  if (behind) return store.setState({ selected_lens: lens });
-  closeVaultArea();
-  selectLens(lens);
+  if (behind) store.setState({ selected_lens: lens });
+  else selectLens(lens);
 }
 
 showHeader(store.getState().selected_lens);

@@ -104,7 +104,10 @@ export function documentsIfCalendar() {
   return store.getState().selected_lens === 'calendar' ? { selected_lens: 'documents' } : {};
 }
 
+// A lens picked (its tab, Ctrl+1 to Ctrl+5, Go to): the vault page that
+// covers the lenses closes.
 export function selectLens(selected_lens) {
+  closeVaultArea();
   store.setState({ selected_lens });
 }
 
