@@ -20,20 +20,15 @@ import { isoInstant, localDay, localTime, parseDate, relativeDay, zonedInstant }
 import { registerAction, shortcutText } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store, vaultOpen } from '../model/state.js';
-import { entities, projectScope, projectsFor } from '../model/entities.js';
-import { projectCalendar } from '../model/blueprint.js';
+import { currentDraft, openDraft, showDraft } from '../model/drafts.js';
+import { entities, projectsFor } from '../model/entities.js';
 import { eventScheduleLines } from '../model/schedule.js';
-import { writableCalendar } from '../model/calendar.js';
 import { LOCAL_ZONE, STATES, TRIP_TYPES, MEANS, byNights, placeZone } from '../model/trip.js';
 import { MEANS_ICONS, docIcon, iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
-import {
-  closeVaultArea, openVaultOp, registerVaultPage, replaceVaultPage,
-  setPageFocus,
-} from '../ui/page.js';
+import { closeVaultArea, registerVaultPage } from '../ui/page.js';
 import { accSeg } from '../ui/segmented.js';
-import { calendarMenu } from './facts.js';
-import { selectDocument } from './selection.js';
+import { calendarMenu } from './panel/event-fields.js';
 import {
   contextTarget, createdNote, registerContextTab, selectContextTab,
   shownContextTab,
@@ -49,8 +44,9 @@ import { watchFormGrid } from './workspace/folders.js';
 
 // The types New makes: their derived kind, what Go to calls it (`command`,
 // `also`), the folder the host writes them into (shown only; av-vault's
-// `schema::layout` decides), and how their title is asked for.
-const NEW_TYPES = [
+// `schema::layout` decides), and how their title is asked for; also the
+// draft card's (features/panel/draft.js).
+export const NEW_TYPES = [
   {
     kind: 'document', name: t('kind.document'), command: t('new.document'), also: t('new.document_also'), folder: 'Documents', label: t('new.label.title'), hint: t('new.label.title'),
     missing: t('new.enter_title'), create: t('new.create.document'), createTitle: t('new.create_title.document'),
@@ -153,7 +149,7 @@ for (const type of NEW_TYPES) {
   registerAction({
     id: `new.a_${type.kind}`, group: 'new', title: type.command, icon: newTypeIcon(type), also: type.also,
     when: vaultOpen,
-    run: () => openNew(type.kind),
+    run: () => openDraft(type.kind),
   });
 }
 
@@ -161,51 +157,21 @@ for (const type of NEW_TYPES) {
 registerAction({
   id: 'new.event',
   when: vaultOpen,
-  run: day => openNew('event', { start: localDay(day), end: localDay(day) }),
+  run: day => openDraft('event', { day: localDay(day) }),
 });
 
-// The types, at `anchor`.
+// The types at `anchor`, each a draft card in the side panel
+// (model/drafts.js); a kept draft first, shown again.
 function showNewMenu(anchor) {
   const items = NEW_TYPES.map(type => ({
     label: type.name,
     icon: newTypeIcon(type),
     hint: type.folder.split('\\')[0],
-    run: () => openNew(type.kind),
+    run: () => openDraft(type.kind),
   }));
+  const kept = currentDraft();
+  if (kept) items.unshift({ label: t('draft.back', { title: kept.title || t('untitled') }), icon: docIcon(kept), run: showDraft });
   showMenu(anchor, items, { head: t('new.head') });
-}
-
-// Open the New page for `kind`, in the project selected in the sidebar; an
-// event in its calendar, if it names one still in the vault (a trip's
-// `calendar` fact).
-// `fields`: what the draft starts with besides (a gap of a trip's route,
-// features/route.js), a place named in the zone it had last. Once created,
-// the page closes and the new entity is selected.
-export function openNew(kind, fields = {}) {
-  openVaultOp('new');
-  const scope = projectScope();
-  const d = newDraft(kind, {
-    page: true,
-    projects: scope ? [scope] : [],
-    scope,
-    onCreated: id => {
-      if (newPage === d) closeVaultArea();
-      selectDocument(id);
-    },
-  });
-  d.calendar = scope ? writableCalendar(projectCalendar(scope)) : null;
-  Object.assign(d, fields);
-  for (const [key, zoneKey] of [['from', 'fromZone'], ['to', 'toZone'], ['place', 'fromZone']]) {
-    if (fields[key]) d[zoneKey] = placeZone(fields[key]) ?? d[zoneKey];
-  }
-  newPage = d;
-
-  d.els.sheet = accEl('section', 'new__sheet');
-  renderNewSheet(d);
-  const page = accEl('div', 'page');
-  page.append(d.els.sheet);
-  setPageFocus('new:title');
-  replaceVaultPage(page);
 }
 
 // The New page's sheet: its head and the form; built again when an

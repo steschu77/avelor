@@ -16,7 +16,7 @@ import { nightsText } from '../model/trip.js';
 import { editEntityLocal, joinProjectLocal } from '../model/structure.js';
 import { docIcon } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
-import { openNew } from './new.js';
+import { openDraft } from '../model/drafts.js';
 import { selectDocument } from './selection.js';
 
 // How many other events the filter adds at most.
@@ -82,14 +82,21 @@ function newItem(need) {
   if (need.type === 'stay') {
     return {
       label: t('gaps.new_stay'), icon: '#i-add',
-      run: () => openNew('event', { eventKind: 'stay', place: need.place ?? '', start: localDay(need.from), end: localDay(need.to) }),
+      run: () => openDraft('event', { event: placed({ type: 'stay', status: 'confirmed', start: localDay(need.from), end: localDay(need.to) }, need.place) }),
     };
   }
   const day = localDay(need.day);
   return {
     label: t('gaps.new_journey'), icon: '#i-add',
-    run: () => openNew('event', { eventKind: 'journey', from: need.from ?? '', to: need.to ?? '', start: day, end: day, startTime: '', endTime: '' }),
+    run: () => openDraft('event', {
+      event: { type: 'journey', by: 'flight', status: 'confirmed', start: day, end: localDay(addDays(need.day, 1)), ...(need.from && { from: need.from }), ...(need.to && { to: need.to }) },
+    }),
   };
+}
+
+// `event` at `place`, if the gap names one.
+function placed(event, place) {
+  return place ? { ...event, place } : event;
 }
 
 // The night of `need` a layover, at once: a night on the way between two

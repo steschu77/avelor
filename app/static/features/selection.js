@@ -39,7 +39,7 @@ export function selectDocument(doc_id, thread_id = null) {
     selection.selected_lens = 'documents';
   }
   openPanel();
-  store.setState(selection);
+  store.setState({ ...selection, selected_draft: null });
 }
 
 // The selection of the entity `selected_entity`, see `selectDocument`; a
@@ -51,7 +51,7 @@ function selectionOf(selected_entity, thread_id = null) {
   const threadsOfDoc = entities.get(selected_entity)?.threads ?? [];
   const selected_thread = threadsOfDoc.includes(current) ? current : (threadOf(selected_entity) ?? null);
   const selected_leg = !thread_id && leg?.includes(selected_entity) ? leg : null;
-  return { selected_entity, selected_thread, selected_transaction: null, selected_leg };
+  return { selected_entity, selected_thread, selected_transaction: null, selected_leg, selected_draft: null };
 }
 
 // Selects the transaction `transaction` of the statement `statement`: the panel
@@ -59,7 +59,7 @@ function selectionOf(selected_entity, thread_id = null) {
 // statement's file, not an entity (vault.md#statement).
 export function selectTransaction(statement, transaction) {
   openPanel();
-  store.setState({ selected_entity: statement, selected_thread: null, selected_transaction: transaction });
+  store.setState({ selected_entity: statement, selected_thread: null, selected_transaction: transaction, selected_draft: null });
 }
 
 // Selects a trip's leg, the events `ids` that are its parts
@@ -77,7 +77,7 @@ export function selectLeg(ids) {
 // scrolls to it, features/lenses/calendar.js).
 export function selectDay(selected_day, doc_id = null) {
   openPanel();
-  store.setState({ selected_day, ...(doc_id && selectionOf(doc_id)) });
+  store.setState({ selected_day, selected_draft: null, ...(doc_id && selectionOf(doc_id)) });
 }
 
 // Mark what shows the selected entity in `containerEl` -- its elements
@@ -141,7 +141,7 @@ export function selectById(id) {
     selectDocument(id);
   } else if (threads.has(id)) {
     openPanel();
-    store.setState({ ...documentsIfCalendar(), selected_entity: null, selected_thread: id, selected_transaction: null });
+    store.setState({ ...documentsIfCalendar(), selected_entity: null, selected_thread: id, selected_transaction: null, selected_draft: null });
   } else if (projects.has(id)) {
     selectFilter({ selected_project: id });
   } else {
@@ -195,6 +195,8 @@ export function expandPanel() {
 
 // ----------------------------------------------------------------------------
 // Which panel shows what, derived from store state alone:
+// - 'draft': `selected_draft`, the draft card (features/panel/draft.js),
+//   whatever the lens,
 // - 'day': the calendar lens is active: `selected_day`'s events,
 // - 'transaction': `selected_transaction` is a transaction of `selected_entity`,
 // - 'leg': `selected_entity` is one of the parts of `selected_leg`,
@@ -203,7 +205,10 @@ export function expandPanel() {
 // - 'document': `selected_entity` is a known entity, shown standalone,
 // - 'none': nothing selected (or the selection was deleted): the empty
 //   preview.
-export function panelMode({ selected_lens, selected_entity, selected_thread, selected_transaction, selected_leg }) {
+export function panelMode({ selected_draft, selected_lens, selected_entity, selected_thread, selected_transaction, selected_leg }) {
+  if (selected_draft) {
+    return 'draft';
+  }
   if (selected_lens === 'calendar') {
     return 'day';
   }

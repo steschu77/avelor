@@ -42,8 +42,8 @@ sequenceDiagram
 Everything document-shaped happens in `app/static/model/documents.js`;
 the editor (`editor.js`) knows nothing about documents, markdown, or the
 host, and the serializer (`markdown.js`) knows nothing about saving.
-Edits are written straight to the vault file: there are no drafts
-(`vault.md#versioning`).
+Edits are written straight to the vault file: there are no drafts on
+disk (`vault.md#versioning`).
 
 ## Triggers <a id="triggers"></a>
 

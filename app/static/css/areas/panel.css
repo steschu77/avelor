@@ -161,6 +161,24 @@
   cursor: grab;
 }
 
+/* a draft card's title, typed in where a card's stands; its foot,
+   Create and Discard (features/panel/draft.js) */
+.draft__title {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.draft__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* the open thread's head, over its messages */
 .doc-head--thread {
   background: var(--c-paper);

@@ -54,6 +54,10 @@ export const store = createStore({
   words: '',
   word_filter: null,
   selected_entity: null,
+  // the draft the panel shows, its id (model/drafts.js); its changes bump
+  // `drafts_rev`
+  selected_draft: null,
+  drafts_rev: 0,
   selected_thread: null, // the thread shown in the panel, see renderPanel
   // a transaction of `selected_entity`, a statement: its card in the panel
   // (`selectTransaction`, features/selection.js)

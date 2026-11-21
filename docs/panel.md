@@ -180,6 +180,7 @@ Five store keys decide what the panel shows:
 
 | Mode | When | Shows |
 |---|---|---|
+| `draft` | `selected_draft`, whatever the lens | `#panel-draft-view`, the draft card (`#draft`) |
 | `day` | `selected_lens === 'calendar'` | `#panel-day-view`, its events, tasks |
 | `thread` | `selected_thread` exists and `selected_entity` (if any) is one of its members | `#panel-thread-view`, all members |
 | `transaction` | `selected_transaction` is a transaction of `selected_entity`, a statement | `#panel-transaction-view`, the transaction's card (`#transaction-card`) |
@@ -319,11 +320,43 @@ it is refreshed in place on `entities_rev` (`refreshCardChips`): a thread
 that comes back from the trash, or is renamed, shows without rebuilding
 the cards.
 
+## The draft card <a id="draft"></a>
+
+New (the vault panel's New, Ctrl+N; `ui.md#keys-and-actions`) makes a
+draft: an entity not made yet, in the page only (`model/drafts.js`), shown
+as a card in the side panel while `selected_draft` names it
+(`features/panel/draft.js`); the panel opens for it, and an open vault
+page, which covers it, closes:
+
+- **The card** is a made entity's (`#cards`): its title typed in at its
+  head, under it the type and the folder the host writes it into; its
+  details with their editors (`renderCardDetails`, `#field-edits`); its
+  projects and labels; the body's editor, editable from the start (none
+  for a list or a record). A draft event's calendar is a button naming it
+  that opens the vault's calendars but those read-only in Google (none
+  too), where a made event's has Move.
+- **Its writes** go through the same helpers as a made entity's
+  (`model/structure.js`: `editEntityLocal`, `setLabelsLocal`,
+  `setTitleLocal`, ...), which change the draft for its id, by the host's
+  rules for `edit_entities` but never refused (`changeDraft`); the card
+  follows `drafts_rev`.
+- **Create** (Ctrl+Enter), off while the title is empty, sends one
+  `create_entity` with all of it, its date (but an event's, whose start
+  it is), the body as markdown, a record's own
+  fields (`api.md#structure`), and shows the new entity where it lives
+  (`ui.md#documents`); refused, the card says why and stays. **Discard** (Esc, with the focus outside a
+  field and the editor) drops it.
+- **One at a time**: another selection hides it and keeps it, New's menu
+  offering it again first ("Back to the draft: ..."); a type picked there
+  starts another in its place; a vault switch drops it. The day view's
+  New event and a trip's gaps start one too (`#the-day-view`,
+  `#route-gaps`).
+
 ## The day view <a id="the-day-view"></a>
 
 Under the calendar lens (`ui.md#calendar`) the panel shows the selected
 day, `selected_day`: today when the app starts, and a selected today moves
-on at midnight. Its head's New event opens New (`features/new.js`) with the
+on at midnight. Its head's New event makes a draft (`#draft`) with the
 day set (`new.event`).
 
 - **Events** come first: a stack of the day's event cards by start time, a
@@ -496,7 +529,7 @@ is its link, so the contract's card shows the recurring payment as an incoming l
 ## A new recurring payment <a id="a-new-recurring"></a>
 
 New recurring payment, in a transaction's Recurring payment menu, opens a form in the
-expanded vault area as the New page does (`features/recurring-payment-new.js`),
+expanded vault area (`features/recurring-payment-new.js`),
 filled from the transaction: the title and party (the transaction's other side),
 the account, the schedule (monthly on the transaction's day), From, Until,
 the amount, Varies by, the category, Linked to (a chip with × and "+",
@@ -523,8 +556,8 @@ entity (`renderCardChips`, `features/panel/panel.js`).
 - A project picked joins it (`joinProjectLocal` → `join_project`), a label
   is added (`setLabelsLocal` → `set_labels`); a label chip's × removes it.
 - The filter is `showMenu`'s (`ui/menu.js`), its `filter` option. The
-  New page and the Task tab have the same row and "+" (`renderNewChips`,
-  `features/new.js`), which fill the draft.
+  draft card (`#draft`) and the Task tab have the same row and "+" (the
+  Task tab's `renderNewChips`, `features/new.js`), which fill the draft.
 
 ## Titles <a id="titles"></a>
 
@@ -768,8 +801,8 @@ row and on a gap's row on the Timeline (`ui.md#timeline`), opens one menu
 (`fillGap`, `features/gaps.js`) under what is missing ("No stay in
 Berlin"):
 
-- **New stay…** or **New journey…** first: New with what is missing filled in
-  (`openNew`, `features/new.js`), in the trip and its calendar: a stay at
+- **New stay…** or **New journey…** first: a draft card with what is missing
+  filled in (`openDraft`, `#draft`), in the trip and its calendar: a stay at
   its place for its nights; a journey between its places on its day, a
   day only.
 - **Mark as layover**, for a single night: a layover at its place for that
@@ -1129,7 +1162,7 @@ applies the edit:
 | The page sends | the full body (state) | an intent: `create_thread`, `join_thread`, `leave_thread`, `join_project`, `leave_project`, `set_title`, `edit_entities`, `delete_entity`, … |
 | The host writes | `Index::save_content` → `Index::save`, only if dirty | the matching `Index` op → the same `Index::save`; deletes move the file (`Index::trash`) |
 | The host answers | `ok {source, html}` with the saved source | `entity` / `entity_deleted` per changed entity, then the command's answer |
-| Stale-reply guard | `edit_seq`, kept with the call on the page | none needed: nothing is applied optimistically; the answer only says how to select |
+| Stale-reply guard | `edit_seq`, kept with the call on the page | none needed: nothing is applied optimistically but a draft's own changes (`#draft`); the answer only says how to select |
 | On failure | an error answer, shown in the status bar; the document stays dirty, the next poll retries | an error answer, shown in the status bar; the page shows whatever the host pushed, so it never shows unsaved structure |
 | File changed outside the app | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs / Use ours | `ok {conflict: {id, changed}}`, nothing written; the dialog offers Use theirs, after which the user makes the edit again. `edit_entities` names the entity among those it `skipped` instead, and writes the others |
 
@@ -1214,7 +1247,7 @@ and save their bodies at once.
 | C8 | Delete a project | header Delete, two clicks within 3 s → description saved first → `structureCall('delete_entity')` | `Index::delete`: members leave the project, file to `.trash/` → `entity` per member, `entity_deleted`, the answer | filter back to all documents |
 | C9 | A trip's route | a stop of a dated route → `selectDocument` (its first stay) and `showWeeks`; a leg → `selectLeg` (its parts), one of one part `selectDocument`; a gap → `fillGap` (C11) | — | the card and its Meets; the Timeline kept to the stop's weeks; the gap's menu |
 | C10 | A trip's sketch | a sketched stop or leg picked; a place, nights or note typed in, Enter or blur; a means picked, Via, Over night; Add a stop, Remove → `setProjectLocal(id, {…, sketch})` | `set_project {id, project}` → `entity` | the route follows |
-| C11 | A trip's gap filled | Add (a gap of the route, a Missing row, a gap's row on the Timeline) → `fillGap` (`features/gaps.js`); New stay… / New journey… → `openNew('event', {…})`; an event picked → `joinProjectLocal`, `editEntityLocal(id, {event: {type, place}})` (a journey's `from` and `to`), `selectDocument` | `join_project {id, project}`, `edit_entities {ids, change}` → `entity` | New filled in; or the event in the trip, its card shown, the route and Missing following |
+| C11 | A trip's gap filled | Add (a gap of the route, a Missing row, a gap's row on the Timeline) → `fillGap` (`features/gaps.js`); New stay… / New journey… → `openDraft('event', {…})`; an event picked → `joinProjectLocal`, `editEntityLocal(id, {event: {type, place}})` (a journey's `from` and `to`), `selectDocument` | `join_project {id, project}`, `edit_entities {ids, change}` → `entity` | a draft card filled in; or the event in the trip, its card shown, the route and Missing following |
 | C12 | A trip's When | When (the tab); a fit or its radio chosen; a lane's name → its menu, Open → `selectDocument` (its calendar or event); an event's span → `selectDocument`; Set the dates A → `openSetDates(id, {from, to})` (D8) | — | the window chosen, its band and its foot; the source's card; Set the dates with its days |
 | C13 | When's lanes edited | Edit: the window's days or the length typed in, Enter or blur → `writeSketch`; + Lane: a calendar or an event picked, a lane named and its days added; a lane's or a span's menu: how it counts, Rename, Add days, Edit, Remove, Leave out → `setProjectLocal(id, {…, lanes})` | `set_project {id, project}` → `entity` | the lanes, the fits and their costs follow |
 | C14 | A blueprint for a project | Blueprint (the project toolbar, a project without one) → a shipped blueprint → `setProjectLocal(id, withBlueprint(…))` | `set_project {id, project}` → `entity` | the blueprint's block under the description, its facts and checks |

@@ -16,6 +16,7 @@ import { commitExistingSelection } from './entities.js';
 import { entities } from './entities.js';
 import { threadMembers, threads } from './entities.js';
 import { showConflict } from './documents.js';
+import { changeDraft, currentDraft, isDraft } from './drafts.js';
 import { isDirty, startReload, trySave } from './documents.js';
 
 // ----------------------------------------------------------------------------
@@ -128,8 +129,9 @@ export function leaveThreadLocal(doc_id, thread_id) {
 // or its group row in the Documents lens); the selection stays. `step`: the
 // group it is one step with (`newGroup`).
 export function joinProjectLocal(doc_id, project_id, step = undefined) {
-  const doc = entities.get(doc_id);
-  if (!doc || doc.projects?.includes(project_id)) return;
+  const doc = entities.get(doc_id) ?? currentDraft();
+  if (!doc || doc.doc_id !== doc_id || doc.projects?.includes(project_id)) return;
+  if (isDraft(doc_id)) return changeDraft({ projects: [...doc.projects, project_id] });
 
   structureCall('join_project', { id: doc_id, project: project_id }, () => store.getState(), step);
 }
@@ -137,8 +139,9 @@ export function joinProjectLocal(doc_id, project_id, step = undefined) {
 // ----------------------------------------------------------------------------
 // Removes `doc_id` from the project `project_id`; the selection stays.
 export function leaveProjectLocal(doc_id, project_id) {
-  const doc = entities.get(doc_id);
-  if (!doc || !doc.projects?.includes(project_id)) return;
+  const doc = entities.get(doc_id) ?? currentDraft();
+  if (!doc || doc.doc_id !== doc_id || !doc.projects?.includes(project_id)) return;
+  if (isDraft(doc_id)) return changeDraft({ projects: doc.projects.filter(p => p !== project_id) });
 
   structureCall('leave_project', { id: doc_id, project: project_id }, () => store.getState());
 }
@@ -162,13 +165,22 @@ export function createThreadLocal(target_id, dropped_id) {
 // Set `doc_id`'s labels to `labels`; the host writes them and pushes the
 // entity back. The selection stays.
 export function setLabelsLocal(doc_id, labels) {
+  if (isDraft(doc_id)) return changeDraft({ labels });
   structureCall('set_labels', { id: doc_id, labels }, () => store.getState());
 }
 
 // Link `id` to `to`, null to remove its link; the host writes it and pushes
 // the entity back. The selection stays.
 export function setLinkLocal(id, to) {
+  if (isDraft(id)) return changeDraft({ linked_to: to });
   structureCall('set_link', { id, to }, () => store.getState());
+}
+
+// Title `id` `title`, an empty one removing it (`set_title`); the host
+// pushes it back, and the selection stays as it is.
+export function setTitleLocal(id, title, select = () => store.getState()) {
+  if (isDraft(id)) return changeDraft({ title });
+  structureCall('set_title', { id, title }, select);
 }
 
 // Link the transaction `transaction` of the statement `statement` to `to`, null to
@@ -227,8 +239,10 @@ export function setProjectLocal(id, project, step = undefined) {
 // calendar's `work`), or a calendar's `{calendar: {"work-of"}}` (the
 // Accounts page), null removing it. The host pushes the entity back, which
 // the cards, the lenses and the dashboard follow; the selection stays as it
-// is. `step`: the group it is one step with (`newGroup`).
+// is. The draft's (model/drafts.js) changes the draft. `step`: the group it
+// is one step with (`newGroup`).
 export function editEntityLocal(id, change, step = undefined) {
+  if (isDraft(id)) return changeDraft(change);
   structureCall('edit_entities', { ids: [id], change }, null, step);
 }
 

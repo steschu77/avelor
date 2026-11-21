@@ -22,6 +22,7 @@ import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { openSetDates } from './set-dates.js';
 import { contactChip, entityChip } from './panel/details.js';
+import { calendarMenu } from './panel/event-fields.js';
 
 // The fact `fact` (`factsOf`) of the project `id`, its block `project`, as
 // the header shows it; `meta` a note after its value (what the budget has
@@ -273,19 +274,6 @@ function vaultContacts() {
 
 function pickCalendar(fact, anchor, save) {
   calendarMenu(anchor, fact.value, save, fact.label, { writable: true });
-}
-
-// The vault's calendars at `anchor`, to pick one of (`onPick(id)`) or none
-// (null), `current` ticked; `writable`, for new events, those Google keeps
-// as they are left out (`access`, api.md#events). Also New's
-// (features/new.js) and When's (features/when.js).
-export function calendarMenu(anchor, current, onPick, head = t('props.calendar'), { writable = false } = {}) {
-  const shown = doc => doc.kind === 'calendar' && !(writable && doc.access === 'read-only');
-  const calendars = [...entities.values()].filter(shown);
-  showMenu(anchor, [
-    { label: t('watch.none'), checked: !current, run: () => onPick(null) },
-    ...calendars.map(doc => ({ label: doc.title || t('untitled'), checked: current === doc.doc_id, run: () => onPick(doc.doc_id) })),
-  ], { head });
 }
 
 // A choice's values to pick one of, or none.

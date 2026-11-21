@@ -30,7 +30,8 @@ import { textListField } from '../../ui/text-list.js';
 import { CLASSIFICATIONS } from '../workspace/models.js';
 import { openOriginal, selectById } from '../selection.js';
 import { contactFields } from './contact-fields.js';
-import { plainEventFields, statusField } from './event-fields.js';
+import { calendarMenu, plainEventFields, statusField } from './event-fields.js';
+import { draftDoc, isDraft } from '../../model/drafts.js';
 import { eventScheduleField, scheduleField, scheduleText } from './schedule-field.js';
 import { eventTypeField, meetsField, tripFields } from './trip-fields.js';
 
@@ -72,7 +73,8 @@ export function dueTag(text) {
 // being renamed, `heldWhileTyping`, ui/field.js); a field or button that
 // had the focus gets it back (`keepingFocus`).
 export function renderCardDetails(row, doc, occurrence = null) {
-    if (heldWhileTyping(row, () => renderCardDetails(row, entities.get(doc?.doc_id) ?? doc, occurrence))) return;
+    const latest = () => entities.get(doc?.doc_id) ?? draftDoc(doc?.doc_id) ?? doc;
+    if (heldWhileTyping(row, () => renderCardDetails(row, latest(), occurrence))) return;
     const parts = [];
     const add = (label, ...content) => {
         const dt = accEl('dt', 'label', label);
@@ -137,8 +139,9 @@ function eventFields(doc, add, occurrence) {
     }
     if (event.guests?.length) add(t('props.guests'), ...event.guests.map(contactChip));
     const calendar = entities.get(event.calendar);
-    const move = doc.writable && !googleLocked(doc) ? moveButton(doc, edit) : null;
-    if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')), ...accessText(doc, calendar), ...(move ? [move] : []));
+    const move = doc.writable && !googleLocked(doc) && !isDraft(doc.doc_id) ? moveButton(doc, edit) : null;
+    if (isDraft(doc.doc_id)) add(t('props.calendar'), draftCalendarButton(doc, edit));
+    else if (calendar) add(t('props.calendar'), entityChip(event.calendar, calendar.title || t('untitled')), ...accessText(doc, calendar), ...(move ? [move] : []));
     else if (move) add(t('props.calendar'), move);
     const work = calendar?.calendar?.['work-of'] || event.work ? workField(doc) : null;
     if (work) add(t('props.work'), ...work);
@@ -153,6 +156,18 @@ function eventFields(doc, add, occurrence) {
 function known(ref) {
     const { id, name } = parseContact(ref);
     return Boolean(id) || !name.startsWith('@');
+}
+
+// ----------------------------------------------------------------------------
+// A draft event's calendar (model/drafts.js): a button naming it, or none,
+// which opens the vault's calendars but those read-only in Google.
+function draftCalendarButton(doc, edit) {
+    const btn = accEl('button', 'tool label', entities.get(doc.event.calendar)?.title || t('watch.none'));
+    btn.type = 'button';
+    btn.dataset.focusKey = 'calendar:pick';
+    btn.addEventListener('click', () => calendarMenu(btn, doc.event.calendar ?? null,
+        calendar => edit({ calendar }), undefined, { writable: true }));
+    return btn;
 }
 
 // ----------------------------------------------------------------------------

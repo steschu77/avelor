@@ -252,6 +252,11 @@ so is the Timeline's.
 - **Shown on request** (`showInDocuments`, the `documents.show` action;
   the selection restored on start, `revealInDocuments`): the group and
   thread holding the entity's first row unfold and it is scrolled to.
+- **What was made** with New or restored from Trash is shown where it
+  lives (`documents.show_made`): an event with a day on that day in the
+  Calendar, as is a task due on a day while the Calendar is the lens,
+  anything else here as on request. A restore makes it ready under the
+  Trash page, which stays for the next.
 
 ### Timeline <a id="timeline"></a>
 
@@ -476,11 +481,12 @@ What a key, a menu, a button or Go to starts is a registered action
 - **Ctrl+Shift+P** opens Go to (`ui.md#go-to`).
 - **Ctrl+,** opens Settings (`ui.md#settings`).
 - **Esc** closes an open menu, else the page in the expanded vault area
-  (Settings, Fetch email, Import scans, New, New recurring payment); in an
-  editor it leaves edit mode.
+  (Settings, Fetch email, Import scans, New recurring payment), else drops the
+  draft card shown (`panel.md#draft`) with the focus outside a field and
+  the editor; in an editor it leaves edit mode.
 - **Ctrl+Enter** runs the open page's main action (Fetch, Import all,
-  Create).
-- **Ctrl+N** opens New.
+  Create), else creates the draft shown.
+- **Ctrl+N** opens New's menu.
 - **Ctrl+Z** undoes the last edit, **Ctrl+Y** or **Ctrl+Shift+Z** does it
   again, outside a field or an editor (`saving.md#undo`).
 - **Ctrl+F** goes to the words box, unless an editor or a field has the
@@ -568,45 +574,21 @@ a checked calendar its sync.
 
 ## New
 
-The New item, the "+" of "Created Here" and Ctrl+N open a menu of types
-(`showNewMenu`, `features/new.js`): a document, task, event, contact, list or
-record. The choice opens the New page in the expanded vault area
-(`openNew`, op `new`); its projects start with the selected one, and its
-projects and labels share one row with a card's "+" menu
-(`panel.md#labels`). Create or
-Ctrl+Enter (`createNew`) sends `create_entity`, which writes the entity
-into its type's folder (`vault.md#vault-layout`); the area closes and
-the new entity is selected. A failure stays on the page; Esc cancels. The
-Task tab of the context column uses the same form (`panel.md#context-column`).
-
-An event asks what it is (Kind: Event, or a trip's Journey, Stay,
-Activity or Layover; another builds the page's rows again), its status
-(`status`: an Event's Confirmed or Tentative, a trip's Planned or Booked),
-and its calendar, a menu of the vault's but those read-only in Google
-(`calendar.md#two-way-sync`); opened while a trip is selected, its
-calendar is the trip's (its `calendar` fact), if that calendar is still in
-the vault and not read-only, else none until one is picked. The day
-view's New event opens it on that day (`panel.md#the-day-view`).
-Then by its kind (`panel.md#trip-fields`):
-
-- **Event**: its start and end, a day and a time each, the end moving
-  with the start while it lies before it; both in one zone (`tz`),
-  a button naming it by its city ("Lisbon time") that opens the zones'
-  menu, this PC's at first. Without a start time it is all day: its days
-  only, the end's time off; All day, a check, clears the time or gives it
-  9:00 to 10:00 again. Its Schedule, Once at first, as on its card
-  (`panel.md#field-edits`).
-- **Journey**: its way (icons), From and Leaves, To and Arrives, each
-  time in its place's zone, a button naming it that opens the zones'
-  menu; a place typed in that the vault's trip events name takes the zone
-  it had last (`placeZone`), else the zone stays (this PC's at first).
-  Its booking. Without a time it is a day only (a planned journey).
-- **Stay**, **Layover**: its place and nights, from the first night to
-  the morning after the last.
-- **Activity**: its place, and its start and end in the place's zone; all
-  day without a start time, as an Event.
-
-Then where it is (`location`) for each.
+The New item under the words box, the "+" of "Created Here" and Ctrl+N
+open a menu of types (`showNewMenu`, `features/new.js`): a document, task,
+event, contact, list or record, a draft kept from before first ("Back to
+the draft: ...").
+The choice makes a draft card in the side panel (`panel.md#draft`): the
+entity's card before it exists, its fields as a made one's, in the project
+selected in the sidebar; an event today from 9:00 to 10:00 in this PC's
+zone, in that project's calendar (its `calendar` fact) if that is still in
+the vault and not read-only, else none until one is picked. Create or
+Ctrl+Enter sends `create_entity`, which writes the entity into its type's
+folder (`vault.md#vault-layout`), and shows it where it lives
+(`#documents`); a refusal stays on the card; Esc or Discard drops it. The day view's New event starts one on its
+day (`panel.md#the-day-view`), a trip's gaps a stay or a journey
+(`panel.md#route-gaps`). The Task tab of the context column has a form of
+its own (`panel.md#context-column`).
 
 ## Settings <a id="settings"></a>
 
@@ -715,7 +697,7 @@ the days as they were.
 | B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | B6 | Filter by words | typing in the box (`features/words.js`) → `selectFilter({words})`, at most every 120 ms `search` on the channel `search`; the chip's ×, the box's × or Esc → `NO_WORDS` | `search {text}` → `ok {terms, hits}` | the lenses keep what holds every word, its words marked, an excerpt where the title lacks some; the chip in the lens head; the find strip in the panel |
-| D7 | New | New item, the "+" of "Created Here" or Ctrl+N → `showNewMenu` → the New page (`openNew`, op `new`); Create or Ctrl+Enter → `createNew` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the area closes and the new entity is selected; a failure stays on the page; Esc cancels |
+| D7 | New | New item, the "+" of "Created Here" or Ctrl+N → `showNewMenu` → a draft card (`openDraft`, `panel.md#draft`); Create or Ctrl+Enter → `createDraft` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the draft is dropped and the new entity selected; a failure stays on the card; Esc discards |
 | D8 | Set the dates | the Days fact of a trip with a sketch typed in, Enter or blur (`features/facts.js`) → `openSetDates` (op `set-dates`); a row ticked, All, None; Apply or Ctrl+Enter → `apply` | `create_entity {roles, title, projects}` per row ticked → `entity`; then `set_project {id, project}` (the days, no sketch) → `entity` | the route from the planned events; a failure stays on the page |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
 | F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Payments, Recent files or Recent conversations → `selectDocument`; a transaction of Payments → `selectTransaction` | — | the entity (or the transaction) in the panel, its rows marked on the dashboard; a conversation in the assistant, beside what it is about |

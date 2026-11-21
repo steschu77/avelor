@@ -84,8 +84,9 @@ open (`vault.md#catalog`).
 
 ## Saving and Versioning <a id="versioning"></a>
 
-There are no drafts or temporary copies: the app always saves edits
-directly to the original vault file. As a safety net, the vault is meant to
+There are no drafts or temporary copies on disk: the app always saves
+edits directly to the original vault file, and an entity not made yet
+lives in the page until it is (`panel.md#draft`). As a safety net, the vault is meant to
 be versioned with git, so any earlier state of a file can be recovered.
 
 ## Trash <a id="trash"></a>

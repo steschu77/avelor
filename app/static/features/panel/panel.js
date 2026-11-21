@@ -41,7 +41,7 @@ import {
   joinProjectLocal, leaveProjectLocal, setLinkLocal, setLabelsLocal,
 } from '../../model/structure.js';
 import { createThreadLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
-import { selectionWithout } from '../../model/structure.js';
+import { selectionWithout, setTitleLocal } from '../../model/structure.js';
 import { routeSpot } from '../../model/trip.js';
 import { docIcon, fileIcon, iconEl } from '../../ui/icons.js';
 import { KIND_ICONS } from '../../ui/icons.js';
@@ -471,8 +471,7 @@ function renderCardHead(controller) {
 // removes it) and pushes the entity back. The selection stays.
 function renameEntity(id, titleEl) {
   const current = () => (entities.get(id) ?? threads.get(id))?.title ?? '';
-  editTextInPlace(titleEl, current,
-    title => structureCall('set_title', { id, title }, () => store.getState()));
+  editTextInPlace(titleEl, current, title => setTitleLocal(id, title));
 }
 
 // ----------------------------------------------------------------------------
@@ -551,7 +550,7 @@ function renderPanel(selected) {
   panelThreadViewEl.hidden = mode !== 'thread';
   panelTransactionViewEl.hidden = mode !== 'transaction';
   panelLegViewEl.hidden = mode !== 'leg';
-  panelDocViewEl.hidden = mode === 'day' || mode === 'thread' || mode === 'transaction' || mode === 'leg';
+  panelDocViewEl.hidden = mode === 'day' || mode === 'thread' || mode === 'transaction' || mode === 'leg' || mode === 'draft';
 
   const stale = state.threads_rev !== renderedRev;
 
@@ -1065,7 +1064,7 @@ export function leaveCardEditMode() {
 store.subscribe([
   state => state.selected_lens, state => state.selected_day?.getTime(), state => state.selected_entity,
   state => state.selected_thread, state => state.selected_transaction, state => state.selected_leg,
-  state => state.threads_rev,
+  state => state.selected_draft, state => state.threads_rev,
 ], (_values, state) => renderPanel(state));
 
 // The cards' heads, event details, links, attachments and threads lines

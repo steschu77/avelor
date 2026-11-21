@@ -23,7 +23,7 @@ import { editField } from '../ui/field.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { toolButton } from '../ui/toolbar.js';
-import { calendarMenu } from './facts.js';
+import { calendarMenu } from './panel/event-fields.js';
 import { openSetDates } from './set-dates.js';
 import { eventMenu } from './gaps.js';
 import { editInput, withKey, writeSketch } from './route.js';

@@ -9,6 +9,7 @@ import { accEl, titled } from '../../core/dom.js';
 import { DATE_FORMAT, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
 import { addDays, daysBetween, timeFormatIn, zonedInstant, zonedTime } from '../../core/format.js';
 import { t } from '../../core/text.js';
+import { entities } from '../../model/entities.js';
 import {
   LOCAL_ZONE, byNights, endZone, issueText, startZone, tripPlaces, zoneIssuesOf, zoneName,
 } from '../../model/trip.js';
@@ -194,4 +195,19 @@ function zoneMenu(anchor, current, onPick) {
     { head: t('zone.all'), separator: true },
     ...all.filter(zone => !first.has(zone)).map(item),
   ], { head: t('zone.head'), filter: { placeholder: t('zone.filter') } });
+}
+
+// ----------------------------------------------------------------------------
+// The vault's calendars at `anchor`, to pick one of (`onPick(id)`) or none
+// (null), `current` ticked; `writable`, for new events, those Google keeps
+// as they are left out (`access`, api.md#events). A trip's calendar fact's
+// (features/facts.js), New's (features/new.js), a draft event's
+// (features/panel/details.js) and When's (features/when.js).
+export function calendarMenu(anchor, current, onPick, head = t('props.calendar'), { writable = false } = {}) {
+  const shown = doc => doc.kind === 'calendar' && !(writable && doc.access === 'read-only');
+  const calendars = [...entities.values()].filter(shown);
+  showMenu(anchor, [
+    { label: t('watch.none'), checked: !current, run: () => onPick(null) },
+    ...calendars.map(doc => ({ label: doc.title || t('untitled'), checked: current === doc.doc_id, run: () => onPick(doc.doc_id) })),
+  ], { head });
 }

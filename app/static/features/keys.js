@@ -28,12 +28,14 @@ export const KEY_GROUPS = [
       key(t('keys.next_control'), ['Tab']),
       key(t('keys.previous_control'), ['Shift+Tab']),
       key(t('keys.press'), ['Enter', 'Space']),
-      key(t('keys.create'), ['Ctrl+Enter'], '#i-checkmark'),
-      key(t('keys.discard'), ['Escape'], '#i-dismiss'),
     ],
   },
   {
-    head: t('keys.panel'), works: t('keys.works_in_panel'), commands: action => action.where === 'panel', keys: [],
+    head: t('keys.panel'), works: t('keys.works_in_panel'), commands: action => action.where === 'panel',
+    keys: [
+      key(t('keys.create'), ['Ctrl+Enter'], '#i-checkmark'),
+      key(t('keys.discard'), ['Escape'], '#i-dismiss'),
+    ],
   },
   {
     head: t('keys.text'), works: t('keys.works_in_text'),
