@@ -202,7 +202,8 @@ function zoneMenu(anchor, current, onPick) {
 // (null), `current` ticked; `writable`, for new events, those Google keeps
 // as they are left out (`access`, api.md#events). A trip's calendar fact's
 // (features/facts.js), New's (features/new.js), a draft event's
-// (features/panel/details.js) and When's (features/when.js).
+// (features/panel/details.js), When's (features/when.js) and new events'
+// (features/workspace/settings.js).
 export function calendarMenu(anchor, current, onPick, head = t('props.calendar'), { writable = false } = {}) {
   const shown = doc => doc.kind === 'calendar' && !(writable && doc.access === 'read-only');
   const calendars = [...entities.values()].filter(shown);

@@ -8,6 +8,7 @@
 import { addDays, compareText, dayStart, parseDate, sameDay } from '../core/format.js';
 import { entities, matchesFilter } from './entities.js';
 import { dayKey, scheduleStarts } from './schedule.js';
+import { savePrefs, store } from './state.js';
 
 // ----------------------------------------------------------------------------
 // Whether Google keeps the event `doc` as it is: in a calendar read-only in
@@ -38,6 +39,23 @@ export function googleKept(doc) {
 export function writableCalendar(id) {
   const calendar = id ? entities.get(id) : null;
   return calendar?.kind === 'calendar' && calendar.access !== 'read-only' ? id : null;
+}
+
+// The calendar new events go into, if one of this vault's is picked and
+// takes them; else none. The preference `event_calendar` has at most one of
+// each vault's: their ids, joined by commas.
+export function newEventCalendar() {
+  return pickedCalendars().map(writableCalendar).find(Boolean) ?? null;
+}
+
+// Pick `id` for this vault, or none (null).
+export function pickNewEventCalendar(id) {
+  const others = pickedCalendars().filter(other => entities.get(other)?.kind !== 'calendar');
+  savePrefs({ event_calendar: [...others, id].filter(Boolean).join(',') });
+}
+
+function pickedCalendars() {
+  return (store.getState().prefs.event_calendar ?? '').split(',').filter(Boolean);
 }
 
 // ----------------------------------------------------------------------------

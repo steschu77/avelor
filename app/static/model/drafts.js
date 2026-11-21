@@ -11,7 +11,7 @@
 import { isoInstant, localDay, zonedInstant } from '../core/format.js';
 import { rpcCall, rpcOn } from '../core/rpc.js';
 import { projectCalendar } from './blueprint.js';
-import { writableCalendar } from './calendar.js';
+import { newEventCalendar, writableCalendar } from './calendar.js';
 import { entityOf, projectScope } from './entities.js';
 import { newItemId } from './id-documents.js';
 import { store } from './state.js';
@@ -29,9 +29,9 @@ let draft = null;
 // A draft of `kind` (document, task, event, contact, list, record), shown at
 // once, in place of a kept one: as New made them, in the project selected
 // in the sidebar, an event today from 9:00 to 10:00 in this PC's zone, in
-// that project's calendar if it can take new events. `prefill`: an event's
-// `day`, or fields of its block (`event`: a gap's stay or journey,
-// features/gaps.js).
+// that project's calendar if it can take new events, else in the one picked
+// for them (`newEventCalendar`). `prefill`: an event's `day`, or fields of
+// its block (`event`: a gap's stay or journey, features/gaps.js).
 export function openDraft(kind, prefill = {}) {
   const scope = projectScope();
   const meta = {
@@ -47,7 +47,7 @@ export function openDraft(kind, prefill = {}) {
   } else if (kind === 'event') {
     const start = zonedInstant(prefill.day ?? localDay(new Date()), '09:00', LOCAL_ZONE);
     meta.event = { start: isoInstant(start), end: isoInstant(new Date(start.getTime() + 3600e3)), tz: LOCAL_ZONE };
-    const calendar = scope ? writableCalendar(projectCalendar(scope)) : null;
+    const calendar = (scope && writableCalendar(projectCalendar(scope))) || newEventCalendar();
     if (calendar) meta.event.calendar = calendar;
     Object.assign(meta.event, prefill.event);
     // a day only has no zone

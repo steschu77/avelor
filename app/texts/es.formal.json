@@ -111,7 +111,7 @@
   "settings.intro": "Cómo trabaja Avelor para usted en este PC. Un cambio vale al momento; el que espera al próximo inicio lo dice. Lo que comparten todos los que abren la bóveda se ajusta en sus propias páginas.",
   "settings.kept.client": "su cliente de Google",
   "settings.kept.only_you": "{what}; solo su cuenta en este PC puede leerlos",
-  "settings.per_vault": "Quién es usted se ajusta en cada bóveda.",
+  "settings.per_vault": "Quién es usted y a qué calendario van los eventos nuevos se ajusta en cada bóveda.",
   "settings.who": "Quién es usted",
   "settings.who_note": "Lo que añade a la bóveda y pregunta en ella lleva este nombre.",
   "settings.you": "Usted en {vault}",

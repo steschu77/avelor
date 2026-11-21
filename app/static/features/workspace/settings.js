@@ -7,6 +7,7 @@ import { registerAction, runAction, shortcutText } from '../../core/actions.js';
 import { fileSize } from '../../core/format.js';
 import { rpcCall } from '../../core/rpc.js';
 import { locale, t } from '../../core/text.js';
+import { newEventCalendar, pickNewEventCalendar } from '../../model/calendar.js';
 import { entities, me } from '../../model/entities.js';
 import { showError, store, vaultOpen } from '../../model/state.js';
 import { iconEl } from '../../ui/icons.js';
@@ -16,6 +17,7 @@ import {
   closeVaultArea, detailPane, listDetailPage, listSection, openVaultOp, registerVaultPage, replaceVaultPage, setPageFocus,
 } from '../../ui/page.js';
 import { contactMenu } from '../facts.js';
+import { calendarMenu } from '../panel/event-fields.js';
 
 const SHORTCUT = 'Ctrl+,';
 
@@ -224,7 +226,7 @@ function youPart() {
   return {
     id: 'you', title: open ? t('settings.you', { vault: store.getState().vault_name }) : t('settings.you_none'),
     scope: open ? t('settings.this_vault') : '', now: entities.get(me())?.title ?? '',
-    rows: [open ? meRow() : noVaultRow()],
+    rows: open ? [meRow(), calendarRow()] : [noVaultRow()],
   };
 }
 
@@ -247,6 +249,15 @@ function makeMe(title) {
   rpcCall('create_entity', { title, roles: { contact: { type: 'person' } } })
     .then(({ id }) => setMe(id))
     .catch(e => showError(e.message));
+}
+
+// The calendar a new event starts with (`openDraft`, model/drafts.js).
+function calendarRow() {
+  const name = t('settings.calendar');
+  const id = newEventCalendar();
+  const label = id ? entities.get(id).title || t('untitled') : t('watch.none');
+  return settingRow(name, [t('settings.calendar_note')], settingBox(name, 'calendar', label, '',
+    box => calendarMenu(box, id, pickNewEventCalendar, name, { writable: true }), indexing()));
 }
 
 function noVaultRow() {
@@ -371,7 +382,7 @@ function openSettings(key) {
 registerVaultPage('settings', { close: () => (removing ? showRemoval(false) : closeVaultArea()), ofVault: false });
 store.subscribe([
   state => state.vault_op, state => state.language, state => state.vault_state, state => state.vault_name,
-  state => state.entities_rev, state => state.me,
+  state => state.entities_rev, state => state.prefs, state => state.me,
 ], () => scheduleRenderSettings());
 
 registerAction({
@@ -384,6 +395,7 @@ for (const [id, title, also, control, when] of [
   ['language', t('settings.language'), t('settings.language_also'), () => 'language'],
   ['theme', t('settings.theme'), t('settings.theme_also'), () => `theme:${pickedTheme()}`],
   ['who', t('settings.who'), t('settings.who_also'), () => 'who', vaultOpen],
+  ['calendar', t('settings.calendar'), t('settings.calendar_also'), () => 'calendar', vaultOpen],
   ['remove', t('settings.remove'), t('settings.remove_also'), () => 'remove'],
 ]) {
   registerAction({

@@ -1,9 +1,9 @@
-import { equal, test } from './harness.js';
+import { equal, posted, test } from './harness.js';
 import { vault } from './vault.js';
 import { addDays, dayStart, isoInstant, localDay, parseDate } from '../../static/core/format.js';
 import {
   calendarDayOf, dayOccurrences, dayTasks, eventsBetween, eventsOnDay, getDueTasks, getEvents, googleKept, googleLocked,
-  googleType, isOverdue, writableCalendar,
+  googleType, isOverdue, newEventCalendar, pickNewEventCalendar, writableCalendar,
 } from '../../static/model/calendar.js';
 import { entities } from '../../static/model/entities.js';
 import { store } from '../../static/model/state.js';
@@ -166,4 +166,35 @@ test('an occurrence is not expanded again', () => {
 test('an occurrence that starts as the days end, or ends as they start, is not in them', () => {
   vault(event('weekly', '2027-07-05', '2027-07-06', WEEKLY));
   equal([occurrences('2027-07-06', '2027-07-12'), occurrences('2027-07-13', '2027-07-19')], [[], []]);
+});
+
+// The calendars `ids` of the vault, the preference saying `picked`.
+const calendars = (picked, ...ids) => {
+  vault(...ids.map(id => ({ id, kind: 'calendar', title: id })), { id: 'theirs', kind: 'calendar', access: 'read-only' }, event('e1', '2027-07-08'));
+  store.setState({ prefs: { lens: 'bank', ...(picked && { event_calendar: picked }) } });
+};
+const picked = () => store.getState().prefs.event_calendar;
+
+test('new events go into the calendar picked in this vault', () => {
+  calendars('elsewhere,work', 'home', 'work');
+  equal(newEventCalendar(), 'work');
+});
+
+test('new events go into none without one that takes them', () => {
+  calendars(null, 'home');
+  equal(newEventCalendar(), null);
+  for (const id of ['gone', 'theirs', 'e1', '']) {
+    calendars(id, 'home');
+    equal(newEventCalendar(), null, id);
+  }
+});
+
+test('a calendar picked leaves those of other vaults', () => {
+  calendars('elsewhere,work,theirs', 'home', 'work');
+  pickNewEventCalendar('home');
+  equal([picked(), newEventCalendar(), store.getState().prefs.lens], ['elsewhere,home', 'home', 'bank']);
+  const { cmd, args } = posted.at(-1);
+  equal([cmd, args.prefs], ['set_prefs', { lens: 'bank', event_calendar: 'elsewhere,home' }]);
+  pickNewEventCalendar(null);
+  equal([picked(), newEventCalendar()], ['elsewhere', null]);
 });

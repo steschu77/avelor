@@ -582,7 +582,8 @@ The choice makes a draft card in the side panel (`panel.md#draft`): the
 entity's card before it exists, its fields as a made one's, in the project
 selected in the sidebar; an event today from 9:00 to 10:00 in this PC's
 zone, in that project's calendar (its `calendar` fact) if that is still in
-the vault and not read-only, else none until one is picked. Create or
+the vault and not read-only, else in the one picked for new events
+(`ui.md#settings`), else none until one is picked. Create or
 Ctrl+Enter sends `create_entity`, which writes the entity into its type's
 folder (`vault.md#vault-layout`), and shows it where it lives
 (`#documents`); a refusal stays on the card; Esc or Discard drops it. The day view's New event starts one on its
@@ -610,12 +611,17 @@ start says so in the row. Another vault opening leaves the page open.
     Windows the title bar (`architecture.md#platforms`).
 - **You in the vault**, in this vault, or none open and one to open:
   - **Who you are**: no one, or a contact of the vault; a name typed that no
-    contact has makes one. `me` (`model/entities.js`, the host's `me.rs`) is
-    kept in `config.yaml`, which is the system account's: contacts' ids, at
-    most one per vault, as a vault has no id of its own. While the vault is
-    read, it can't be picked: which of the ids are the vault's isn't known
-    yet. What the user adds from then on names them (`vault.md#sources`),
-    and the card shows it as Added by (`panel.md#cards`).
+    contact has makes one. `me` (`model/entities.js`, the host's `me.rs`)
+    is kept in `config.yaml`, which is the system account's: contacts' ids,
+    at most one per vault, as a vault has no id of its own. While the vault
+    is read, this and the calendar below can't be picked: which of the ids
+    are the vault's isn't known yet. What the user adds from then on names
+    them (`vault.md#sources`), and the card shows it as Added by
+    (`panel.md#cards`).
+  - **New events go into**: none, or a calendar of the vault that isn't
+    read-only, which a new event starts with (`newEventCalendar`,
+    `model/calendar.js`); a trip's own goes first (`openDraft`,
+    `model/drafts.js`).
 - **On this PC**: what Avelor keeps outside the vaults
   (`architecture.md#storage`), counted as the page opens: the settings, the
   sign-ins and keys of every vault, the index, the web view's files and the
@@ -634,7 +640,9 @@ joined by commas) and the Week card's start (`week_start`: `today` or
 (`doc_hidden`, type ids joined by commas, so a type added since is
 shown), its bar (`doc_types_bar`: `open` or `closed`) and its folded
 projects (`doc_folded`, project ids joined by commas; project ids are
-unique across vaults, so one list serves every vault); the Timeline lens's types
+unique across vaults, so one list serves every vault); the calendars new
+events go into (`event_calendar`, calendar ids joined by commas, one per
+vault at most); the Timeline lens's types
 switched off and its bar (`tl_hidden`, `tl_types_bar`, as the Documents lens's);
 the selection
 (`entity`, `thread`: ids, empty for none), saved once the vault's indexing
@@ -689,6 +697,7 @@ the days as they were.
 | A8 | Stop a job | the card's Stop | `cancel_job` → the job's requests cancelled; it ends `stopped · …` | email fetch, calendar sync |
 | A9 | Language | Settings → the language or its form of address → `setLanguage` (`features/workspace/settings.js`) | `set_language {language, formal}` → `config.yaml` `language` | the row says what the next start shows (`localization.md#language`) |
 | A10 | Theme | Settings → System, Light, Dark → `setTheme` | `set_theme {theme}` → `config.yaml` `theme`, the title bar (`UiSignal::theme`) | the page in the theme (`data-theme`) |
+| A11 | New events' calendar | Settings → the calendar → `calendarMenu` → `pickNewEventCalendar` | `set_prefs {prefs}` (`event_calendar`) | a new event starts in it |
 | A12 | Remove Avelor's data | Settings → Remove…, Remove and quit | `remove_data` → a close (`saving.md#closing-the-app`) → `Shell::removes`, `kept::remove` | quit, and its data gone from this PC; a save that can't be made leaves both |
 | A13 | Who you are | Settings → a contact, Nobody, or New contact (`create_entity` first) → `setMe` | `set_me {contact}` → `config.yaml` `me` | the box and the list name the contact |
 | B1 | Filter by project | pill or No project → `selectProject` → `selected_project` (`NO_PROJECT` for No project) | — | lens, header, counts re-render |
