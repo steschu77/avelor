@@ -74,8 +74,6 @@
   "linked.select_hint": "Seleccione un documento para ver sus enlaces.",
   "new.enter_name": "Escriba primero un nombre",
   "new.enter_title": "Escriba primero un título",
-  "new.pick_date": "Elija primero una fecha",
-  "new.pick_start": "Elija primero una fecha de inicio",
   "panel.delete_armed": "Haga clic otra vez para eliminar",
   "panel.select_hint": "Seleccione un documento de la lista.",
   "recurring.none": "Aún no hay pagos recurrentes aquí: cree uno desde la tarjeta de un movimiento, en su fila Pago recurrente.",

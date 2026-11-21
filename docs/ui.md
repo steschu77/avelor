@@ -25,7 +25,7 @@ button puts the assistant beside the card, over the main view, as the
 full width does (`assistant.md#conversations`). Opening a panel never
 moves the main view's layout. The expanded vault area hosts the
 pages of the vault panel: the Workspace pages (Accounts, Folders, Vault,
-Trash), Settings (`ui.md#settings`), Fetch email, Import scans, New and New
+Trash), Settings (`ui.md#settings`), Fetch email, Import scans and New
 recurring payment (`panel.md#a-new-recurring`). It is
 expanded only while one of them is shown: a page opens it (`openVaultOp`,
 `ui/page.js`); its ×, Esc on a page that registers it (`registerVaultPage`)
@@ -60,7 +60,7 @@ the Vault page alone.
   folded under an "Archived" row at the end, still selectable
   (`projectsInOrder`). Creating and editing projects, and dropping rows on
   them, is `panel.md#projects`.
-- **Sources**: "Created Here" (with a "+" that opens New); each enabled
+- **Sources**: "Created Here" (what was made in the app); each enabled
   folder watch under its name, a statements watch under its account's
   (its account's statements, whichever watch imported them), with its
   Import button (`import.md#folder-watches`); per
@@ -574,10 +574,9 @@ a checked calendar its sync.
 
 ## New
 
-The New item under the words box, the "+" of "Created Here" and Ctrl+N
-open a menu of types (`showNewMenu`, `features/new.js`): a document, task,
-event, contact, list or record, a draft kept from before first ("Back to
-the draft: ...").
+The New item under the words box and Ctrl+N open a menu of types
+(`showNewMenu`, `features/new.js`): a document, task, event, contact, list
+or record, a draft kept from before first ("Back to the draft: ...").
 The choice makes a draft card in the side panel (`panel.md#draft`): the
 entity's card before it exists, its fields as a made one's, in the project
 selected in the sidebar; an event today from 9:00 to 10:00 in this PC's
@@ -706,7 +705,7 @@ the days as they were.
 | B4 | Switch lens | topbar tab → `selectLens` (`features/selection.js`) | `set_prefs {prefs}` (`lens`) | visible lens rendered if stale; the calendar lens shows the day view in the panel; the next start shows it again (`restoreLens`) |
 | B5 | The selection on start | `vault` (open) → `restoreSelection` → `selectDocument` or `selectById`, `revealInDocuments`; a selection changed → `savePrefs` | `set_prefs {prefs}` (`entity`, `thread`) | the entity or thread shown last selected again, its row unfolded |
 | B6 | Filter by words | typing in the box (`features/words.js`) → `selectFilter({words})`, at most every 120 ms `search` on the channel `search`; the chip's ×, the box's × or Esc → `NO_WORDS` | `search {text}` → `ok {terms, hits}` | the lenses keep what holds every word, its words marked, an excerpt where the title lacks some; the chip in the lens head; the find strip in the panel |
-| D7 | New | New item, the "+" of "Created Here" or Ctrl+N → `showNewMenu` → a draft card (`openDraft`, `panel.md#draft`); Create or Ctrl+Enter → `createDraft` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the draft is dropped and the new entity selected; a failure stays on the card; Esc discards |
+| D7 | New | New item or Ctrl+N → `showNewMenu` → a draft card (`openDraft`, `panel.md#draft`); Create or Ctrl+Enter → `createDraft` | `create_entity {roles, title, …}` → `Index::create_new` (type, folder, format, `created: {}`) → `entity`, `ok {id}` | the draft is dropped and the new entity shown where it lives (`documents.show_made`); a failure stays on the card; Esc discards |
 | D8 | Set the dates | the Days fact of a trip with a sketch typed in, Enter or blur (`features/facts.js`) → `openSetDates` (op `set-dates`); a row ticked, All, None; Apply or Ctrl+Enter → `apply` | `create_entity {roles, title, projects}` per row ticked → `entity`; then `set_project {id, project}` (the days, no sketch) → `entity` | the route from the planned events; a failure stays on the page |
 | F1 | Sort / drag in Documents | header click (`onSortClick`, `features/lenses/documents.js`); row drag | — | multi-key sort in `sort_state`; drag preview chip |
 | F3 | Dashboard item | a Week event or task, a task card, a row of Upcoming, Payments, Recent files or Recent conversations → `selectDocument`; a transaction of Payments → `selectTransaction` | — | the entity (or the transaction) in the panel, its rows marked on the dashboard; a conversation in the assistant, beside what it is about |

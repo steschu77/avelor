@@ -87,7 +87,7 @@
   --h-nav-row: 28px;
   --h-control: 24px;
   --h-control-sm: 22px;
-  /* the title input of the New page */
+  /* the title input of an entity's form (the Task tab's) */
   --h-new-title: 40px;
   /* the dashboard: a day of the Week card, a column of the Tasks card */
   --h-week-day: 116px;
@@ -134,7 +134,7 @@
   /* the Workspace pages (Accounts, Email) */
   --p-page-x: 40px;
   --p-page-y: 28px;
-  /* the sheet of the New page */
+  /* the sheet of an entity's form */
   --p-sheet-x: 28px;
   --p-sheet-y: 22px;
   /* the dashboard: the gap between its cards, and a card's inset */
@@ -153,7 +153,7 @@
   --w-palette: 680px;
   --o-palette: 72px;
   --h-palette-box: 52px;
-  /* the New page: its sheet, and its date and time inputs */
+  /* an entity's form: its sheet, and its date and time inputs */
   --w-new-sheet: 720px;
   --w-new-date: 150px;
   --w-new-time: 96px;

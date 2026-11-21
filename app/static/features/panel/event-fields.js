@@ -3,7 +3,7 @@
 // time in its zone, with the zones' menu (`timeFields`), the change a new
 // start, end or zone makes, either end as text in its zone (`whenIn`), and
 // Where (`whereField`); a plain event's rows (`plainEventFields`) and its
-// status (`statusField`). Also New's zone menu (features/new.js).
+// status (`statusField`).
 
 import { accEl, titled } from '../../core/dom.js';
 import { DATE_FORMAT, durationText, isoInstant, localDay, parseDate } from '../../core/format.js';
@@ -47,8 +47,8 @@ function allDayCheck(doc, edit) {
 }
 
 // A plain event's status, Confirmed or Tentative; one the host keeps
-// (`cancelled`) isn't offered. Also New's (features/new.js).
-export const EVENT_STATUSES = [['confirmed', t('event.confirmed')], ['tentative', t('event.tentative')]];
+// (`cancelled`) isn't offered.
+const EVENT_STATUSES = [['confirmed', t('event.confirmed')], ['tentative', t('event.tentative')]];
 
 export function statusField(event, edit) {
   const status = event.status === 'tentative' ? 'tentative' : 'confirmed';
@@ -174,7 +174,7 @@ export function whereField(event, edit) {
 // A button naming `zone` that opens the zones' menu (`zoneMenu`); `key`
 // finds it again once the block is drawn anew. With `warning`, the zone
 // isn't the one the trip arrived in (`zoneIssuesOf`), marked and said.
-export function zoneButton(key, zone, onPick, warning = null) {
+function zoneButton(key, zone, onPick, warning = null) {
   const button = accEl('button', 'tool label props__zone', zoneLabel(zone));
   button.type = 'button';
   button.title = [t('zone.another', { zone: zone.replace(/_/g, ' ') }), warning].filter(Boolean).join('\n');
@@ -201,9 +201,8 @@ function zoneMenu(anchor, current, onPick) {
 // The vault's calendars at `anchor`, to pick one of (`onPick(id)`) or none
 // (null), `current` ticked; `writable`, for new events, those Google keeps
 // as they are left out (`access`, api.md#events). A trip's calendar fact's
-// (features/facts.js), New's (features/new.js), a draft event's
-// (features/panel/details.js), When's (features/when.js) and new events'
-// (features/workspace/settings.js).
+// (features/facts.js), a draft event's (features/panel/details.js), When's
+// (features/when.js) and new events' (features/workspace/settings.js).
 export function calendarMenu(anchor, current, onPick, head = t('props.calendar'), { writable = false } = {}) {
   const shown = doc => doc.kind === 'calendar' && !(writable && doc.access === 'read-only');
   const calendars = [...entities.values()].filter(shown);

@@ -1,6 +1,6 @@
 // A gap of a trip's route filled (panel.md#route): one menu at the gap --
 // on the route, a Missing row of the blueprint, a gap's row on the
-// Timeline -- with New first, what is missing filled in (`openNew`), a
+// Timeline -- with a draft first, what is missing filled in (`openDraft`), a
 // single night marked a layover, then the events outside the trip at that
 // time, and a filter finding any other. A picked event joins the trip, takes the gap's kind if it has
 // none and the places it lacks, and its card shows, to finish there.

@@ -167,8 +167,9 @@ function renderCardChips(doc_id, msg) {
 // The projects `project_ids` as chips, each with an x that calls
 // `onRemove(project_id)` -- no x without it (an entity the host can't
 // write). Projects not in the vault are left out. `renameProjectChips`
-// keeps the names in the panel current. The card's, the thread's and the
-// New page's (features/new.js).
+// keeps the names in the panel current. The card's, the thread's, the
+// draft card's (features/panel/draft.js) and the Task tab's
+// (features/new.js).
 export function projectChips(project_ids, onRemove) {
   return project_ids.filter(project_id => projects.has(project_id)).map(project_id => {
     const chip = accEl('span', 'chip');

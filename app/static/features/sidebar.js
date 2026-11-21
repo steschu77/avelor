@@ -10,7 +10,7 @@ import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
 import { titled } from '../core/dom.js';
 import { rpcCall } from '../core/rpc.js';
-import { registerAction, registerActions, runAction } from '../core/actions.js';
+import { registerAction, registerActions } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store, vaultOpen } from '../model/state.js';
 import { showError } from '../model/state.js';
@@ -183,8 +183,8 @@ function renderSidebar() {
     editProject(editRow.dataset.id, editRow);
   }
 
-  // A row click filters by the source; its button opens the New menu, imports
-  // from a watch or syncs an account's.
+  // A row click filters by the source; its button imports from a watch or
+  // syncs an account's.
   const sourceRows = vaultSources().map(source => {
     const { key, name, icon, watch, account } = source;
     const row = rowFor(`source:${key}${watch && !watch.folder ? ':no-folder' : ''}`, name, () =>
@@ -326,12 +326,10 @@ function toggleArchived() {
   scheduleRenderSidebar();
 }
 
-// A source's button: Created Here's opens the New menu; a watch's imports
-// (`importWatch`), a bank account's whose folder isn't chosen yet has none; an
-// account's syncs.
+// A source's button: a watch's imports (`importWatch`), a bank account's whose
+// folder isn't chosen yet has none; an account's syncs.
 function sourceButton(source) {
-  const { key, name, watch, account } = source;
-  if (key === 'created') return { icon: '#i-add', title: t('sidebar.new_title'), onClick: (_row, button) => runAction('new', button) };
+  const { name, watch, account } = source;
   if (account) return { icon: '#i-arrow-sync', title: t('sidebar.sync', { name }), onClick: () => syncSource(source) };
   if (!watch?.folder) return null;
   return {

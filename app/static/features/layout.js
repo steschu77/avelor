@@ -212,17 +212,12 @@ store.subscribe(state => state.vault_expanded, vault_expanded => {
   applyVaultLayout();
 });
 
-// A page item is highlighted only while its page is shown. An item with
-// an action (New: its menu of types) runs it, at the item; the others
-// open their page.
+// A page item is highlighted only while its page is shown; a click opens
+// its page.
 const vaultOpNavs = sidebar.querySelectorAll("[data-vault-op]");
 for (const nav of vaultOpNavs) {
-  const { vaultOp: op, action } = nav.dataset;
-  nav.addEventListener('click', () => {
-    if (action) runAction(action, nav);
-    else openVaultOp(op);
-  });
-  if (action) continue;
+  const op = nav.dataset.vaultOp;
+  nav.addEventListener('click', () => openVaultOp(op));
   registerAction({
     id: `workspace.${op}`, group: 'go', title: nav.textContent.trim(), icon: nav.querySelector('use').getAttribute('href'),
     also: nav.dataset.also, page: true, place: 'page', end: () => t('palette.page'),
@@ -232,6 +227,9 @@ for (const nav of vaultOpNavs) {
 store.subscribe([state => state.vault_op, state => state.vault_expanded], ([vault_op, vault_expanded]) => {
   for (const nav of vaultOpNavs) setAria(nav, "aria-current", vault_expanded && nav.dataset.vaultOp === vault_op);
 });
+
+// New, its menu of types at the item (`new`, features/new.js)
+$('new-item').addEventListener('click', e => runAction('new', e.currentTarget));
 
 // collapsible sections: a label owns the siblings up to the next label
 for (const section of sidebar.querySelectorAll(".nav-section")) {

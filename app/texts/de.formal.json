@@ -63,8 +63,6 @@
   "linked.select_hint": "Wählen Sie ein Dokument, um seine Verknüpfungen zu sehen.",
   "new.enter_name": "Geben Sie zuerst einen Namen ein",
   "new.enter_title": "Geben Sie zuerst einen Titel ein",
-  "new.pick_date": "Wählen Sie zuerst ein Datum",
-  "new.pick_start": "Wählen Sie zuerst ein Startdatum",
   "panel.select_hint": "Wählen Sie ein Dokument aus der Liste.",
   "recurring.none": "Hier gibt es noch keine Dauerzahlung: Legen Sie eine auf der Karte einer Buchung an, in ihrer Zeile Dauerzahlung.",
   "route.no_journey_on": "Keine Fahrt von {from} nach {to} am {day}: Fügen Sie eine hinzu",

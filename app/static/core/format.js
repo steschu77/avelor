@@ -51,7 +51,7 @@ export function localDay(date) {
 }
 
 // `date`'s local time of day as `hh:mm`, the value of an <input type="time">.
-export function localTime(date) {
+function localTime(date) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 

@@ -1,9 +1,9 @@
-/* The pages of the expanded vault area: New (features/new.js), the Workspace
-   pages (features/workspace/: accounts, folders, vault, trash) and Settings.
-   The page itself and the list + detail page are components. */
+/* The pages of the expanded vault area: the Workspace pages
+   (features/workspace/: accounts, folders, vault, trash) and Settings. The
+   page itself and the list + detail page are components. */
 
-/* New (features/new.js): the sheet of the entity being
-   made, raised on the card layer */
+/* the form of an entity being made (the Task tab's, features/new.js; New
+   recurring payment's; Set the dates'), raised on the card layer */
 .new__sheet {
   /* the form's inset, which its foot's rule spans (the Task tab's is the
      pane's) */
@@ -60,11 +60,6 @@
   width: var(--w-new-date);
 }
 
-.new__time {
-  flex: none;
-  width: var(--w-new-time);
-}
-
 .new__body-head {
   margin-top: 22px;
 }
@@ -79,35 +74,6 @@
   resize: vertical;
   font: 400 var(--fs-body)/var(--lh-body) var(--f-serif);
   color: var(--c-ink-soft);
-}
-
-/* a list's items, one input each */
-.new__items {
-  display: flex;
-  flex-direction: column;
-}
-
-.new__item {
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--c-line);
-  font: 400 var(--fs-body)/1 var(--f-serif);
-}
-
-.new__item-remove {
-  opacity: 0;
-}
-
-.new__item:hover .new__item-remove,
-.new__item:focus-within .new__item-remove {
-  opacity: 1;
-}
-
-.new__add-item {
-  align-self: flex-start;
-  margin-top: 6px;
 }
 
 .new__error {

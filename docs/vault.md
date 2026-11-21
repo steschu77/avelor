@@ -1163,8 +1163,8 @@ page's vault over (`forgetVault`, `model/events.js`). The page forgets:
   (`sendEdits`).
 - the conflicts;
 - the selection and the filter;
-- a page about the old vault: New, Fetch email, Import scans, and the Task
-  tab's drafts (`features/new.js`).
+- a page about the old vault: Fetch email, Import scans, and the draft
+  card's (`panel.md#draft`) and the Task tab's drafts (`features/new.js`).
 
 The lens, the calendar's day, the panel's size and the Vault page stay.
 The accounts and folder watches arrive before the indexing as the new

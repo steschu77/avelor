@@ -8,10 +8,9 @@
 // In a calendar Google keeps as it is (`googleLocked`), what it syncs -- planned
 // or booked, the times, where -- is shown as text, the rest still edited.
 // The place inputs offer the places of the vault's trip events, and a
-// place named turns to the zone it had last (`placeZone`). Also New's
-// place inputs (features/new.js). After its calendar, what it meets on its
-// trip's route (`meetsField`). The times and Where are every event's
-// (features/panel/event-fields.js).
+// place named turns to the zone it had last (`placeZone`). After its
+// calendar, what it meets on its trip's route (`meetsField`). The times and
+// Where are every event's (features/panel/event-fields.js).
 
 import { accEl } from '../../core/dom.js';
 import { addDays, daysBetween, localDay, parseDate } from '../../core/format.js';
@@ -161,7 +160,7 @@ const placeList = accEl('datalist');
 placeList.id = 'trip-places';
 document.body.append(placeList);
 
-export function placeInput(input) {
+function placeInput(input) {
   input.setAttribute('list', placeList.id);
   input.placeholder ||= t('trip.place');
   input.addEventListener('focus', () => {
