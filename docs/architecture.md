@@ -601,7 +601,7 @@ nothing imports `app.js`.
 | `features/workspace/vault.js` | the Vault page; `switchVault`, `revealVault`, Rebuild index |
 | `features/workspace/settings.js` | the Settings page (`ui.md#settings`), its rows as commands, Help and settings |
 | `features/assistant/tree.js`, `features/assistant/assistant.js` | conversation tree helpers; the assistant |
-| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the vault area's and the panel's layout, the page items, the sidebar's sections, the panel's close and expand buttons |
+| `features/layout.js` | the shell's layout: the resizing grips with the widths in the preferences, the vault area's and the panel's layout, the page items, the sidebar's sections, the panel's close, open and expand buttons |
 | `app.js` | the entry: its imports run the modules that act when they load, in the order they act; the lenses' start, the renders wired to the model, the dirty dots, `ready` |
 | `css/` | the stylesheets in cascade order (`architecture.md#css`) |
 | `icons/` | the icons, Fluent UI System Icons (MIT, `icons/LICENSE`), each a file as it comes, joined into the page's sprite by `build.rs` |

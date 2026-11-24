@@ -2,7 +2,8 @@
 // vault panel, the panel and its context column, with the widths kept in
 // the preferences; the vault area's and the panel's layout, which follow
 // `vault_expanded` and `panel_size`; the page items and the sidebar's
-// sections; the panel's close and expand buttons; F6 between the areas.
+// sections; the panel's close, open and expand buttons; F6 between the
+// areas.
 
 import { $ } from '../core/dom.js';
 import { setAria } from '../core/dom.js';
@@ -21,6 +22,7 @@ const sidebarDivider = $("sidebar-divider");
 const panelDivider = $("panel-divider");
 const contextDivider = $("context-divider");
 const btnClose = $("doc-close-btn");
+const btnOpen = $("panel-open-btn");
 const btnExpand = $("doc-expand-btn");
 
 let draggingSidebar = false;
@@ -250,16 +252,28 @@ for (const btn of sidebar.querySelectorAll(".nav-section__add")) {
   btn.addEventListener('click', e => e.stopPropagation());
 }
 
+// Close and Open are at the same place, and the focus goes from one to the
+// other, not scrolled to: the panel is still sliding.
 function closePanel() {
   store.setState({ panel_size: "closed" });
+  btnOpen.focus({ preventScroll: true });
+}
+function openPanel() {
+  store.setState({ panel_size: "normal" });
+  btnClose.focus({ preventScroll: true });
 }
 btnClose.addEventListener('click', closePanel);
+btnOpen.addEventListener('click', openPanel);
 
 function toggleFullWidth() {
   store.setState({ panel_size: store.getState().panel_size === "expanded" ? "normal" : "expanded" });
 }
 btnExpand.addEventListener('click', toggleFullWidth);
 
+registerAction({
+  id: 'panel.open', group: 'window', title: t('panel.open_panel'), icon: '#i-panel-right',
+  when: () => store.getState().panel_size === "closed", run: openPanel,
+});
 registerAction({
   id: 'panel.close', group: 'window', title: t('panel.close_panel'), icon: '#i-panel-right-contract',
   when: () => store.getState().panel_size !== "closed", run: closePanel,
@@ -271,8 +285,9 @@ registerAction({
 });
 
 // The layout follows `panel_size`; the expand button shows and says what it
-// does.
+// does, Open is there while the panel is closed.
 store.subscribe(state => state.panel_size, panel_size => {
+  btnOpen.hidden = panel_size !== "closed";
   const icon = panel_size === "expanded" ? "#i-panel-right-contract" : "#i-panel-right-expand";
   btnExpand.querySelector("use").setAttribute("href", icon);
   titled(btnExpand, panel_size === "expanded" ? t('panel.restore') : t('panel.expand'));

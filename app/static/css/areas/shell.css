@@ -57,6 +57,13 @@
   box-shadow: 0 1px 0 var(--c-paper);
 }
 
+/* the closed panel's Open, where its close button was */
+.topbar__open {
+  align-self: center;
+  gap: 6px;
+  margin-right: var(--p-pane);
+}
+
 .main {
   grid-area: main;
   display: flex;

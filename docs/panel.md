@@ -15,7 +15,9 @@ editable cards, or — under the calendar lens — the selected day. It can be
 closed, half-open with the chat beside the card, expanded to full width and
 resized (`panel_size` in the store; the widths are preferences,
 `ui.md#preferences`); half-open or expanded, it has the context column
-(`panel.md#context-column`).
+(`panel.md#context-column`). Closed, a selection or a draft (`#draft`)
+opens it, and Open does, which stands where its × was, at the end of the
+lens tabs (`features/layout.js`).
 
 ```mermaid
 sequenceDiagram
