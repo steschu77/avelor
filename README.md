@@ -41,7 +41,7 @@ It is a personal project, not a commercial product or a claim to have solved per
 - **An assistant.** Conversations about a document, a thread, or a project, with Anthropic, OpenAI, Mistral, Gemini, or a local Ollama model, within a spend limit.
 - **Analysis.** New email and imported documents are sorted by a model of your choice (what it is, a clean title, a document's date, labels, projects); a closer look adds the points to check and the questions to ask, for an email a draft reply, as a conversation.
 - **In your language.** English, German, and Spanish: the system's language or the one picked in Settings, informal by default and formal on request. A new language is a catalog of texts, checked by a script.
-- **Light or dark, by mouse or keyboard.** Avelor follows the system's light or dark theme, on Windows its title bar too; every control is in the keyboard's reach, with a visible focus, and every place and command is found by its name (Ctrl+Shift+P).
+- **Light or dark, by mouse or keyboard.** Avelor follows the system's light or dark theme, on Windows its title bar too; every control is in the keyboard's reach, with a visible focus, and every place, entry and command is found by its name (Ctrl+Shift+P).
 
 ## How It Compares
 

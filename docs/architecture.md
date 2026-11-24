@@ -590,7 +590,7 @@ nothing imports `app.js`.
 | `features/conflict.js`, `features/close.js` | the conflict dialog (`saving.md#the-dialog`); closing the app: the `close` event leaves edit mode in every editor and answers `close_ready` once the saves are answered |
 | `features/jobs.js` | job cards from the `job` event, with Stop |
 | `features/palette.js` | Go to (`ui.md#go-to`): the dialog; the hints naming a key |
-| `features/palette-found.js` | what Go to finds: the places, the commands and the keys, as blocks of rows |
+| `features/palette-found.js` | what Go to finds: the places, the entries, the commands and the keys, as blocks of rows |
 | `features/keys.js` | the keys that are no command, by where they work (Go to's Keys) |
 | `features/window.js` | the page's zoom and full screen as commands |
 | `features/undo.js` | Ctrl+Z and Ctrl+Y as the actions `undo` and `redo` |

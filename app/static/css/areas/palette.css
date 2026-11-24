@@ -68,6 +68,12 @@
   line-height: 15px;
 }
 
+.palette__head>.note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .palette__row {
   display: grid;
   grid-template-columns: var(--h-icon) minmax(0, 1fr) auto;
@@ -90,8 +96,9 @@
   box-shadow: inset 2px 0 0 var(--c-accent-line);
 }
 
-/* a row's name, as a menu's; then the words it was found by when the name
-   hasn't them */
+/* a row's name, an entry's in serif, as a row's of a lens, a place's or a
+   command's as a menu's; then the words or the label it was found by when
+   the name hasn't them */
 .palette__name {
   display: flex;
   align-items: baseline;
@@ -102,6 +109,11 @@
 .palette__name>.row-title {
   flex: 0 1 auto;
   min-width: 0;
+}
+
+.palette__name>.row-title:has(+.palette__hit) {
+  flex-shrink: 0;
+  max-width: 60%;
 }
 
 .palette__name>.row-title--ui {
@@ -117,6 +129,11 @@
   color: var(--c-label);
 }
 
+.palette__hit>.label {
+  margin-right: 6px;
+  font-style: normal;
+}
+
 .palette__end {
   display: flex;
   align-items: center;
@@ -128,6 +145,21 @@
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* outside the filter: shown, and a step back */
+.palette__row.is-outside .row-title,
+.palette__row.is-outside .palette__end {
+  color: var(--c-label);
+}
+
+.palette__row.is-outside[aria-selected="true"] .row-title {
+  color: var(--c-ink);
+}
+
+/* a row for more of its kind */
+.palette__row--more .row-title {
+  color: var(--c-label);
 }
 
 /* a shortcut, each key drawn as one */

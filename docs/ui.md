@@ -50,7 +50,8 @@ the Vault page alone.
 
 - **Filter by words**: the box at the top (`ui.md#words`).
 
-- **Go to**: under New, places, commands and keys by name (`ui.md#go-to`).
+- **Go to**: under New, places, entries, commands and keys by name
+  (`ui.md#go-to`).
 
 - **Marked** is a row while it narrows the list (`aria-current`): a
   project, No project, a source. "All Projects" and "All Sources", the
@@ -529,8 +530,8 @@ keys.
 ## Go to <a id="go-to"></a>
 
 Ctrl+Shift+P, or the Go to item under New, opens a dialog over the app that
-finds places, commands and keys by name (`features/palette.js`, the blocks
-of rows `features/palette-found.js`). With nothing typed it lists the
+finds places, entries, commands and keys by name (`features/palette.js`, the
+blocks of rows `features/palette-found.js`). With nothing typed it lists the
 commands: the actions that have a group and apply now
 (`architecture.md#actions`), under their groups: New, Assistant, Get things
 in, Go to (the lenses, the Workspace pages, Settings, the next and the
@@ -540,21 +541,27 @@ own: an enabled folder watch its import, an account's Email its Fetch email,
 a checked calendar its sync.
 
 - **What is typed** is looked for in the names and in the other words one is
-  found by: every word, in any order, case and accents aside (`fit`,
-  `core/match.js`). The words are marked, and a row found by another word
-  says which ("rescan", Rebuild index). What has a name is collected as the
-  dialog opens (`collect`), each name folded once.
+  found by, a command's or an entry's labels: every word, in any order, case
+  and accents aside (`fit`, `core/match.js`). The words are marked, and a row
+  found by another word says which ("rescan", Rebuild index). What has a name
+  is collected as the dialog opens (`collect`), each name folded once.
 - **What is found** stands in blocks, the one with the best fit first, and
-  of two alike in this order; within a block the best fit first
-  (`foundBlocks`):
+  of two alike in this order; within a block the best fit first, of entries
+  alike the newest (`foundBlocks`):
   - **Go to**: the places: the lenses, the Workspace pages and Settings,
     All Projects, No project, each project (an archived one after the
     others), All Sources and each source, with its entries counted. A
     project or a source is the filter then, as a press on its row in the
     vault panel, and the lens stays.
+  - **Entries**: every entity but a calendar, and the threads. With a filter
+    in the vault panel those in it come first, then, a step back and with
+    their project, those elsewhere. A row at the end shows more of them.
   - **Commands**: those that are no place.
   - **Keys**: those that are no command, at most two, by a word of theirs
     begun.
+- **Enter** on an entry opens its card, as a press on a link to it does; the
+  filter stays. **Ctrl+Enter** shows it in the Documents lens
+  (`showInDocuments`), without the filter if that hides it.
 - **Narrowed** to the commands, only those are listed, by their groups: by a
   press on Commands beside the box, by `>` typed first, or with **Tab** and
   **Shift+Tab**, which go round what it can be narrowed to. **Backspace** in
@@ -571,7 +578,7 @@ a checked calendar its sync.
 - **Up** and **Down** move the highlight, round the ends of the list, and
   **PageUp** and **PageDown** go over several rows; **Enter**, or a press
   on a row, acts on it, once the dialog is closed and the focus is
-  back where it was. The foot says what Enter does. **Esc** or a
+  back where it was. The foot says what Enter and Ctrl+Enter do. **Esc** or a
   press beside the dialog closes it.
 
 ## New

@@ -25,7 +25,7 @@ import { isDirty } from '../../model/documents.js';
 import { entities } from '../../model/entities.js';
 import { matchesFilter } from '../../model/entities.js';
 import { projects, projectsInOrder, projectsOf } from '../../model/entities.js';
-import { knownThreads, threads } from '../../model/entities.js';
+import { knownThreads, threadMembers, threads } from '../../model/entities.js';
 import { calendarDayOf } from '../../model/calendar.js';
 import { joinProjectLocal, joinThreadLocal, leaveThreadLocal } from '../../model/structure.js';
 import { docIcon, iconEl } from '../../ui/icons.js';
@@ -539,17 +539,20 @@ export function initDocumentsLens() {
 }
 
 // ----------------------------------------------------------------------------
-// Show the entity `id` in the lens (a new email's notice, through the
-// `documents.show` action): without a filter or a type selection that
-// would hide it, the entity selected and its row unfolded and scrolled
-// into view. `behind`: under the open vault page, which stays.
+// Show the entity or thread `id` in the lens (a new email's notice, an entry
+// found in Go to, through the `documents.show` action): without a filter or
+// a type selection that would hide it, selected and its row unfolded and
+// scrolled into view; a thread by its first member in the filter. `behind`:
+// under the open vault page, which stays.
 function showInDocuments(id, { behind = false } = {}) {
-  const doc = entities.get(id);
-  if (!doc) return showError(t('docs.gone'));
-  showingAny([doc]);
-  docTypes.show(typeOf(doc));
+  const thread = threads.has(id);
+  const members = thread ? threadMembers(id) : [entities.get(id)].filter(Boolean);
+  if (!members.length) return showError(t('docs.gone'));
+  showingAny(members);
+  docTypes.show(typeOf(members.find(doc => matchesFilter(doc))));
   showLens('documents', behind);
-  selectDocument(id);
+  if (thread) selectById(id);
+  else selectDocument(id);
   revealInDocuments(id);
 }
 registerAction({ id: 'documents.show', title: t('docs.show_in_documents'), run: showInDocuments });

@@ -1,8 +1,8 @@
-// Go to (ui.md#go-to): places, commands and keys by name, at Ctrl+Shift+P or
-// the vault panel's item under New. The dialog: its box, what it is narrowed
-// to, the blocks found (features/palette-found.js) and the foot; Enter runs
-// the highlighted row, once the dialog is closed and the focus is back where
-// it was.
+// Go to (ui.md#go-to): places, entries, commands and keys by name, at
+// Ctrl+Shift+P or the vault panel's item under New. The dialog: its box, what
+// it is narrowed to, the blocks found (features/palette-found.js) and the
+// foot; Enter runs the highlighted row, once the dialog is closed and the
+// focus is back where it was.
 
 import { $, accEl } from '../core/dom.js';
 import { registerAction, runAction, shortcutHint, shortcutKeys, shortcutOf } from '../core/actions.js';
@@ -28,6 +28,7 @@ const footEl = $('palette-foot');
 
 let found = null; // what has a name, as it was when it opened (`collect`)
 let narrow = ''; // one of NARROW
+const unfolded = new Map(); // how many more rows a block shows, by its key
 let rows = []; // { row, el }, in the list's order
 let at = 0; // the highlighted row
 
@@ -54,55 +55,65 @@ function narrowTo(to, text = inputEl.value) {
 
 function type(text) {
   if (inputEl.value !== text) inputEl.value = text;
+  unfolded.clear();
   render();
   inputEl.focus();
 }
 
-function runRow() {
+function runRow(second = false) {
   const row = rows[at]?.row;
-  if (!row?.run) return;
-  dialogEl.close();
-  row.run();
+  const act = second ? row?.second : row;
+  if (!act?.run) return;
+  if (!row.stays) dialogEl.close();
+  act.run();
 }
 
 // ----------------------------------------------------------------------------
 // the list
 
-function render() {
+function render(to = 0) {
   const words = wordsOf(inputEl.value);
+  const unfold = (key, n) => {
+    unfolded.set(key, n);
+    render(at); // the first of those unfolded
+  };
   const everything = !narrow && words.length;
-  const blocks = everything ? foundBlocks(found, words)
+  const blocks = everything ? foundBlocks(found, words, { unfolded, unfold })
     : narrow === 'keys' ? keyBlocks(found, words) : commandBlocks(found, words);
   rows = [];
   const none = everything ? t('palette.nothing', { text: inputEl.value.trim() }) : NONE[narrow];
   listEl.replaceChildren(...(blocks.length ? blocks.map(block => blockEl(block, words)) : [accEl('div', 'palette__none', none)]));
   for (const option of narrowEl.children) option.setAttribute('aria-pressed', String(option.dataset.narrow === narrow));
   inputEl.placeholder = HINTS[narrow];
-  highlight(0);
+  highlight(to);
 }
 
-function blockEl({ head, rows: blockRows }, words) {
+function blockEl({ head, note, rows: blockRows }, words) {
   const el = accEl('div');
   el.setAttribute('role', 'group');
   el.setAttribute('aria-label', head);
   const headEl = accEl('div', 'palette__head');
   headEl.append(accEl('span', 'label', head));
+  if (note) headEl.append(accEl('span', 'note', note));
   el.append(headEl, ...blockRows.map(row => rowEl(row, words)));
   return el;
 }
 
 function rowEl(row, words) {
   const el = accEl('div', 'palette__row');
+  el.classList.toggle('is-outside', Boolean(row.outside));
+  el.classList.toggle('palette__row--more', Boolean(row.more));
   el.id = `palette-row-${rows.length}`;
   el.dataset.at = rows.length;
   el.setAttribute('role', 'option');
   const name = accEl('span', 'palette__name');
-  const title = accEl('span', 'row-title row-title--ui');
-  title.append(...(row.unmarked ? [row.name] : markedNodes(words, row.name)));
+  const title = accEl('span', row.serif ? 'row-title' : 'row-title row-title--ui');
+  title.append(...(row.more || row.unmarked ? [row.name] : markedNodes(words, row.name)));
   name.append(title);
-  if (row.also) {
+  if (row.also || row.label) {
     const hit = accEl('span', 'palette__hit');
-    hit.append(...markedNodes(words, row.also));
+    if (row.label) hit.append(accEl('span', 'label', t('search.in_label')));
+    hit.append(...markedNodes(words, row.label || row.also));
     name.append(hit);
   }
   const end = accEl('span', 'palette__end');
@@ -143,6 +154,7 @@ function highlight(i) {
   };
   footEl.replaceChildren(
     ...(row?.run ? [does('Enter', row.verb)] : row ? [accEl('span', '', row.works)] : []),
+    ...(row?.second ? [does('Ctrl+Enter', row.second.verb)] : []),
     does('Tab', t('palette.narrows')),
     does('Escape', t('palette.closes')));
 }
@@ -164,7 +176,7 @@ inputEl.addEventListener('keydown', e => {
   } else if (e.key === 'PageDown' || e.key === 'PageUp') {
     highlight(at + (e.key === 'PageDown' ? PAGE : -PAGE));
   } else if (e.key === 'Enter') {
-    runRow();
+    runRow(e.ctrlKey);
   } else if (e.key === 'Tab') {
     narrowTo(NARROW[(NARROW.indexOf(narrow) + (e.shiftKey ? NARROW.length - 1 : 1)) % NARROW.length]);
   } else if (e.key === 'Backspace' && narrow && !inputEl.value) {
@@ -198,7 +210,7 @@ listEl.addEventListener('mousedown', e => {
   const i = e.target.closest('[data-at]')?.dataset.at;
   if (i === undefined) return;
   highlight(Number(i));
-  runRow();
+  runRow(e.ctrlKey);
 });
 
 // A press beside the dialog closes it.

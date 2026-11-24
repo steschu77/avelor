@@ -58,6 +58,7 @@ export const KEY_GROUPS = [
     keys: [
       key(t('keys.rows'), ['Up', 'Down']),
       key(t('keys.act'), ['Enter']),
+      key(t('docs.show_in_documents'), ['Ctrl+Enter']),
       key(t('keys.narrow'), ['Tab']),
       key(t('keys.back'), ['Backspace']),
       key(t('keys.close'), ['Escape']),
