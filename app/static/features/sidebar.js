@@ -1,7 +1,8 @@
 // The vault panel (ui.md#vault-panel): the projects (starred first, the
 // archived folded) after No project, and the sources, with their counts,
 // each a filter; renaming, adding, starring and dropping onto projects;
-// the sources' sync buttons; the vault's name and menu. It renders at most
+// each pill's menu (a project's, features/projects.js; a source's import,
+// sync and settings); the vault's name and menu. It renders at most
 // once per frame (`scheduleRenderSidebar`), following the model (app.js).
 // The labels filter from the lens head (features/header.js).
 
@@ -10,7 +11,7 @@ import { accEl, oncePerFrame, placeChildren, setAria } from '../core/dom.js';
 import { pressable } from '../core/dom.js';
 import { titled } from '../core/dom.js';
 import { rpcCall } from '../core/rpc.js';
-import { registerAction, registerActions } from '../core/actions.js';
+import { registerAction, registerActions, runAction } from '../core/actions.js';
 import { t } from '../core/text.js';
 import { store, vaultOpen } from '../model/state.js';
 import { showError } from '../model/state.js';
@@ -28,8 +29,9 @@ import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
 import { openNewProject } from './header.js';
+import { projectMenu, toggleStar } from './projects.js';
 import { accountSources, vaultSources } from './sources.js';
-import { importWatch } from './workspace/folders.js';
+import { importWatch, openWatch } from './workspace/folders.js';
 import { openEmailFetch } from './import/email.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
@@ -49,27 +51,45 @@ const allSourcesEl = $('all-sources');
 export const scheduleRenderSidebar = oncePerFrame(renderSidebar);
 
 // A sidebar row without its count and highlight, which `updateNavItem` sets.
-// `action` ({ icon, title, onClick }) becomes a circular icon button at the
-// row's right end, shown while the row is hovered or has the focus;
-// `onClick` gets the row and the button.
-function sidebarNavItem(className, name, classIcon, icon, onClick, action) {
+// `pen` ({ title, onClick }) becomes a pen right after the name; `menu()`,
+// the items of the row's menu, a round button with three dots at its right
+// end, in the count's place: both are shown while the row is hovered or has
+// the focus. A right-click on the row (the Menu key and Shift+F10 too) opens
+// the same menu, at its point. `onClick`s get the row.
+function sidebarNavItem(className, name, classIcon, icon, onClick, { pen, menu } = {}) {
   const el = pressable(accEl('a', className));
   const elName = accEl('span', 'nav-item__name', name);
   const elCount = accEl('span', 'meta nav-item__count');
   const elIcon = iconEl(icon, classIcon);
-  el.appendChild(elIcon);
-  el.appendChild(elName);
-  el.appendChild(elCount);
-  if (action) {
-    const btn = accEl('button', 'icon-btn icon-btn--quiet nav-item__action');
+  el.append(elIcon, elName);
+  if (pen) {
+    const btn = accEl('button', 'icon-btn icon-btn--quiet nav-item__pen');
     btn.type = 'button';
-    btn.title = action.title;
-    btn.append(iconEl(action.icon));
+    titled(btn, pen.title);
+    btn.append(iconEl('#i-edit'));
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      action.onClick(el, btn);
+      pen.onClick(el);
     });
     el.appendChild(btn);
+  }
+  el.appendChild(elCount);
+  if (menu) {
+    const btn = accEl('button', 'icon-btn icon-btn--quiet nav-item__more', '\u22ef');
+    btn.type = 'button';
+    btn.setAttribute('aria-haspopup', 'menu');
+    titled(btn, t('menu.actions', { name }));
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      showMenu(btn, menu());
+    });
+    el.appendChild(btn);
+    // a key's has no point of its own (0, 0): the menu opens at the button
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      const at = e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : null;
+      showMenu(btn, menu(), at ? { at } : {});
+    });
   }
   el.addEventListener('click', onClick);
   return el;
@@ -153,9 +173,10 @@ function renderSidebar() {
   for (const { id, name, starred, archived } of projectsInOrder()) {
     const row = rowFor(`project:${id}`, name, () => {
       const row = sidebarNavItem('nav-item nav-item--project', name, 'nav-item__icon nav-item__icon--star', '#i-star', () => selectProject(id),
-        { icon: '#i-edit', title: t('header.rename'), onClick: row => editProject(id, row) });
+        { pen: { title: t('header.rename'), onClick: row => editProject(id, row) }, menu: () => projectMenu(id) });
       row.dataset.id = id; // the drop target of `joinProjectLocal`, see below
-      pressable(row.querySelector('.nav-item__icon')).addEventListener('click', e => {
+      // the mouse's star; the keyboard's is in the menu
+      row.querySelector('.nav-item__icon').addEventListener('click', e => {
         e.stopPropagation();
         toggleStar(id);
       });
@@ -183,20 +204,23 @@ function renderSidebar() {
     editProject(editRow.dataset.id, editRow);
   }
 
-  // A row click filters by the source; its button imports from a watch or
-  // syncs an account's.
+  // A row click filters by the source; its menu gets new things from it
+  // (`sourceMenu`). A source that syncs on its own says "auto" after its
+  // name.
   const sourceRows = vaultSources().map(source => {
     const { key, name, icon, watch, account } = source;
-    const row = rowFor(`source:${key}${watch && !watch.folder ? ':no-folder' : ''}`, name, () =>
-      sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', icon, () => selectSource(key), sourceButton(source)));
+    const row = rowFor(`source:${key}`, name, () =>
+      sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', icon, () => selectSource(key),
+        watch || account ? { menu: () => sourceMenu(key) } : {}));
     updateNavItem(row, sourceCounts.get(key) ?? 0, key === selected_source);
     if (account) {
-      // A source that syncs on its own shows its button pressed.
-      const button = row.querySelector('.nav-item__action');
-      setAria(button, 'aria-pressed', source.autoSync);
-      const sync = t('sidebar.sync', { name });
-      const action = source.kind === 'email' ? t('sidebar.fetch_email') : sync;
-      button.title = source.autoSync ? t('sidebar.auto_sync_on', { action }) : sync;
+      let auto = row.querySelector('.nav-item__auto');
+      if (!auto) {
+        auto = accEl('span', 'meta nav-item__auto', t('sidebar.auto'));
+        auto.title = t('sidebar.auto_title');
+        row.querySelector('.nav-item__name').after(auto);
+      }
+      auto.hidden = !source.autoSync;
     }
     return row;
   });
@@ -264,8 +288,8 @@ function addBlueprintProject(blueprint) {
   });
 }
 
-// The Projects section's "+": the New project menu, a blank project, then
-// the shipped blueprints, each with what it makes.
+// The Projects section's "+ Project": the New project menu, a blank
+// project, then the shipped blueprints, each with what it makes.
 const addProjectBtn = $('add-project-btn');
 addProjectBtn.addEventListener('click', () => showMenu(addProjectBtn, [
   { label: t('sidebar.menu_project'), icon: KIND_ICONS.project.icon, desc: t('sidebar.menu_blank'), run: addProject },
@@ -309,14 +333,6 @@ allProjectsEl.addEventListener('click', () => selectFilter({ selected_project: n
 noProjectEl.addEventListener('click', () => selectProject(NO_PROJECT));
 allSourcesEl.addEventListener('click', () => selectFilter({ selected_source: null }));
 
-// The star on a project pill: the host writes `starred` (unstarring removes
-// it) and pushes the project back as `entity`, which re-sorts the pills.
-// The selection, the filter and an open page stay.
-function toggleStar(project_id) {
-  const starred = !projects.get(project_id)?.starred;
-  structureCall('set_starred', { id: project_id, starred }, () => store.getState());
-}
-
 // The "Archived" row folds and unfolds the archived projects; not kept
 // across restarts.
 let archivedUnfolded = false;
@@ -326,17 +342,39 @@ function toggleArchived() {
   scheduleRenderSidebar();
 }
 
-// A source's button: a watch's imports (`importWatch`), a bank account's whose
-// folder isn't chosen yet has none; an account's syncs.
-function sourceButton(source) {
-  const { name, watch, account } = source;
-  if (account) return { icon: '#i-arrow-sync', title: t('sidebar.sync', { name }), onClick: () => syncSource(source) };
-  if (!watch?.folder) return null;
-  return {
-    icon: IMPORT_ICON,
-    title: watch.type === 'statements' ? t('sidebar.import_statements', { name }) : t('sidebar.import_from', { name }),
-    onClick: () => importWatch(watch.id),
-  };
+// The menu of the source `key`, as it is when it opens: first what gets new
+// things from it -- a watch's import (`importWatch`, dim while its folder
+// isn't chosen), an account's email or calendar sync (`syncSource`), with
+// its auto-sync -- then its settings, the watch's pane under Folders or the
+// account's under Accounts.
+function sourceMenu(key) {
+  const source = vaultSources().find(s => s.key === key);
+  if (!source) return [];
+  const { kind, watch, account, autoSync } = source;
+  if (watch) {
+    const label = watch.type === 'statements' ? t('sidebar.menu_import_new')
+      : watch.type === 'pdf' ? t('sidebar.menu_import_pdfs') : t('sidebar.menu_import_scans');
+    return [
+      { label, dim: !watch.folder, run: watch.folder ? () => importWatch(watch.id) : undefined },
+      { label: t('sidebar.menu_settings'), run: () => openWatch(watch.id) },
+    ];
+  }
+  return [
+    { label: kind === 'email' ? t('sidebar.menu_fetch') : t('sidebar.menu_sync_now'), run: () => syncSource(source) },
+    { label: t('accounts.auto_sync'), checked: autoSync, run: () => setAutoSync(source, !autoSync) },
+    { label: t('sidebar.menu_settings'), run: () => runAction('accounts.open', account) },
+  ];
+}
+
+// Auto-sync on or off, as the account's pane switches it; a refusal is said
+// in the status bar.
+function setAutoSync(source, enabled) {
+  const call = source.kind === 'email'
+    ? rpcCall('set_email_sync', { account: source.account, enabled })
+    : rpcCall('set_calendar_sync', { account: source.account, calendar: source.calendar, enabled });
+  call.catch(e => {
+    if (e.code !== 'cancelled') showError(e.message);
+  });
 }
 
 // The vault panel's rows as places Go to finds: each filters by its project
@@ -363,9 +401,9 @@ registerActions(() => [
   })),
 ].map(place => ({ ...place, when: vaultOpen })));
 
-// The sync button of a source: Email opens the Fetch email page
-// (features/import/email.js); a calendar syncs right away, its progress and
-// summary in the jobs panel.
+// An account's source's sync, its menu's first entry and Go to's: Email
+// opens the Fetch email page (features/import/email.js); a calendar syncs
+// right away, its progress and summary in the jobs panel.
 function syncSource(source) {
   if (source.kind === 'email') return openEmailFetch(source.account);
   if (source.kind === 'calendar') return syncCalendar(source);

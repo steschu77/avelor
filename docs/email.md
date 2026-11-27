@@ -7,7 +7,7 @@
 
 ## Fetch email <a id="fetch-email"></a>
 
-The Email source's sync button opens Fetch email (`features/import/email.js`) in
+The Email source's Fetch email… opens Fetch email (`features/import/email.js`) in
 the expanded vault area, filled with the account's last filter
 (`accounts.md#google-file`).
 
@@ -57,8 +57,9 @@ switched on, then since its last complete run.
   the new emails after a run (`email.md#analysis`).
 - A failed run is shown once in the status bar, not again until a run
   succeeds.
-- The Email source's sync button stays shown, pressed, while auto-sync is
-  on; it still opens Fetch email.
+- The Email source says "auto" after its name while auto-sync is on; its
+  menu's Fetch email… still opens Fetch email, and its Auto-sync switches
+  it as the pane's check does.
 
 ## Attachments <a id="attachments"></a>
 
@@ -251,7 +252,7 @@ feature picks its model (`accounts.md#model-choice`).
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| G3 | Fetch email | Email source sync button → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; the attachments' types, size and reading, with its model; the analysis's level and model; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `entity` per attachment, `account`; the job's end reads the matches again; then G7, G5 | emails in `Email/`, their attachments in `Attachments/`; filter remembered |
+| G3 | Fetch email | Email source's Fetch email… → `openEmailFetch` (`features/import/email.js`) in the expanded vault area → `email_labels`; filter edits (500 ms debounce) → `email_search` (Auto-update; Manual: on Update); paging → `email_headers`; the attachments' types, size and reading, with its model; the analysis's level and model; Fetch or Ctrl+Enter → `email_fetch` | answers `{labels}`, `{matches, truncated, headers}`, `{headers}`; then `email_fetch` → `ok {job}` (page closes), job events, `entity` / `content` per email, `entity` per attachment, `account`; the job's end reads the matches again; then G7, G5 | emails in `Email/`, their attachments in `Attachments/`; filter remembered |
 | G4 | Auto-sync email | Email row of the account pane → Auto-sync check, filter form (500 ms debounce), its attachments, its analysis | `set_email_sync {account, enabled?, filter?, analysis?, attachments?}` → `account`; later, on the clock: a quiet `list_message_ids` → for new email a "Syncing email" job, `entity` per email and attachment, `account`; then G7, G5 | emails in `Email/` on their own |
 | G6 | Open an attachment | the card's Attachments block: Open, or a double-click on a row; an attachment's card: its File row's Open → `openOriginal` (`features/selection.js`) | `open_file {id}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | the file in its app |
 | G7 | Read attachments | a fetch or an auto-sync run with Read on ends with saved files, or a Replace's without text | `attachments::read` → `AiAccounts::choose` (refused: a `notice`) → job "Reading attachments"; per document `step_for`, for an image or a PDF `check_limit`, then `reader::read` on a worker (an image, or a PDF's scans or the whole file, by `reader::ask`; a PDF's text layer and a text file without a model); `set_content` through the vault edit → `entity`, `content`, `job`, `account`; at the end one `notice` for the failures, then G5 | the files' text in their documents |

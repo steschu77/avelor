@@ -221,6 +221,15 @@ export function addBankAccount() {
   openVaultOp('folders');
 }
 
+// The Folders page with the watch `id`'s pane: its source's Settings...
+// (features/sidebar.js).
+export function openWatch(id) {
+  selectedWatch = id;
+  watchError = null;
+  openVaultOp('folders');
+  scheduleRenderFolders();
+}
+
 // Check and store `folder` for `watch` (an id, or 'new:<type>', which
 // creates the watch with its type's defaults). The field shows it as being
 // checked until the host answers; then it closes, or opens again with the

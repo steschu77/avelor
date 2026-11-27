@@ -33,6 +33,7 @@ import { leaveCardEditMode } from './panel/panel.js';
 import { addChip, labelChips, linkChip } from './panel/panel.js';
 import { linkMenuChip } from './linked.js';
 import { vaultSources } from './sources.js';
+import { deleteProject, toggleArchive } from './projects.js';
 
 const projectNameEl = $('project-name');
 const projectDescEl = $('project-desc');
@@ -262,16 +263,10 @@ projectArchiveBtn.addEventListener('click', () => {
   if (projectArchiveBtn.getAttribute('aria-disabled') !== 'true') toggleArchive(descProjectId);
 });
 
-// Delete: two clicks (`armedButton`). The description is saved first, so
-// if the delete fails no edit is lost; the host takes the project out of
-// its members and moves its file to `.trash`, and `onEntityDeleted` clears
-// the filter.
+// Delete: two clicks (`armedButton`), the description saved first.
 const projectDeleteBtn = $('project-delete-btn');
-armedButton(projectDeleteBtn, t('header.delete_armed'), () => {
-  const project_id = descProjectId;
-  setProjectDescEditMode(false);
-  structureCall('delete_entity', { id: project_id }, () => store.getState());
-});
+armedButton(projectDeleteBtn, t('header.delete_armed'), () =>
+  deleteProject(descProjectId, () => setProjectDescEditMode(false)));
 
 // The buttons follow the selected project: what the host may do with its
 // file, and whether it is archived.
@@ -305,11 +300,3 @@ store.subscribe(state => state.selected_project, () => {
   }
   updateProjectDesc();
 });
-
-// The project header's Archive: the host writes `archived` (unarchiving
-// removes it) and pushes the project back, which moves its pill between
-// the active and the archived projects. The selection stays.
-function toggleArchive(project_id) {
-  const archived = !projects.get(project_id)?.archived;
-  structureCall('set_archived', { id: project_id, archived }, () => store.getState());
-}

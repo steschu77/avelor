@@ -112,15 +112,21 @@ registerAction({
   run: day => openDraft('event', { day: localDay(day) }),
 });
 
-// The types at `anchor`, each a draft card in the side panel
-// (model/drafts.js); a kept draft first, shown again.
-function showNewMenu(anchor) {
-  const items = NEW_TYPES.map(type => ({
+// The types as a menu's items, each a draft card in the side panel
+// (model/drafts.js); `prefill`: the draft's (`openDraft`), a project's New
+// here its project (features/projects.js).
+export function newTypeItems(prefill = {}) {
+  return NEW_TYPES.map(type => ({
     label: type.name,
     icon: newTypeIcon(type),
     hint: type.folder.split('\\')[0],
-    run: () => openDraft(type.kind),
+    run: () => openDraft(type.kind, prefill),
   }));
+}
+
+// The types at `anchor`; a kept draft first, shown again.
+function showNewMenu(anchor) {
+  const items = newTypeItems();
   const kept = currentDraft();
   if (kept) items.unshift({ label: t('draft.back', { title: kept.title || t('untitled') }), icon: docIcon(kept), run: showDraft });
   showMenu(anchor, items, { head: t('new.head') });

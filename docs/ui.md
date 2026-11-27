@@ -33,7 +33,10 @@ every one of them), a click on a filter or a lens picked (its tab, Ctrl+1
 to Ctrl+5, Go to) closes it (`closeVaultArea`). Menus are popups
 (`showMenu`, `ui/menu.js`), which mark their anchor `aria-expanded`; an
 item may say on its right what it makes (`.menu__desc`, New project's
-blueprints).
+blueprints), open a submenu beside it, marked with a triangle (a
+project's New here), or ask once more before it runs: its first press
+says what it would do ("Delete project?") and keeps the menu open, its
+second runs it, and moving off it or 3 s take it back.
 
 ## Vault panel <a id="vault-panel"></a>
 
@@ -56,7 +59,21 @@ the Vault page alone.
 - **Marked** is a row while it narrows the list (`aria-current`): a
   project, No project, a source. "All Projects" and "All Sources", the
   default, never are, so a filter stands out.
-- **Projects**: "All Projects" clears the project; "No project" shows the
+- **A pill's menu**: hovered or focused, a project's or a source's pill
+  shows ⋯ in its count's place (`.nav-item__more`), and a right-click on
+  it, the Menu key or Shift+F10 opens the same menu at its point. Its
+  first entry gets something new from it: a project's New here ▸ (New's
+  types, the draft in that project), then Star, Archive and Delete
+  (`features/projects.js`, `panel.md#projects`); a folder watch's Import
+  scans… or Import PDFs…, a bank account's Import new statements (dim
+  until its folder is chosen), then Settings…, its pane under Folders;
+  Email's Fetch email…, a calendar's Sync now, then Auto-sync, a check,
+  and Settings…, the account's pane under Accounts. A refused auto-sync
+  is said in the status bar. Created Here, All Projects, No project and
+  All Sources have none and keep their count. A project's pen stands right
+  after its name, shown with ⋯, and renames it in place.
+- **Projects**: "+ Project" in the head, always shown, opens New
+  project's menu; "All Projects" clears the project; "No project" shows the
   entities in no project of the vault (`NO_PROJECT` as
   `selected_project`); starred projects come first; archived projects are
   folded under an "Archived" row at the end, still selectable
@@ -65,15 +82,14 @@ the Vault page alone.
 - **Sources**: "Created Here" (what was made in the app); each enabled
   folder watch under its name, a statements watch under its account's
   (its account's statements, whichever watch imported them), with its
-  Import button (`import.md#folder-watches`); per
+  import in its menu (`import.md#folder-watches`); per
   connected Google account an Email source (unless its access is off), one
   source per checked calendar. A source
   counts and filters the entities that came through it (`sourceKeyOf`),
   until its row goes (`features/sources.js`);
-  its sync button syncs it: a calendar right away (`calendar.md`), Email
+  its menu syncs it: a calendar right away (`calendar.md`), Email
   opens Fetch email (`email.md`). While auto-sync
-  is on, the sync button stays shown, pressed, in the count's place
-  (`.nav-item__action[aria-pressed]`).
+  is on, "auto" follows its name (`.nav-item__auto`).
 - **Workspace**: Accounts, Folders, Vault, Trash.
 - **Help and settings**: at the foot, under what scrolls, a menu: the
   keyboard shortcuts (`ui.md#go-to`) and Settings (`ui.md#settings`).
@@ -482,7 +498,8 @@ What a key, a menu, a button or Go to starts is a registered action
 
 - **Ctrl+Shift+P** opens Go to (`ui.md#go-to`).
 - **Ctrl+,** opens Settings (`ui.md#settings`).
-- **Esc** closes an open menu, else the page in the expanded vault area
+- **Esc** closes an open menu, a submenu first, else the page in the
+  expanded vault area
   (any of them), else drops the
   draft card shown (`panel.md#draft`) with the focus outside a field and
   the editor; in an editor it leaves edit mode.
@@ -506,8 +523,9 @@ Every control is in the keyboard's reach (`architecture.md#css`): **Tab**
 goes from one to the next, a row or a day included, and **Enter** or
 **Space** presses it, as a click would. A control shown on hover shows
 while its row has the focus too. In a menu **Up** and **Down** move the
-highlight and **Enter** runs it; a focused grip moves with **Left** and
-**Right**. In an editor Tab indents where it can, in a list, a quote, a
+highlight and **Enter** runs it, **Right** opens a submenu and **Left**
+goes back; a focused grip moves with **Left** and **Right**. A pill's
+menu opens by a right-click too, the **Menu** key and **Shift+F10**. In an editor Tab indents where it can, in a list, a quote, a
 table or code, and goes on elsewhere (`editor.md#keys`); Esc leaves edit
 mode, back on the Edit button. Left to the mouse: joining or making a
 thread by drag, the Dashboard's cards reordered, a scan's pages in any

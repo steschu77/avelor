@@ -165,26 +165,23 @@
   transform: rotate(-90deg);
 }
 
-/* "+" on the section label, shown on hover or while the label has the
-   focus */
+/* "+ Project" on the section label, always shown */
 .nav-section__add {
   margin-left: auto;
-  padding: 2px;
+  padding: 1px 6px;
   border: 1px solid transparent;
+  border-radius: var(--r-pill);
   background: none;
+  font: inherit;
   font-size: var(--fs-meta);
   letter-spacing: 0;
+  text-transform: none;
   color: var(--c-ink-mute);
-  visibility: hidden;
 }
 
 .nav-section__add:hover {
   background: var(--c-hover);
-}
-
-.nav-section:hover .nav-section__add,
-.nav-section:focus-within .nav-section__add {
-  visibility: visible;
+  color: var(--c-ink);
 }
 
 .nav-item {
@@ -238,7 +235,8 @@
 }
 
 /* a project's star: the glyph follows the row's aria-selected (starred);
-   off, it shows only while the row is hovered */
+   off, it shows only while the row is hovered, the mouse's (the keyboard's
+   Star is in the pill's menu) */
 .nav-item__icon--star {
   color: transparent;
 }
@@ -264,38 +262,45 @@
   margin-left: auto;
 }
 
-.nav-item__action {
+/* "auto" after the name of a source that syncs on its own */
+.nav-item__auto {
+  flex: none;
+}
+
+/* a pill's menu, three dots in its count's place while the pill is hovered,
+   has the focus or its menu is open; the count of a row without one stays */
+.nav-item__more {
   display: none;
   margin-left: auto;
   /* concentric with the pill's round end: as far from its right edge as
      from top and bottom (2px: the pill's own borders) */
   margin-right: calc((var(--h-nav-row) - 2px - var(--h-control-sm)) / 2 - var(--nav-pad));
+  font-size: var(--fs-ui);
+  line-height: 1;
 }
 
-.nav-item:hover .nav-item__action,
-.nav-item:focus-within .nav-item__action {
-  display: flex;
-}
-
-.nav-item:hover .nav-item__count,
-.nav-item:focus-within:has(.nav-item__action) .nav-item__count {
+/* the pen right after a name that can be changed, shown with the dots */
+.nav-item__pen {
   display: none;
+  margin-left: -4px;
 }
 
-/* a source that syncs on its own (email auto-sync): its button stays shown,
-   pressed, in the count's place */
-.nav-item__action[aria-pressed="true"] {
+.nav-item:hover .nav-item__more,
+.nav-item:focus-within .nav-item__more,
+.nav-item__more[aria-expanded="true"],
+.nav-item:hover .nav-item__pen,
+.nav-item:focus-within .nav-item__pen {
   display: flex;
-  background: var(--c-paper);
-  border: 1px solid var(--c-card);
 }
 
-.nav-item:has(.nav-item__action[aria-pressed="true"]) .nav-item__count {
+.nav-item:hover:has(.nav-item__more) .nav-item__count,
+.nav-item:focus-within:has(.nav-item__more) .nav-item__count,
+.nav-item:has(.nav-item__more[aria-expanded="true"]) .nav-item__count {
   display: none;
 }
 
 /* a row's name being renamed in place: the input takes the whole row, its
-   round ends concentric with the pill's like .nav-item__action */
+   round ends concentric with the pill's like .nav-item__more */
 .nav-item__edit {
   --edit-h: 20px;
   flex: 1;
@@ -311,7 +316,8 @@
 }
 
 .nav-item--editing .nav-item__icon,
-.nav-item--editing .nav-item__action,
+.nav-item--editing .nav-item__pen,
+.nav-item--editing .nav-item__more,
 .nav-item--editing .nav-item__count {
   display: none !important;
 }

@@ -34,10 +34,11 @@ watches (`watches::folders::open`, on every vault open), and without an open vau
 there are none. Each enabled watch is listed in the vault panel's Sources
 under its name, a statements watch under its account's; the source counts
 and filters the entities imported from it, a statements watch's its
-account's statements, whichever watch imported them. Its Import button,
-like the one on the watch's pane, opens Import scans for an images watch,
-and imports a statements watch's new files into its account
-(`#statements`).
+account's statements, whichever watch imported them. Its menu's first
+entry, like the Import button on the watch's pane, opens Import scans for
+an images watch (Import scans…) and a PDF watch (Import PDFs…), and
+imports a statements watch's new files into its account (Import new
+statements, `#statements`); its Settings… opens the watch's pane.
 
 ### Watch files <a id="watch-files"></a>
 
@@ -149,8 +150,8 @@ vault), following the Accounts page:
 
 ## Import scans <a id="import-scans"></a>
 
-The Import button of a watch opens Import scans, or Import PDFs for a PDF
-watch (`features/import/scans.js`), in the expanded vault area:
+A watch's Import scans… opens Import scans, and Import PDFs… Import PDFs
+for a PDF watch (`features/import/scans.js`), in the expanded vault area:
 
 - **Files in folder** lists the watch's files that aren't read yet and
   aren't in the vault: the files in its folder (and subfolders, if the
@@ -353,13 +354,13 @@ whichever watch imported it.
 | J2 | Edit | name, folder, subfolders, patterns, source on/off, collect, the models (pickers) → `watchSet` (optimistic) | `set_watch {watch, …change}` → `watch`, `null` | — |
 | J3 | Remove | two clicks within 3 s | `remove_watch {watch}` → `watch_removed`, `null` | imports stay |
 | J4 | Add a bank account | "Add a bank account" → a new account's name, number, type, bank, or a vault's account picked (`renderNewAccountPane`) → folder typed, Browse or none → Add account (`addAccount`) | `create_watch {type: statements, folder?, patterns, account \| new_account}` → folder checked if given → the new account's fields checked, it is written (`entity`) → `.avelor/watches/watch_statements[_n].yaml` → `watch`, `ok {id}` | the account's card and source |
-| K1 | Open Import scans | the watch source's Import or the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files, job}`; `scan_previews` → `scan_preview` per file | file list, large preview |
+| K1 | Open Import scans | the watch source's Import scans… or the watch pane's Import → `openScanImport` (`features/import/scans.js`) | `scan_list {watch}` → `ok {listed, files, job}`; `scan_previews` → `scan_preview` per file | file list, large preview |
 | K2 | Read | per file or Read all → `scanRead` | `scan_read {watch, files, again}` → the host checks the watch's model (a PDF watch reads on without one) → `ok {job}`; one file after another on workers through `reader::read` → `scan_page` queued / reading (words) / read (words, title, encrypted) / failed; job events; `account` | text per page |
 | K3 | Stop reading | Stop (or the job card's Stop) | `cancel_job {id: job}` → remaining pages `stopped`, job ends | — |
 | K4 | Arrange | drag pages, merge with previous/next, split, edit titles, tick | page only (`scanPlace`, `features/import/scans.js`) | documents as arranged |
 | K5 | Import | Import, Import all, Ctrl+Enter → `scanImport` | `scan_import {watch, docs: [{title, files}]}` → `entity` per document, `ok {imported, failed}`; with the watch's analysis on, the job "Analysing scans" or "Analysing PDFs" (G5's steps) → `entity`, `job`, `account` | documents in `Scans/`, analysed; one file kept beside its document |
 | K6 | Open original | double-click a preview | `scan_open {watch, file}` → `on_ui` → ShellExecute (a `FileLauncher` on Linux) | default image viewer |
-| M1 | Import statements | a statements watch's source or pane, once its folder is chosen: Import → `importWatch` (`features/workspace/folders.js`) | `statements_import {watch}` → `ok {job}` (`invalid_argument` without a folder); the files listed and read on the job's worker → per file `entity` (the statement, the older ones it took pending transactions from, the other accounts' statements holding a transfer's other half, the account) → `job` with its summary | statements in `Accounts/`, the account's balance, its transfers paired, its transactions in their recurring payments |
+| M1 | Import statements | a statements watch's source (Import new statements) or pane (Import), once its folder is chosen → `importWatch` (`features/workspace/folders.js`) | `statements_import {watch}` → `ok {job}` (`invalid_argument` without a folder); the files listed and read on the job's worker → per file `entity` (the statement, the older ones it took pending transactions from, the other accounts' statements holding a transfer's other half, the account) → `job` with its summary | statements in `Accounts/`, the account's balance, its transfers paired, its transactions in their recurring payments |
 | M2 | Change the account | the pane's name, Bank, Number, Type | `set_title {id, title}`; `set_bank_account {entity, bank?, number?, type?}` → `entity`, `ok` | the account, the watch's name |
 
 ## Design <a id="design"></a>

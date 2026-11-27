@@ -50,6 +50,7 @@ export const KEY_GROUPS = [
     head: t('keys.menu'), works: t('keys.works_there'),
     keys: [
       key(t('keys.in_menu'), ['Up', 'Down']),
+      key(t('keys.submenu'), ['Right', 'Left']),
       key(t('keys.divider'), ['Left', 'Right']),
     ],
   },

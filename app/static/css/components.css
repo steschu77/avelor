@@ -502,6 +502,20 @@ mark {
   padding-left: 18px;
 }
 
+/* an item that opens a submenu: its triangle at the right */
+.menu__more {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--c-label);
+}
+
+/* an item asking once more before it runs (a project's Delete) */
+.menu__item[data-armed],
+.menu__item[data-armed].is-active {
+  background: var(--c-danger);
+  color: var(--c-on-accent);
+}
+
 /* Resize grip on a pane's left edge; --end puts it on the right edge. */
 .grip {
   position: absolute;

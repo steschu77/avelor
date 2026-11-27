@@ -8,7 +8,7 @@
 ## Syncing a calendar <a id="syncing"></a>
 
 Each calendar checked in the account pane is a source in the vault panel.
-Its sync button syncs that calendar right away, as a job: the jobs panel
+Its menu's Sync now syncs that calendar right away, as a job: the jobs panel
 shows it and its summary (new, updated, pushed, deleted, restored,
 conflicts, skipped occurrences, failed), and its Stop ends it early — what
 it already did is kept, the rest waits for the next sync. One calendar
@@ -101,13 +101,14 @@ are written to a folder named after the calendar beside it, e.g.
 Each checked calendar in the account pane has an Auto-sync check. Ticked,
 the calendar syncs on its own as an account's email does
 (`email.md#email-auto-sync`): one calendar at a time, never beside another
-sync; a sync from the sync button counts as a run.
+sync; a sync from its source's Sync now counts as a run.
 
 - Each run first asks Google what changed, writing nothing. A run with
   nothing to fetch and nothing to write back leaves no trace; otherwise it
-  is a "Syncing calendar · <name>" job like the sync button's.
-- The calendar source's sync button is shown pressed while auto-sync is
-  on; it still syncs right away.
+  is a "Syncing calendar · <name>" job like Sync now's.
+- The calendar source says "auto" after its name while auto-sync is on;
+  its menu's Sync now still syncs right away, and its Auto-sync switches
+  it as the pane's check does.
 
 ## Sync points <a id="sync-points"></a>
 
@@ -122,7 +123,7 @@ An auto-synced calendar also syncs sooner:
 - While one of its events is in edit mode, the calendar's auto-sync waits,
   so a change made in Google never replaces text you are typing; it runs
   once you leave edit mode. An event left in edit mode isn't synced until
-  you leave it — there is no cap, and the sync button doesn't wait.
+  you leave it — there is no cap, and Sync now doesn't wait.
 - Switching back to the app syncs the calendars that haven't asked Google
   in the last 2 minutes, so a change just made in Google Calendar shows
   within moments.
@@ -131,7 +132,7 @@ An auto-synced calendar also syncs sooner:
 
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
-| G1 | Sync a calendar | the source's sync button → `syncCalendar` (`features/sidebar.js`) | `calendar_sync {account, calendar}` → `ok {job}` (refused before any job; the first sync's start, a year back, is the host's) → plan on the UI thread, `run_sync` on a worker, effects applied on the UI thread → job events, `entity`, `content`, a `notice` per failed event, `account` | events in `Calendar/<name>/`, summary on the job card |
+| G1 | Sync a calendar | the source's Sync now → `syncCalendar` (`features/sidebar.js`) | `calendar_sync {account, calendar}` → `ok {job}` (refused before any job; the first sync's start, a year back, is the host's) → plan on the UI thread, `run_sync` on a worker, effects applied on the UI thread → job events, `entity`, `content`, a `notice` per failed event, `account` | events in `Calendar/<name>/`, summary on the job card |
 
 ## Design <a id="design"></a>
 

@@ -31,9 +31,11 @@ let draft = null;
 // in the sidebar, an event today from 9:00 to 10:00 in this PC's zone, in
 // that project's calendar if it can take new events, else in the one picked
 // for them (`newEventCalendar`). `prefill`: an event's `day`, or fields of
-// its block (`event`: a gap's stay or journey, features/gaps.js).
+// its block (`event`: a gap's stay or journey, features/gaps.js); the
+// `project` it starts in, in place of the selected one (a project's New
+// here, features/projects.js).
 export function openDraft(kind, prefill = {}) {
-  const scope = projectScope();
+  const scope = prefill.project ?? projectScope();
   const meta = {
     id: newItemId(), kind, title: '', path: '', source: null, type: null,
     date: isoInstant(new Date()), projects: scope ? [scope] : [], labels: [], linked_to: null,
