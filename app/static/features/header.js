@@ -1,10 +1,11 @@
-// The lens header (panel.md#projects): the selected project's name, the
-// words filtering (ui.md#words) and the active labels with the "+" that
-// filters by another one (ui.md#vault-panel), and the project's details -- a toolbar (rename, edit
-// description, archive, delete) and the description, an editor bound like
-// any document's (saving.md). Also `leaveEditModes`, which takes every
-// editor out of edit mode, the cards' and the description (closing the
-// app, switching the vault).
+// The lens header (panel.md#projects): the selected project's name with its
+// pen, the words filtering (ui.md#words) and the active labels with the "+"
+// that filters by another one (ui.md#vault-panel), its menu at the end (the
+// pill's, features/projects.js, with Blueprint and Link to), and the
+// project's details -- its own labels and link, and the description, an
+// editor bound like any document's (saving.md) with its pen. Also
+// `leaveEditModes`, which takes every editor out of edit mode, the cards'
+// and the description (closing the app, switching the vault).
 
 import { $, accEl, oncePerFrame } from '../core/dom.js';
 import { titled } from '../core/dom.js';
@@ -20,7 +21,6 @@ import {
 } from '../model/documents.js';
 import { beginEditSession, endEditSession, reportEditing } from '../model/documents.js';
 import { setLabelsLocal, setLinkLocal, setProjectLocal, structureCall } from '../model/structure.js';
-import { armedButton } from '../ui/confirm.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { createEditorToolbar } from '../ui/toolbar.js';
@@ -31,9 +31,9 @@ import { showBlueprint } from './blueprint.js';
 import { BLUEPRINTS, withBlueprint } from '../model/blueprint.js';
 import { leaveCardEditMode } from './panel/panel.js';
 import { addChip, labelChips, linkChip } from './panel/panel.js';
-import { linkMenuChip } from './linked.js';
+import { linkMenuChip, showLinkMenu } from './linked.js';
 import { vaultSources } from './sources.js';
-import { deleteProject, toggleArchive } from './projects.js';
+import { projectMenu } from './projects.js';
 
 const projectNameEl = $('project-name');
 const projectDescEl = $('project-desc');
@@ -127,15 +127,16 @@ labelAddBtn.addEventListener('click', () => {
 });
 
 // The selected project's details under the header, shown while the fold
-// button (the chevron) is unfolded: a toolbar (rename, edit description,
-// archive, delete), the description -- its file's body in an editor, loaded and
-// saved like any document (saving.md) -- and its blueprint
-// (features/blueprint.js). The description pen toggles edit
-// mode, Escape leaves it. The description is hidden while empty and not
-// being edited.
+// button (the chevron) is unfolded: its own labels and link, the
+// description -- its file's body in an editor, loaded and saved like any
+// document (saving.md) -- and its blueprint (features/blueprint.js). The
+// description's pen, at the end of its first line, toggles edit mode,
+// Escape leaves it. While it is empty and not being edited, "+ Description"
+// stands in its place, where the host can write the project.
 const projectFoldBtn = $('project-fold-btn');
-const projectToolsEl = $('project-tools');
+const projectAboutEl = $('project-about');
 const projectDescBtn = $('project-desc-btn');
+const projectDescAddBtn = $('project-desc-add');
 let descProjectId = null; // the project the details are bound to
 let unbindProjectDesc = null;
 const projectDescToolbar = createEditorToolbar();
@@ -156,15 +157,17 @@ function projectUnfolded() {
 
 function updateProjectDesc() {
   const shown = Boolean(descProjectId) && projectUnfolded();
-  projectToolsEl.hidden = !shown;
+  const writable = Boolean(projects.get(descProjectId)?.writable);
   renderProjectProps(shown);
-  projectDescEl.hidden = !shown || (!projectDescEditor.isEditable()
-    && serializeMarkdown(projectDescEl).trim() === '');
+  const empty = !projectDescEditor.isEditable() && serializeMarkdown(projectDescEl).trim() === '';
+  projectAboutEl.hidden = !shown || empty;
+  projectDescBtn.hidden = !writable;
+  projectDescAddBtn.hidden = !shown || !empty || !writable;
   showBlueprint(shown ? descProjectId : null);
 }
 
 // The project's own labels and link (vault.md#metadata) in its details,
-// under the toolbar: its labels as a card's chips with an x and "+" (labels
+// under the head: its labels as a card's chips with an x and "+" (labels
 // only, `addChip`), its link as a chip with an x, or "+" that picks one
 // (`linkMenuChip`, offering entities beyond the project itself), while the
 // host can write the project (`set_labels`, `set_link`). The label chips
@@ -179,10 +182,7 @@ function renderProjectProps(shown) {
     chips.push(...labelChips(labels, writable ? next => setLabelsLocal(id, next) : null));
     if (writable) chips.push(addChip({ projects: [], labels }, { onAddLabel: label => setLabelsLocal(id, [...labels, label]) }));
     if (to) chips.push(linkChip(to, { onRemove: writable ? () => setLinkLocal(id, null) : null }));
-    else if (writable) {
-      const scope = state => ({ ...state, selected_project: null });
-      chips.push(linkMenuChip(t('header.link_to'), { target: id, scope, onPick: other => setLinkLocal(id, other) }));
-    }
+    else if (writable) chips.push(linkMenuChip(t('header.link_to'), linkPick(id)));
   }
   projectPropsEl.replaceChildren(...chips);
   projectPropsEl.hidden = !chips.length;
@@ -239,47 +239,60 @@ export function openNewProject() {
   editProjectName();
 }
 
-$('project-rename-btn').addEventListener('click', editProjectName);
+const projectRenameBtn = $('project-rename-btn');
+projectRenameBtn.addEventListener('click', editProjectName);
 projectDescBtn.addEventListener('click',
   () => setProjectDescEditMode(!projectDescEditor.isEditable()));
+projectDescAddBtn.addEventListener('click', () => {
+  setProjectDescEditMode(true);
+  projectDescEl.focus();
+});
 
-// Blueprint: a project without one gets a shipped blueprint, from a menu as
-// New project's (features/sidebar.js); its name, and the checks and labels
-// it brings, go into the project's block (`withBlueprint`), which keeps what
-// it has. A blueprint stays: once set, the button is gone.
-const projectBlueprintBtn = $('project-blueprint-btn');
-projectBlueprintBtn.addEventListener('click', () => {
+// The project's menu: its pill's (`projectMenu`), the description saved
+// before a delete, with two of the header's own. Blueprint: a project
+// without one gets a shipped blueprint, from a submenu as New project's
+// (features/sidebar.js); its name, and the checks and labels it brings, go
+// into the project's block (`withBlueprint`), which keeps what it has. A
+// blueprint stays: once set, the entry is gone. Link to: a project without
+// a link picks one, as its "+" among its details does.
+const projectMoreBtn = $('project-more-btn');
+projectMoreBtn.addEventListener('click', () => {
   const project = projects.get(descProjectId);
   if (!project) return;
-  showMenu(projectBlueprintBtn, BLUEPRINTS.map(blueprint => ({
-    label: blueprint.title, icon: blueprint.icon, desc: blueprint.note,
-    run: () => setProjectLocal(project.id, withBlueprint(project.project, blueprint)),
-  })), { head: t('header.blueprint_head') });
+  const { id, writable, linked_to } = project;
+  const more = [];
+  if (writable && !project.project.blueprint && BLUEPRINTS.length) {
+    more.push({
+      label: t('project.blueprint'),
+      items: BLUEPRINTS.map(blueprint => ({
+        label: blueprint.title, icon: blueprint.icon, desc: blueprint.note,
+        run: () => setProjectLocal(id, withBlueprint(project.project, blueprint)),
+      })),
+    });
+  }
+  if (writable && !linked_to) {
+    more.push({
+      label: t('project.link_to'),
+      run: () => showLinkMenu(projectMoreBtn, linkPick(id)),
+    });
+  }
+  showMenu(projectMoreBtn, projectMenu(id, { more, beforeDelete: () => setProjectDescEditMode(false) }));
 });
 
-// Archive toggles: an archived project's button is pressed and unarchives.
-const projectArchiveBtn = $('project-archive-btn');
-projectArchiveBtn.addEventListener('click', () => {
-  if (projectArchiveBtn.getAttribute('aria-disabled') !== 'true') toggleArchive(descProjectId);
-});
+// What a project may link to: the entities beyond the project itself.
+function linkPick(id) {
+  return { target: id, scope: state => ({ ...state, selected_project: null }), onPick: other => setLinkLocal(id, other) };
+}
 
-// Delete: two clicks (`armedButton`), the description saved first.
-const projectDeleteBtn = $('project-delete-btn');
-armedButton(projectDeleteBtn, t('header.delete_armed'), () =>
-  deleteProject(descProjectId, () => setProjectDescEditMode(false)));
-
-// The buttons follow the selected project: what the host may do with its
-// file, and whether it is archived.
+// The pen and the menu follow the selected project: the pen while the host
+// may write its file, the menu named after it.
 store.subscribe(
   [state => state.selected_project, state => state.projects_rev],
-  ([selected_project]) => {
-    const project = selected_project ? projects.get(selected_project) : null;
-    const archived = Boolean(project?.archived);
-    projectArchiveBtn.setAttribute('aria-disabled', String(!project?.writable));
-    projectArchiveBtn.setAttribute('aria-pressed', String(archived));
-    projectArchiveBtn.title = archived ? t('header.unarchive') : t('header.archive');
-    projectDeleteBtn.setAttribute('aria-disabled', String(!project?.deletable));
-    projectBlueprintBtn.hidden = !project?.writable || Boolean(project.project.blueprint) || !BLUEPRINTS.length;
+  () => {
+    const project = projects.get(projectScope());
+    projectRenameBtn.hidden = !project?.writable;
+    projectMoreBtn.hidden = !project;
+    if (project) titled(projectMoreBtn, t('menu.actions', { name: project.name || t('untitled') }));
   });
 
 // Another project selected: the outgoing one is saved first. The fold state

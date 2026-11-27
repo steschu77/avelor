@@ -149,26 +149,30 @@ function linkedResults(target, query, current = (entities.get(target) ?? threads
     .slice(0, LINKED_RESULTS);
 }
 
-// A "+" chip titled `title` whose menu offers what to link to: `before()`'s
-// items, then the newest entities and threads in the vault panel's filter
-// (made another by `scope`), the search finding older ones (`linkedResults`,
-// but `target` and `current`). A pick calls `onPick(id)`. A transaction's link
-// (features/panel/transaction.js), New recurring payment's
-// (features/recurring-payment-new.js) and a project's own
-// (features/header.js).
-export function linkMenuChip(title, { target = null, current = null, before = () => [], scope = undefined, onPick }) {
+// A "+" chip titled `title` whose menu offers what to link to
+// (`showLinkMenu`). A transaction's link (features/panel/transaction.js),
+// New recurring payment's (features/recurring-payment-new.js) and a
+// project's own (features/header.js).
+export function linkMenuChip(title, pick) {
   const add = accEl('button', 'chip chip--action', '+');
   add.type = 'button';
   titled(add, title);
-  add.addEventListener('click', () => {
-    const item = id => ({ label: linkTarget(id)?.title || t('untitled'), icon: linkTarget(id)?.icon ?? '', run: () => onPick(id) });
-    const newest = linkedResults(target, '', current, scope);
-    const listed = new Set(newest);
-    const found = text => linkedResults(target, text, current, scope).filter(id => !listed.has(id)).map(item);
-    showMenu(add, [...before(), { head: t('linked.newest') }, ...newest.map(item)],
-      { filter: { placeholder: t('linked.search'), extra: found } });
-  });
+  add.addEventListener('click', () => showLinkMenu(add, pick));
   return add;
+}
+
+// The menu at `anchor` that offers what to link to: `before()`'s items,
+// then the newest entities and threads in the vault panel's filter (made
+// another by `scope`), the search finding older ones (`linkedResults`, but
+// `target` and `current`). A pick calls `onPick(id)`. Also a project's Link
+// to (features/header.js).
+export function showLinkMenu(anchor, { target = null, current = null, before = () => [], scope = undefined, onPick }) {
+  const item = id => ({ label: linkTarget(id)?.title || t('untitled'), icon: linkTarget(id)?.icon ?? '', run: () => onPick(id) });
+  const newest = linkedResults(target, '', current, scope);
+  const listed = new Set(newest);
+  const found = text => linkedResults(target, text, current, scope).filter(id => !listed.has(id)).map(item);
+  showMenu(anchor, [...before(), { head: t('linked.newest') }, ...newest.map(item)],
+    { filter: { placeholder: t('linked.search'), extra: found } });
 }
 
 // One row: the icon, the title -- `label` instead, for a transaction --

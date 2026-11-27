@@ -41,7 +41,7 @@ export function toggleStar(id) {
 // Archive: the host writes `archived` (unarchiving removes it) and pushes
 // the project back, which moves its pill between the active and the
 // archived projects. The selection stays.
-export function toggleArchive(id) {
+function toggleArchive(id) {
   const archived = !projects.get(id)?.archived;
   structureCall('set_archived', { id, archived }, () => store.getState());
 }
@@ -49,7 +49,7 @@ export function toggleArchive(id) {
 // Delete: the host takes the project out of its members and moves its file
 // to `.trash`, and `onEntityDeleted` clears the filter. `before` runs
 // first, so if the delete fails no edit is lost.
-export function deleteProject(id, before = null) {
+function deleteProject(id, before = null) {
   before?.();
   structureCall('delete_entity', { id }, () => store.getState());
 }

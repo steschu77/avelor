@@ -13,8 +13,8 @@ Three panels:
   (`ui.md#vault-panel`); its lower area holds the jobs panel
   (`ui.md#jobs-panel`);
 - the **main view** with the lenses (`ui.md#lenses`), and above them the vault
-  header (the selected project's name, description and toolbar,
-  `panel.md#projects`);
+  header (the selected project's name with its pen, its menu at the end,
+  its description, `panel.md#projects`);
 - the **side panel** on the right, for the selected entity, thread or day
   (`panel.md`).
 

@@ -598,9 +598,10 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   checks and labels, `vault.md#project`); the project becomes the filter,
   its details unfold and its name opens in the header (`openNewProject`,
   `features/header.js`).
-- **Rename**: the pen right after a project pill's name (`editProject`), or the
-  rename button in the vault header's project toolbar (`editProjectName`,
-  which edits `#project-name` in place, `panel.md#titles`): the name
+- **Rename**: the pen right after a project pill's name (`editProject`), or
+  the one right after its name in the vault header (`#project-rename-btn`,
+  `editProjectName`, which edits `#project-name` in place,
+  `panel.md#titles`), each while the host can write the project: the name
   becomes an input; Enter
   or leaving it sends `set_title` if the text changed, Esc cancels. The
   pushed `entity` bumps `projects_rev`, so the header and the panel's
@@ -621,10 +622,17 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   since `renderSidebar` rebuilds those; only a pill is a valid target,
   highlighted (`.is-drop-target`) while dragged over. A card's head dragged
   out of a thread joins a project the same way.
+- **The header's menu**: at the head's end, the pill's menu
+  (`projectMenu`, `features/projects.js`), with Blueprint ▸ while the
+  project has none (`#blueprint`) and Link to… while it has no link,
+  which picks one as its details' "+" does (`showLinkMenu`,
+  `features/linked.js`), before Archive.
 - **Description**: the project file's body, under the vault header behind
-  a fold chevron and edited with its pen (`#project-desc` via
-  `bindDocContent`), loaded and saved like a document (`saving.md`).
-- **Its own labels and link** (`vault.md#metadata`): under the toolbar,
+  a fold chevron and edited with its pen at the end of its first line
+  (`#project-desc` via `bindDocContent`), loaded and saved like a document
+  (`saving.md`). While it is empty and not being edited, "+ Description"
+  (`#project-desc-add`) starts it, where the host can write the project.
+- **Its own labels and link** (`vault.md#metadata`): under the head,
   behind the same fold (`#project-props`, `renderProjectProps`): its
   labels as a card's chips with × and "+", which offers labels only
   (`addChip`, `#labels`), and its link as a chip with ×, or "+" that picks
@@ -632,16 +640,14 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   the vault panel's filter without the project itself,
   while the host can write the project (`set_labels`, `set_link`). The
   label chips after the header's name are the filter's.
-- **Archive**: Archive in the project's menu, Unarchive while it is
-  archived, or the Archive button in the project header's toolbar, pressed
-  while the project is archived (`toggleArchive`, `features/projects.js`),
-  sends `set_archived`;
+- **Archive**: Archive in the project's menu, its pill's or its
+  header's, Unarchive while it is archived (`toggleArchive`,
+  `features/projects.js`), sends `set_archived`;
   the sidebar folds archived projects under an "Archived" row
   (`toggleArchived`, not kept across restarts).
 - **Delete**: the last entry of the project's menu, two presses (the
-  first says "Delete project?"), or the project header's Delete, two clicks
-  (`armedButton`), which saves the description first: `delete_entity`
-  (`deleteProject`, `features/projects.js`). The host takes the
+  first says "Delete project?"); the header's saves the description first:
+  `delete_entity` (`deleteProject`, `features/projects.js`). The host takes the
   project out of every member (all writable and unchanged, or nothing is
   written) and moves its file to `.trash`, pushing the members as `entity`
   and the project as `entity_deleted`; `onEntityDeleted` drops it and, if
@@ -652,12 +658,12 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
 A project whose block carries a blueprint, facts or checks
 (`vault.md#project`) shows it under its description while its details are
 unfolded (`features/blueprint.js`). A project without a blueprint gets
-one from Blueprint in its toolbar, while the host can write it: the
+one from Blueprint ▸ in its header's menu, while the host can write it: the
 shipped blueprints as New project offers them (`#projects`); a pick puts
 its name, and the checks and labels it brings that the block lacks, into
 the block (`withBlueprint`, `model/blueprint.js`, `set_project`), keeping
 what the block has. A blueprint stays with its project: once set, the
-button is gone.
+entry is gone.
 
 - **Its facts** on a line: the shipped blueprint's in its order, set or
   not, then the project's others (`factsOf`, `model/blueprint.js`), each
@@ -1248,16 +1254,16 @@ and save their bodies at once.
 | E4 | Leave | card thread button, or the card's head dropped on the Documents or Timeline lens → `leaveThreadLocal` | `leave_thread`; below two members the thread file goes to `.trash/` | selection per `selectionWithout` |
 | E5 | Switch thread | a chip in the threads line of a card in several threads → `switchThread` | — | that thread shown, the entity still selected and focused |
 | C1 | Create a project | "+ Project" → the New project menu → Project (`addProject`) or a blueprint (`addBlueprintProject`) → `structureCall('create_project', {title, project?})` | `Index::create_project` in `Projects/` → `entity`, `ok {id}` | Project: the new pill in rename mode; a blueprint: the project the filter, its details unfolded, its name in rename mode |
-| C2 | Rename a project | pill pen or header rename → inline input, Enter/blur | `set_title` → `entity` | header and chips follow (`projects_rev`) |
+| C2 | Rename a project | pill pen or the header's pen → inline input, Enter/blur | `set_title` → `entity` | header and chips follow (`projects_rev`) |
 | C3 | Star | star icon, or Star in the pill's menu → `toggleStar` | `set_starred {starred}` → `entity` | starred first |
 | C4 | Add to a project | drag an entity's row onto a pill or a project's row in Documents, or a project in a card's "+" menu → `joinProjectLocal` | `join_project` → `entity` | the card's chips and the counts update |
 | C5 | Remove from a project | × on a project chip → `leaveProjectLocal` | `leave_project` → `entity` | chip gone, counts update |
 | C6 | Description | fold chevron → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
-| C7 | Archive | Archive in the pill's menu, or header Archive → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |
-| C8 | Delete a project | Delete in the pill's menu, two presses within 3 s, or header Delete, two clicks, the description saved first → `deleteProject` → `structureCall('delete_entity')` | `Index::delete`: members leave the project, file to `.trash/` → `entity` per member, `entity_deleted`, the answer | filter back to all documents |
+| C7 | Archive | Archive in the pill's or the header's menu → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |
+| C8 | Delete a project | Delete in the pill's or the header's menu, two presses within 3 s (the header's saves the description first) → `deleteProject` → `structureCall('delete_entity')` | `Index::delete`: members leave the project, file to `.trash/` → `entity` per member, `entity_deleted`, the answer | filter back to all documents |
 | C9 | A trip's route | a stop of a dated route → `selectDocument` (its first stay) and `showWeeks`; a leg → `selectLeg` (its parts), one of one part `selectDocument`; a gap → `fillGap` (C11) | — | the card and its Meets; the Timeline kept to the stop's weeks; the gap's menu |
 | C10 | A trip's sketch | a sketched stop or leg picked; a place, nights or note typed in, Enter or blur; a means picked, Via, Over night; Add a stop, Remove → `setProjectLocal(id, {…, sketch})` | `set_project {id, project}` → `entity` | the route follows |
 | C11 | A trip's gap filled | Add (a gap of the route, a Missing row, a gap's row on the Timeline) → `fillGap` (`features/gaps.js`); New stay… / New journey… → `openDraft('event', {…})`; an event picked → `joinProjectLocal`, `editEntityLocal(id, {event: {type, place}})` (a journey's `from` and `to`), `selectDocument` | `join_project {id, project}`, `edit_entities {ids, change}` → `entity` | a draft card filled in; or the event in the trip, its card shown, the route and Missing following |
 | C12 | A trip's When | When (the tab); a fit or its radio chosen; a lane's name → its menu, Open → `selectDocument` (its calendar or event); an event's span → `selectDocument`; Set the dates A → `openSetDates(id, {from, to})` (D8) | — | the window chosen, its band and its foot; the source's card; Set the dates with its days |
 | C13 | When's lanes edited | Edit: the window's days or the length typed in, Enter or blur → `writeSketch`; + Lane: a calendar or an event picked, a lane named and its days added; a lane's or a span's menu: how it counts, Rename, Add days, Edit, Remove, Leave out → `setProjectLocal(id, {…, lanes})` | `set_project {id, project}` → `entity` | the lanes, the fits and their costs follow |
-| C14 | A blueprint for a project | Blueprint (the project toolbar, a project without one) → a shipped blueprint → `setProjectLocal(id, withBlueprint(…))` | `set_project {id, project}` → `entity` | the blueprint's block under the description, its facts and checks |
+| C14 | A blueprint for a project | Blueprint ▸ (the header's menu, a project without one) → a shipped blueprint → `setProjectLocal(id, withBlueprint(…))` | `set_project {id, project}` → `entity` | the blueprint's block under the description, its facts and checks |

@@ -1,6 +1,6 @@
-/* The lens header (features/header.js): the project's description, its
-   tools and the active labels; and the titles edited in place (the
-   project's name, a card's or a thread's title). */
+/* The lens header (features/header.js): the project's name with its pen
+   and its menu, its description and the active labels; and the titles
+   edited in place (the project's name, a card's or a thread's title). */
 
 .project-desc {
   flex: none;
@@ -8,12 +8,48 @@
   padding: 0 var(--p-gutter) 10px;
 }
 
-.project-tools {
-  flex: none;
-  padding: 0 var(--p-gutter) 6px;
+/* the pen right after the project's name, its menu at the head's end
+   (after the lens's own, which push themselves there) */
+.project-pen>.icon {
+  width: var(--fs-small);
+  height: var(--fs-small);
 }
 
-/* a project's own labels and link under its toolbar (features/header.js) */
+.project-more {
+  margin-left: auto;
+  font-size: var(--fs-ui);
+}
+
+.docs-count:not([hidden])~.project-more,
+.lens-types:not([hidden])~.project-more,
+.dash__cards:not([hidden])~.project-more {
+  margin-left: 0;
+}
+
+/* the description, its pen at the end of its first line; "+ Description"
+   while it is empty */
+.project-about {
+  flex: none;
+  position: relative;
+}
+
+.project-about>.project-desc {
+  padding-right: calc(var(--p-gutter) + var(--h-control-sm) + 4px);
+}
+
+.project-about__pen {
+  position: absolute;
+  top: 0;
+  right: var(--p-gutter);
+}
+
+.project-desc-add {
+  flex: none;
+  align-self: flex-start;
+  margin: 0 var(--p-gutter) 8px;
+}
+
+/* a project's own labels and link under its head (features/header.js) */
 .project-props {
   flex: none;
   display: flex;

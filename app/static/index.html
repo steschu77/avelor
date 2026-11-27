@@ -163,6 +163,8 @@
         <button type="button" class="tool" id="project-fold-btn" aria-expanded="false"
           data-t-title="header.show_details" hidden><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
         <span class="project-name" id="project-name" data-t="sidebar.all_projects"></span>
+        <button type="button" class="icon-btn icon-btn--quiet project-pen" id="project-rename-btn"
+          data-t-title="header.rename" hidden><svg class="icon"><use href="#i-edit" /></svg></button>
         <span class="label-filter" id="label-filter"></span>
         <button type="button" class="chip chip--action" id="label-add-btn" data-t-title="header.filter_label" data-t-aria-label="header.filter_label"
           aria-haspopup="menu" hidden>+</button>
@@ -175,19 +177,17 @@
         <button type="button" class="tool dash__cards" id="dash-cards-btn" data-t-title="header.cards_title"
           aria-haspopup="menu" hidden><span data-t="header.cards"></span><span class="meta" id="dash-cards-closed"
             hidden></span><svg class="icon"><use href="#i-chevron-down" /></svg></button>
-      </div>
-      <div class="toolbar project-tools" id="project-tools" hidden>
-        <button type="button" class="tool" id="project-rename-btn" data-t-title="header.rename"><svg class="icon"><use href="#i-rename" /></svg></button>
-        <button type="button" class="tool" id="project-desc-btn" data-t-title="header.edit_description"><svg class="icon"><use href="#i-edit" /></svg></button>
-        <button type="button" class="tool" id="project-blueprint-btn" data-t-title="header.blueprint" aria-haspopup="menu"
-          hidden><svg class="icon"><use href="#i-layer" /></svg></button>
-        <button type="button" class="tool" id="project-archive-btn" data-t-title="header.archive"><svg class="icon"><use href="#i-archive" /></svg></button>
-        <button type="button" class="tool tool--danger push" id="project-delete-btn"
-          data-t-title="header.delete"><svg class="icon"><use href="#i-delete" /></svg></button>
+        <button type="button" class="tool project-more" id="project-more-btn" aria-haspopup="menu" hidden>&#x22ef;</button>
       </div>
       <!-- the project's own labels and link (features/header.js) -->
       <div class="project-props" id="project-props" hidden></div>
-      <div class="project-desc editor prose" id="project-desc"></div>
+      <!-- its description, with its pen at the end of its first line -->
+      <div class="project-about" id="project-about" hidden>
+        <button type="button" class="icon-btn icon-btn--quiet project-about__pen" id="project-desc-btn"
+          data-t-title="header.edit_description"><svg class="icon"><use href="#i-edit" /></svg></button>
+        <div class="project-desc editor prose" id="project-desc"></div>
+      </div>
+      <button type="button" class="tool label project-desc-add" id="project-desc-add" hidden data-t="header.add_description"></button>
       <!-- the project's blueprint (features/blueprint.js) -->
       <div class="bp" id="project-bp" hidden></div>
 
