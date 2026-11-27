@@ -26,6 +26,31 @@
   margin-left: 0;
 }
 
+/* Missing and Next beside the name while the details are folded */
+.project-checks {
+  display: flex;
+  gap: 4px;
+}
+
+/* Details, the fold under the head, and while folded what the project is */
+.project-details {
+  flex: none;
+  align-self: flex-start;
+  justify-content: flex-start;
+  gap: 4px;
+  max-width: calc(100% - 2 * var(--p-gutter));
+  margin: 0 var(--p-gutter) 6px;
+  font: 400 var(--fs-ui)/1.3 var(--f-chrome);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-details>.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* the description, its pen at the end of its first line; "+ Description"
    while it is empty */
 .project-about {

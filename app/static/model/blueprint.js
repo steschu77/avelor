@@ -47,6 +47,27 @@ export function hasBlueprint(project) {
     || project?.documents?.length || project?.payments?.length || project?.checks?.length);
 }
 
+// Whether the details of the project `id` (its block `project`) are
+// unfolded (ui.md#preferences): as they were left for it, its id in
+// `details_open` or `details_shut` (ids joined by commas), else unfolded
+// for a project with something to show there (`hasBlueprint`).
+export function detailsOpen(prefs, id, project) {
+  if (idsOf(prefs.details_open).includes(id)) return true;
+  if (idsOf(prefs.details_shut).includes(id)) return false;
+  return hasBlueprint(project);
+}
+
+// The preferences that keep the details of the project `id` unfolded, or
+// folded: its id in the one list, out of the other.
+export function detailsPrefs(prefs, id, open) {
+  const opened = idsOf(prefs.details_open).filter(other => other !== id);
+  const shut = idsOf(prefs.details_shut).filter(other => other !== id);
+  (open ? opened : shut).push(id);
+  return { details_open: opened.join(','), details_shut: shut.join(',') };
+}
+
+const idsOf = list => (list ? list.split(',').filter(Boolean) : []);
+
 // The facts the header shows, `{ name, label, type, value }` each: the
 // blueprint's, in its order, set or not; then the project's others, as text.
 export function factsOf(project) {

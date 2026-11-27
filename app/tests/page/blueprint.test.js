@@ -2,7 +2,7 @@ import { equal, test } from './harness.js';
 import { vault } from './vault.js';
 import { projects } from '../../static/model/entities.js';
 import {
-  checksOf, factsOf, hasBlueprint, membersOf, newProjectBlock, projectCalendar, withBlueprint, withFact,
+  checksOf, detailsOpen, detailsPrefs, factsOf, hasBlueprint, membersOf, newProjectBlock, projectCalendar, withBlueprint, withFact,
 } from '../../static/model/blueprint.js';
 
 const TODAY = new Date(2027, 2, 15);
@@ -26,6 +26,19 @@ test('a blueprint put on a project leaves what it has', () => {
 test('a project has something for its header to show', () => {
   equal([{ blueprint: 'move' }, { facts: { a: 1 } }, { documents: [{}] }, { payments: [{}] }, { checks: ['budget'] }, { facts: {}, documents: [] }, {}, null].map(hasBlueprint),
     [true, true, true, true, true, false, false, false]);
+});
+
+test("a project's details are open at first if they have something to show, then as they were left", () => {
+  equal([detailsOpen({}, 'p', { blueprint: 'move' }), detailsOpen({}, 'p', { facts: { a: 1 } }), detailsOpen({}, 'p', {}), detailsOpen({}, 'p', null)],
+    [true, true, false, false]);
+  equal([detailsOpen({ details_shut: 'q,p' }, 'p', { blueprint: 'move' }), detailsOpen({ details_open: 'p', details_shut: '' }, 'p', {}),
+    detailsOpen({ details_open: 'pp' }, 'p', {})], [false, true, false]);
+});
+
+test("a project's fold is kept by its id in one list, out of the other", () => {
+  equal(detailsPrefs({ details_open: 'a,p', details_shut: 'b' }, 'p', false), { details_open: 'a', details_shut: 'b,p' });
+  equal(detailsPrefs({}, 'p', true), { details_open: 'p', details_shut: '' });
+  equal(detailsPrefs({ details_open: 'p' }, 'p', true), { details_open: 'p', details_shut: '' });
 });
 
 test("a project's own facts, as text", () => {

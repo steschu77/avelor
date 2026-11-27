@@ -14,7 +14,7 @@ Three panels:
   (`ui.md#jobs-panel`);
 - the **main view** with the lenses (`ui.md#lenses`), and above them the vault
   header (the selected project's name with its pen, its menu at the end,
-  its description, `panel.md#projects`);
+  and under them its details, `panel.md#projects`);
 - the **side panel** on the right, for the selected entity, thread or day
   (`panel.md`).
 
@@ -670,6 +670,9 @@ unique across vaults, so one list serves every vault); the calendars new
 events go into (`event_calendar`, calendar ids joined by commas, one per
 vault at most); the Timeline lens's types
 switched off and its bar (`tl_hidden`, `tl_types_bar`, as the Documents lens's);
+a project's details unfolded or folded (`details_open`, `details_shut`,
+project ids joined by commas; a project in neither is unfolded while it
+has a blueprint, `detailsOpen`, `model/blueprint.js`);
 the selection
 (`entity`, `thread`: ids, empty for none), saved once the vault's indexing
 has ended and selected again after the next one (`restoreSelection`,

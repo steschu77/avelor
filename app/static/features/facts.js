@@ -9,14 +9,14 @@
 // menus of calendars and contacts serve New and the Accounts page too.
 
 import { accEl } from '../core/dom.js';
-import { DATE_FORMAT, DAY_MONTH, SHORT_MONTH_YEAR, WEEKDAY } from '../core/format.js';
+import { DATE_FORMAT, DAY_MONTH, SHORT_MONTH_YEAR } from '../core/format.js';
 import { amountText, compareText, dayStart, daysBetween, parseAmount, parseDate } from '../core/format.js';
 import { t } from '../core/text.js';
 import { entities, parseContact } from '../model/entities.js';
 import { factsOf, withFact } from '../model/blueprint.js';
 import { idDocumentType, idDocumentState, idDocumentsOf } from '../model/id-documents.js';
 import { setProjectLocal } from '../model/structure.js';
-import { tripEndOf } from '../model/trip.js';
+import { daysText, tripEndOf } from '../model/trip.js';
 import { fieldInput } from '../ui/field.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
@@ -93,6 +93,12 @@ export function newFactEl({ id, project }) {
 // ----------------------------------------------------------------------------
 // What a fact's value shows: a dash while it has none, but for open days
 // what the project's sketch says of them.
+// A fact's value as its row says it, as text: a chip's words, a trip's days
+// with their nights (a project's folded details, features/header.js).
+export function factText(fact, project) {
+  return valueParts(fact, project).map(part => (typeof part === 'string' ? part : part.textContent)).join(' ');
+}
+
 function valueParts(fact, project) {
   const { type, value } = fact;
   if (value == null || value === '' || (Array.isArray(value) && !value.length)) {
@@ -137,8 +143,7 @@ function daysParts(days) {
   if (!from || !to) return [String(days?.from ?? days)];
   const ahead = daysBetween(dayStart(new Date()), from);
   const meta = [t('trip.nights', { n: daysBetween(from, to) }), ahead > 0 ? t('facts.in_days', { n: ahead }) : null];
-  return [`${WEEKDAY.format(from)} ${DAY_MONTH.format(from)} \u2013 ${WEEKDAY.format(to)} ${DATE_FORMAT.format(to)}`,
-    accEl('span', 'meta', meta.filter(Boolean).join(' \u00b7 '))];
+  return [daysText(days), accEl('span', 'meta', meta.filter(Boolean).join(' \u00b7 '))];
 }
 
 // A trip's days while they are open (vault.md#project): the window its

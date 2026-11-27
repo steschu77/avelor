@@ -4,7 +4,7 @@
 // (panel.md#route): its nights, the stops and the legs between them, and
 // what it lacks (`tripGaps`).
 
-import { DAY_MONTH, addDays, dayStart, daysBetween, localDay, parseDate, timeFormatIn, zonedTime } from '../core/format.js';
+import { DATE_FORMAT, DAY_MONTH, WEEKDAY, addDays, dayStart, daysBetween, localDay, parseDate, timeFormatIn, zonedTime } from '../core/format.js';
 import { entities, parseContact, projects, projectsOf } from './entities.js';
 import { idDocumentState, idDocumentsOf } from './id-documents.js';
 import { t } from '../core/text.js';
@@ -181,6 +181,33 @@ export function routeOf(id, project) {
   const to = parseDate(project.facts?.days?.to);
   if (from && to && to > from) return { home, sketched: false, from, to, parts: datedParts(id, home, from, to) };
   return { home, sketched: true, from: null, to: null, parts: sketchedParts(home, project.sketch) };
+}
+
+// A trip's days, `{ from, to }`, as its facts show them: from and to with
+// their weekdays; null without both.
+export function daysText(days) {
+  const from = parseDate(days?.from);
+  const to = parseDate(days?.to);
+  if (!from || !to) return null;
+  return `${WEEKDAY.format(from)} ${DAY_MONTH.format(from)} \u2013 ${WEEKDAY.format(to)} ${DATE_FORMAT.format(to)}`;
+}
+
+// A trip in a line, its folded details' (features/header.js): its days,
+// its nights and its route's places, its home first, at most four; null
+// for a project that is no trip.
+export function tripLine(id, project) {
+  const route = routeOf(id, project);
+  if (!route) return null;
+  const from = parseDate(project.facts?.days?.from);
+  const to = parseDate(project.facts?.days?.to);
+  const places = [route.home, ...route.parts.filter(part => part.type === 'stop').map(stop => stop.name)]
+    .filter(Boolean).filter((place, i, all) => place !== all[i - 1]);
+  const shown = places.length > 4 ? [...places.slice(0, 4), '\u2026'] : places;
+  return [
+    daysText(project.facts?.days),
+    from && to && to > from ? t('trip.nights', { n: daysBetween(from, to) }) : null,
+    places.length > 1 ? shown.join(' \u2192 ') : null,
+  ].filter(Boolean).join(' \u00b7 ');
 }
 
 const placeKey = place => place?.trim().toLowerCase() || null;

@@ -160,11 +160,10 @@
 
     <main class="main" id="main">
       <div class="pane-head">
-        <button type="button" class="tool" id="project-fold-btn" aria-expanded="false"
-          data-t-title="header.show_details" hidden><svg class="icon disclosure"><use href="#i-chevron-down" /></svg></button>
         <span class="project-name" id="project-name" data-t="sidebar.all_projects"></span>
         <button type="button" class="icon-btn icon-btn--quiet project-pen" id="project-rename-btn"
           data-t-title="header.rename" hidden><svg class="icon"><use href="#i-edit" /></svg></button>
+        <span class="project-checks" id="project-checks" hidden></span>
         <span class="label-filter" id="label-filter"></span>
         <button type="button" class="chip chip--action" id="label-add-btn" data-t-title="header.filter_label" data-t-aria-label="header.filter_label"
           aria-haspopup="menu" hidden>+</button>
@@ -179,6 +178,10 @@
             hidden></span><svg class="icon"><use href="#i-chevron-down" /></svg></button>
         <button type="button" class="tool project-more" id="project-more-btn" aria-haspopup="menu" hidden>&#x22ef;</button>
       </div>
+      <!-- the project's details, folded or not (features/header.js) -->
+      <button type="button" class="tool project-details" id="project-fold-btn" aria-expanded="false" hidden><svg
+          class="icon disclosure"><use href="#i-chevron-down" /></svg><span data-t="header.details"></span><span
+          class="meta" id="project-summary"></span></button>
       <!-- the project's own labels and link (features/header.js) -->
       <div class="project-props" id="project-props" hidden></div>
       <!-- its description, with its pen at the end of its first line -->

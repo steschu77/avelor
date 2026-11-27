@@ -3,8 +3,8 @@ import { vault } from './vault.js';
 import { localDay, parseDate } from '../../static/core/format.js';
 import { entities, projects } from '../../static/model/entities.js';
 import {
-  byNights, setDatesProposal, isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripEndOf,
-  tripGaps, tripPlaces, tripSummary, tripsShortOf, workCalendarsOf, zoneIssuesOf, zoneName,
+  byNights, daysText, setDatesProposal, isPlanned, isTripEvent, issueText, nightsOf, nightsText, placeZone, routeOf, routeSpot, tripEndOf,
+  tripGaps, tripLine, tripPlaces, tripSummary, tripsShortOf, workCalendarsOf, zoneIssuesOf, zoneName,
 } from '../../static/model/trip.js';
 
 // A trip from Springfield, from `from` to `to`, and its events on days:
@@ -127,6 +127,21 @@ test('while its days are open the route is the sketch', () => {
   equal([parts[1].nights.map(night => night.maybe), parts[3].note], [[false, false, true], 'at Anna']);
   vault(trip({ days: { from: '2027-07-08', to: '2027-07-08' } }));
   equal([route().sketched, route().parts], [true, []]);
+});
+
+test("a trip's days with their weekdays, none without both", () => {
+  equal([daysText(DAYS).startsWith('Thu '), daysText(DAYS).includes(' \u2013 Mon '), daysText({ from: '2027-07-08' }), daysText(null)],
+    [true, true, null, null]);
+});
+
+test('a trip in a line: its days, its nights and its places, at most four', () => {
+  vault(trip(), THERE, HOTEL, BACK);
+  equal(tripLine('trip', projects.get('trip').project), `${daysText(DAYS)} \u00b7 trip.nights \u00b7 Springfield \u2192 Hamburg`);
+  const stops = ['Hamburg', 'Berlin', 'Dresden', 'Leipzig'].map(place => ({ place, nights: 1 }));
+  vault(trip({ days: undefined }, { sketch: { stops } }));
+  equal(tripLine('trip', projects.get('trip').project), ['Springfield', 'Hamburg', 'Berlin', 'Dresden', '\u2026'].join(' \u2192 '));
+  vault(trip({ home: undefined, days: undefined }));
+  equal([tripLine('trip', projects.get('trip').project), tripLine('p', { blueprint: 'move' })], ['', null]);
 });
 
 // A timed journey, its ends in their own zones.

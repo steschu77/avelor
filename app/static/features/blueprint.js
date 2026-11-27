@@ -42,9 +42,14 @@ let shownId = null;
 let openList = 'missing';
 let openedFor = null;
 
-// Show the blueprint of the project `id`, null to hide it.
-export function showBlueprint(id) {
+// Show the blueprint of the project `id`, null to hide it; `list`, one to
+// open (Missing and Next beside a folded project's name, features/header.js).
+export function showBlueprint(id, list = null) {
   shownId = id;
+  if (list) {
+    openList = list;
+    openedFor = id;
+  }
   render();
 }
 

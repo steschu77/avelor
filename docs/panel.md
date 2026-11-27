@@ -627,13 +627,26 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
   project has none (`#blueprint`) and Link to… while it has no link,
   which picks one as its details' "+" does (`showLinkMenu`,
   `features/linked.js`), before Archive.
+- **Details**: under the head, a fold labelled Details
+  (`#project-fold-btn`) holds the project's own labels and link, its
+  description and its blueprint. It is the project's own, kept in the
+  preferences (`details_open`, `details_shut`, `ui.md#preferences`):
+  unfolded at first for a project with a blueprint, facts, documents,
+  payments or checks (`hasBlueprint`), folded for another. Folded, what
+  matters stands outside it: Missing and Next beside the name
+  (`#project-checks`), each while it has any, a click unfolding the
+  details with that list open (`#blueprint`); and after Details what the
+  project is (`#project-summary`), a trip's days, nights and route's
+  places, at most four (`tripLine`, `model/trip.js`), another's first two
+  facts with a value as their rows say them (`factText`,
+  `features/facts.js`). All Projects and No project have none.
 - **Description**: the project file's body, under the vault header behind
-  a fold chevron and edited with its pen at the end of its first line
+  Details and edited with its pen at the end of its first line
   (`#project-desc` via `bindDocContent`), loaded and saved like a document
   (`saving.md`). While it is empty and not being edited, "+ Description"
   (`#project-desc-add`) starts it, where the host can write the project.
 - **Its own labels and link** (`vault.md#metadata`): under the head,
-  behind the same fold (`#project-props`, `renderProjectProps`): its
+  behind Details too (`#project-props`, `renderProjectProps`): its
   labels as a card's chips with × and "+", which offers labels only
   (`addChip`, `#labels`), and its link as a chip with ×, or "+" that picks
   one as a transaction's link does (`linkMenuChip`, `features/linked.js`), from
@@ -657,7 +670,8 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
 
 A project whose block carries a blueprint, facts or checks
 (`vault.md#project`) shows it under its description while its details are
-unfolded (`features/blueprint.js`). A project without a blueprint gets
+unfolded (`features/blueprint.js`), and Missing and Next beside its name
+while they are folded (`#projects`). A project without a blueprint gets
 one from Blueprint ▸ in its header's menu, while the host can write it: the
 shipped blueprints as New project offers them (`#projects`); a pick puts
 its name, and the checks and labels it brings that the block lacks, into
@@ -1258,7 +1272,7 @@ and save their bodies at once.
 | C3 | Star | star icon, or Star in the pill's menu → `toggleStar` | `set_starred {starred}` → `entity` | starred first |
 | C4 | Add to a project | drag an entity's row onto a pill or a project's row in Documents, or a project in a card's "+" menu → `joinProjectLocal` | `join_project` → `entity` | the card's chips and the counts update |
 | C5 | Remove from a project | × on a project chip → `leaveProjectLocal` | `leave_project` → `entity` | chip gone, counts update |
-| C6 | Description | fold chevron → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
+| C6 | Description | Details unfolded → the pen or "+ Description" → `#project-desc` editor via `bindDocContent` | `load_doc_content` / `save_doc_content` as D2/D4 (`saving.md#flows`) | project file body edited in place |
 | C7 | Archive | Archive in the pill's or the header's menu → `toggleArchive` | `set_archived {archived}` → `entity` | pill moves under the folded "Archived" row, or back |
 | C8 | Delete a project | Delete in the pill's or the header's menu, two presses within 3 s (the header's saves the description first) → `deleteProject` → `structureCall('delete_entity')` | `Index::delete`: members leave the project, file to `.trash/` → `entity` per member, `entity_deleted`, the answer | filter back to all documents |
 | C9 | A trip's route | a stop of a dated route → `selectDocument` (its first stay) and `showWeeks`; a leg → `selectLeg` (its parts), one of one part `selectDocument`; a gap → `fillGap` (C11) | — | the card and its Meets; the Timeline kept to the stop's weeks; the gap's menu |

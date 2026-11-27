@@ -13,7 +13,7 @@ import { compareText } from '../core/format.js';
 import { t } from '../core/text.js';
 import { createEditor } from '../editor/editor.js';
 import { serializeMarkdown } from '../editor/markdown.js';
-import { NO_WORDS, store } from '../model/state.js';
+import { NO_WORDS, savePrefs, store } from '../model/state.js';
 import { NO_PROJECT, entities, matchesFilter, projects } from '../model/entities.js';
 import { projectScope } from '../model/entities.js';
 import {
@@ -28,7 +28,9 @@ import { editTextInPlace } from '../ui/field.js';
 import { openLink } from './selection.js';
 import { selectFilter } from './selection.js';
 import { showBlueprint } from './blueprint.js';
-import { BLUEPRINTS, withBlueprint } from '../model/blueprint.js';
+import { BLUEPRINTS, checksOf, detailsOpen, detailsPrefs, factsOf, hasBlueprint, withBlueprint } from '../model/blueprint.js';
+import { tripLine } from '../model/trip.js';
+import { factText } from './facts.js';
 import { leaveCardEditMode } from './panel/panel.js';
 import { addChip, labelChips, linkChip } from './panel/panel.js';
 import { linkMenuChip, showLinkMenu } from './linked.js';
@@ -126,8 +128,8 @@ labelAddBtn.addEventListener('click', () => {
     { head: t('header.filter_label'), filter: { placeholder: t('header.filter_labels') } });
 });
 
-// The selected project's details under the header, shown while the fold
-// button (the chevron) is unfolded: its own labels and link, the
+// The selected project's details under the header, shown while Details,
+// the fold under the head, is unfolded: its own labels and link, the
 // description -- its file's body in an editor, loaded and saved like any
 // document (saving.md) -- and its blueprint (features/blueprint.js). The
 // description's pen, at the end of its first line, toggles edit mode,
@@ -151,12 +153,17 @@ const projectDescEditor = createEditor(projectDescEl, {
   onLinkClick: openLink,
 });
 
+// The fold is the project's own: as it was left for it, else unfolded for
+// a project with a blueprint (`detailsOpen`, kept in the preferences).
 function projectUnfolded() {
-  return projectFoldBtn.getAttribute('aria-expanded') === 'true';
+  const project = projects.get(descProjectId);
+  return Boolean(project) && detailsOpen(store.getState().prefs, project.id, project.project);
 }
 
 function updateProjectDesc() {
   const shown = Boolean(descProjectId) && projectUnfolded();
+  projectFoldBtn.setAttribute('aria-expanded', String(shown));
+  scheduleFolded();
   const writable = Boolean(projects.get(descProjectId)?.writable);
   renderProjectProps(shown);
   const empty = !projectDescEditor.isEditable() && serializeMarkdown(projectDescEl).trim() === '';
@@ -187,8 +194,6 @@ function renderProjectProps(shown) {
   projectPropsEl.replaceChildren(...chips);
   projectPropsEl.hidden = !chips.length;
 }
-const redrawProjectProps = oncePerFrame(() => renderProjectProps(Boolean(descProjectId) && projectUnfolded()));
-store.subscribe([state => state.projects_rev, state => state.entities_rev], () => redrawProjectProps());
 
 function setProjectDescEditMode(on) {
   if (!descProjectId) return;
@@ -223,13 +228,58 @@ function editProjectName() {
 
 // Folding while the description is edited saves it first.
 function foldProjectDetails(unfold) {
+  if (!descProjectId) return;
   if (!unfold) setProjectDescEditMode(false);
-  projectFoldBtn.setAttribute('aria-expanded', String(unfold));
-  projectFoldBtn.title = unfold ? t('header.hide_details') : t('header.show_details');
+  savePrefs(detailsPrefs(store.getState().prefs, descProjectId, unfold));
   updateProjectDesc();
 }
 
 projectFoldBtn.addEventListener('click', () => foldProjectDetails(!projectUnfolded()));
+
+// While the details are folded, what matters stands outside them: Missing
+// and Next beside the name, each while it has any, a click unfolding the
+// details with that list open; and after Details what the project is, a
+// trip's days, nights and route (`tripLine`), another's first two facts
+// with a value as their rows say them. Looked at once per frame.
+const projectChecksEl = $('project-checks');
+const projectSummaryEl = $('project-summary');
+const scheduleFolded = oncePerFrame(() => {
+  const project = projects.get(descProjectId);
+  const folded = Boolean(project) && !projectUnfolded();
+  const chips = [];
+  if (folded && hasBlueprint(project.project)) {
+    const { missing, next } = checksOf(project.id, project.project);
+    if (missing.length) chips.push(checkChip(t('bp.missing'), missing.length, 'missing'));
+    if (next.length) chips.push(checkChip(t('props.next'), next.length, 'next'));
+  }
+  projectChecksEl.replaceChildren(...chips);
+  projectChecksEl.hidden = !chips.length;
+  const summary = folded ? projectSummary(project) : '';
+  projectSummaryEl.textContent = summary ? `\u00b7 ${summary}` : '';
+});
+// The details follow the project, its members and the preferences, once per
+// frame, not once per entity of an indexing.
+const scheduleProjectDesc = oncePerFrame(updateProjectDesc);
+store.subscribe([state => state.projects_rev, state => state.entities_rev, state => state.prefs], () => scheduleProjectDesc());
+
+function checkChip(label, n, list) {
+  const chip = accEl('button', 'tool label', label);
+  chip.type = 'button';
+  chip.append(accEl('span', 'meta', String(n)));
+  chip.addEventListener('click', () => {
+    foldProjectDetails(true);
+    showBlueprint(descProjectId, list);
+  });
+  return chip;
+}
+
+function projectSummary({ id, project }) {
+  const trip = tripLine(id, project);
+  if (trip !== null) return trip;
+  const set = value => value != null && value !== '' && !(Array.isArray(value) && !value.length);
+  return factsOf(project).filter(fact => set(fact.value)).slice(0, 2)
+    .map(fact => factText(fact, project)).join(' \u00b7 ');
+}
 
 // A project New project just made from a blueprint, selected: its details
 // unfold to be filled in, and its name opens to be edited in place
@@ -295,8 +345,8 @@ store.subscribe(
     if (project) titled(projectMoreBtn, t('menu.actions', { name: project.name || t('untitled') }));
   });
 
-// Another project selected: the outgoing one is saved first. The fold state
-// stays. All Projects and No project have no details.
+// Another project selected: the outgoing one is saved first; its fold is
+// its own. All Projects and No project have no details.
 store.subscribe(state => state.selected_project, () => {
   if (descProjectId) {
     setProjectDescEditMode(false);
