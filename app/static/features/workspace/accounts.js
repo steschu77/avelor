@@ -3,7 +3,7 @@
 // accounts and their connect, then the AI providers: the AI provider menu,
 // an AI account's card and pane, and the pane of a new one until its key or
 // address checks out. A required field (the key, Ollama's address) stays an
-// input until the host has checked it; then it shows as text with a pencil.
+// input until the host has checked it; then it shows as text with its pen.
 // A model picker's way here is the `accounts.open` action
 // (`openAccountsPage`). The Email row's auto-sync is Fetch email's
 // (`renderEmailSync`); a synced calendar's Work of is its vault entity's
@@ -819,6 +819,7 @@ function renderAiKeyStat(id, kind, account) {
   const [field, note] = renderEditField(id, 'key', {
     saved: account?.key ?? null,
     required: true,
+    checked: true,
     type: 'password',
     mono: true,
     placeholder: provider.placeholder,
@@ -840,6 +841,7 @@ function renderAiAddressStat(id, kind, account) {
   const [field, note] = renderEditField(id, 'address', {
     saved: account ? aiHost(account.address) : null,
     required: true,
+    checked: true,
     mono: true,
     value: account?.address ?? provider.address,
     placeholder: provider.address,

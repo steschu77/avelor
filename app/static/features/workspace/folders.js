@@ -436,7 +436,7 @@ export function watchFormGrid() {
   return [grid, row];
 }
 
-// The folder of `id` (a watch, or 'new:<type>'): text with a pencil, or an
+// The folder of `id` (a watch, or 'new:<type>'): text with its pen, or an
 // input until the host has found it (starting with `value`), and Browse to
 // pick one instead. Its note (being checked, or the error) goes on a line
 // of its own.
@@ -445,6 +445,7 @@ function renderWatchFolder(id, saved, { value = saved, placeholder = value } = {
   const [field, note] = renderEditField(id, 'folder', {
     saved,
     required: true,
+    checked: true,
     mono: true,
     value: value ?? '',
     placeholder: placeholder ?? '',

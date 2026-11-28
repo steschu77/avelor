@@ -162,12 +162,15 @@ export function fieldEditKey(owner, field) {
 }
 
 // A field shown as text with its pen, or as an input while it is edited
-// -- and, if `required`, while nothing valid is saved. `opts`: { saved
-// (text, or null if nothing valid is saved), empty (the text without a
-// saved value), required, value (the input's start), placeholder, type,
-// mono, textClass (of the saved text), editTitle (the pen's title), byClick
-// (a name: a click on it edits it too, ui.md#the-pen), onSave(value),
-// rerender (the page's scheduler) }.
+// -- and, if `required`, while nothing valid is saved. Enter or leaving the
+// input saves it, as a card's field does, if its text changed (else it
+// just closes), Esc cancels; a field the host checks first (`checked`: a
+// key, an address, a folder) has Save and an x instead, and leaving it
+// keeps it open. `opts`: { saved (text, or null if nothing valid is saved),
+// empty (the text without a saved value), required, checked, value (the
+// input's start), placeholder, type, mono, textClass (of the saved text),
+// editTitle (the pen's title), byClick (a name: a click on it edits it
+// too, ui.md#the-pen), onSave(value), rerender (the page's scheduler) }.
 export function renderEditField(owner, field, opts) {
   const key = fieldEditKey(owner, field);
   const state = fieldEdits.get(key);
@@ -209,6 +212,10 @@ export function renderEditField(owner, field, opts) {
     fieldEdits.delete(key);
     opts.rerender();
   };
+  const done = () => {
+    if (input.value.trim() === String(opts.value ?? '').trim() || !canSave()) cancel();
+    else submit();
+  };
   input.addEventListener('input', () => {
     const current = fieldEdits.get(key);
     fieldEdits.set(key, { ...current, value: input.value, error: current?.error ?? null });
@@ -217,16 +224,24 @@ export function renderEditField(owner, field, opts) {
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      submit();
+      if (opts.checked) submit();
+      else done();
     } else if (e.key === 'Escape' && cancelable) {
       e.preventDefault();
       cancel();
     }
   });
-  save.addEventListener('click', submit);
   wrap.classList.add('edit-field--edit');
-  wrap.append(input, save);
-  if (cancelable && !state?.checking) {
+  wrap.append(input);
+  // a redraw that takes the input off the page is no leaving it
+  if (!opts.checked) input.addEventListener('blur', () => {
+    if (input.isConnected && fieldEdits.has(key)) done();
+  });
+  else {
+    save.addEventListener('click', submit);
+    wrap.append(save);
+  }
+  if (opts.checked && cancelable && !state?.checking) {
     const close = accEl('button', 'btn btn--ghost', '\u00d7');
     close.type = 'button';
     titled(close, t('field.cancel'));

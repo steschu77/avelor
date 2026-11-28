@@ -271,7 +271,7 @@ accounts with a detail pane.
 - **AI providers**: the AI provider menu offers Anthropic, OpenAI, Mistral
   and Gemini with an API key, and Ollama by its address. A key or an
   address is checked by listing the provider's models before it is stored;
-  until then it stays an input. The pane lists the models with their price
+  until then it stays an input, with Save and ×. The pane lists the models with their price
   per million tokens, in the provider's order, ticked or not, a ticked one
   the provider no longer lists after them in red: ticking one offers it in
   the features' pickers, which offer them in that order, and
@@ -287,7 +287,12 @@ accounts with a detail pane.
   accounts are removed directly).
 - The page widgets the Workspace pages share are `ui/`'s (`ui/page.js`,
   `ui/field.js`, `ui/segmented.js`); the model picker every feature uses
-  is `features/workspace/models.js` (`accounts.md#model-choice`).
+  is `features/workspace/models.js` (`accounts.md#model-choice`). A
+  field shows its text with its pen (`renderEditField`, `ui.md#the-pen`);
+  edited, Enter or leaving it saves what changed, as a card's field does,
+  and Esc cancels, but for one the host checks first: a key, an address,
+  a watch's folder (`import.md#the-folders-page`), which waits for its
+  Save.
 
 ## Model choice and the spend limit <a id="model-choice"></a>
 
@@ -352,7 +357,7 @@ beside a box in red, nothing picked too, which a tool says itself.
 | I2 | Models, refresh, test | pane renders, Refresh, Test | `list_ai_models {account}` → `account` (Ollama: running?), `ok {models}` | — |
 | I3 | Offer a model | tick | `set_ai_settings {account, offered}` → `account`, `ok` | pickers offer it |
 | I8 | Pick a model | a feature's picker → `aiShowModels` → a model | the feature's own command: `set_vault_settings {chat_model}` → `vault_settings`, `ok`; `set_watch {watch, models}` → `watch`, `ok`; `email_fetch {…, analysis}`, `set_email_sync {account, analysis}` → `account` | the feature uses it; "Used by" names the feature |
-| I4 | Spend limit | edit field | `set_ai_settings {account, spend_limit}` → `account`, `ok` | enforced: at the limit a chat is refused and a scan read stops before its next page |
+| I4 | Spend limit | its pen, then Enter or leaving it | `set_ai_settings {account, spend_limit}` → `account`, `ok` | enforced: at the limit a chat is refused and a scan read stops before its next page |
 | I5 | Replace key | edit key | `connect_ai {account, key}` | — |
 | I6 | Disconnect / remove | two clicks within 3 s | `disconnect_account` / `remove_account`, shared with Google (H6) | — |
 | I7 | Spending | an assistant reply, a page read | `ai::account_used`: what the ledger recorded → this month in `<name>.spend.yaml` → `account` | "This month", also after a restart |
