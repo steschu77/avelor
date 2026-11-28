@@ -115,7 +115,7 @@ sync; a sync from its source's Sync now counts as a run.
 An auto-synced calendar also syncs sooner:
 
 - With Full access, an event changed in the app syncs it: its description
-  once you leave edit mode (the Edit button again, Esc, or closing its
+  once you leave edit mode (the content's pen again, Esc, or closing its
   card), anything else right away — an event made with New, an edit undone
   or redone (`saving.md#undo`), a change made outside the app that the app
   takes in, an edit saved outside edit mode.

@@ -927,15 +927,22 @@ function createMessageController(msg, { selectable = false, thread = false, occu
   const partBlocks = cardBlocksAt('parts', msg);
   card.append(...partBlocks.map(block => block.el));
 
+  // The content, its pen at the end of its first line (ui.md#the-pen): it
+  // toggles edit mode, pressed meanwhile; none where the card can't be
+  // edited.
   const editorRoot = accEl('div', 'pane-section editor prose');
-  card.appendChild(editorRoot);
+  const contentPen = penButton(t('panel.edit_message'), () => setMessageEditMode(doc_id, !editor.isEditable()));
+  contentPen.classList.add('msg__pen');
+  const contentEl = accEl('div', 'msg__content');
+  contentEl.append(contentPen, editorRoot);
+  card.appendChild(contentEl);
 
   const editor = createEditor(editorRoot, {
     toolbar: editorToolbar,
-    // the focus back on the Edit button it came from, not the page's start
+    // the focus back on the pen it came from, not the page's start
     onEscape: () => {
       setMessageEditMode(doc_id, false);
-      editBtn.focus();
+      contentPen.focus();
     },
     onChange: () => onEdited(doc_id),
     onLinkClick: openLink,
@@ -943,17 +950,9 @@ function createMessageController(msg, { selectable = false, thread = false, occu
 
   editorRoots.set(doc_id, editorRoot);
 
-  const editable = Boolean(getMeta(doc_id)?.editable) && !googleLocked(getMeta(doc_id));
-  const editBtn = previewToolbar.querySelector('button[data-cmd="edit"]');
-  editBtn.setAttribute('aria-disabled', String(!editable));
-  editBtn.title = editable ? t('panel.edit_message') : t('panel.read_only');
+  contentPen.hidden = !getMeta(doc_id)?.editable || googleLocked(getMeta(doc_id));
 
   const unsubscribeContent = bindDocContent(doc_id, editor, editorRoot);
-
-  editBtn.addEventListener('click', () => {
-    if (editBtn.getAttribute('aria-disabled') === 'true') return;
-    setMessageEditMode(doc_id, !editor.isEditable());
-  });
 
   // Remove-from-thread: only meaningful on a card shown as a member of the
   // open thread, and always acts on that thread (an entity may be in
@@ -983,7 +982,7 @@ function createMessageController(msg, { selectable = false, thread = false, occu
     () => deleteEntityLocal(doc_id, thread ? renderedThreadId : null));
 
   const controller = {
-    doc_id, card, editor, editBtn, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
+    doc_id, card, editor, contentPen, renameBtn, dirtyDot, editorRoot, iconEl: kindIconEl, titleEl,
     dateEl, detailsEl, linksEl, attachmentsEl, threadsEl, chatBtn, occurrence, unsubscribeContent,
     blocks: [...headBlocks, ...detailBlocks, ...partBlocks],
   };
@@ -1022,7 +1021,7 @@ function setMessageEditMode(doc_id, on) {
   }
   if (on && !controller.editor.isEditable()) beginEditSession(doc_id);
   controller.editor.setEditable(on);
-  controller.editBtn.setAttribute('aria-pressed', String(on));
+  controller.contentPen.setAttribute('aria-pressed', String(on));
 
   if (on) activeEditId = doc_id;
   else if (activeEditId === doc_id) activeEditId = null;

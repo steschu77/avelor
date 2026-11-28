@@ -93,8 +93,8 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   host can write the entity (`panel.md#field-edits`), the last two
   through `edit_entities`' `fields`; the rest is read-only. An event of a
   calendar read-only in Google (`calendar.md#two-way-sync`,
-  `googleLocked`) shows what it syncs as text, its title without the pen,
-  and neither Edit nor Delete, whose tooltip says why;
+  `googleLocked`) shows what it syncs as text, its title and its content
+  without the pen, and no Delete, whose tooltip says why;
 - the blocks other modules add (`registerCardBlock`): after the head,
   after the details, or after the toolbars before the notes, a part of
   the card under a head of its own; each filled for the card's entity,
@@ -111,9 +111,13 @@ holds `selected_entity`, `selected_thread`, `selected_transaction` and
   a double-click on the row opens the file too (`open_file`, refused for
   anything but a PDF or an image). Refreshed on `entities_rev` with the links; hidden
   without any;
-- an action toolbar (edit/link/chat/task/thread/delete, cloned from
+- an action toolbar (link/chat/task/thread/delete, cloned from
   `#preview-toolbar-template`), an editing toolbar (cloned from
-  `#editor-toolbar-template`), and its own `createEditor()` instance.
+  `#editor-toolbar-template`), and its own `createEditor()` instance;
+- its content, with its pen at the end of its first line
+  (`ui.md#the-pen`): edit mode while pressed, if the entity is `editable`
+  and Google doesn't keep it, one card in edit mode at a time; again or
+  Esc leaves it, the focus back on the pen.
 
 It is used from exactly four places:
 
@@ -151,8 +155,7 @@ template itself:
 - **`#editor-toolbar-template`** — the bold/italic/heading/list/etc.
   editing toolbar, passed to `createEditor()`'s `toolbar` option.
 - **`#preview-toolbar-template`** — the action row:
-  `data-cmd="edit"` (edit mode, if the entity is `editable`; one card in
-  edit mode at a time), `data-cmd="link"` and `data-cmd="task"` (the
+  `data-cmd="link"` and `data-cmd="task"` (the
   context column's Linked and Task tabs), `data-cmd="chat"` (the chat
   beside the card, `assistant.md#conversations`; a dot in its corner and
   "· 2 conversations" in its title while conversations are linked to the card,
@@ -1245,7 +1248,7 @@ and save their bodies at once.
 | # | Flow | Trigger → page | Host → events | Result |
 |---|---|---|---|---|
 | D1 | Open | an entity's row in Documents → `selectDocument` (`features/selection.js`) → `openPanel`, `selected_entity` / `selected_thread` → `renderPanel` (`features/panel/panel.js`) → `panelMode` | — | one card, or the thread's cards |
-| D3 | Edit | card Edit (if `editable`) → `setMessageEditMode` | — | one card in edit mode at a time; Esc leaves |
+| D3 | Edit | the content's pen (if `editable`) → `setMessageEditMode` | — | one card in edit mode at a time; the pen again or Esc leaves |
 | D5 | Delete | card delete, two clicks within 3 s → save first → `deleteEntityLocal` | `delete_entity` → `Index::delete` (dissolve threads, move to `.trash/`) → `entity_deleted`, changed members as `entity`, the answer | neighbour selected (`selectionWithout`) |
 | D6 | Labels | card "+" → `addChip`'s menu: a label in use or "New label", Enter or a click; a chip's × → `setLabelsLocal` | `set_labels` → `entity` | the card's chips follow |
 | D8 | Task for a card | the card's Task button → `openTaskTab`; Create or Ctrl+Enter → `createNew` | `create_entity`, a task `linked-to` the card → `entity`, `ok {id}` | the card stays shown; the form clears and notes the new task |

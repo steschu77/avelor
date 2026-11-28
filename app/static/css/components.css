@@ -145,6 +145,13 @@
   height: var(--fs-small);
 }
 
+/* a content's pen while its edit mode is on */
+.icon-btn.pen[aria-pressed="true"] {
+  border-color: var(--c-line);
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
+}
+
 .icon-btn--square {
   width: var(--h-control);
   height: var(--h-control);

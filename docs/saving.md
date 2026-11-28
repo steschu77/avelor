@@ -49,7 +49,7 @@ disk (`vault.md#versioning`).
 
 A save is attempted:
 
-- when the card's Edit button, or the project description's pen in the
+- when a card's content's pen, or the project description's in the
   vault header, is toggled off, or Escape is pressed;
 - when a different document or project is selected while the current one
   is in edit mode — the outgoing one is saved first; also when a card is
@@ -167,7 +167,7 @@ the editor's current HTML — usually it doesn't (`markdown.md#round-trip`).
 
 The host knows which documents are in edit mode (`set_editing` →
 `DocumentState`, `documents.rs`): the page sends the whole list whenever it changes — a
-card's Edit button or Esc, a card torn down while in edit mode, the
+card's content's pen or Esc, a card torn down while in edit mode, the
 project description's pen — after the save that ends an edit, so the host
 has the last text first (`reportEditing`, sent only when the list
 changed). Edit mode is a session of edits: leaving it, not each autosave,
@@ -353,7 +353,7 @@ the page first (`close::on_close`; `close.rs`, `features/close.js`).
   a save on its way is the page's to know. A second Close while it is asked
   asks nothing more.
 - **What the page does.** Every editor leaves edit mode — the card being
-  edited, the project description — which saves it as the Edit button does
+  edited, the project description — which saves it as its pen does
   (`saving.md#triggers`). Once every save sent is answered (`savesInFlight`,
   `model/documents.js`), the page answers `close_ready {id, ready}`.
 - **Not ready.** A save answered as a conflict, or a conflict already

@@ -516,5 +516,5 @@ carry scripts, styles, or arbitrary markup outside the editor's model.
   what it does.
 - **Escape leaves edit mode** by calling the optional `onEscape` callback.
   The editor has no concept of "edit mode" beyond the `contenteditable`
-  attribute itself; what leaving it means (the card's Edit button toggled
-  off) is up to the caller.
+  attribute itself; what leaving it means (the content's pen toggled off)
+  is up to the caller.

@@ -47,7 +47,8 @@ changes. It stands right after a name: a project's on its pill (while
 the pill is hovered or has the focus) and in the vault header, a card's
 and the thread's title, a fact's value (`panel.md#blueprint`), a
 Workspace page's field (`renderEditField`); and at the end of a content's
-first line: the project's description.
+first line: the project's description, a card's content (edit mode while
+pressed, `panel.md#cards`).
 
 ## Vault panel <a id="vault-panel"></a>
 
@@ -538,7 +539,7 @@ highlight and **Enter** runs it, **Right** opens a submenu and **Left**
 goes back; a focused grip moves with **Left** and **Right**. A pill's
 menu opens by a right-click too, the **Menu** key and **Shift+F10**. In an editor Tab indents where it can, in a list, a quote, a
 table or code, and goes on elsewhere (`editor.md#keys`); Esc leaves edit
-mode, back on the Edit button. Left to the mouse: joining or making a
+mode, back on its pen. Left to the mouse: joining or making a
 thread by drag, the Dashboard's cards reordered, a scan's pages in any
 order (a first or last page still moves to the next document by its
 button), the scrubber's range of weeks (Clear and Today remain), the

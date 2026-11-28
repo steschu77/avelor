@@ -125,6 +125,21 @@
   margin-top: 4px;
 }
 
+/* a card's content, its pen at the end of its first line */
+.msg__content {
+  position: relative;
+}
+
+.msg__content>.editor {
+  padding-right: calc(var(--p-pane) + var(--h-control-sm) + 4px);
+}
+
+.msg__pen {
+  position: absolute;
+  top: calc(var(--p-section) - 2px);
+  right: var(--p-pane);
+}
+
 /* the title as long as its text, its dirty dot and its pen right after it */
 .doc-head__title>.doc-title {
   flex: 0 1 auto;
