@@ -79,6 +79,12 @@ test("a lane counted only leaves out the days outside its events, and says what 
   equal(whenOf({ sketch: sketch(JULY, 5), lanes: [{ calendar: 'gone', counts: 'only' }] }).lanes[0].spans.map(span => span.detail), ['when.none_of_its_days']);
 });
 
+test("a lane's icon: a calendar's or an event's, the keyboard for days typed in", () => {
+  vault(event('wedding', 'family', '2027-07-10', '2027-07-12'));
+  const lanes = whenOf({ sketch: sketch(JULY, 5), lanes: [{ calendar: 'family' }, { event: 'wedding' }, spans('cant', ['2027-07-02', '2027-07-03'])] }).lanes;
+  equal(lanes.map(lane => lane.icon), ['#i-calendar', '#i-calendar', '#i-keyboard']);
+});
+
 test('a lane of one event, and one that is gone', () => {
   vault(event('wedding', 'family', '2027-07-10', '2027-07-12'));
   const [lane, gone] = whenOf({ sketch: sketch(JULY, 5), lanes: [{ event: 'wedding', counts: 'reason' }, { event: 'deleted' }] }).lanes;

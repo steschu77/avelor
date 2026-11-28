@@ -798,7 +798,7 @@
   "facts.add": "+ Fact",
   "facts.add_named": "Add “{name}”",
   "facts.change": "{label} · change",
-  "facts.exists": "The project has “{name}” already: change it with its pencil",
+  "facts.exists": "The project has “{name}” already: change it there",
   "facts.filter_contacts": "Filter contacts",
   "facts.id_to": "{type}, to {date}",
   "facts.in_days": {
@@ -2130,6 +2130,7 @@
   "when.before": "before {name}",
   "when.between": "between {before} and {after}",
   "when.calendar_gone": "A calendar no longer in the vault",
+  "when.change": "Change…",
   "when.close_edit": "Close the edit line",
   "when.cost": "{traveler}: {workdays}",
   "when.counts.cant": "Can't go",

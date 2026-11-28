@@ -8,7 +8,7 @@
 // setting them opens Set the dates (features/set-dates.js) instead. The
 // menus of calendars and contacts serve New and the Accounts page too.
 
-import { accEl } from '../core/dom.js';
+import { accEl, pressable } from '../core/dom.js';
 import { DATE_FORMAT, DAY_MONTH, SHORT_MONTH_YEAR } from '../core/format.js';
 import { amountText, compareText, dayStart, daysBetween, parseAmount, parseDate } from '../core/format.js';
 import { t } from '../core/text.js';
@@ -24,9 +24,15 @@ import { openSetDates } from './set-dates.js';
 import { contactChip, entityChip } from './panel/details.js';
 import { calendarMenu } from './panel/event-fields.js';
 
+// The facts that are picked or dates: changed by a click on their value,
+// with no pen (ui.md#the-pen).
+const PICKED = new Set(['contacts', 'calendar', 'choice', 'date', 'days']);
+
 // The fact `fact` (`factsOf`) of the project `id`, its block `project`, as
 // the header shows it; `meta` a note after its value (what the budget has
-// booked). Read-only while the host can't write the project.
+// booked). A text or an amount is changed by its pen, a pick or a date by
+// a click on its value, a chip's name in it still opening what it names.
+// Read-only while the host can't write the project.
 export function factEl(fact, { id, project, writable }, meta = null) {
   const el = accEl('div', 'bp__fact');
   const value = accEl('span', 'bp__value');
@@ -36,12 +42,22 @@ export function factEl(fact, { id, project, writable }, meta = null) {
     if (fact.type === 'days' && project.sketch && parseDate(next?.to) > parseDate(next?.from)) return openSetDates(id, next);
     setProjectLocal(id, withFact(project, fact.name, next));
   };
+  const picked = PICKED.has(fact.type);
   const show = () => {
     value.replaceChildren(...valueParts(fact, project), ...(meta ? [accEl('span', 'meta', meta)] : []));
-    if (!writable) return;
+    if (!writable || picked) return;
     const pen = penButton(t('facts.change', { label: fact.label }), () => edit(fact, value, pen, save, show));
     value.append(pen);
   };
+  if (writable && picked) {
+    pressable(value);
+    value.classList.add('bp__value--picked');
+    value.title = t('facts.change', { label: fact.label });
+    value.addEventListener('click', e => {
+      if (e.target.closest('.chip__name') || value.querySelector('.bp__edit')) return;
+      edit(fact, value, value, save, show);
+    });
+  }
   show();
   return el;
 }

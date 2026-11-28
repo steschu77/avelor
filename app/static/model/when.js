@@ -109,7 +109,9 @@ function laneOf(lane, index, from, to, works) {
   }
   spans = spans.filter(span => span.to >= from && span.from <= to)
     .map(span => ({ ...span, from: span.from < from ? from : span.from, to: span.to > to ? to : span.to }));
-  const icon = lane.calendar ? '#i-calendar' : lane.event ? '#i-calendar' : '#i-edit';
+  // a lane of days typed in has the keyboard (the pen is for a text's
+  // change alone, ui.md#the-pen)
+  const icon = lane.calendar ? '#i-calendar' : lane.event ? '#i-calendar' : '#i-keyboard';
   return { key: index === null ? `work:${lane.calendar}` : `lane:${index}`, index, name, icon, source, work, counts, spans };
 }
 

@@ -46,12 +46,14 @@ the size of small text wherever it stands (`.pen`), named after what it
 changes. It stands right after a name: a project's, a watch's and a bank
 account's on its pill (while the pill is hovered or has the focus,
 `#vault-panel`), a project's in the vault header, a card's and the
-thread's title, a fact's value (`panel.md#blueprint`), a Workspace page's
-field (`renderEditField`), a title before an import
+thread's title, a fact's text or amount (`panel.md#blueprint`), a
+Workspace page's field (`renderEditField`), a title before an import
 (`import.md#import-scans`); and at the end of a content's first line: the
 project's description, a card's content (edit mode while pressed,
 `panel.md#cards`), a message of the user's in a chat
-(`assistant.md#conversations`).
+(`assistant.md#conversations`). A pick, a date or a form has none: its
+value is clicked, a fact's contacts, calendar, choice, date and days
+(`panel.md#blueprint`); a trip's window says Change… (`panel.md#when`).
 
 A click on a name renames it too, where the click means nothing else: the
 thread's title, the project's name in the vault header, a watch's name and

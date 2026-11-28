@@ -861,7 +861,7 @@
   "facts.add": "+ Dato",
   "facts.add_named": "Añadir «{name}»",
   "facts.change": "{label} · cambiar",
-  "facts.exists": "El proyecto ya tiene «{name}»: cámbialo con su lápiz",
+  "facts.exists": "El proyecto ya tiene «{name}»: cámbialo allí",
   "facts.filter_contacts": "Filtrar contactos",
   "facts.id_to": "{type}, hasta el {date}",
   "facts.in_days": {
@@ -2203,6 +2203,7 @@
   "when.before": "antes de {name}",
   "when.between": "entre {before} y {after}",
   "when.calendar_gone": "Un calendario que ya no está en la bóveda",
+  "when.change": "Cambiar…",
   "when.close_edit": "Cerrar la línea de edición",
   "when.cost": "{traveler}: {workdays}",
   "when.counts.cant": "No es posible",

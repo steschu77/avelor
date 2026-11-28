@@ -54,9 +54,9 @@ export function whenEls(ctx, when, render) {
   head.append(accEl('span', 'meta', !when.from ? t('when.no_window')
     : [rangeText(when.from, when.to), when.nights ? nightsRange(when.nights) : t('when.no_length_yet')].join(' \u00b7 ')));
   if (ctx.writable) {
-    const change = toolButton(when.from ? t('when.edit') : t('when.add_window'), t('when.window_title'),
+    // Change... in words, no pen: the window is a pick of days (ui.md#the-pen)
+    const change = toolButton(when.from ? t('when.change') : t('when.add_window'), t('when.window_title'),
       () => edit(editing?.what === 'window' ? null : { what: 'window' }));
-    change.prepend(iconEl('#i-edit'));
     head.append(change);
     if (when.from) {
       const add = toolButton(t('when.lane'), t('when.lane_title'),
@@ -243,7 +243,7 @@ function addLaneMenu(anchor, { id }, when, edit) {
       skip: doc => (doc.projects ?? []).includes(id),
       pick: doc => addLane(id, { event: doc.doc_id, counts: 'cant' }),
     }) },
-    { label: t('when.days_typed_in'), icon: '#i-edit', run: () => edit({ what: 'new' }) },
+    { label: t('when.days_typed_in'), icon: '#i-keyboard', run: () => edit({ what: 'new' }) },
   ], { head: t('when.add_lane') });
 }
 

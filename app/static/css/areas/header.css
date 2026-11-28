@@ -132,6 +132,16 @@
   color: var(--c-ink);
 }
 
+/* a picked value or a date opens by a click on it: a faint line under it on
+   hover, as a card's field has */
+.bp__value--picked {
+  cursor: pointer;
+}
+
+.bp__value--picked:hover {
+  box-shadow: 0 1px 0 var(--c-line);
+}
+
 /* a value's pen shows on hover, or while the fact has the focus */
 .bp__value>.pen {
   visibility: hidden;

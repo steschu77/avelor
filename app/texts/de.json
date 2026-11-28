@@ -798,7 +798,7 @@
   "facts.add": "+ Angabe",
   "facts.add_named": "„{name}“ hinzufügen",
   "facts.change": "{label} · ändern",
-  "facts.exists": "Das Projekt hat „{name}“ schon: mit seinem Stift ändern",
+  "facts.exists": "Das Projekt hat „{name}“ schon: dort ändern",
   "facts.filter_contacts": "Kontakte filtern",
   "facts.id_to": "{type}, bis {date}",
   "facts.in_days": {
@@ -2125,6 +2125,7 @@
   "when.before": "vor {name}",
   "when.between": "zwischen {before} und {after}",
   "when.calendar_gone": "Ein Kalender, der nicht mehr im Tresor ist",
+  "when.change": "Ändern …",
   "when.close_edit": "Bearbeitungszeile schließen",
   "when.cost": "{traveler}: {workdays}",
   "when.counts.cant": "Geht nicht",
