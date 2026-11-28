@@ -122,10 +122,35 @@ attachDropZone(docContentEl, doc_id => {
   if (renderedDocId) createThreadLocal(renderedDocId, doc_id);
 });
 
-// The thread header's pen renames the thread shown (`renameEntity`).
+// The thread header's pen renames the thread shown (`renameEntity`), and
+// so does a click on its title (ui.md#the-pen).
 threadRenameBtn.addEventListener('click', () => {
   if (renderedThreadId) renameEntity(renderedThreadId, threadTitleEl);
 });
+threadTitleEl.addEventListener('click', () => {
+  if (renderedThreadId && !threadRenameBtn.hidden && !threadTitleEl.hasAttribute('contenteditable')) {
+    renameEntity(renderedThreadId, threadTitleEl);
+  }
+});
+
+// F2's in the panel (features/header.js): rename the card that has the
+// focus, else the selected one, else the thread shown, where the host can
+// write it; false if there is none or the panel is closed.
+export function renameSelected() {
+  const state = store.getState();
+  if (state.panel_size === 'closed') return false;
+  const focused = [...msgControllers.values()].find(c => c.card.contains(document.activeElement));
+  const controller = focused ?? msgControllers.get(state.selected_entity);
+  if (controller && !controller.renameBtn.hidden) {
+    renameEntity(controller.doc_id, controller.titleEl);
+    return true;
+  }
+  if (renderedThreadId && state.selected_thread === renderedThreadId && !threadRenameBtn.hidden) {
+    renameEntity(renderedThreadId, threadTitleEl);
+    return true;
+  }
+  return false;
+}
 
 // ----------------------------------------------------------------------------
 // Deletes `doc_id` (the card's delete button), shown in `thread_id` or
@@ -656,6 +681,7 @@ function renderThread(threadId, focusDocId) {
   threadPathEl.title = thread.path ?? '';
   if (!threadTitleEl.hasAttribute('contenteditable')) threadTitleEl.textContent = thread.title ?? '';
   threadRenameBtn.hidden = !thread.writable;
+  threadTitleEl.classList.toggle('renamable', Boolean(thread.writable));
 
   renderMembers(threadId, threadMembers(threadId));
   renderThreadProjects();

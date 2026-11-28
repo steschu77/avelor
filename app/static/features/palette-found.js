@@ -16,6 +16,7 @@ import { selectById } from './selection.js';
 // The commands' groups in the list's order.
 const GROUPS = [
   ['new', t('new.head')],
+  ['edit', t('palette.edit')],
   ['assistant', t('palette.assistant')],
   ['get', t('palette.get')],
   ['go', t('palette.name')],

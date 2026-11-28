@@ -127,7 +127,8 @@ vault), following the Accounts page:
   without one the watch is saved anyway, its folder field stays open and
   Import waits for it, on the pane and its source. Add account saves both,
   the watch with `*.csv`.
-- A watch's pane changes its name, folder, subfolders, file types, whether
+- A watch's pane changes its name (its pen, or a click on it,
+  `ui.md#the-pen`), folder, subfolders, file types, whether
   it is a source, and its import process: the reading step, which always
   runs, then Analysis and Keep original, each switched on or off by its
   check. Analysis's check turns it on at Lite (or off, keeping its model);
@@ -140,7 +141,7 @@ vault), following the Accounts page:
   button to Accounts where the fix is there.
 - A statements watch's pane shows its account instead of a name: its
   balance (and what is pending), its transactions and its newest statement;
-  its name, which is the watch's (`set_title`), its bank, number, kind and
+  its name, which is the watch's (`set_title`; its pen, or a click on it), its bank, number, kind and
   holder (`set_bank_account`), its currency and file as they are. Then its
   folder, as any watch's, and the steps a file takes: Read the rows, Skip
   what is there and Check the balance, which always run, and Pair

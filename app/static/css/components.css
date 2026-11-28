@@ -145,6 +145,22 @@
   height: var(--fs-small);
 }
 
+/* a name that a click renames too: a faint dotted line under it on hover;
+   a card's field that can be typed into: a faint line under it (a link's
+   is solid, in its own color) */
+.renamable {
+  cursor: text;
+}
+
+.renamable:hover:not([contenteditable]) {
+  text-decoration: underline dotted var(--c-line);
+  text-underline-offset: 3px;
+}
+
+.form-input:hover:not(:focus):not(:disabled):not([readonly]) {
+  box-shadow: 0 1px 0 var(--c-line);
+}
+
 /* a content's pen while its edit mode is on */
 .icon-btn.pen[aria-pressed="true"] {
   border-color: var(--c-line);

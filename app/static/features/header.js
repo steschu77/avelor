@@ -13,7 +13,8 @@ import { compareText } from '../core/format.js';
 import { t } from '../core/text.js';
 import { createEditor } from '../editor/editor.js';
 import { serializeMarkdown } from '../editor/markdown.js';
-import { NO_WORDS, savePrefs, store } from '../model/state.js';
+import { NO_WORDS, savePrefs, store, vaultOpen } from '../model/state.js';
+import { registerAction } from '../core/actions.js';
 import { NO_PROJECT, entities, matchesFilter, projects } from '../model/entities.js';
 import { projectScope } from '../model/entities.js';
 import {
@@ -31,7 +32,7 @@ import { showBlueprint } from './blueprint.js';
 import { BLUEPRINTS, checksOf, detailsOpen, detailsPrefs, factsOf, hasBlueprint, withBlueprint } from '../model/blueprint.js';
 import { tripLine } from '../model/trip.js';
 import { factText } from './facts.js';
-import { leaveCardEditMode } from './panel/panel.js';
+import { leaveCardEditMode, renameSelected } from './panel/panel.js';
 import { addChip, labelChips, linkChip } from './panel/panel.js';
 import { linkMenuChip, showLinkMenu } from './linked.js';
 import { vaultSources } from './sources.js';
@@ -289,8 +290,27 @@ export function openNewProject() {
   editProjectName();
 }
 
+// The pen renames the project, and so does a click on its name
+// (ui.md#the-pen).
 const projectRenameBtn = $('project-rename-btn');
 projectRenameBtn.addEventListener('click', editProjectName);
+projectNameEl.addEventListener('click', () => {
+  if (!projectRenameBtn.hidden && !projectNameEl.hasAttribute('contenteditable')) editProjectName();
+});
+
+// F2 renames what has the focus or is selected (ui.md#the-pen): a focused
+// pill, by its pen; else the card or the thread in the panel
+// (`renameSelected`); else the project in the header. Nothing while none
+// can be written.
+registerAction({
+  id: 'rename', group: 'edit', title: t('panel.rename'), icon: '#i-edit', shortcut: 'F2', outsideFields: true,
+  when: vaultOpen,
+  run: () => {
+    const pen = document.activeElement?.closest?.('.nav-item')?.querySelector('.nav-item__pen');
+    if (pen) pen.click();
+    else if (!renameSelected() && !projectRenameBtn.hidden) editProjectName();
+  },
+});
 projectDescBtn.addEventListener('click',
   () => setProjectDescEditMode(!projectDescEditor.isEditable()));
 projectDescAddBtn.addEventListener('click', () => {
@@ -341,6 +361,7 @@ store.subscribe(
   () => {
     const project = projects.get(projectScope());
     projectRenameBtn.hidden = !project?.writable;
+    projectNameEl.classList.toggle('renamable', Boolean(project?.writable));
     projectMoreBtn.hidden = !project;
     if (project) titled(projectMoreBtn, t('menu.actions', { name: project.name || t('untitled') }));
   });

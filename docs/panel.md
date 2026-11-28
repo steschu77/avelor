@@ -573,7 +573,8 @@ an empty title removes the `title` key, and the file keeps its name
 Google like any other edit of it.
 
 - The pen right after a card's title and the thread header's
-  (`#thread-rename-btn`, `ui.md#the-pen`) make the title editable in place (`renameEntity`
+  (`#thread-rename-btn`, `ui.md#the-pen`), a click on the thread's title
+  and F2 make the title editable in place (`renameEntity`
   → `editTextInPlace`, `ui/field.js`, which the project header uses
   too). It starts all selected. Enter or leaving it sends `set_title` if
   the text changed (whitespace runs, such as pasted line breaks, become
@@ -604,7 +605,8 @@ vault panel lists them and filters by them (`ui.md#vault-panel`).
 - **Rename**: the pen right after a project pill's name (`editProject`), or
   the one right after its name in the vault header (`#project-rename-btn`,
   `editProjectName`, which edits `#project-name` in place,
-  `panel.md#titles`), each while the host can write the project: the name
+  `panel.md#titles`), a click on that name, or F2 (`ui.md#the-pen`), each
+  while the host can write the project: the name
   becomes an input; Enter
   or leaving it sends `set_title` if the text changed, Esc cancels. The
   pushed `entity` bumps `projects_rev`, so the header and the panel's

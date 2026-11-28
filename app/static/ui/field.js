@@ -165,20 +165,26 @@ export function fieldEditKey(owner, field) {
 // -- and, if `required`, while nothing valid is saved. `opts`: { saved
 // (text, or null if nothing valid is saved), empty (the text without a
 // saved value), required, value (the input's start), placeholder, type,
-// mono, textClass (of the saved text), editTitle (the pen's title),
-// onSave(value), rerender (the page's scheduler) }.
+// mono, textClass (of the saved text), editTitle (the pen's title), byClick
+// (a name: a click on it edits it too, ui.md#the-pen), onSave(value),
+// rerender (the page's scheduler) }.
 export function renderEditField(owner, field, opts) {
   const key = fieldEditKey(owner, field);
   const state = fieldEdits.get(key);
   const wrap = accEl('span', 'edit-field');
   if (!state && (opts.saved != null || !opts.required)) {
     const textClass = opts.textClass ?? (opts.mono ? 'edit-field__text mono' : 'subtitle');
-    wrap.append(accEl('span', textClass, opts.saved ?? opts.empty ?? ''));
-    wrap.append(penButton(opts.editTitle ?? t('field.edit'), () => {
+    const start = () => {
       fieldEdits.set(key, { value: opts.value ?? '' });
       setPageFocus(key);
       opts.rerender();
-    }));
+    };
+    const text = accEl('span', textClass, opts.saved ?? opts.empty ?? '');
+    if (opts.byClick) {
+      text.classList.add('renamable');
+      text.addEventListener('click', start);
+    }
+    wrap.append(text, penButton(opts.editTitle ?? t('field.edit'), start));
     return [wrap, null];
   }
 

@@ -642,6 +642,7 @@ function renderWatchName(id, settings) {
     textClass: 'pane-title edit-field__text',
     placeholder: t('watch.name_empty'),
     editTitle: t('panel.rename'),
+    byClick: true,
     onSave: value => {
       fieldEdits.delete(fieldEditKey(id, 'name'));
       watchSet(id, { name: value });
@@ -673,6 +674,7 @@ function renderAccountName(id, account) {
     required: true,
     textClass: 'pane-title edit-field__text',
     editTitle: t('watch.rename_account'),
+    byClick: true,
     onSave: title => {
       fieldEdits.delete(key);
       structureCall('set_title', { id: account.id, title });

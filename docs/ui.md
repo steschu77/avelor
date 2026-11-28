@@ -50,6 +50,17 @@ Workspace page's field (`renderEditField`); and at the end of a content's
 first line: the project's description, a card's content (edit mode while
 pressed, `panel.md#cards`).
 
+A click on a name renames it too, where the click means nothing else: the
+thread's title, the project's name in the vault header, a watch's name and
+a bank account's on the Folders page (`.renamable`, a faint dotted line
+under it on hover; a link's is solid). A card's title and a pill's name
+don't: a click on a card selects it, one on a pill filters. A card's field
+that can be typed into shows a faint line under it on hover. **F2**
+renames what has the focus or is selected: a focused pill, else the card
+that has the focus or the selected one, else the thread shown, else the
+project in the vault header, where the host can write it (`rename`,
+`features/header.js`).
+
 ## Vault panel <a id="vault-panel"></a>
 
 The vault panel defines the view on the vault: words, a project and a
@@ -522,6 +533,7 @@ What a key, a menu, a button or Go to starts is a registered action
   again, outside a field or an editor (`saving.md#undo`).
 - **Ctrl+F** goes to the words box, unless an editor or a field has the
   focus; in the box, Esc empties it, then leaves it (`ui.md#words`).
+- **F2** renames what has the focus or is selected (`#the-pen`).
 - **F3** and **Shift+F3** step through the words marked in the panel
   (`panel.md#find`).
 - **F6** and **Shift+F6** move between the areas: the lens tabs, the vault
@@ -563,8 +575,8 @@ Ctrl+Shift+P, or the Go to item under New, opens a dialog over the app that
 finds places, entries, commands and keys by name (`features/palette.js`, the
 blocks of rows `features/palette-found.js`). With nothing typed it lists the
 commands: the actions that have a group and apply now
-(`architecture.md#actions`), under their groups: New, Assistant, Get things
-in, Go to (the lenses, the Workspace pages, Settings, the next and the
+(`architecture.md#actions`), under their groups: New, Edit (Rename, F2,
+`#the-pen`), Assistant, Get things in, Go to (the lenses, the Workspace pages, Settings, the next and the
 previous area), Filter, Window, Vault, Settings (a row of the page each,
 which it opens with the focus there) and Help. What the vault has brings its
 own: an enabled folder watch its import, an account's Email its Fetch email,
