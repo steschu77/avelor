@@ -43,12 +43,15 @@ second runs it, and moving off it or 3 s take it back.
 The pen edits the text next to it, a name or a content, and nothing else
 (`penButton`, `ui/field.js`): the same quiet button with the edit icon at
 the size of small text wherever it stands (`.pen`), named after what it
-changes. It stands right after a name: a project's on its pill (while
-the pill is hovered or has the focus) and in the vault header, a card's
-and the thread's title, a fact's value (`panel.md#blueprint`), a
-Workspace page's field (`renderEditField`); and at the end of a content's
-first line: the project's description, a card's content (edit mode while
-pressed, `panel.md#cards`).
+changes. It stands right after a name: a project's, a watch's and a bank
+account's on its pill (while the pill is hovered or has the focus,
+`#vault-panel`), a project's in the vault header, a card's and the
+thread's title, a fact's value (`panel.md#blueprint`), a Workspace page's
+field (`renderEditField`), a title before an import
+(`import.md#import-scans`); and at the end of a content's first line: the
+project's description, a card's content (edit mode while pressed,
+`panel.md#cards`), a message of the user's in a chat
+(`assistant.md#conversations`).
 
 A click on a name renames it too, where the click means nothing else: the
 thread's title, the project's name in the vault header, a watch's name and
@@ -94,7 +97,10 @@ the Vault page alone.
   and Settings…, the account's pane under Accounts. A refused auto-sync
   is said in the status bar. Created Here, All Projects, No project and
   All Sources have none and keep their count. A project's pen stands right
-  after its name, shown with ⋯, and renames it in place.
+  after its name, shown with ⋯, and renames it in place; so does a
+  watch's (`set_watch`, empty its folder's name) and a bank account's, its
+  account's title (`set_title`, never empty). An email's and a
+  calendar's names are Google's and have none.
 - **Projects**: "+ Project" in the head, always shown, opens New
   project's menu; "All Projects" clears the project; "No project" shows the
   entities in no project of the vault (`NO_PROJECT` as
@@ -554,8 +560,8 @@ table or code, and goes on elsewhere (`editor.md#keys`); Esc leaves edit
 mode, back on its pen. Left to the mouse: joining or making a
 thread by drag, the Dashboard's cards reordered, a scan's pages in any
 order (a first or last page still moves to the next document by its
-button), the scrubber's range of weeks (Clear and Today remain), the
-editor's toolbar, and a chat message edited by clicking it.
+button), the scrubber's range of weeks (Clear and Today remain), and
+the editor's toolbar.
 
 The host switches off the browser's accelerator keys so they reach the page
 (`sys/win32/webview.rs`).

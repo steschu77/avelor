@@ -31,7 +31,7 @@ import { selectFilter } from './selection.js';
 import { openNewProject } from './header.js';
 import { projectMenu, toggleStar } from './projects.js';
 import { accountSources, vaultSources } from './sources.js';
-import { importWatch, openWatch } from './workspace/folders.js';
+import { importWatch, openWatch, renameWatch } from './workspace/folders.js';
 import { openEmailFetch } from './import/email.js';
 import { revealVault, switchVault } from './workspace/vault.js';
 
@@ -208,7 +208,7 @@ function renderSidebar() {
     const { key, name, icon, watch, account } = source;
     const row = rowFor(`source:${key}`, name, () =>
       sidebarNavItem('nav-item nav-item--compact', name, 'nav-item__icon', icon, () => selectSource(key),
-        watch || account ? { menu: () => sourceMenu(key) } : {}));
+        watch || account ? { pen: sourcePen(source), menu: () => sourceMenu(key) } : {}));
     updateNavItem(row, sourceCounts.get(key) ?? 0, key === selected_source);
     if (account) {
       let auto = row.querySelector('.nav-item__auto');
@@ -337,6 +337,25 @@ let archivedUnfolded = false;
 function toggleArchived() {
   archivedUnfolded = !archivedUnfolded;
   scheduleRenderSidebar();
+}
+
+// The pen of a source whose name can be changed: a watch's, renamed with
+// `set_watch` (empty, its folder's name), and a bank account's, its
+// account's title (`set_title`, never empty); none while the account is
+// gone, nor for an email's or a calendar's, which are Google's.
+function sourcePen({ watch }) {
+  if (!watch) return null;
+  if (watch.type !== 'statements') {
+    return { title: t('panel.rename'), onClick: row => editSidebarName(row, watch.name ?? '', name => renameWatch(watch.id, name)) };
+  }
+  const account = entities.get(watch.account);
+  if (!account) return null;
+  return {
+    title: t('watch.rename_account'),
+    onClick: row => editSidebarName(row, account.title ?? '', title => {
+      if (title) structureCall('set_title', { id: account.id, title }, () => store.getState());
+    }),
+  };
 }
 
 // The menu of the source `key`, as it is when it opens: first what gets new

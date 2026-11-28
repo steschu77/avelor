@@ -31,6 +31,7 @@ import {
 } from '../../model/entities.js';
 import { projectsFor } from '../../model/entities.js';
 import { iconEl } from '../../ui/icons.js';
+import { penButton } from '../../ui/field.js';
 import { showMenu } from '../../ui/menu.js';
 import { dayShows, openLink, panelMode } from '../selection.js';
 import { registerContextTab, selectContextTab } from '../context.js';
@@ -580,8 +581,13 @@ function renderAssistantLabel(node, message, children) {
 function createAssistantUserNode(message) {
   const el = accEl('div', 'chat__msg chat__msg--user');
   const label = accEl('div', 'chat__label label');
+  // the message, its pen at the end of its first line (ui.md#the-pen), as
+  // a click on it does; the bubble is the editor's own, so the pen is
+  // beside it
+  const said = accEl('div', 'chat__said');
   const body = accEl('div', 'editor prose chat__bubble');
   body.title = t('chat.click_to_edit');
+  said.append(body, penButton(t('panel.edit_message'), () => assistantStartEdit(message.id)));
   const actions = accEl('div', 'chat__actions');
   actions.hidden = true;
   const cancel = accEl('button', 'btn btn--ghost', t('field.cancel'));
@@ -593,7 +599,7 @@ function createAssistantUserNode(message) {
   send.title = t('chat.send_again');
   send.addEventListener('click', () => assistantResend());
   actions.append(cancel, send);
-  el.append(label, body, actions);
+  el.append(label, said, actions);
 
   const editor = createEditor(body, {
     onEscape: () => assistantEndEdit(),

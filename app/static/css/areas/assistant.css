@@ -163,8 +163,32 @@
 }
 
 .chat__msg--editing .chat__bubble {
-  align-self: stretch;
   border-color: var(--c-ink-mute);
+}
+
+/* a message of the user's, its pen at the end of its first line, inside
+   the bubble's room; gone while it is edited */
+.chat__said {
+  position: relative;
+  max-width: 100%;
+}
+
+.chat__msg--editing>.chat__said {
+  align-self: stretch;
+}
+
+.chat__said>.chat__bubble {
+  padding-right: calc(12px + var(--h-control-sm));
+}
+
+.chat__said>.pen {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+.chat__msg--editing .chat__said>.pen {
+  display: none;
 }
 
 /* below a message: an edited one's Cancel and Send; a written reply's

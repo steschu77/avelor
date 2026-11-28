@@ -197,7 +197,8 @@ for a PDF watch (`features/import/scans.js`), in the expanded vault area:
   document of its own"; the arrows move a document's first page to the
   document before, its last page to the document after; Split makes a
   document of every page. Each document's title is proposed from its first
-  page's text (its first heading, else its first line), and can be edited.
+  page's text (its first heading, else its first line), and can be edited
+  in place: a click into it, or its pen right after it (`ui.md#the-pen`).
   Read reads a document's pages again. A PDF watch's documents are a PDF
   each, not arranged: no dragging, arrows or Split.
 - **Import** (per document, or Import all for the ticked ones, also

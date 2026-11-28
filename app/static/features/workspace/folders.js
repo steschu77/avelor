@@ -18,7 +18,7 @@ import { rpcCall, rpcOn } from '../../core/rpc.js';
 import { money, pageDate } from '../../core/format.js';
 import { registerActions, runAction } from '../../core/actions.js';
 import { t } from '../../core/text.js';
-import { store } from '../../model/state.js';
+import { showError, store } from '../../model/state.js';
 import { entities, parseContact, watches } from '../../model/entities.js';
 import { ACCOUNT_TYPES, ledger, statementsOf } from '../../model/bank.js';
 import { setBankAccountLocal, structureCall } from '../../model/structure.js';
@@ -260,6 +260,12 @@ function watchSaveFolder(watch, folder) {
 // Change some settings of `watch`; they show at once, and the host's
 // `watch` event confirms them. A refusal shows in the watch's pane, or goes
 // to `onError` (Import scans picking its model).
+// A watch's new name from its pill (features/sidebar.js), its folder's
+// while it is empty; a refusal is said in the status bar.
+export function renameWatch(id, name) {
+  watchSet(id, { name }, e => showError(watchErrorText(e)));
+}
+
 function watchSet(watch, change, onError = null) {
   watchError = null;
   watchSetCall(watch, change, change).catch(e => {

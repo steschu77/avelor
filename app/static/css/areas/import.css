@@ -147,10 +147,20 @@
   gap: 4px;
 }
 
-/* the title, editable in place: a box only while hovered or edited */
+/* the title, editable in place: a box only while hovered or edited, as
+   long as its text, its pen right after it */
+.import__title-line {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
 .import__title {
   display: block;
-  width: calc(100% + 10px);
+  field-sizing: content;
+  min-width: 6em;
+  max-width: 100%;
   margin: 0 -5px;
   padding: 2px 4px;
   border: 1px solid transparent;

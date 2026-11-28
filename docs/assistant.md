@@ -48,7 +48,8 @@ when it started.
 - A user's message is headed "You", or with the name of who asked if its
   `sender` is someone else (`otherSender`), and when; one without a `sender`
   is the user's. The name isn't told to the model.
-- A click on a user's message edits it, also someone else's; Enter resends it
+- A user's message is edited by its pen, at the end of its first line
+  (`ui.md#the-pen`), or a click on it, also someone else's; Enter resends it
   as a new branch beside the old one, then by the user (`assistantResend`),
   and Retry asks for a new reply.
   ‹ › switch between siblings, which writes the conversation's `active`

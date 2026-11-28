@@ -30,6 +30,7 @@ import { store } from '../../model/state.js';
 import { entities, watches } from '../../model/entities.js';
 import { armedButton } from '../../ui/confirm.js';
 import { iconEl } from '../../ui/icons.js';
+import { penButton } from '../../ui/field.js';
 import { IMPORT_ICON } from '../../ui/icons.js';
 import { clearDropMark, dropTarget } from '../../ui/dropzone.js';
 import {
@@ -718,6 +719,7 @@ function renderScanDoc(doc, index, arranges) {
   const head = accEl('div', 'import__doc-head');
   if (arranges) scanDropTarget(head, file => scanMove(file, doc));
   const titleBox = accEl('div', 'import__doc-title');
+  const titleLine = accEl('div', 'import__title-line');
   const title = accEl('input', 'import__title');
   title.value = scanDocTitle(doc);
   title.title = t('scans.proposed_title');
@@ -731,7 +733,12 @@ function renderScanDoc(doc, index, arranges) {
   const size = !arranges ? scanWords(first) : t('scans.pages', { n: doc.pages.length });
   const replacedTitle = replaces && entities.get(replaces)?.title;
   const replaced = !replaces ? '' : ` \u00b7 ${replacedTitle ? t('scans.replaces', { title: replacedTitle }) : t('scans.replaces_its')}`;
-  titleBox.append(title, accEl('span', 'meta', `${size} \u00b7 ${pageDate(first.taken)}${replaced}`));
+  // its pen right after it (ui.md#the-pen), as a click into it does
+  titleLine.append(title, penButton(t('scans.proposed_title'), () => {
+    title.focus();
+    title.select();
+  }));
+  titleBox.append(titleLine, accEl('span', 'meta', `${size} \u00b7 ${pageDate(first.taken)}${replaced}`));
 
   const n = doc.pages.length;
   const busy = doc.pages.some(page => scanBusy(scanFile(page)));
