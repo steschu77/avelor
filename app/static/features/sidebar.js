@@ -24,7 +24,7 @@ import { BLUEPRINTS, newProjectBlock } from '../model/blueprint.js';
 import { iconEl } from '../ui/icons.js';
 import { KIND_ICONS } from '../ui/icons.js';
 import { IMPORT_ICON } from '../ui/icons.js';
-import { onEditEnd } from '../ui/field.js';
+import { onEditEnd, penButton } from '../ui/field.js';
 import { showMenu } from '../ui/menu.js';
 import { dropTarget } from '../ui/dropzone.js';
 import { selectFilter } from './selection.js';
@@ -63,14 +63,11 @@ function sidebarNavItem(className, name, classIcon, icon, onClick, { pen, menu }
   const elIcon = iconEl(icon, classIcon);
   el.append(elIcon, elName);
   if (pen) {
-    const btn = accEl('button', 'icon-btn icon-btn--quiet nav-item__pen');
-    btn.type = 'button';
-    titled(btn, pen.title);
-    btn.append(iconEl('#i-edit'));
-    btn.addEventListener('click', e => {
+    const btn = penButton(pen.title, e => {
       e.stopPropagation();
       pen.onClick(el);
     });
+    btn.classList.add('nav-item__pen');
     el.appendChild(btn);
   }
   el.appendChild(elCount);

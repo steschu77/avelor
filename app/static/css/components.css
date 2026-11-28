@@ -138,6 +138,13 @@
   color: var(--c-ink);
 }
 
+/* The pen (ui/field.js `penButton`, ui.md#the-pen): quiet, its icon at the
+   size of small text, the same wherever it stands */
+.icon-btn.pen>.icon {
+  width: var(--fs-small);
+  height: var(--fs-small);
+}
+
 .icon-btn--square {
   width: var(--h-control);
   height: var(--h-control);

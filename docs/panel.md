@@ -569,8 +569,8 @@ an empty title removes the `title` key, and the file keeps its name
 (`vault.md#filenames`). A synced event's new title waits to be pushed to
 Google like any other edit of it.
 
-- The pen at the end of a card's title line and the thread header's
-  (`#thread-rename-btn`) make the title editable in place (`renameEntity`
+- The pen right after a card's title and the thread header's
+  (`#thread-rename-btn`, `ui.md#the-pen`) make the title editable in place (`renameEntity`
   → `editTextInPlace`, `ui/field.js`, which the project header uses
   too). It starts all selected. Enter or leaving it sends `set_title` if
   the text changed (whitespace runs, such as pasted line breaks, become
@@ -681,8 +681,8 @@ entry is gone.
 
 - **Its facts** on a line: the shipped blueprint's in its order, set or
   not, then the project's others (`factsOf`, `model/blueprint.js`), each
-  with its label and its value, a dash while it has none. A value's pencil
-  shows on hover and edits it in place by its type (`features/facts.js`):
+  with its label and its value, a dash while it has none. A value's pen
+  (`ui.md#the-pen`) shows on hover and edits it in place by its type (`features/facts.js`):
   a text or an amount typed in, a date, a trip's days (from and to; while
   they aren't fixed, what its sketch says of them: "Aug 2028 · 4–5 nights
   · not set"; setting them opens Set the dates instead, `ui.md#set-the-dates`),
@@ -695,7 +695,7 @@ entry is gone.
   blueprint doesn't name, while the host can write the project: its name
   and value typed in, as a record's + Field (`newFactEl`), Enter writing
   it as text, Esc dropping it; a name the project has a fact of already
-  isn't written, that fact being changed with its own pencil.
+  isn't written, that fact being changed with its own pen.
 - **A trip's route** (`#route`), under its facts.
 - **A tab line**: Missing and Next, each with its count, while a trip's
   days are open its When first (`#when`), Documents after them while the

@@ -50,7 +50,7 @@ import { armedButton } from '../../ui/confirm.js';
 import {
   createDocPreviewToolbar, createEditorToolbar,
 } from '../../ui/toolbar.js';
-import { editTextInPlace, heldWhileTyping, keepingFocus } from '../../ui/field.js';
+import { editTextInPlace, heldWhileTyping, keepingFocus, penButton } from '../../ui/field.js';
 import {
   MEMBER_DRAG, attachDropZone, endDragPreview, startDragPreview,
 } from '../../ui/dropzone.js';
@@ -860,11 +860,8 @@ function createMessageController(msg, { selectable = false, thread = false, occu
   dirtyDot.hidden = !isDirty(doc_id);
   // The pen renames the entity in place (`renameEntity`), shown where
   // `renderCardHead` says so -- like the thread header's.
-  const renameBtn = accEl('button', 'icon-btn icon-btn--quiet doc-head__rename');
-  renameBtn.type = 'button';
-  renameBtn.title = t('panel.rename');
-  renameBtn.append(iconEl('#i-edit'));
-  renameBtn.addEventListener('click', () => renameEntity(doc_id, titleEl));
+  const renameBtn = penButton(t('panel.rename'), () => renameEntity(doc_id, titleEl));
+  renameBtn.classList.add('doc-head__rename');
   headTitle.appendChild(kindIconEl);
   headTitle.appendChild(titleEl);
   headTitle.appendChild(dirtyDot);

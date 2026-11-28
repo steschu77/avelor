@@ -8,13 +8,8 @@
   padding: 0 var(--p-gutter) 10px;
 }
 
-/* the pen right after the project's name, its menu at the head's end
-   (after the lens's own, which push themselves there) */
-.project-pen>.icon {
-  width: var(--fs-small);
-  height: var(--fs-small);
-}
-
+/* the project's menu at the head's end (after the lens's own, which push
+   themselves there) */
 .project-more {
   margin-left: auto;
   font-size: var(--fs-ui);
@@ -137,14 +132,13 @@
   color: var(--c-ink);
 }
 
-/* a value's pencil shows on hover, as a card's title's does, or while the
-   fact has the focus */
-.bp__value>.icon-btn {
+/* a value's pen shows on hover, or while the fact has the focus */
+.bp__value>.pen {
   visibility: hidden;
 }
 
-.bp__fact:hover .icon-btn,
-.bp__fact:focus-within .icon-btn {
+.bp__fact:hover .pen,
+.bp__fact:focus-within .pen {
   visibility: visible;
 }
 

@@ -125,15 +125,10 @@
   margin-top: 4px;
 }
 
-/* the title takes the line, the rename pen (features/panel/panel.js) sits at its
-   end, at the size of small text */
+/* the title as long as its text, its dirty dot and its pen right after it */
 .doc-head__title>.doc-title {
-  flex: 1 1 0;
-}
-
-.doc-head .doc-head__rename>.icon {
-  width: var(--fs-small);
-  height: var(--fs-small);
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* a card's threads, when it is in more than one (features/panel/panel.js): the one

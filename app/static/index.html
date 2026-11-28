@@ -161,8 +161,8 @@
     <main class="main" id="main">
       <div class="pane-head">
         <span class="project-name" id="project-name" data-t="sidebar.all_projects"></span>
-        <button type="button" class="icon-btn icon-btn--quiet project-pen" id="project-rename-btn"
-          data-t-title="header.rename" hidden><svg class="icon"><use href="#i-edit" /></svg></button>
+        <button type="button" class="icon-btn icon-btn--quiet pen" id="project-rename-btn"
+          data-t-title="header.rename" data-t-aria-label="header.rename" hidden><svg class="icon"><use href="#i-edit" /></svg></button>
         <span class="project-checks" id="project-checks" hidden></span>
         <span class="label-filter" id="label-filter"></span>
         <button type="button" class="chip chip--action" id="label-add-btn" data-t-title="header.filter_label" data-t-aria-label="header.filter_label"
@@ -186,8 +186,8 @@
       <div class="project-props" id="project-props" hidden></div>
       <!-- its description, with its pen at the end of its first line -->
       <div class="project-about" id="project-about" hidden>
-        <button type="button" class="icon-btn icon-btn--quiet project-about__pen" id="project-desc-btn"
-          data-t-title="header.edit_description"><svg class="icon"><use href="#i-edit" /></svg></button>
+        <button type="button" class="icon-btn icon-btn--quiet pen project-about__pen" id="project-desc-btn"
+          data-t-title="header.edit_description" data-t-aria-label="header.edit_description"><svg class="icon"><use href="#i-edit" /></svg></button>
         <div class="project-desc editor prose" id="project-desc"></div>
       </div>
       <button type="button" class="tool label project-desc-add" id="project-desc-add" hidden data-t="header.add_description"></button>
@@ -280,8 +280,8 @@
             <div class="doc-head__title">
               <svg class="icon" id="thread-icon"><use /></svg>
               <span class="doc-title" id="thread-title"></span>
-              <button type="button" class="icon-btn icon-btn--quiet doc-head__rename"
-                id="thread-rename-btn" data-t-title="thread.rename" hidden><svg class="icon"><use href="#i-edit" /></svg></button>
+              <button type="button" class="icon-btn icon-btn--quiet pen doc-head__rename"
+                id="thread-rename-btn" data-t-title="thread.rename" data-t-aria-label="thread.rename" hidden><svg class="icon"><use href="#i-edit" /></svg></button>
             </div>
             <div class="doc-head__sub">
               <span class="meta truncate-start" id="thread-path"></span>

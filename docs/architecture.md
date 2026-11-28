@@ -685,7 +685,7 @@ order into the page's one `<style>`. The order stands in one place, as
 Conventions the page keeps:
 
 - Tokens for sizes, insets and heights (`--fs-*`, `--p-*`, `--h-*`);
-  shared components (`btn`, `tool`, `icon-btn`, `seg`, `chip`, `input`,
+  shared components (`btn`, `tool`, `icon-btn` and its `pen`, `seg`, `chip`, `input`,
   `list-row`, `pane-section`, `page`, the list + detail page's
   `list-detail`, `item-card`, `add-tile`, `detail-head`, `stats`,
   `notice`, `detail-footer`, `edit-field`, …) and type roles (`label`, `meta`,

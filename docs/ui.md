@@ -38,6 +38,17 @@ project's New here), or ask once more before it runs: its first press
 says what it would do ("Delete project?") and keeps the menu open, its
 second runs it, and moving off it or 3 s take it back.
 
+## The pen <a id="the-pen"></a>
+
+The pen edits the text next to it, a name or a content, and nothing else
+(`penButton`, `ui/field.js`): the same quiet button with the edit icon at
+the size of small text wherever it stands (`.pen`), named after what it
+changes. It stands right after a name: a project's on its pill (while
+the pill is hovered or has the focus) and in the vault header, a card's
+and the thread's title, a fact's value (`panel.md#blueprint`), a
+Workspace page's field (`renderEditField`); and at the end of a content's
+first line: the project's description.
+
 ## Vault panel <a id="vault-panel"></a>
 
 The vault panel defines the view on the vault: words, a project and a

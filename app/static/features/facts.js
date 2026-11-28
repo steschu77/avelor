@@ -17,7 +17,7 @@ import { factsOf, withFact } from '../model/blueprint.js';
 import { idDocumentType, idDocumentState, idDocumentsOf } from '../model/id-documents.js';
 import { setProjectLocal } from '../model/structure.js';
 import { daysText, tripEndOf } from '../model/trip.js';
-import { fieldInput } from '../ui/field.js';
+import { fieldInput, penButton } from '../ui/field.js';
 import { iconEl } from '../ui/icons.js';
 import { showMenu } from '../ui/menu.js';
 import { openSetDates } from './set-dates.js';
@@ -39,12 +39,8 @@ export function factEl(fact, { id, project, writable }, meta = null) {
   const show = () => {
     value.replaceChildren(...valueParts(fact, project), ...(meta ? [accEl('span', 'meta', meta)] : []));
     if (!writable) return;
-    const pencil = accEl('button', 'icon-btn icon-btn--quiet');
-    pencil.type = 'button';
-    pencil.title = t('facts.change', { label: fact.label });
-    pencil.append(iconEl('#i-edit'));
-    pencil.addEventListener('click', () => edit(fact, value, pencil, save, show));
-    value.append(pencil);
+    const pen = penButton(t('facts.change', { label: fact.label }), () => edit(fact, value, pen, save, show));
+    value.append(pen);
   };
   show();
   return el;

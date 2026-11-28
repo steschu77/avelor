@@ -1,12 +1,24 @@
-// Editing in place: a title where it shows (its `onEditEnd` also ends the
-// sidebar's renames, features/sidebar.js), and the Workspace pages' editable
-// field with the edits under way.
+// Editing in place: the pen, a title where it shows (its `onEditEnd` also
+// ends the sidebar's renames, features/sidebar.js), and the Workspace pages'
+// editable field with the edits under way.
 
 import { accEl } from '../core/dom.js';
 import { titled } from '../core/dom.js';
 import { t } from '../core/text.js';
 import { iconEl } from './icons.js';
 import { setPageFocus } from './page.js';
+
+// The pen (ui.md#the-pen): it edits the text next to it, a name or a
+// content, and nothing else, and looks the same everywhere; `title` says
+// what it changes.
+export function penButton(title, onClick = null) {
+  const pen = accEl('button', 'icon-btn icon-btn--quiet pen');
+  pen.type = 'button';
+  titled(pen, title);
+  pen.append(iconEl('#i-edit'));
+  if (onClick) pen.addEventListener('click', onClick);
+  return pen;
+}
 
 // End an in-place edit of `el` (an input or a contenteditable element):
 // Enter or leaving it calls `finish(true)`, Esc `finish(false)`. Only the
@@ -149,11 +161,11 @@ export function fieldEditKey(owner, field) {
   return `${owner}\n${field}`;
 }
 
-// A field shown as text with a pencil, or as an input while it is edited
+// A field shown as text with its pen, or as an input while it is edited
 // -- and, if `required`, while nothing valid is saved. `opts`: { saved
 // (text, or null if nothing valid is saved), empty (the text without a
 // saved value), required, value (the input's start), placeholder, type,
-// mono, textClass (of the saved text), editTitle (the pencil's title),
+// mono, textClass (of the saved text), editTitle (the pen's title),
 // onSave(value), rerender (the page's scheduler) }.
 export function renderEditField(owner, field, opts) {
   const key = fieldEditKey(owner, field);
@@ -162,16 +174,11 @@ export function renderEditField(owner, field, opts) {
   if (!state && (opts.saved != null || !opts.required)) {
     const textClass = opts.textClass ?? (opts.mono ? 'edit-field__text mono' : 'subtitle');
     wrap.append(accEl('span', textClass, opts.saved ?? opts.empty ?? ''));
-    const edit = accEl('button', 'icon-btn');
-    edit.append(iconEl('#i-edit'));
-    edit.type = 'button';
-    edit.title = opts.editTitle ?? t('field.edit');
-    edit.addEventListener('click', () => {
+    wrap.append(penButton(opts.editTitle ?? t('field.edit'), () => {
       fieldEdits.set(key, { value: opts.value ?? '' });
       setPageFocus(key);
       opts.rerender();
-    });
-    wrap.append(edit);
+    }));
     return [wrap, null];
   }
 
